@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Cairo } from "next/font/google";
 import "./globals.css";
+import { LanguageWrapper } from "@/components/LanguageWrapper";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -30,11 +31,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Default to Arabic (RTL) - can be changed based on user preference
+  // Default to Arabic (RTL) - client-side will update based on user preference
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
       <body className={`${inter.variable} ${cairo.variable} font-cairo antialiased`}>
-        {children}
+        <LanguageWrapper>{children}</LanguageWrapper>
       </body>
     </html>
   );
