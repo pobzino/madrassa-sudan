@@ -1,279 +1,638 @@
 // Custom SVG illustrations for child-friendly design
-// Playful, colorful shapes without emojis
+// Style: Friendly Illustrated - rounded, colorful, with personality
+
+// ============================================
+// FLOATING DECORATIONS - Hero section elements
+// Full color, playful, with motion cues
+// ============================================
 
 export const FloatingBook = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 60 60" fill="none">
-    <rect x="10" y="12" width="40" height="36" rx="3" fill="#8B5CF6" />
-    <rect x="14" y="16" width="32" height="28" rx="2" fill="#C4B5FD" />
-    <line x1="30" y1="16" x2="30" y2="44" stroke="#8B5CF6" strokeWidth="2" />
-    <path d="M18 22h8M18 28h8M18 34h8" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" />
-    <path d="M34 22h8M34 28h8M34 34h8" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" />
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Book body */}
+    <path
+      d="M12 14c0-2 1.5-3.5 3.5-3.5h33c2 0 3.5 1.5 3.5 3.5v36c0 2-1.5 3.5-3.5 3.5h-33c-2 0-3.5-1.5-3.5-3.5V14z"
+      fill="#8B5CF6"
+    />
+    {/* Pages */}
+    <path
+      d="M16 14h32v34c0 1-1 2-2 2H18c-1 0-2-1-2-2V14z"
+      fill="#F5F3FF"
+    />
+    {/* Spine shadow */}
+    <path d="M16 14h4v36h-4z" fill="#DDD6FE" />
+    {/* Page lines */}
+    <path d="M24 22h18M24 28h18M24 34h14M24 40h16" stroke="#C4B5FD" strokeWidth="2" strokeLinecap="round" />
+    {/* Bookmark */}
+    <path d="M40 10v12l-3-2-3 2V10" fill="#F43F5E" />
+    {/* Sparkle */}
+    <circle cx="52" cy="12" r="2" fill="#FBBF24" />
+    <circle cx="56" cy="18" r="1.5" fill="#FBBF24" opacity="0.6" />
   </svg>
 );
 
 export const FloatingPencil = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 60 60" fill="none">
-    <rect x="20" y="8" width="12" height="40" rx="2" fill="#F59E0B" transform="rotate(15 26 28)" />
-    <polygon points="26,52 22,48 30,48" fill="#FCD34D" transform="rotate(15 26 50)" />
-    <rect x="20" y="8" width="12" height="8" rx="1" fill="#FBBF24" transform="rotate(15 26 12)" />
-    <circle cx="26" cy="50" r="2" fill="#374151" transform="rotate(15 26 50)" />
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Pencil body */}
+    <rect x="18" y="8" width="14" height="40" rx="2" fill="#FBBF24" />
+    {/* Wood/tip section */}
+    <path d="M18 42h14l-7 14-7-14z" fill="#FDE68A" />
+    {/* Graphite tip */}
+    <path d="M23 50h4l-2 6-2-6z" fill="#374151" />
+    {/* Metal band */}
+    <rect x="18" y="8" width="14" height="6" rx="1" fill="#F59E0B" />
+    {/* Eraser */}
+    <rect x="18" y="2" width="14" height="8" rx="2" fill="#FDA4AF" />
+    {/* Shine */}
+    <rect x="20" y="16" width="3" height="20" rx="1" fill="#FEF3C7" opacity="0.6" />
+    {/* Motion lines */}
+    <path d="M10 20c-2-1-4 0-5 2M8 30c-2 0-4 1-4 3" stroke="#E5E7EB" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
 
 export const FloatingTarget = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 60 60" fill="none">
-    <circle cx="30" cy="30" r="24" fill="#FEE2E2" stroke="#EF4444" strokeWidth="3" />
-    <circle cx="30" cy="30" r="16" fill="#FECACA" stroke="#EF4444" strokeWidth="3" />
-    <circle cx="30" cy="30" r="8" fill="#EF4444" />
-    <circle cx="30" cy="30" r="3" fill="#FEE2E2" />
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Outer ring */}
+    <circle cx="32" cy="32" r="26" fill="#FEE2E2" stroke="#EF4444" strokeWidth="3" />
+    {/* Middle ring */}
+    <circle cx="32" cy="32" r="18" fill="#FECACA" stroke="#EF4444" strokeWidth="3" />
+    {/* Inner ring */}
+    <circle cx="32" cy="32" r="10" fill="#FCA5A5" stroke="#EF4444" strokeWidth="3" />
+    {/* Bullseye */}
+    <circle cx="32" cy="32" r="4" fill="#EF4444" />
+    {/* Arrow */}
+    <path d="M48 16L34 30" stroke="#F59E0B" strokeWidth="3" strokeLinecap="round" />
+    <path d="M48 16l-6 1 5 5" fill="#F59E0B" />
+    {/* Impact stars */}
+    <path d="M38 26l2-4 2 4-4-2 4 2" stroke="#FBBF24" strokeWidth="1.5" strokeLinecap="round" />
   </svg>
 );
 
 export const FloatingStar = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 60 60" fill="none">
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Main star */}
     <path
-      d="M30 8L35.5 23.5H52L38.5 33L44 48L30 38L16 48L21.5 33L8 23.5H24.5L30 8Z"
+      d="M32 6l6 14h15l-12 10 5 15-14-9-14 9 5-15L11 20h15l6-14z"
       fill="#FBBF24"
       stroke="#F59E0B"
+      strokeWidth="2"
+      strokeLinejoin="round"
+    />
+    {/* Face - happy eyes */}
+    <circle cx="26" cy="26" r="2" fill="#92400E" />
+    <circle cx="38" cy="26" r="2" fill="#92400E" />
+    {/* Smile */}
+    <path d="M28 32c0 3 2 5 4 5s4-2 4-5" stroke="#92400E" strokeWidth="2" strokeLinecap="round" />
+    {/* Blush */}
+    <circle cx="22" cy="30" r="3" fill="#FDBA74" opacity="0.5" />
+    <circle cx="42" cy="30" r="3" fill="#FDBA74" opacity="0.5" />
+    {/* Sparkles around */}
+    <circle cx="10" cy="14" r="2" fill="#FDE68A" />
+    <circle cx="54" cy="10" r="1.5" fill="#FDE68A" />
+    <circle cx="52" cy="48" r="2" fill="#FDE68A" />
+  </svg>
+);
+
+export const FloatingPalette = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Palette base */}
+    <ellipse cx="32" cy="34" rx="26" ry="22" fill="#FDF4FF" stroke="#A855F7" strokeWidth="2.5" />
+    {/* Thumb hole */}
+    <ellipse cx="20" cy="40" rx="6" ry="5" fill="white" stroke="#A855F7" strokeWidth="2" />
+    {/* Paint blobs with personality */}
+    <circle cx="22" cy="24" r="6" fill="#EF4444" />
+    <circle cx="36" cy="20" r="6" fill="#FBBF24" />
+    <circle cx="48" cy="28" r="5" fill="#10B981" />
+    <circle cx="46" cy="42" r="5" fill="#3B82F6" />
+    <circle cx="32" cy="44" r="4" fill="#EC4899" />
+    {/* Paint highlights */}
+    <circle cx="20" cy="22" r="2" fill="#FCA5A5" />
+    <circle cx="34" cy="18" r="2" fill="#FDE68A" />
+    <circle cx="46" cy="26" r="1.5" fill="#6EE7B7" />
+    {/* Brush */}
+    <rect x="50" y="4" width="4" height="16" rx="2" fill="#92400E" />
+    <path d="M50 20h4l-2 8-2-8z" fill="#D97706" />
+    <rect x="50" y="2" width="4" height="4" rx="1" fill="#6B7280" />
+  </svg>
+);
+
+export const FloatingRocket = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Rocket body */}
+    <path
+      d="M32 4c-8 8-12 20-12 28 0 4 2 8 4 10h16c2-2 4-6 4-10 0-8-4-20-12-28z"
+      fill="#E0E7FF"
+      stroke="#6366F1"
+      strokeWidth="2.5"
+    />
+    {/* Rocket tip */}
+    <path d="M32 4c-4 4-6 10-6 14h12c0-4-2-10-6-14z" fill="#6366F1" />
+    {/* Window */}
+    <circle cx="32" cy="26" r="6" fill="#06B6D4" stroke="#6366F1" strokeWidth="2" />
+    <circle cx="30" cy="24" r="2" fill="#A5F3FC" />
+    {/* Fins */}
+    <path d="M20 36l-8 10 8-2" fill="#F43F5E" stroke="#E11D48" strokeWidth="1.5" strokeLinejoin="round" />
+    <path d="M44 36l8 10-8-2" fill="#F43F5E" stroke="#E11D48" strokeWidth="1.5" strokeLinejoin="round" />
+    {/* Flames */}
+    <ellipse cx="32" cy="50" rx="6" ry="10" fill="#F59E0B" />
+    <ellipse cx="32" cy="52" rx="4" ry="7" fill="#FBBF24" />
+    <ellipse cx="32" cy="54" rx="2" ry="4" fill="#FEF3C7" />
+    {/* Stars/trail */}
+    <circle cx="18" cy="56" r="2" fill="#FBBF24" opacity="0.6" />
+    <circle cx="46" cy="58" r="1.5" fill="#FBBF24" opacity="0.6" />
+    <circle cx="24" cy="62" r="1" fill="#FBBF24" opacity="0.4" />
+  </svg>
+);
+
+// ============================================
+// FEATURE ICONS - Card icons with personality
+// Full color, friendly, recognizable
+// ============================================
+
+export const VideoIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Screen */}
+    <rect x="6" y="12" width="44" height="34" rx="4" fill="#EDE9FE" stroke="#8B5CF6" strokeWidth="2.5" />
+    {/* Screen shine */}
+    <rect x="10" y="16" width="8" height="3" rx="1" fill="#C4B5FD" />
+    {/* Play button */}
+    <path d="M26 22v14l12-7-12-7z" fill="#8B5CF6" />
+    {/* Film reel camera */}
+    <circle cx="54" cy="20" r="8" fill="#DDD6FE" stroke="#8B5CF6" strokeWidth="2" />
+    <circle cx="54" cy="20" r="3" fill="#8B5CF6" />
+    <circle cx="54" cy="38" r="6" fill="#DDD6FE" stroke="#8B5CF6" strokeWidth="2" />
+    <circle cx="54" cy="38" r="2" fill="#8B5CF6" />
+    {/* Connection */}
+    <path d="M50 24v10" stroke="#8B5CF6" strokeWidth="2" />
+    {/* Sparkle */}
+    <path d="M14 50l2-3 2 3-3-1 3 1" stroke="#FBBF24" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+export const RobotIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Head */}
+    <rect x="14" y="18" width="36" height="30" rx="6" fill="#CFFAFE" stroke="#06B6D4" strokeWidth="2.5" />
+    {/* Antenna */}
+    <path d="M32 6v12" stroke="#06B6D4" strokeWidth="2.5" strokeLinecap="round" />
+    <circle cx="32" cy="6" r="4" fill="#F43F5E" />
+    <circle cx="32" cy="6" r="2" fill="#FDA4AF" />
+    {/* Eyes - friendly */}
+    <ellipse cx="24" cy="32" rx="5" ry="6" fill="white" stroke="#06B6D4" strokeWidth="2" />
+    <ellipse cx="40" cy="32" rx="5" ry="6" fill="white" stroke="#06B6D4" strokeWidth="2" />
+    <circle cx="25" cy="31" r="3" fill="#1E3A5F" />
+    <circle cx="41" cy="31" r="3" fill="#1E3A5F" />
+    <circle cx="26" cy="30" r="1" fill="white" />
+    <circle cx="42" cy="30" r="1" fill="white" />
+    {/* Happy smile */}
+    <path d="M26 42c0 3 3 5 6 5s6-2 6-5" stroke="#06B6D4" strokeWidth="2.5" strokeLinecap="round" />
+    {/* Cheeks */}
+    <circle cx="18" cy="38" r="3" fill="#FBCFE8" opacity="0.6" />
+    <circle cx="46" cy="38" r="3" fill="#FBCFE8" opacity="0.6" />
+    {/* Ears */}
+    <rect x="6" y="28" width="8" height="12" rx="2" fill="#A5F3FC" stroke="#06B6D4" strokeWidth="2" />
+    <rect x="50" y="28" width="8" height="12" rx="2" fill="#A5F3FC" stroke="#06B6D4" strokeWidth="2" />
+    {/* Body hint */}
+    <path d="M24 48v8h16v-8" stroke="#06B6D4" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+export const GamepadIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Controller body */}
+    <path
+      d="M8 26c0-4 3-7 7-7h34c4 0 7 3 7 7v12c0 8-6 14-14 14H22c-8 0-14-6-14-14V26z"
+      fill="#D1FAE5"
+      stroke="#10B981"
+      strokeWidth="2.5"
+    />
+    {/* D-pad */}
+    <rect x="14" y="28" width="6" height="14" rx="1" fill="#10B981" />
+    <rect x="11" y="31" width="12" height="6" rx="1" fill="#10B981" />
+    {/* Buttons */}
+    <circle cx="44" cy="28" r="4" fill="#EF4444" />
+    <circle cx="52" cy="34" r="4" fill="#3B82F6" />
+    <circle cx="44" cy="40" r="4" fill="#FBBF24" />
+    <circle cx="36" cy="34" r="4" fill="#10B981" />
+    {/* Button shines */}
+    <circle cx="43" cy="27" r="1.5" fill="#FCA5A5" />
+    <circle cx="51" cy="33" r="1.5" fill="#93C5FD" />
+    {/* Center buttons */}
+    <rect x="26" y="32" width="4" height="6" rx="1" fill="#6EE7B7" />
+    {/* Face on screen/center */}
+    <circle cx="32" cy="26" r="1" fill="#065F46" />
+    <circle cx="36" cy="26" r="1" fill="#065F46" />
+    <path d="M32 29c0 1 2 2 2 2s2-1 2-2" stroke="#065F46" strokeWidth="1" strokeLinecap="round" />
+  </svg>
+);
+
+export const TrophyIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Cup body */}
+    <path
+      d="M18 10h28v18c0 10-6 16-14 16s-14-6-14-16V10z"
+      fill="#FEF3C7"
+      stroke="#F59E0B"
+      strokeWidth="2.5"
+    />
+    {/* Left handle */}
+    <path d="M18 14H12c-2 0-4 2-4 4v4c0 6 4 10 10 10" stroke="#F59E0B" strokeWidth="2.5" fill="#FEF3C7" />
+    {/* Right handle */}
+    <path d="M46 14h6c2 0 4 2 4 4v4c0 6-4 10-10 10" stroke="#F59E0B" strokeWidth="2.5" fill="#FEF3C7" />
+    {/* Shine */}
+    <path d="M24 16v10M28 14v8" stroke="#FDE68A" strokeWidth="2" strokeLinecap="round" />
+    {/* Star on cup */}
+    <path d="M32 22l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4l2-4z" fill="#F59E0B" />
+    {/* Stem */}
+    <rect x="28" y="44" width="8" height="6" fill="#F59E0B" />
+    {/* Base */}
+    <rect x="22" y="50" width="20" height="6" rx="2" fill="#F59E0B" />
+    <rect x="24" y="52" width="16" height="2" rx="1" fill="#FDE68A" />
+    {/* Sparkles */}
+    <circle cx="12" cy="8" r="2" fill="#FBBF24" />
+    <circle cx="52" cy="6" r="1.5" fill="#FBBF24" />
+    <circle cx="56" cy="12" r="1" fill="#FBBF24" />
+    {/* Confetti */}
+    <rect x="8" cy="14" width="3" height="3" rx="0.5" fill="#F43F5E" transform="rotate(20 8 14)" />
+    <rect x="54" y="18" width="3" height="3" rx="0.5" fill="#8B5CF6" transform="rotate(-15 54 18)" />
+  </svg>
+);
+
+// ============================================
+// SUBJECT ICONS - Standardized, clean, friendly
+// Consistent 64x64, 2.5px strokes, rounded
+// ============================================
+
+export const MathIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Calculator body */}
+    <rect x="12" y="6" width="40" height="52" rx="6" fill="#DBEAFE" stroke="#3B82F6" strokeWidth="2.5" />
+    {/* Screen */}
+    <rect x="18" y="12" width="28" height="12" rx="2" fill="#1E3A8A" />
+    <text x="40" y="21" fill="#60A5FA" fontSize="10" fontFamily="monospace">123</text>
+    {/* Buttons */}
+    <circle cx="24" cy="34" r="4" fill="#3B82F6" />
+    <circle cx="36" cy="34" r="4" fill="#3B82F6" />
+    <circle cx="24" cy="46" r="4" fill="#3B82F6" />
+    <circle cx="36" cy="46" r="4" fill="#3B82F6" />
+    <rect x="44" y="30" width="4" height="20" rx="2" fill="#F59E0B" />
+    {/* Plus and equals symbols */}
+    <path d="M22 34h4M24 32v4" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+    <path d="M34 33h4M34 35h4" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+export const ScienceIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Flask body */}
+    <path
+      d="M24 6h16v14l12 30c1 3-1 6-4 6H16c-3 0-5-3-4-6l12-30V6z"
+      fill="#D1FAE5"
+      stroke="#10B981"
+      strokeWidth="2.5"
+    />
+    {/* Flask neck */}
+    <path d="M24 6h16" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" />
+    <rect x="22" y="4" width="20" height="4" rx="1" fill="#10B981" />
+    {/* Liquid */}
+    <path d="M18 40c4-2 10 2 14 0s10 2 14 0l2 10c0 2-2 4-4 4H16c-2 0-4-2-4-4l2-10z" fill="#10B981" opacity="0.4" />
+    {/* Bubbles with faces */}
+    <circle cx="26" cy="44" r="4" fill="#6EE7B7" />
+    <circle cx="25" cy="43" r="1" fill="#065F46" />
+    <circle cx="28" cy="43" r="1" fill="#065F46" />
+    <path d="M25 46c.5.5 1.5.5 2 0" stroke="#065F46" strokeWidth="0.75" strokeLinecap="round" />
+    <circle cx="36" cy="48" r="3" fill="#6EE7B7" />
+    <circle cx="42" cy="42" r="2" fill="#A7F3D0" />
+    {/* Rising bubbles */}
+    <circle cx="30" cy="32" r="2" fill="#A7F3D0" />
+    <circle cx="34" cy="28" r="1.5" fill="#A7F3D0" />
+    <circle cx="28" cy="24" r="1" fill="#D1FAE5" />
+  </svg>
+);
+
+export const ArabicIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Book base */}
+    <rect x="8" y="8" width="48" height="48" rx="6" fill="#FEF3C7" stroke="#F59E0B" strokeWidth="2.5" />
+    {/* Pages */}
+    <path d="M14 14h36v36H14z" fill="#FFFBEB" />
+    {/* Arabic letter ع (Ain) - stylized path */}
+    <path
+      d="M32 20c-6 0-10 4-10 8 0 6 8 8 12 8 2 0 6-1 6-4s-4-4-8-4c-2 0-4 1-4 3s3 4 8 3"
+      stroke="#F59E0B"
+      strokeWidth="3.5"
+      strokeLinecap="round"
+      fill="none"
+    />
+    {/* Decorative dots */}
+    <circle cx="24" cy="44" r="2" fill="#FBBF24" />
+    <circle cx="32" cy="46" r="2" fill="#FBBF24" />
+    <circle cx="40" cy="44" r="2" fill="#FBBF24" />
+    {/* Corner decoration */}
+    <path d="M46 14l-8 8M46 22l-4 4" stroke="#FDE68A" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+export const GlobeIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Globe */}
+    <circle cx="32" cy="32" r="26" fill="#DBEAFE" stroke="#3B82F6" strokeWidth="2.5" />
+    {/* Continents (simplified) */}
+    <ellipse cx="26" cy="24" rx="8" ry="6" fill="#10B981" />
+    <ellipse cx="38" cy="22" rx="6" ry="4" fill="#10B981" />
+    <ellipse cx="24" cy="38" rx="6" ry="8" fill="#10B981" />
+    <ellipse cx="40" cy="40" rx="8" ry="6" fill="#10B981" />
+    {/* Grid lines */}
+    <ellipse cx="32" cy="32" rx="10" ry="26" stroke="#93C5FD" strokeWidth="1.5" fill="none" />
+    <path d="M6 32h52" stroke="#93C5FD" strokeWidth="1.5" />
+    <path d="M10 20h44M10 44h44" stroke="#93C5FD" strokeWidth="1" strokeDasharray="2 2" />
+    {/* Shine */}
+    <ellipse cx="22" cy="18" rx="6" ry="4" fill="white" opacity="0.4" />
+    {/* Tiny plane */}
+    <path d="M48 16l4-2-2 4-2-2z" fill="#F43F5E" />
+  </svg>
+);
+
+export const MoonStarIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Background glow */}
+    <circle cx="28" cy="32" r="24" fill="#EFF6FF" />
+    {/* Crescent moon */}
+    <path
+      d="M40 10c-12 2-20 12-20 24s8 22 20 24c-2 1-4 1-6 1-14 0-26-12-26-26S20 7 34 7c2 0 4 0 6 1z"
+      fill="#FBBF24"
+      stroke="#F59E0B"
+      strokeWidth="2"
+    />
+    {/* Moon face */}
+    <circle cx="24" cy="28" r="1.5" fill="#92400E" />
+    <circle cx="22" cy="36" r="1.5" fill="#92400E" />
+    <path d="M20 32c1 2 3 3 5 2" stroke="#92400E" strokeWidth="1.5" strokeLinecap="round" />
+    {/* Star */}
+    <path
+      d="M50 22l3 6h6l-5 4 2 6-6-4-6 4 2-6-5-4h6l3-6z"
+      fill="#FBBF24"
+      stroke="#F59E0B"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+    {/* Small stars */}
+    <circle cx="44" cy="12" r="2" fill="#FDE68A" />
+    <circle cx="56" cy="40" r="1.5" fill="#FDE68A" />
+    <circle cx="48" cy="48" r="2" fill="#FDE68A" />
+  </svg>
+);
+
+export const MapIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Map folds */}
+    <path d="M8 12l16-4v44l-16 4V12z" fill="#FECACA" stroke="#F43F5E" strokeWidth="2" strokeLinejoin="round" />
+    <path d="M24 8l16 6v44l-16-6V8z" fill="#FEF3C7" stroke="#F59E0B" strokeWidth="2" strokeLinejoin="round" />
+    <path d="M40 14l16-6v44l-16 6V14z" fill="#D1FAE5" stroke="#10B981" strokeWidth="2" strokeLinejoin="round" />
+    {/* Dotted path */}
+    <path d="M16 24c4 4 8-2 12 4s8-2 12 4 8 0 10 4" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 4" />
+    {/* Location pin */}
+    <path d="M32 20c-4 0-7 3-7 7 0 5 7 11 7 11s7-6 7-11c0-4-3-7-7-7z" fill="#EF4444" stroke="#DC2626" strokeWidth="1.5" />
+    <circle cx="32" cy="26" r="3" fill="white" />
+    {/* X marks the spot */}
+    <path d="M44 42l4 4m0-4l-4 4" stroke="#92400E" strokeWidth="2" strokeLinecap="round" />
+    {/* Compass rose hint */}
+    <circle cx="16" cy="44" r="6" fill="white" stroke="#6B7280" strokeWidth="1.5" />
+    <path d="M16 40v8M12 44h8" stroke="#6B7280" strokeWidth="1.5" />
+    <path d="M16 40l1 2-1-2z" fill="#EF4444" />
+  </svg>
+);
+
+// ============================================
+// STEP/PROCESS ICONS - How it works section
+// ============================================
+
+export const SparkleIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Main sparkle */}
+    <path
+      d="M32 4l5 14 14 5-14 5-5 14-5-14-14-5 14-5 5-14z"
+      fill="currentColor"
+      opacity="0.9"
+    />
+    {/* Secondary sparkles */}
+    <path
+      d="M14 40l3 8 8 3-8 3-3 8-3-8-8-3 8-3 3-8z"
+      fill="currentColor"
+      opacity="0.6"
+    />
+    <path
+      d="M48 36l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z"
+      fill="currentColor"
+      opacity="0.6"
+    />
+    {/* Tiny dots */}
+    <circle cx="50" cy="14" r="2" fill="currentColor" opacity="0.4" />
+    <circle cx="10" cy="20" r="1.5" fill="currentColor" opacity="0.4" />
+  </svg>
+);
+
+export const BookOpenIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Left page */}
+    <path
+      d="M32 14c-6-4-14-6-22-4v34c8-2 16 0 22 4V14z"
+      fill="currentColor"
+      opacity="0.15"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinejoin="round"
+    />
+    {/* Right page */}
+    <path
+      d="M32 14c6-4 14-6 22-4v34c-8-2-16 0-22 4V14z"
+      fill="currentColor"
+      opacity="0.15"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinejoin="round"
+    />
+    {/* Spine */}
+    <path d="M32 14v34" stroke="currentColor" strokeWidth="2" />
+    {/* Page lines left */}
+    <path d="M16 20h10M16 26h10M16 32h8M16 38h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
+    {/* Page lines right */}
+    <path d="M38 20h10M38 26h10M38 32h8M38 38h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
+  </svg>
+);
+
+export const RocketLaunchIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Rocket body */}
+    <path
+      d="M32 8c-6 6-10 16-10 24 0 4 2 6 4 8h12c2-2 4-4 4-8 0-8-4-18-10-24z"
+      fill="currentColor"
+      opacity="0.2"
+      stroke="currentColor"
+      strokeWidth="2.5"
+    />
+    {/* Rocket tip */}
+    <path d="M32 8c-4 4-6 10-6 12h12c0-2-2-8-6-12z" fill="currentColor" />
+    {/* Window */}
+    <circle cx="32" cy="26" r="5" fill="currentColor" opacity="0.3" stroke="currentColor" strokeWidth="2" />
+    {/* Fins */}
+    <path d="M22 34l-6 8 6-2" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    <path d="M42 34l6 8-6-2" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    {/* Flames */}
+    <path d="M28 42c0 4-2 10 4 14 6-4 4-10 4-14" fill="currentColor" opacity="0.4" />
+    <path d="M30 42c0 3-1 7 2 10 3-3 2-7 2-10" fill="currentColor" opacity="0.6" />
+    {/* Motion lines */}
+    <path d="M14 18l-6-2M50 18l6-2M12 28H6M52 28h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.4" />
+  </svg>
+);
+
+// ============================================
+// DECORATIVE & MISC ICONS - Standardized
+// ============================================
+
+export const LightningIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    <path
+      d="M36 4L14 34h16L26 60 50 28H34L36 4z"
+      fill="currentColor"
+      stroke="currentColor"
       strokeWidth="2"
       strokeLinejoin="round"
     />
   </svg>
 );
 
-export const FloatingPalette = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 60 60" fill="none">
-    <ellipse cx="30" cy="32" rx="22" ry="18" fill="#E0E7FF" stroke="#6366F1" strokeWidth="2" />
-    <circle cx="20" cy="26" r="5" fill="#EF4444" />
-    <circle cx="32" cy="22" r="5" fill="#FBBF24" />
-    <circle cx="42" cy="30" r="5" fill="#10B981" />
-    <circle cx="36" cy="40" r="5" fill="#3B82F6" />
-    <ellipse cx="22" cy="38" rx="6" ry="5" fill="#E0E7FF" stroke="#6366F1" strokeWidth="1" />
-  </svg>
-);
-
-export const FloatingRocket = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 60 60" fill="none">
-    <ellipse cx="30" cy="28" rx="10" ry="18" fill="#E0E7FF" stroke="#6366F1" strokeWidth="2" />
-    <ellipse cx="30" cy="20" rx="6" ry="8" fill="#6366F1" />
-    <circle cx="30" cy="28" r="4" fill="#06B6D4" />
-    <path d="M20 35L16 42L24 38" fill="#EF4444" />
-    <path d="M40 35L44 42L36 38" fill="#EF4444" />
-    <path d="M26 46L30 56L34 46" fill="#F59E0B" />
-    <path d="M28 46L30 52L32 46" fill="#FBBF24" />
-  </svg>
-);
-
-// Feature icons
-export const VideoIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <rect x="6" y="14" width="42" height="36" rx="4" fill="currentColor" opacity="0.2" />
-    <rect x="6" y="14" width="42" height="36" rx="4" stroke="currentColor" strokeWidth="3" />
-    <polygon points="26,24 26,42 40,33" fill="currentColor" />
-    <path d="M52 22L58 18V46L52 42" fill="currentColor" opacity="0.6" />
-  </svg>
-);
-
-export const RobotIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <rect x="14" y="20" width="36" height="32" rx="6" fill="currentColor" opacity="0.2" />
-    <rect x="14" y="20" width="36" height="32" rx="6" stroke="currentColor" strokeWidth="3" />
-    <circle cx="26" cy="34" r="5" fill="currentColor" />
-    <circle cx="38" cy="34" r="5" fill="currentColor" />
-    <path d="M24 44h16" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    <path d="M32 8v12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    <circle cx="32" cy="8" r="4" fill="currentColor" />
-    <path d="M8 32h6M50 32h6" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-  </svg>
-);
-
-export const GamepadIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <rect x="6" y="18" width="52" height="32" rx="8" fill="currentColor" opacity="0.2" />
-    <rect x="6" y="18" width="52" height="32" rx="8" stroke="currentColor" strokeWidth="3" />
-    <circle cx="20" cy="34" r="6" stroke="currentColor" strokeWidth="2" />
-    <path d="M20 30v8M16 34h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    <circle cx="40" cy="30" r="3" fill="currentColor" />
-    <circle cx="48" cy="34" r="3" fill="currentColor" />
-    <circle cx="44" cy="38" r="3" fill="currentColor" />
-  </svg>
-);
-
-export const TrophyIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <path d="M18 12h28v20c0 8-6 14-14 14s-14-6-14-14V12z" fill="currentColor" opacity="0.2" />
-    <path d="M18 12h28v20c0 8-6 14-14 14s-14-6-14-14V12z" stroke="currentColor" strokeWidth="3" />
-    <path d="M18 16H10c0 8 4 12 8 12" stroke="currentColor" strokeWidth="3" />
-    <path d="M46 16h8c0 8-4 12-8 12" stroke="currentColor" strokeWidth="3" />
-    <rect x="26" y="46" width="12" height="6" fill="currentColor" />
-    <rect x="22" y="52" width="20" height="4" rx="1" fill="currentColor" />
-    <path d="M28 22l4 4 8-8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-// Subject icons
-export const MathIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <rect x="8" y="8" width="48" height="48" rx="4" fill="currentColor" opacity="0.15" />
-    <path d="M20 20v24M32 32h-24M44 20l-8 24M36 24l16 16M52 24l-16 16" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-  </svg>
-);
-
-export const ScienceIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <path d="M24 8h16v16l10 28c1 3-1 6-4 6H18c-3 0-5-3-4-6l10-28V8z" fill="currentColor" opacity="0.2" />
-    <path d="M24 8h16v16l10 28c1 3-1 6-4 6H18c-3 0-5-3-4-6l10-28V8z" stroke="currentColor" strokeWidth="3" />
-    <path d="M24 8h16" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    <circle cx="28" cy="42" r="4" fill="currentColor" />
-    <circle cx="38" cy="46" r="3" fill="currentColor" />
-    <circle cx="32" cy="36" r="2" fill="currentColor" />
-  </svg>
-);
-
-export const ArabicIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <rect x="10" y="10" width="44" height="44" rx="4" fill="currentColor" opacity="0.15" />
-    <text x="32" y="42" textAnchor="middle" fontSize="28" fontWeight="bold" fill="currentColor">ع</text>
-  </svg>
-);
-
-export const GlobeIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <circle cx="32" cy="32" r="24" fill="currentColor" opacity="0.2" />
-    <circle cx="32" cy="32" r="24" stroke="currentColor" strokeWidth="3" />
-    <ellipse cx="32" cy="32" rx="10" ry="24" stroke="currentColor" strokeWidth="2" />
-    <path d="M8 32h48M12 20h40M12 44h40" stroke="currentColor" strokeWidth="2" />
-  </svg>
-);
-
-export const MoonStarIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <path d="M44 12c-14 2-24 14-24 28 0 2 0 4 .5 6C12 42 6 34 6 24 6 12 16 2 28 2c6 0 12 2 16 6z" fill="currentColor" opacity="0.2" />
-    <path d="M44 12c-14 2-24 14-24 28 0 2 0 4 .5 6C12 42 6 34 6 24 6 12 16 2 28 2c6 0 12 2 16 6z" stroke="currentColor" strokeWidth="3" />
-    <path d="M48 28l3 6h7l-5 4 2 7-7-4-7 4 2-7-5-4h7l3-6z" fill="currentColor" />
-  </svg>
-);
-
-export const MapIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <path d="M8 14l16-6v42l-16 6V14z" fill="currentColor" opacity="0.3" />
-    <path d="M24 8l16 6v42l-16-6V8z" fill="currentColor" opacity="0.2" />
-    <path d="M40 14l16-6v42l-16 6V14z" fill="currentColor" opacity="0.3" />
-    <path d="M8 14l16-6 16 6 16-6v42l-16 6-16-6-16 6V14z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-    <circle cx="24" cy="30" r="4" fill="currentColor" />
-  </svg>
-);
-
-// How it works icons
-export const SparkleIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <path d="M32 4l4 12 12 4-12 4-4 12-4-12-12-4 12-4 4-12z" fill="currentColor" />
-    <path d="M16 36l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="currentColor" opacity="0.6" />
-    <path d="M48 32l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="currentColor" opacity="0.6" />
-  </svg>
-);
-
-export const BookOpenIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <path d="M32 14c-6-4-14-6-22-4v36c8-2 16 0 22 4 6-4 14-6 22-4V10c-8-2-16 0-22 4z" fill="currentColor" opacity="0.2" />
-    <path d="M32 14c-6-4-14-6-22-4v36c8-2 16 0 22 4 6-4 14-6 22-4V10c-8-2-16 0-22 4z" stroke="currentColor" strokeWidth="3" />
-    <path d="M32 14v36" stroke="currentColor" strokeWidth="2" />
-    <path d="M16 22h8M16 30h8M16 38h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    <path d="M40 22h8M40 30h8M40 38h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-  </svg>
-);
-
-export const RocketLaunchIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <ellipse cx="36" cy="24" rx="14" ry="20" fill="currentColor" opacity="0.2" transform="rotate(45 36 24)" />
-    <ellipse cx="36" cy="24" rx="14" ry="20" stroke="currentColor" strokeWidth="3" transform="rotate(45 36 24)" />
-    <circle cx="36" cy="24" r="6" fill="currentColor" />
-    <path d="M18 46l-8 10 14-4" fill="currentColor" opacity="0.6" />
-    <path d="M46 36l10 8-4-14" fill="currentColor" opacity="0.6" />
-    <path d="M8 48l8 8 6-6-8-8-6 6z" fill="currentColor" />
-  </svg>
-);
-
-// Additional decorative icons
-export const LightningIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 64 64" fill="none">
-    <path d="M36 4L16 36h14L26 60 48 26H34L36 4z" fill="currentColor" />
-  </svg>
-);
-
 export const LightbulbIcon = ({ className = "" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 64 64" fill="none">
-    <path d="M32 6c-12 0-20 10-20 20 0 8 4 14 10 18v6c0 2 2 4 4 4h12c2 0 4-2 4-4v-6c6-4 10-10 10-18 0-10-8-20-20-20z" fill="currentColor" opacity="0.2" />
-    <path d="M32 6c-12 0-20 10-20 20 0 8 4 14 10 18v6c0 2 2 4 4 4h12c2 0 4-2 4-4v-6c6-4 10-10 10-18 0-10-8-20-20-20z" stroke="currentColor" strokeWidth="3" />
-    <path d="M26 54h12M26 58h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    <path d="M32 16v10M26 22l6 4 6-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    {/* Bulb */}
+    <path
+      d="M32 6c-11 0-18 9-18 18 0 7 4 12 8 16v6c0 2 2 4 4 4h12c2 0 4-2 4-4v-6c4-4 8-9 8-16 0-9-7-18-18-18z"
+      fill="currentColor"
+      opacity="0.2"
+      stroke="currentColor"
+      strokeWidth="2.5"
+    />
+    {/* Filament */}
+    <path d="M28 24c0 4 2 6 4 8s4 4 4 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="M36 24c0 4-2 6-4 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    {/* Base rings */}
+    <path d="M26 50h12M26 54h12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    {/* Light rays */}
+    <path d="M32 0v4M52 12l-3 2M12 12l3 2M56 32h-4M8 32h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
   </svg>
 );
 
 export const GraduationCapIcon = ({ className = "" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 64 64" fill="none">
-    <path d="M32 8L4 22l28 14 28-14L32 8z" fill="currentColor" opacity="0.3" />
-    <path d="M32 8L4 22l28 14 28-14L32 8z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-    <path d="M12 28v16c0 4 8 8 20 8s20-4 20-8V28" stroke="currentColor" strokeWidth="3" />
-    <path d="M56 22v20" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    <circle cx="56" cy="46" r="4" fill="currentColor" />
+    {/* Cap top */}
+    <path
+      d="M32 8L4 22l28 14 28-14L32 8z"
+      fill="currentColor"
+      opacity="0.3"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinejoin="round"
+    />
+    {/* Cap bottom */}
+    <path
+      d="M14 28v14c0 4 8 8 18 8s18-4 18-8V28"
+      stroke="currentColor"
+      strokeWidth="2.5"
+    />
+    {/* Tassel string */}
+    <path d="M54 22v18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    {/* Tassel */}
+    <circle cx="54" cy="42" r="3" fill="currentColor" />
+    <path d="M54 45v6" stroke="currentColor" strokeWidth="2" />
+    <path d="M52 51h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
 
 export const BackpackIcon = ({ className = "" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 64 64" fill="none">
-    <rect x="14" y="16" width="36" height="40" rx="6" fill="currentColor" opacity="0.2" />
-    <rect x="14" y="16" width="36" height="40" rx="6" stroke="currentColor" strokeWidth="3" />
-    <path d="M24 16c0-6 4-10 8-10s8 4 8 10" stroke="currentColor" strokeWidth="3" />
-    <rect x="20" y="28" width="24" height="14" rx="3" fill="currentColor" opacity="0.3" stroke="currentColor" strokeWidth="2" />
-    <path d="M28 28v14M36 28v14" stroke="currentColor" strokeWidth="2" />
+    {/* Main body */}
+    <rect x="14" y="18" width="36" height="38" rx="6" fill="currentColor" opacity="0.2" stroke="currentColor" strokeWidth="2.5" />
+    {/* Top handle/straps */}
+    <path d="M24 18c0-6 4-10 8-10s8 4 8 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    {/* Front pocket */}
+    <rect x="20" y="32" width="24" height="16" rx="4" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="2" />
+    {/* Zipper */}
+    <path d="M32 32v16" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2" />
+    {/* Pocket flap line */}
+    <path d="M22 36h20" stroke="currentColor" strokeWidth="1.5" />
+    {/* Side straps */}
+    <rect x="10" y="24" width="4" height="20" rx="2" fill="currentColor" opacity="0.4" />
+    <rect x="50" y="24" width="4" height="20" rx="2" fill="currentColor" opacity="0.4" />
   </svg>
 );
 
 export const TeacherIcon = ({ className = "" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 64 64" fill="none">
-    <circle cx="32" cy="18" r="12" fill="currentColor" opacity="0.2" />
-    <circle cx="32" cy="18" r="12" stroke="currentColor" strokeWidth="3" />
-    <path d="M14 58c0-12 8-20 18-20s18 8 18 20" fill="currentColor" opacity="0.2" />
-    <path d="M14 58c0-12 8-20 18-20s18 8 18 20" stroke="currentColor" strokeWidth="3" />
-    <path d="M32 38v10" stroke="currentColor" strokeWidth="3" />
-    <circle cx="28" cy="16" r="2" fill="currentColor" />
-    <circle cx="36" cy="16" r="2" fill="currentColor" />
-    <path d="M28 22c0 2 2 4 4 4s4-2 4-4" stroke="currentColor" strokeWidth="2" />
+    {/* Head */}
+    <circle cx="32" cy="18" r="12" fill="currentColor" opacity="0.2" stroke="currentColor" strokeWidth="2.5" />
+    {/* Hair */}
+    <path d="M22 14c0-6 4-10 10-10s10 4 10 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    {/* Eyes */}
+    <circle cx="28" cy="18" r="2" fill="currentColor" />
+    <circle cx="36" cy="18" r="2" fill="currentColor" />
+    {/* Smile */}
+    <path d="M28 24c0 2 2 3 4 3s4-1 4-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    {/* Body */}
+    <path
+      d="M18 56c0-10 6-18 14-18s14 8 14 18"
+      fill="currentColor"
+      opacity="0.2"
+      stroke="currentColor"
+      strokeWidth="2.5"
+    />
+    {/* Collar/tie */}
+    <path d="M32 38l-4 8h8l-4-8z" fill="currentColor" />
   </svg>
 );
 
 export const QuestionIcon = ({ className = "" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 64 64" fill="none">
-    <circle cx="32" cy="32" r="26" fill="currentColor" opacity="0.15" />
-    <circle cx="32" cy="32" r="26" stroke="currentColor" strokeWidth="3" />
-    <path d="M24 24c0-6 4-10 8-10s8 4 8 10c0 4-4 6-8 8v4" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    <circle cx="32" cy="48" r="3" fill="currentColor" />
+    {/* Circle */}
+    <circle cx="32" cy="32" r="26" fill="currentColor" opacity="0.15" stroke="currentColor" strokeWidth="2.5" />
+    {/* Question mark */}
+    <path
+      d="M24 22c0-6 4-8 8-8s8 2 8 8c0 4-4 6-8 8v4"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+    />
+    <circle cx="32" cy="46" r="3" fill="currentColor" />
   </svg>
 );
 
 export const PlayIcon = ({ className = "" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 64 64" fill="none">
-    <circle cx="32" cy="32" r="26" fill="currentColor" opacity="0.2" />
-    <circle cx="32" cy="32" r="26" stroke="currentColor" strokeWidth="3" />
+    {/* Circle */}
+    <circle cx="32" cy="32" r="26" fill="currentColor" opacity="0.2" stroke="currentColor" strokeWidth="2.5" />
+    {/* Play triangle */}
     <path d="M26 20v24l20-12-20-12z" fill="currentColor" />
   </svg>
 );
 
 export const CelebrationIcon = ({ className = "" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 64 64" fill="none">
-    <path d="M32 8l2 8 8 2-8 2-2 8-2-8-8-2 8-2 2-8z" fill="#FBBF24" />
-    <path d="M16 24l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="#F472B6" />
-    <path d="M48 20l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="#34D399" />
-    <path d="M20 44l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="#60A5FA" />
-    <path d="M44 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="#A78BFA" />
+    {/* Main star burst */}
+    <path d="M32 8l3 10 10 3-10 3-3 10-3-10-10-3 10-3 3-10z" fill="#FBBF24" />
+    {/* Colored confetti */}
+    <path d="M16 20l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="#F472B6" />
+    <path d="M48 16l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="#34D399" />
+    <path d="M18 44l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z" fill="#60A5FA" />
+    <path d="M46 40l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z" fill="#A78BFA" />
+    {/* Extra dots */}
+    <circle cx="40" cy="28" r="2" fill="#F43F5E" />
+    <circle cx="24" cy="36" r="2" fill="#06B6D4" />
+    <circle cx="52" cy="32" r="1.5" fill="#FBBF24" />
+    <circle cx="12" cy="32" r="1.5" fill="#10B981" />
   </svg>
 );
 
 export const CheckCircleIcon = ({ className = "" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 64 64" fill="none">
-    <circle cx="32" cy="32" r="26" fill="currentColor" opacity="0.2" />
-    <circle cx="32" cy="32" r="26" stroke="currentColor" strokeWidth="3" />
+    <circle cx="32" cy="32" r="26" fill="currentColor" opacity="0.2" stroke="currentColor" strokeWidth="2.5" />
     <path d="M20 32l8 8 16-16" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
