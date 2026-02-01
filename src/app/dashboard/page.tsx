@@ -10,8 +10,8 @@ import type { Profile, Subject } from "@/lib/database.types";
 const translations = {
   ar: {
     dashboard: "لوحة التحكم",
-    welcomeBack: "مرحباً بعودتك",
-    welcomeSubtitle: "تابع رحلتك التعليمية واكتشف دروساً جديدة",
+    welcomeBack: "أهلاً",
+    welcomeSubtitle: "مستعد لمغامرة تعليمية جديدة؟",
     startLearning: "ابدأ التعلم",
     lessons: "الدروس",
     homework: "الواجبات",
@@ -20,7 +20,7 @@ const translations = {
     progress: "التقدم",
     settings: "الإعدادات",
     logout: "تسجيل الخروج",
-    gettingStarted: "البداية",
+    gettingStarted: "مهماتك اليوم",
     completed: "مكتمل",
     of: "من",
     watchFirstLesson: "شاهد أول درس",
@@ -33,19 +33,23 @@ const translations = {
     joinClassDesc: "تعلم مع زملائك في الفصول المباشرة",
     earnPoints: "اجمع 100 نقطة",
     earnPointsDesc: "اجمع النقاط من إتمام الدروس والواجبات",
-    yourProgress: "تقدمك",
-    lessonsCompleted: "درس مكتمل",
+    yourProgress: "إنجازاتك",
+    lessonsCompleted: "درس",
     dayStreak: "يوم متتالي",
-    homeworkDone: "واجب منجز",
+    homeworkDone: "واجب",
     totalPoints: "نقطة",
-    subjects: "المواد الدراسية",
+    subjects: "اختر مادة",
     exploreSubjects: "اكتشف المواد",
     loading: "جاري التحميل...",
+    keepGoing: "استمر! أنت تبلي بلاءً حسناً",
+    awesome: "رائع!",
+    greatJob: "أحسنت!",
+    letsLearn: "هيا نتعلم!",
   },
   en: {
     dashboard: "Dashboard",
-    welcomeBack: "Welcome back",
-    welcomeSubtitle: "Continue your learning journey and discover new lessons",
+    welcomeBack: "Hey",
+    welcomeSubtitle: "Ready for a new learning adventure?",
     startLearning: "Start Learning",
     lessons: "Lessons",
     homework: "Homework",
@@ -54,7 +58,7 @@ const translations = {
     progress: "Progress",
     settings: "Settings",
     logout: "Log out",
-    gettingStarted: "Getting Started",
+    gettingStarted: "Today's Missions",
     completed: "completed",
     of: "of",
     watchFirstLesson: "Watch your first lesson",
@@ -67,14 +71,18 @@ const translations = {
     joinClassDesc: "Learn together with classmates in live sessions",
     earnPoints: "Earn 100 points",
     earnPointsDesc: "Collect points by completing lessons and homework",
-    yourProgress: "Your Progress",
+    yourProgress: "Your Achievements",
     lessonsCompleted: "Lessons",
     dayStreak: "Day Streak",
     homeworkDone: "Homework",
     totalPoints: "Points",
-    subjects: "Subjects",
+    subjects: "Pick a Subject",
     exploreSubjects: "Explore Subjects",
     loading: "Loading...",
+    keepGoing: "Keep going! You're doing great",
+    awesome: "Awesome!",
+    greatJob: "Great job!",
+    letsLearn: "Let's learn!",
   },
 };
 
@@ -116,35 +124,34 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
   ),
-  logout: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-    </svg>
-  ),
   play: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
     </svg>
   ),
   check: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
     </svg>
   ),
   fire: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
+    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M12 23c-4.97 0-9-3.582-9-8 0-2.79 1.378-5.313 3.5-6.938.281-.216.625-.313.969-.25.344.063.625.281.781.594.438.875.969 1.625 1.625 2.25.125.125.281.188.438.188.281 0 .531-.188.625-.438.156-.438.188-.938.188-1.406 0-2.063-.875-4.063-2.375-5.5-.219-.219-.313-.531-.25-.844.063-.313.25-.563.531-.719C9.5 1.313 10.719 1 12 1c5.523 0 10 4.477 10 10 0 6.627-4.925 12-10 12zm0-2c3.859 0 7-3.582 7-8 0-4.411-3.589-8-8-8-.469 0-.938.031-1.406.094 1.063 1.563 1.656 3.438 1.656 5.406 0 .75-.063 1.5-.219 2.219-.438-.156-.875-.344-1.281-.563-.844-.469-1.594-1.094-2.188-1.844C6.594 12.156 6 13.531 6 15c0 3.314 2.686 6 6 6z"/>
     </svg>
   ),
   star: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
     </svg>
   ),
-  chevronUp: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+  trophy: (
+    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H8v2h8v-2h-3v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/>
+    </svg>
+  ),
+  rocket: (
+    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M12 2.5c2.5 0 5.5 1.5 7.5 4.5 1.5 2.5 2 5 2 7.5 0 1-.5 2-1 2.5-.5.5-1 .5-1.5.5h-2l-1.5 3.5c-.5 1-1.5 1-2 0L12 17l-1.5 3.5c-.5 1-1.5 1-2 0L7 17H5c-.5 0-1 0-1.5-.5s-1-1.5-1-2.5c0-2.5.5-5 2-7.5C6.5 4 9.5 2.5 12 2.5zm-2 8.5c0 1.1.9 2 2 2s2-.9 2-2-.9-2-2-2-2 .9-2 2z"/>
     </svg>
   ),
   menu: (
@@ -157,6 +164,11 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   ),
+  sparkle: (
+    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3zm6 10l.75 2.25L21 16l-2.25.75L18 19l-.75-2.25L15 16l2.25-.75L18 13zM6 13l.75 2.25L9 16l-2.25.75L6 19l-.75-2.25L3 16l2.25-.75L6 13z"/>
+    </svg>
+  ),
 };
 
 export default function DashboardPage() {
@@ -165,7 +177,6 @@ export default function DashboardPage() {
   const [stats, setStats] = useState({ lessons: 0, streak: 0, homework: 0, points: 0 });
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [gettingStartedOpen, setGettingStartedOpen] = useState(true);
   const router = useRouter();
   const supabase = createClient();
   const { language, setLanguage } = useLanguage();
@@ -204,10 +215,12 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-cyan-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 rounded-xl bg-[#0D9488] flex items-center justify-center text-white font-bold text-2xl mx-auto mb-3 animate-pulse">م</div>
-          <p className="text-gray-500">{t.loading}</p>
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold text-3xl mx-auto mb-4 animate-bounce shadow-lg">
+            م
+          </div>
+          <p className="text-gray-500 text-lg">{t.loading}</p>
         </div>
       </div>
     );
@@ -215,31 +228,41 @@ export default function DashboardPage() {
 
   const firstName = profile?.full_name?.split(" ")[0] || "Student";
 
-  // Getting started tasks
+  // Getting started tasks with fun colors
   const tasks = [
-    { id: 1, label: t.watchFirstLesson, desc: t.watchFirstLessonDesc, done: stats.lessons > 0, href: "/lessons" },
-    { id: 2, label: t.completeHomework, desc: t.completeHomeworkDesc, done: stats.homework > 0, href: "/homework" },
-    { id: 3, label: t.askTutor, desc: t.askTutorDesc, done: false, href: "/tutor" },
-    { id: 4, label: t.joinClass, desc: t.joinClassDesc, done: false, href: "/cohorts/join" },
-    { id: 5, label: t.earnPoints, desc: t.earnPointsDesc, done: stats.points >= 100, href: "/lessons" },
+    { id: 1, label: t.watchFirstLesson, desc: t.watchFirstLessonDesc, done: stats.lessons > 0, href: "/lessons", color: "from-violet-500 to-purple-600", emoji: "📺" },
+    { id: 2, label: t.completeHomework, desc: t.completeHomeworkDesc, done: stats.homework > 0, href: "/homework", color: "from-amber-500 to-orange-600", emoji: "✏️" },
+    { id: 3, label: t.askTutor, desc: t.askTutorDesc, done: false, href: "/tutor", color: "from-cyan-500 to-blue-600", emoji: "🤖" },
+    { id: 4, label: t.joinClass, desc: t.joinClassDesc, done: false, href: "/cohorts/join", color: "from-pink-500 to-rose-600", emoji: "👋" },
+    { id: 5, label: t.earnPoints, desc: t.earnPointsDesc, done: stats.points >= 100, href: "/lessons", color: "from-emerald-500 to-teal-600", emoji: "⭐" },
   ];
   const completedTasks = tasks.filter(task => task.done).length;
 
   const navItems = [
-    { href: "/dashboard", label: t.dashboard, icon: Icons.dashboard, active: true },
-    { href: "/lessons", label: t.lessons, icon: Icons.book },
-    { href: "/homework", label: t.homework, icon: Icons.clipboard },
-    { href: "/tutor", label: t.aiTutor, icon: Icons.cpu },
-    { href: "/cohorts", label: t.myClasses, icon: Icons.users },
-    { href: "/progress", label: t.progress, icon: Icons.chart },
+    { href: "/dashboard", label: t.dashboard, icon: Icons.dashboard, active: true, color: "text-emerald-600" },
+    { href: "/lessons", label: t.lessons, icon: Icons.book, color: "text-violet-600" },
+    { href: "/homework", label: t.homework, icon: Icons.clipboard, color: "text-amber-600" },
+    { href: "/tutor", label: t.aiTutor, icon: Icons.cpu, color: "text-cyan-600" },
+    { href: "/cohorts", label: t.myClasses, icon: Icons.users, color: "text-pink-600" },
+    { href: "/progress", label: t.progress, icon: Icons.chart, color: "text-blue-600" },
+  ];
+
+  // Subject card colors
+  const subjectColors = [
+    "from-violet-500 to-purple-600",
+    "from-cyan-500 to-blue-600",
+    "from-emerald-500 to-teal-600",
+    "from-amber-500 to-orange-600",
+    "from-pink-500 to-rose-600",
+    "from-indigo-500 to-violet-600",
   ];
 
   const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
-    <div className={`flex flex-col h-full bg-white ${mobile ? "" : "border-r border-gray-200"}`}>
+    <div className={`flex flex-col h-full bg-white ${mobile ? "" : "border-r border-gray-100"}`}>
       {/* Logo */}
       <div className="p-5 border-b border-gray-100">
         <Link href="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#0D9488] flex items-center justify-center text-white font-bold text-xl shadow-sm">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-500/30">
             م
           </div>
           <span className="font-bold text-gray-900 text-lg">
@@ -252,9 +275,9 @@ export default function DashboardPage() {
       <div className="p-4">
         <Link
           href="/lessons"
-          className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-[#0D9488] hover:bg-[#0F766E] text-white font-semibold rounded-xl transition-colors shadow-sm"
+          className="flex items-center justify-center gap-2 w-full py-3.5 px-4 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-0.5"
         >
-          {Icons.play}
+          {Icons.rocket}
           <span>{t.startLearning}</span>
         </Link>
       </div>
@@ -266,13 +289,13 @@ export default function DashboardPage() {
             key={item.href}
             href={item.href}
             onClick={() => mobile && setSidebarOpen(false)}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-[15px] font-medium transition-colors ${
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-[15px] font-semibold transition-all ${
               item.active
-                ? "bg-[#F0FDFA] text-[#0D9488]"
+                ? "bg-gradient-to-r from-emerald-50 to-cyan-50 text-emerald-700"
                 : "text-gray-600 hover:bg-gray-50"
             }`}
           >
-            <span className={item.active ? "text-[#0D9488]" : "text-gray-400"}>{item.icon}</span>
+            <span className={item.active ? "text-emerald-600" : "text-gray-400"}>{item.icon}</span>
             {item.label}
           </Link>
         ))}
@@ -290,21 +313,21 @@ export default function DashboardPage() {
 
         {/* User Profile */}
         <div className="flex items-center gap-3 px-4 py-3 mt-2 border-t border-gray-100 pt-4">
-          <div className="w-10 h-10 rounded-full bg-[#0D9488] flex items-center justify-center text-white font-semibold">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold shadow-md">
             {firstName.charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-gray-900 truncate">{profile?.full_name}</p>
+            <p className="font-semibold text-gray-900 truncate">{profile?.full_name}</p>
             <button
               onClick={handleLogout}
-              className="text-sm text-gray-500 hover:text-[#0D9488] transition-colors"
+              className="text-sm text-gray-500 hover:text-emerald-600 transition-colors"
             >
               {t.logout}
             </button>
           </div>
           <button
             onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
-            className="text-xs font-medium text-gray-500 hover:text-[#0D9488] px-2 py-1 rounded transition-colors"
+            className="text-xs font-bold text-gray-500 hover:text-emerald-600 px-2 py-1 rounded-lg hover:bg-emerald-50 transition-all"
           >
             {language === "ar" ? "EN" : "عربي"}
           </button>
@@ -314,20 +337,19 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#FAFBFC]" dir={isRtl ? "rtl" : "ltr"}>
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50/50 via-white to-cyan-50/50" dir={isRtl ? "rtl" : "ltr"}>
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 z-40">
+      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-lg border-b border-gray-200/50 flex items-center justify-between px-4 z-40">
         <button
           onClick={() => setSidebarOpen(true)}
-          className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+          className="p-2 text-gray-600 hover:bg-gray-100 rounded-xl"
         >
           {Icons.menu}
         </button>
         <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-[#0D9488] flex items-center justify-center text-white font-bold">م</div>
-          <span className="font-bold text-gray-900">{language === "ar" ? "مدرسة السودان" : "Madrassa"}</span>
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold shadow-md">م</div>
         </Link>
-        <div className="w-8 h-8 rounded-full bg-[#0D9488] flex items-center justify-center text-white font-semibold text-sm">
+        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold text-sm shadow-md">
           {firstName.charAt(0)}
         </div>
       </header>
@@ -335,11 +357,11 @@ export default function DashboardPage() {
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
-          <div className={`absolute top-0 ${isRtl ? "right-0" : "left-0"} w-72 h-full bg-white shadow-xl`}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
+          <div className={`absolute top-0 ${isRtl ? "right-0" : "left-0"} w-72 h-full bg-white shadow-2xl`}>
             <button
               onClick={() => setSidebarOpen(false)}
-              className={`absolute top-4 ${isRtl ? "left-4" : "right-4"} p-2 text-gray-500 hover:bg-gray-100 rounded-lg`}
+              className={`absolute top-4 ${isRtl ? "left-4" : "right-4"} p-2 text-gray-500 hover:bg-gray-100 rounded-xl`}
             >
               {Icons.close}
             </button>
@@ -349,138 +371,185 @@ export default function DashboardPage() {
       )}
 
       {/* Desktop Sidebar */}
-      <aside className={`hidden lg:block fixed top-0 ${isRtl ? "right-0" : "left-0"} w-64 h-screen z-30`}>
+      <aside className={`hidden lg:block fixed top-0 ${isRtl ? "right-0" : "left-0"} w-64 h-screen z-30 bg-white shadow-xl shadow-gray-200/50`}>
         <Sidebar />
       </aside>
 
       {/* Main Content */}
       <main className={`pt-16 lg:pt-0 ${isRtl ? "lg:mr-64" : "lg:ml-64"}`}>
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Welcome */}
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">{t.welcomeBack}, {firstName}</h1>
-            <p className="text-gray-500 mt-1">{t.welcomeSubtitle}</p>
+          {/* Welcome Banner */}
+          <div className="relative mb-8 p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-white overflow-hidden">
+            {/* Decorative elements */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+
+            <div className="relative">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-3xl">👋</span>
+                <h1 className="text-2xl sm:text-3xl font-bold">{t.welcomeBack}, {firstName}!</h1>
+              </div>
+              <p className="text-emerald-100 text-lg">{t.welcomeSubtitle}</p>
+
+              {/* Quick stats in banner */}
+              <div className="flex flex-wrap gap-4 mt-6">
+                <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-2">
+                  <span className="text-yellow-300">{Icons.fire}</span>
+                  <span className="font-bold">{stats.streak} {t.dayStreak}</span>
+                </div>
+                <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-2">
+                  <span className="text-yellow-300">{Icons.star}</span>
+                  <span className="font-bold">{stats.points} {t.totalPoints}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Getting Started Card */}
-          <div className="bg-white rounded-2xl border border-gray-200 mb-8 overflow-hidden">
-            <button
-              onClick={() => setGettingStartedOpen(!gettingStartedOpen)}
-              className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors"
-            >
+          {/* Today's Missions */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold text-gray-900">{t.gettingStarted}</h2>
-                <span className="text-sm text-gray-500">
-                  {completedTasks} {t.of} {tasks.length} {t.completed}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-[#0D9488] rounded-full transition-all duration-500"
-                      style={{ width: `${(completedTasks / tasks.length) * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-sm font-semibold text-[#0D9488]">
-                    {Math.round((completedTasks / tasks.length) * 100)}%
-                  </span>
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/30">
+                  {Icons.sparkle}
                 </div>
-                <span className={`text-gray-400 transition-transform ${gettingStartedOpen ? "" : "rotate-180"}`}>
-                  {Icons.chevronUp}
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">{t.gettingStarted}</h2>
+                  <p className="text-sm text-gray-500">{completedTasks} {t.of} {tasks.length} {t.completed}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-32 h-3 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-violet-500 to-purple-600 rounded-full transition-all duration-500"
+                    style={{ width: `${(completedTasks / tasks.length) * 100}%` }}
+                  />
+                </div>
+                <span className="text-sm font-bold text-violet-600">
+                  {Math.round((completedTasks / tasks.length) * 100)}%
                 </span>
               </div>
-            </button>
+            </div>
 
-            {gettingStartedOpen && (
-              <div className="border-t border-gray-100">
-                {tasks.map((task, index) => (
-                  <Link
-                    key={task.id}
-                    href={task.href}
-                    className={`flex items-start gap-4 p-5 hover:bg-gray-50 transition-colors ${
-                      index < tasks.length - 1 ? "border-b border-gray-100" : ""
-                    }`}
-                  >
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                      task.done
-                        ? "bg-[#0D9488] text-white"
-                        : "bg-gray-100 text-gray-400 border-2 border-gray-200"
-                    }`}>
-                      {task.done ? Icons.check : <span className="text-xs font-semibold">{task.id}</span>}
-                    </div>
-                    <div className="flex-1">
-                      <p className={`font-medium ${task.done ? "text-[#0D9488]" : "text-gray-900"}`}>
-                        {task.label}
-                      </p>
-                      <p className="text-sm text-gray-500 mt-0.5">{task.desc}</p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+            <div className="grid gap-3">
+              {tasks.map((task) => (
+                <Link
+                  key={task.id}
+                  href={task.href}
+                  className={`group flex items-center gap-4 p-4 rounded-2xl border-2 transition-all hover:-translate-y-0.5 ${
+                    task.done
+                      ? "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200"
+                      : "bg-white border-gray-100 hover:border-gray-200 hover:shadow-lg"
+                  }`}
+                >
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${
+                    task.done
+                      ? "bg-gradient-to-br from-emerald-400 to-teal-500 shadow-lg shadow-emerald-500/30"
+                      : `bg-gradient-to-br ${task.color} shadow-lg`
+                  }`}>
+                    {task.done ? <span className="text-white">{Icons.check}</span> : task.emoji}
+                  </div>
+                  <div className="flex-1">
+                    <p className={`font-semibold ${task.done ? "text-emerald-700" : "text-gray-900"}`}>
+                      {task.label}
+                    </p>
+                    <p className="text-sm text-gray-500">{task.desc}</p>
+                  </div>
+                  {task.done && (
+                    <span className="text-emerald-600 font-bold text-sm bg-emerald-100 px-3 py-1 rounded-full">
+                      {t.greatJob}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
           </div>
 
           {/* Stats Grid */}
           <div className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">{t.yourProgress}</h2>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/30">
+                {Icons.trophy}
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">{t.yourProgress}</h2>
+            </div>
+
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white rounded-xl p-5 border border-gray-200">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                    {Icons.book}
-                  </div>
+              <div className="relative overflow-hidden bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl p-5 text-white shadow-lg shadow-violet-500/30">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <div className="relative">
+                  <div className="text-violet-200 mb-1">{Icons.book}</div>
+                  <p className="text-4xl font-bold">{stats.lessons}</p>
+                  <p className="text-violet-200 text-sm font-medium">{t.lessonsCompleted}</p>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{stats.lessons}</p>
-                <p className="text-sm text-gray-500">{t.lessonsCompleted}</p>
               </div>
-              <div className="bg-white rounded-xl p-5 border border-gray-200">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center text-orange-500">
-                    {Icons.fire}
-                  </div>
+
+              <div className="relative overflow-hidden bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl p-5 text-white shadow-lg shadow-orange-500/30">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <div className="relative">
+                  <div className="text-orange-200 mb-1">{Icons.fire}</div>
+                  <p className="text-4xl font-bold">{stats.streak}</p>
+                  <p className="text-orange-200 text-sm font-medium">{t.dayStreak}</p>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{stats.streak}</p>
-                <p className="text-sm text-gray-500">{t.dayStreak}</p>
               </div>
-              <div className="bg-white rounded-xl p-5 border border-gray-200">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
-                    {Icons.clipboard}
-                  </div>
+
+              <div className="relative overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-5 text-white shadow-lg shadow-emerald-500/30">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <div className="relative">
+                  <div className="text-emerald-200 mb-1">{Icons.clipboard}</div>
+                  <p className="text-4xl font-bold">{stats.homework}</p>
+                  <p className="text-emerald-200 text-sm font-medium">{t.homeworkDone}</p>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{stats.homework}</p>
-                <p className="text-sm text-gray-500">{t.homeworkDone}</p>
               </div>
-              <div className="bg-white rounded-xl p-5 border border-gray-200">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center text-amber-500">
-                    {Icons.star}
-                  </div>
+
+              <div className="relative overflow-hidden bg-gradient-to-br from-amber-500 to-yellow-500 rounded-2xl p-5 text-white shadow-lg shadow-amber-500/30">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <div className="relative">
+                  <div className="text-amber-200 mb-1">{Icons.star}</div>
+                  <p className="text-4xl font-bold">{stats.points}</p>
+                  <p className="text-amber-200 text-sm font-medium">{t.totalPoints}</p>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{stats.points}</p>
-                <p className="text-sm text-gray-500">{t.totalPoints}</p>
               </div>
             </div>
           </div>
 
           {/* Subjects */}
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">{t.subjects}</h2>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/30">
+                {Icons.book}
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">{t.subjects}</h2>
+            </div>
+
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-              {subjects.map((subject) => (
+              {subjects.map((subject, index) => (
                 <Link
                   key={subject.id}
                   href={`/lessons?subject=${subject.id}`}
-                  className="bg-white rounded-xl p-5 border border-gray-200 hover:border-[#0D9488] hover:shadow-sm transition-all text-center group"
+                  className="group relative overflow-hidden rounded-2xl p-6 text-white transition-all hover:-translate-y-1 hover:shadow-xl"
                 >
-                  <span className="text-4xl mb-3 block">{subject.icon}</span>
-                  <span className="font-medium text-gray-900 group-hover:text-[#0D9488] transition-colors">
-                    {language === "ar" ? subject.name_ar : subject.name_en}
-                  </span>
+                  <div className={`absolute inset-0 bg-gradient-to-br ${subjectColors[index % subjectColors.length]}`} />
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                  <div className="absolute bottom-0 left-0 w-12 h-12 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+
+                  <div className="relative text-center">
+                    <span className="text-5xl mb-3 block drop-shadow-lg">{subject.icon}</span>
+                    <span className="font-bold text-white/90 group-hover:text-white transition-colors">
+                      {language === "ar" ? subject.name_ar : subject.name_en}
+                    </span>
+                  </div>
                 </Link>
               ))}
             </div>
+          </div>
+
+          {/* Encouragement message */}
+          <div className="mt-8 text-center">
+            <p className="text-gray-500 flex items-center justify-center gap-2">
+              <span className="text-yellow-500">{Icons.sparkle}</span>
+              {t.keepGoing}
+              <span className="text-yellow-500">{Icons.sparkle}</span>
+            </p>
           </div>
         </div>
       </main>
