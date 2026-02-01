@@ -267,48 +267,44 @@ export default function Home() {
 
       <main className="pt-16">
         {/* Hero Section */}
-        <section className="relative min-h-[90vh] flex items-center overflow-hidden">
+        <section className="relative pt-8 pb-16 overflow-hidden">
           {/* Background decorations */}
           <div className="absolute inset-0 overflow-hidden">
-            {/* Soft gradient blobs */}
-            <div className="absolute top-20 left-10 w-72 h-72 bg-violet-200/40 rounded-full blur-3xl" />
-            <div className="absolute top-40 right-20 w-96 h-96 bg-cyan-200/40 rounded-full blur-3xl" />
-            <div className="absolute bottom-20 left-1/3 w-80 h-80 bg-amber-200/40 rounded-full blur-3xl" />
-            <div className="absolute bottom-40 right-10 w-64 h-64 bg-emerald-200/40 rounded-full blur-3xl" />
+            {/* Soft gradient blobs - more subtle */}
+            <div className="absolute top-10 left-10 w-64 h-64 bg-violet-200/30 rounded-full blur-3xl" />
+            <div className="absolute top-20 right-10 w-72 h-72 bg-cyan-200/30 rounded-full blur-3xl" />
+            <div className="absolute bottom-0 left-1/4 w-64 h-64 bg-amber-200/30 rounded-full blur-3xl" />
+            <div className="absolute bottom-10 right-1/4 w-56 h-56 bg-emerald-200/30 rounded-full blur-3xl" />
 
-            {/* Floating decorative elements */}
-            <div className="absolute top-32 left-[15%] w-14 h-14 animate-bounce" style={{ animationDelay: "0s", animationDuration: "3s" }}>
+            {/* Floating decorative elements - better distributed */}
+            <div className="absolute top-24 left-[8%] w-12 h-12 animate-bounce hidden sm:block" style={{ animationDelay: "0s", animationDuration: "3s" }}>
               <FloatingBook className="w-full h-full drop-shadow-lg" />
             </div>
-            <div className="absolute top-48 right-[20%] w-12 h-12 animate-bounce" style={{ animationDelay: "0.5s", animationDuration: "2.5s" }}>
+            <div className="absolute top-32 right-[10%] w-10 h-10 animate-bounce hidden sm:block" style={{ animationDelay: "0.5s", animationDuration: "2.5s" }}>
               <FloatingPencil className="w-full h-full drop-shadow-lg" />
             </div>
-            <div className="absolute top-64 left-[10%] w-12 h-12 animate-bounce" style={{ animationDelay: "1s", animationDuration: "3.5s" }}>
+            <div className="absolute top-48 left-[4%] w-10 h-10 animate-bounce hidden md:block" style={{ animationDelay: "1s", animationDuration: "3.5s" }}>
               <FloatingTarget className="w-full h-full drop-shadow-lg" />
             </div>
-            <div className="absolute bottom-48 right-[15%] w-14 h-14 animate-bounce" style={{ animationDelay: "0.3s", animationDuration: "2.8s" }}>
+            <div className="absolute top-20 right-[5%] w-12 h-12 animate-bounce" style={{ animationDelay: "0.3s", animationDuration: "2.8s" }}>
               <FloatingStar className="w-full h-full drop-shadow-lg" />
             </div>
-            <div className="absolute bottom-32 left-[20%] w-12 h-12 animate-bounce" style={{ animationDelay: "0.7s", animationDuration: "3.2s" }}>
+            <div className="absolute bottom-32 left-[12%] w-10 h-10 animate-bounce hidden sm:block" style={{ animationDelay: "0.7s", animationDuration: "3.2s" }}>
               <FloatingPalette className="w-full h-full drop-shadow-lg" />
             </div>
-            <div className="absolute top-1/3 right-[8%] w-16 h-16 animate-bounce" style={{ animationDelay: "0.2s", animationDuration: "3s" }}>
+            <div className="absolute top-40 right-[4%] w-14 h-14 animate-bounce hidden md:block" style={{ animationDelay: "0.2s", animationDuration: "3s" }}>
               <FloatingRocket className="w-full h-full drop-shadow-lg" />
             </div>
-
-            {/* Decorative shapes */}
-            <div className="absolute top-40 left-[5%] w-16 h-16 border-4 border-violet-300/50 rounded-full" />
-            <div className="absolute top-60 right-[12%] w-12 h-12 bg-amber-300/30 rounded-lg rotate-45" />
-            <div className="absolute bottom-60 left-[8%] w-20 h-20 border-4 border-cyan-300/50 rounded-xl rotate-12" />
-            <div className="absolute bottom-40 right-[25%] w-8 h-8 bg-emerald-400/40 rounded-full" />
-
-            {/* Dashed path decoration */}
-            <svg className="absolute top-20 left-1/4 w-96 h-64 text-gray-300/50" viewBox="0 0 400 200">
-              <path d="M 0 100 Q 100 20 200 100 T 400 100" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="8 8" />
-            </svg>
+            {/* Extra illustrations for richness */}
+            <div className="absolute bottom-24 right-[8%] w-10 h-10 animate-bounce hidden sm:block" style={{ animationDelay: "0.4s", animationDuration: "2.6s" }}>
+              <TrophyIcon className="w-full h-full" />
+            </div>
+            <div className="absolute bottom-40 left-[6%] w-8 h-8 animate-bounce hidden md:block" style={{ animationDelay: "0.9s", animationDuration: "3.1s" }}>
+              <GamepadIcon className="w-full h-full" />
+            </div>
           </div>
 
-          <div className="relative z-10 max-w-6xl mx-auto px-6 py-20">
+          <div className="relative z-10 max-w-5xl mx-auto px-6 py-8">
             <div className="text-center">
               {/* Main headline with colorful highlights */}
               <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold text-gray-900 leading-tight mb-6">
@@ -336,7 +332,7 @@ export default function Home() {
               </p>
 
               {/* CTAs */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
                 <Link
                   href="/auth/signup"
                   className="group px-8 py-4 text-lg font-bold text-white bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full hover:from-emerald-600 hover:to-cyan-600 transition-all shadow-xl shadow-emerald-500/30 hover:shadow-2xl hover:shadow-emerald-500/40 hover:-translate-y-1 flex items-center gap-2"
@@ -376,17 +372,10 @@ export default function Home() {
               </div>
             </div>
           </div>
-
-          {/* Wave decoration at bottom */}
-          <div className="absolute bottom-0 left-0 right-0">
-            <svg viewBox="0 0 1440 120" fill="none" className="w-full">
-              <path d="M0 120L60 105C120 90 240 60 360 45C480 30 600 30 720 37.5C840 45 960 60 1080 67.5C1200 75 1320 75 1380 75L1440 75V120H1380C1320 120 1200 120 1080 120C960 120 840 120 720 120C600 120 480 120 360 120C240 120 120 120 60 120H0Z" fill="#F9FAFB"/>
-            </svg>
-          </div>
         </section>
 
         {/* Features Section */}
-        <section id="features" className="py-24 bg-gray-50 relative">
+        <section id="features" className="py-16 bg-gradient-to-b from-white to-gray-50 relative">
           {/* Decorative elements */}
           <div className="absolute top-10 right-10 w-16 h-16 opacity-20">
             <LightningIcon className="w-full h-full text-amber-500" />
@@ -396,7 +385,7 @@ export default function Home() {
           </div>
 
           <div className="max-w-7xl mx-auto px-6">
-            <div className="text-center mb-16">
+            <div className="text-center mb-10">
               <span className="inline-block px-4 py-2 bg-violet-100 text-violet-700 rounded-full text-sm font-bold mb-4">
                 {txt.features.label}
               </span>
@@ -438,7 +427,7 @@ export default function Home() {
         </section>
 
         {/* Subjects Section */}
-        <section className="py-24 relative overflow-hidden">
+        <section className="py-16 relative overflow-hidden">
           {/* Background decoration */}
           <div className="absolute top-0 left-0 w-full h-32 bg-gray-50" />
           <div className="absolute inset-0">
@@ -447,7 +436,7 @@ export default function Home() {
           </div>
 
           <div className="relative z-10 max-w-7xl mx-auto px-6">
-            <div className="text-center mb-16">
+            <div className="text-center mb-10">
               <span className="inline-block px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full text-sm font-bold mb-4">
                 {txt.subjects.label}
               </span>
@@ -479,7 +468,7 @@ export default function Home() {
         </section>
 
         {/* How It Works */}
-        <section id="how-it-works" className="py-24 bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 relative overflow-hidden">
+        <section id="how-it-works" className="py-16 bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 relative overflow-hidden">
           {/* Decorative elements */}
           <div className="absolute inset-0">
             <div className="absolute top-10 left-10 w-32 h-32 border-4 border-white/10 rounded-full" />
@@ -489,7 +478,7 @@ export default function Home() {
           </div>
 
           <div className="relative z-10 max-w-7xl mx-auto px-6">
-            <div className="text-center mb-16">
+            <div className="text-center mb-10">
               <span className="inline-block px-4 py-2 bg-white/20 text-white rounded-full text-sm font-bold mb-4">
                 {txt.howItWorks.label}
               </span>
@@ -523,7 +512,7 @@ export default function Home() {
         </section>
 
         {/* For Teachers */}
-        <section id="teachers" className="py-24 relative">
+        <section id="teachers" className="py-16 relative">
           <div className="max-w-7xl mx-auto px-6">
             <div className="bg-gradient-to-br from-amber-400 via-orange-500 to-red-500 rounded-3xl p-8 md:p-16 relative overflow-hidden">
               {/* Decorative elements */}
@@ -575,7 +564,7 @@ export default function Home() {
         </section>
 
         {/* FAQ */}
-        <section id="faq" className="py-24 bg-gray-50">
+        <section id="faq" className="py-16 bg-gray-50">
           <div className="max-w-3xl mx-auto px-6">
             <div className="text-center mb-12">
               <div className="inline-flex items-center gap-3">
@@ -613,7 +602,7 @@ export default function Home() {
         </section>
 
         {/* Final CTA */}
-        <section className="py-24 relative overflow-hidden">
+        <section className="py-16 relative overflow-hidden">
           {/* Background decoration */}
           <div className="absolute inset-0">
             <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-100/50 rounded-full blur-3xl" />
