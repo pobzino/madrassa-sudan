@@ -20,19 +20,6 @@ const translations = {
     progress: "التقدم",
     settings: "الإعدادات",
     logout: "تسجيل الخروج",
-    gettingStarted: "مهماتك اليوم",
-    completed: "مكتمل",
-    of: "من",
-    watchFirstLesson: "شاهد أول درس",
-    watchFirstLessonDesc: "ابدأ بمشاهدة درس في مادتك المفضلة",
-    completeHomework: "أكمل واجباً",
-    completeHomeworkDesc: "حل واجبك الأول واحصل على نقاط",
-    askTutor: "اسأل المعلم الذكي",
-    askTutorDesc: "احصل على مساعدة فورية في أي سؤال",
-    joinClass: "انضم لفصل دراسي",
-    joinClassDesc: "تعلم مع زملائك في الفصول المباشرة",
-    earnPoints: "اجمع 100 نقطة",
-    earnPointsDesc: "اجمع النقاط من إتمام الدروس والواجبات",
     yourProgress: "إنجازاتك",
     lessonsCompleted: "درس",
     dayStreak: "يوم متتالي",
@@ -42,9 +29,6 @@ const translations = {
     exploreSubjects: "اكتشف المواد",
     loading: "جاري التحميل...",
     keepGoing: "استمر! أنت تبلي بلاءً حسناً",
-    awesome: "رائع!",
-    greatJob: "أحسنت!",
-    letsLearn: "هيا نتعلم!",
   },
   en: {
     dashboard: "Dashboard",
@@ -58,19 +42,6 @@ const translations = {
     progress: "Progress",
     settings: "Settings",
     logout: "Log out",
-    gettingStarted: "Today's Missions",
-    completed: "completed",
-    of: "of",
-    watchFirstLesson: "Watch your first lesson",
-    watchFirstLessonDesc: "Start by watching a lesson in your favorite subject",
-    completeHomework: "Complete a homework",
-    completeHomeworkDesc: "Solve your first homework and earn points",
-    askTutor: "Ask the AI Tutor",
-    askTutorDesc: "Get instant help with any question",
-    joinClass: "Join a classroom",
-    joinClassDesc: "Learn together with classmates in live sessions",
-    earnPoints: "Earn 100 points",
-    earnPointsDesc: "Collect points by completing lessons and homework",
     yourProgress: "Your Achievements",
     lessonsCompleted: "Lessons",
     dayStreak: "Day Streak",
@@ -80,9 +51,6 @@ const translations = {
     exploreSubjects: "Explore Subjects",
     loading: "Loading...",
     keepGoing: "Keep going! You're doing great",
-    awesome: "Awesome!",
-    greatJob: "Great job!",
-    letsLearn: "Let's learn!",
   },
 };
 
@@ -227,16 +195,6 @@ export default function DashboardPage() {
   }
 
   const firstName = profile?.full_name?.split(" ")[0] || "Student";
-
-  // Getting started tasks with fun colors
-  const tasks = [
-    { id: 1, label: t.watchFirstLesson, desc: t.watchFirstLessonDesc, done: stats.lessons > 0, href: "/lessons", color: "from-violet-500 to-purple-600", emoji: "📺" },
-    { id: 2, label: t.completeHomework, desc: t.completeHomeworkDesc, done: stats.homework > 0, href: "/homework", color: "from-amber-500 to-orange-600", emoji: "✏️" },
-    { id: 3, label: t.askTutor, desc: t.askTutorDesc, done: false, href: "/tutor", color: "from-cyan-500 to-blue-600", emoji: "🤖" },
-    { id: 4, label: t.joinClass, desc: t.joinClassDesc, done: false, href: "/cohorts/join", color: "from-pink-500 to-rose-600", emoji: "👋" },
-    { id: 5, label: t.earnPoints, desc: t.earnPointsDesc, done: stats.points >= 100, href: "/lessons", color: "from-emerald-500 to-teal-600", emoji: "⭐" },
-  ];
-  const completedTasks = tasks.filter(task => task.done).length;
 
   const navItems = [
     { href: "/dashboard", label: t.dashboard, icon: Icons.dashboard, active: true, color: "text-emerald-600" },
@@ -402,65 +360,6 @@ export default function DashboardPage() {
                   <span className="font-bold">{stats.points} {t.totalPoints}</span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Today's Missions */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/30">
-                  {Icons.sparkle}
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">{t.gettingStarted}</h2>
-                  <p className="text-sm text-gray-500">{completedTasks} {t.of} {tasks.length} {t.completed}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-32 h-3 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-violet-500 to-purple-600 rounded-full transition-all duration-500"
-                    style={{ width: `${(completedTasks / tasks.length) * 100}%` }}
-                  />
-                </div>
-                <span className="text-sm font-bold text-violet-600">
-                  {Math.round((completedTasks / tasks.length) * 100)}%
-                </span>
-              </div>
-            </div>
-
-            <div className="grid gap-3">
-              {tasks.map((task) => (
-                <Link
-                  key={task.id}
-                  href={task.href}
-                  className={`group flex items-center gap-4 p-4 rounded-2xl border-2 transition-all hover:-translate-y-0.5 ${
-                    task.done
-                      ? "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200"
-                      : "bg-white border-gray-100 hover:border-gray-200 hover:shadow-lg"
-                  }`}
-                >
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${
-                    task.done
-                      ? "bg-gradient-to-br from-emerald-400 to-teal-500 shadow-lg shadow-emerald-500/30"
-                      : `bg-gradient-to-br ${task.color} shadow-lg`
-                  }`}>
-                    {task.done ? <span className="text-white">{Icons.check}</span> : task.emoji}
-                  </div>
-                  <div className="flex-1">
-                    <p className={`font-semibold ${task.done ? "text-emerald-700" : "text-gray-900"}`}>
-                      {task.label}
-                    </p>
-                    <p className="text-sm text-gray-500">{task.desc}</p>
-                  </div>
-                  {task.done && (
-                    <span className="text-emerald-600 font-bold text-sm bg-emerald-100 px-3 py-1 rounded-full">
-                      {t.greatJob}
-                    </span>
-                  )}
-                </Link>
-              ))}
             </div>
           </div>
 
