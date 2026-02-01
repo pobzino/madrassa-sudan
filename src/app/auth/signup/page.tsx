@@ -72,10 +72,18 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
 
+    // Determine the correct redirect URL based on environment
+    const redirectUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/auth/callback`
+      : process.env.NEXT_PUBLIC_SITE_URL
+        ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
+        : 'https://madrassasudan.netlify.app/auth/callback';
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo: redirectUrl,
         data: {
           full_name: fullName,
           role: role,
