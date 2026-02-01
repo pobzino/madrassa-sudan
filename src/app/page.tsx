@@ -3,6 +3,69 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  FloatingBook,
+  FloatingPencil,
+  FloatingTarget,
+  FloatingStar,
+  FloatingPalette,
+  FloatingRocket,
+  VideoIcon,
+  RobotIcon,
+  GamepadIcon,
+  TrophyIcon,
+  MathIcon,
+  ScienceIcon,
+  ArabicIcon,
+  GlobeIcon,
+  MoonStarIcon,
+  MapIcon,
+  SparkleIcon,
+  BookOpenIcon,
+  RocketLaunchIcon,
+  LightningIcon,
+  LightbulbIcon,
+  GraduationCapIcon,
+  BackpackIcon,
+  TeacherIcon,
+  QuestionIcon,
+  PlayIcon,
+  CelebrationIcon,
+} from "@/components/illustrations";
+
+// Helper function to render feature icons
+const FeatureIcon = ({ type, className }: { type: string; className?: string }) => {
+  switch (type) {
+    case "video": return <VideoIcon className={className} />;
+    case "robot": return <RobotIcon className={className} />;
+    case "gamepad": return <GamepadIcon className={className} />;
+    case "trophy": return <TrophyIcon className={className} />;
+    default: return null;
+  }
+};
+
+// Helper function to render subject icons
+const SubjectIcon = ({ type, className }: { type: string; className?: string }) => {
+  switch (type) {
+    case "math": return <MathIcon className={className} />;
+    case "science": return <ScienceIcon className={className} />;
+    case "arabic": return <ArabicIcon className={className} />;
+    case "globe": return <GlobeIcon className={className} />;
+    case "moonstar": return <MoonStarIcon className={className} />;
+    case "map": return <MapIcon className={className} />;
+    default: return null;
+  }
+};
+
+// Helper function to render how it works icons
+const StepIcon = ({ type, className }: { type: string; className?: string }) => {
+  switch (type) {
+    case "sparkle": return <SparkleIcon className={className} />;
+    case "bookopen": return <BookOpenIcon className={className} />;
+    case "rocketlaunch": return <RocketLaunchIcon className={className} />;
+    default: return null;
+  }
+};
 
 export default function Home() {
   const { language, setLanguage, isRtl } = useLanguage();
@@ -29,31 +92,31 @@ export default function Home() {
         title: "تعلم بطريقة",
         titleHighlight: "ممتعة",
         items: [
-          { title: "دروس ممتعة", desc: "فيديوهات تفاعلية مع رسوم متحركة تجعل التعلم مغامرة", color: "from-violet-500 to-purple-600", icon: "🎬" },
-          { title: "المعلم الذكي", desc: "صديقك الذكي الذي يساعدك على فهم أي سؤال بالعربية", color: "from-cyan-500 to-blue-600", icon: "🤖" },
-          { title: "الألعاب التعليمية", desc: "اختبارات وتحديات ممتعة تجعلك تتعلم وأنت تلعب", color: "from-emerald-500 to-teal-600", icon: "🎮" },
-          { title: "شهادات وجوائز", desc: "اجمع النقاط واحصل على شهادات وشارات تقدير", color: "from-amber-500 to-orange-600", icon: "🏆" },
+          { title: "دروس ممتعة", desc: "فيديوهات تفاعلية مع رسوم متحركة تجعل التعلم مغامرة", color: "from-violet-500 to-purple-600", iconType: "video" },
+          { title: "المعلم الذكي", desc: "صديقك الذكي الذي يساعدك على فهم أي سؤال بالعربية", color: "from-cyan-500 to-blue-600", iconType: "robot" },
+          { title: "الألعاب التعليمية", desc: "اختبارات وتحديات ممتعة تجعلك تتعلم وأنت تلعب", color: "from-emerald-500 to-teal-600", iconType: "gamepad" },
+          { title: "شهادات وجوائز", desc: "اجمع النقاط واحصل على شهادات وشارات تقدير", color: "from-amber-500 to-orange-600", iconType: "trophy" },
         ],
       },
       subjects: {
         label: "المواد الدراسية",
         title: "اختر مادتك المفضلة",
         items: [
-          { name: "الرياضيات", icon: "📐", color: "from-blue-500 to-indigo-600" },
-          { name: "العلوم", icon: "🔬", color: "from-emerald-500 to-teal-600" },
-          { name: "اللغة العربية", icon: "📚", color: "from-amber-500 to-orange-600" },
-          { name: "اللغة الإنجليزية", icon: "🌍", color: "from-violet-500 to-purple-600" },
-          { name: "التربية الإسلامية", icon: "☪️", color: "from-cyan-500 to-blue-600" },
-          { name: "الدراسات الاجتماعية", icon: "🗺️", color: "from-pink-500 to-rose-600" },
+          { name: "الرياضيات", iconType: "math", color: "from-blue-500 to-indigo-600" },
+          { name: "العلوم", iconType: "science", color: "from-emerald-500 to-teal-600" },
+          { name: "اللغة العربية", iconType: "arabic", color: "from-amber-500 to-orange-600" },
+          { name: "اللغة الإنجليزية", iconType: "globe", color: "from-violet-500 to-purple-600" },
+          { name: "التربية الإسلامية", iconType: "moonstar", color: "from-cyan-500 to-blue-600" },
+          { name: "الدراسات الاجتماعية", iconType: "map", color: "from-pink-500 to-rose-600" },
         ],
       },
       howItWorks: {
         label: "كيف يعمل",
         title: "ثلاث خطوات للنجاح",
         steps: [
-          { num: "1", title: "سجّل حسابك", desc: "أنشئ حساباً مجانياً في دقيقة واحدة", icon: "✨" },
-          { num: "2", title: "اختر موادك", desc: "حدد صفك الدراسي والمواد التي تريد تعلمها", icon: "📖" },
-          { num: "3", title: "ابدأ المغامرة", desc: "تعلم، العب، واجمع النقاط والشهادات", icon: "🚀" },
+          { num: "1", title: "سجّل حسابك", desc: "أنشئ حساباً مجانياً في دقيقة واحدة", iconType: "sparkle" },
+          { num: "2", title: "اختر موادك", desc: "حدد صفك الدراسي والمواد التي تريد تعلمها", iconType: "bookopen" },
+          { num: "3", title: "ابدأ المغامرة", desc: "تعلم، العب، واجمع النقاط والشهادات", iconType: "rocketlaunch" },
         ],
       },
       teachers: {
@@ -103,31 +166,31 @@ export default function Home() {
         title: "Learn in a",
         titleHighlight: "fun way",
         items: [
-          { title: "Fun Lessons", desc: "Interactive videos with animations that make learning an adventure", color: "from-violet-500 to-purple-600", icon: "🎬" },
-          { title: "AI Tutor", desc: "Your smart friend who helps you understand any question in Arabic", color: "from-cyan-500 to-blue-600", icon: "🤖" },
-          { title: "Learning Games", desc: "Fun quizzes and challenges that let you learn while playing", color: "from-emerald-500 to-teal-600", icon: "🎮" },
-          { title: "Badges & Awards", desc: "Collect points and earn certificates and achievement badges", color: "from-amber-500 to-orange-600", icon: "🏆" },
+          { title: "Fun Lessons", desc: "Interactive videos with animations that make learning an adventure", color: "from-violet-500 to-purple-600", iconType: "video" },
+          { title: "AI Tutor", desc: "Your smart friend who helps you understand any question in Arabic", color: "from-cyan-500 to-blue-600", iconType: "robot" },
+          { title: "Learning Games", desc: "Fun quizzes and challenges that let you learn while playing", color: "from-emerald-500 to-teal-600", iconType: "gamepad" },
+          { title: "Badges & Awards", desc: "Collect points and earn certificates and achievement badges", color: "from-amber-500 to-orange-600", iconType: "trophy" },
         ],
       },
       subjects: {
         label: "Subjects",
         title: "Pick your favorite subject",
         items: [
-          { name: "Mathematics", icon: "📐", color: "from-blue-500 to-indigo-600" },
-          { name: "Science", icon: "🔬", color: "from-emerald-500 to-teal-600" },
-          { name: "Arabic", icon: "📚", color: "from-amber-500 to-orange-600" },
-          { name: "English", icon: "🌍", color: "from-violet-500 to-purple-600" },
-          { name: "Islamic Studies", icon: "☪️", color: "from-cyan-500 to-blue-600" },
-          { name: "Social Studies", icon: "🗺️", color: "from-pink-500 to-rose-600" },
+          { name: "Mathematics", iconType: "math", color: "from-blue-500 to-indigo-600" },
+          { name: "Science", iconType: "science", color: "from-emerald-500 to-teal-600" },
+          { name: "Arabic", iconType: "arabic", color: "from-amber-500 to-orange-600" },
+          { name: "English", iconType: "globe", color: "from-violet-500 to-purple-600" },
+          { name: "Islamic Studies", iconType: "moonstar", color: "from-cyan-500 to-blue-600" },
+          { name: "Social Studies", iconType: "map", color: "from-pink-500 to-rose-600" },
         ],
       },
       howItWorks: {
         label: "HOW IT WORKS",
         title: "Three steps to success",
         steps: [
-          { num: "1", title: "Create Account", desc: "Sign up for free in one minute", icon: "✨" },
-          { num: "2", title: "Choose Subjects", desc: "Select your grade and subjects you want to learn", icon: "📖" },
-          { num: "3", title: "Start Adventure", desc: "Learn, play, and collect points and certificates", icon: "🚀" },
+          { num: "1", title: "Create Account", desc: "Sign up for free in one minute", iconType: "sparkle" },
+          { num: "2", title: "Choose Subjects", desc: "Select your grade and subjects you want to learn", iconType: "bookopen" },
+          { num: "3", title: "Start Adventure", desc: "Learn, play, and collect points and certificates", iconType: "rocketlaunch" },
         ],
       },
       teachers: {
@@ -214,12 +277,24 @@ export default function Home() {
             <div className="absolute bottom-40 right-10 w-64 h-64 bg-emerald-200/40 rounded-full blur-3xl" />
 
             {/* Floating decorative elements */}
-            <div className="absolute top-32 left-[15%] text-4xl animate-bounce" style={{ animationDelay: "0s", animationDuration: "3s" }}>📚</div>
-            <div className="absolute top-48 right-[20%] text-3xl animate-bounce" style={{ animationDelay: "0.5s", animationDuration: "2.5s" }}>✏️</div>
-            <div className="absolute top-64 left-[10%] text-3xl animate-bounce" style={{ animationDelay: "1s", animationDuration: "3.5s" }}>🎯</div>
-            <div className="absolute bottom-48 right-[15%] text-4xl animate-bounce" style={{ animationDelay: "0.3s", animationDuration: "2.8s" }}>🌟</div>
-            <div className="absolute bottom-32 left-[20%] text-3xl animate-bounce" style={{ animationDelay: "0.7s", animationDuration: "3.2s" }}>🎨</div>
-            <div className="absolute top-1/3 right-[8%] text-5xl animate-bounce" style={{ animationDelay: "0.2s", animationDuration: "3s" }}>🚀</div>
+            <div className="absolute top-32 left-[15%] w-14 h-14 animate-bounce" style={{ animationDelay: "0s", animationDuration: "3s" }}>
+              <FloatingBook className="w-full h-full drop-shadow-lg" />
+            </div>
+            <div className="absolute top-48 right-[20%] w-12 h-12 animate-bounce" style={{ animationDelay: "0.5s", animationDuration: "2.5s" }}>
+              <FloatingPencil className="w-full h-full drop-shadow-lg" />
+            </div>
+            <div className="absolute top-64 left-[10%] w-12 h-12 animate-bounce" style={{ animationDelay: "1s", animationDuration: "3.5s" }}>
+              <FloatingTarget className="w-full h-full drop-shadow-lg" />
+            </div>
+            <div className="absolute bottom-48 right-[15%] w-14 h-14 animate-bounce" style={{ animationDelay: "0.3s", animationDuration: "2.8s" }}>
+              <FloatingStar className="w-full h-full drop-shadow-lg" />
+            </div>
+            <div className="absolute bottom-32 left-[20%] w-12 h-12 animate-bounce" style={{ animationDelay: "0.7s", animationDuration: "3.2s" }}>
+              <FloatingPalette className="w-full h-full drop-shadow-lg" />
+            </div>
+            <div className="absolute top-1/3 right-[8%] w-16 h-16 animate-bounce" style={{ animationDelay: "0.2s", animationDuration: "3s" }}>
+              <FloatingRocket className="w-full h-full drop-shadow-lg" />
+            </div>
 
             {/* Decorative shapes */}
             <div className="absolute top-40 left-[5%] w-16 h-16 border-4 border-violet-300/50 rounded-full" />
@@ -267,13 +342,13 @@ export default function Home() {
                   className="group px-8 py-4 text-lg font-bold text-white bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full hover:from-emerald-600 hover:to-cyan-600 transition-all shadow-xl shadow-emerald-500/30 hover:shadow-2xl hover:shadow-emerald-500/40 hover:-translate-y-1 flex items-center gap-2"
                 >
                   {txt.hero.cta1}
-                  <span className="text-xl">🎉</span>
+                  <CelebrationIcon className="w-6 h-6" />
                 </Link>
                 <a
                   href="#how-it-works"
                   className="px-8 py-4 text-lg font-semibold text-gray-700 bg-white border-2 border-gray-200 rounded-full hover:border-gray-300 hover:bg-gray-50 transition-all flex items-center gap-2"
                 >
-                  <span>▶️</span>
+                  <PlayIcon className="w-6 h-6 text-emerald-500" />
                   {txt.hero.cta2}
                 </a>
               </div>
@@ -313,8 +388,12 @@ export default function Home() {
         {/* Features Section */}
         <section id="features" className="py-24 bg-gray-50 relative">
           {/* Decorative elements */}
-          <div className="absolute top-10 right-10 text-6xl opacity-20">⚡</div>
-          <div className="absolute bottom-20 left-10 text-5xl opacity-20">💡</div>
+          <div className="absolute top-10 right-10 w-16 h-16 opacity-20">
+            <LightningIcon className="w-full h-full text-amber-500" />
+          </div>
+          <div className="absolute bottom-20 left-10 w-14 h-14 opacity-20">
+            <LightbulbIcon className="w-full h-full text-yellow-500" />
+          </div>
 
           <div className="max-w-7xl mx-auto px-6">
             <div className="text-center mb-16">
@@ -339,7 +418,9 @@ export default function Home() {
                   <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
 
                   <div className="relative z-10">
-                    <div className="text-5xl mb-4">{feature.icon}</div>
+                    <div className="w-14 h-14 mb-4 text-violet-600 group-hover:text-white transition-colors">
+                      <FeatureIcon type={feature.iconType} className="w-full h-full" />
+                    </div>
                     <h3 className="text-xl font-bold text-gray-900 group-hover:text-white mb-3 transition-colors">
                       {feature.title}
                     </h3>
@@ -386,7 +467,9 @@ export default function Home() {
                   <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
 
                   <div className="relative z-10">
-                    <span className="text-5xl mb-3 block drop-shadow-lg">{subject.icon}</span>
+                    <div className="w-14 h-14 mx-auto mb-3 text-white drop-shadow-lg">
+                      <SubjectIcon type={subject.iconType} className="w-full h-full" />
+                    </div>
                     <span className="font-bold text-white text-sm">{subject.name}</span>
                   </div>
                 </Link>
@@ -424,7 +507,9 @@ export default function Home() {
                   )}
 
                   <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-8 text-center border border-white/20 hover:bg-white/20 transition-all">
-                    <div className="text-5xl mb-4">{step.icon}</div>
+                    <div className="w-14 h-14 mx-auto mb-4 text-white">
+                      <StepIcon type={step.iconType} className="w-full h-full" />
+                    </div>
                     <div className="w-12 h-12 rounded-full bg-white text-violet-600 font-extrabold text-xl flex items-center justify-center mx-auto mb-4">
                       {step.num}
                     </div>
@@ -444,8 +529,12 @@ export default function Home() {
               {/* Decorative elements */}
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
               <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
-              <div className="absolute top-10 left-10 text-6xl opacity-30">🎓</div>
-              <div className="absolute bottom-10 right-10 text-6xl opacity-30">✨</div>
+              <div className="absolute top-10 left-10 w-16 h-16 opacity-30">
+                <GraduationCapIcon className="w-full h-full text-white" />
+              </div>
+              <div className="absolute bottom-10 right-10 w-16 h-16 opacity-30">
+                <SparkleIcon className="w-full h-full text-white" />
+              </div>
 
               <div className="relative z-10 grid md:grid-cols-2 gap-12 items-center">
                 <div className="text-white">
@@ -476,7 +565,9 @@ export default function Home() {
                 </div>
 
                 <div className="hidden md:flex items-center justify-center">
-                  <div className="text-9xl">👩‍🏫</div>
+                  <div className="w-48 h-48 text-white/90">
+                    <TeacherIcon className="w-full h-full" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -486,9 +577,14 @@ export default function Home() {
         {/* FAQ */}
         <section id="faq" className="py-24 bg-gray-50">
           <div className="max-w-3xl mx-auto px-6">
-            <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 text-center mb-12">
-              {txt.faq.title} 🤔
-            </h2>
+            <div className="text-center mb-12">
+              <div className="inline-flex items-center gap-3">
+                <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">
+                  {txt.faq.title}
+                </h2>
+                <QuestionIcon className="w-10 h-10 text-violet-500" />
+              </div>
+            </div>
 
             <div className="space-y-4">
               {txt.faq.items.map((item, i) => (
@@ -525,7 +621,9 @@ export default function Home() {
           </div>
 
           <div className="relative z-10 max-w-4xl mx-auto px-6 text-center">
-            <div className="text-6xl mb-6">🎒</div>
+            <div className="w-20 h-20 mx-auto mb-6">
+              <BackpackIcon className="w-full h-full text-emerald-600" />
+            </div>
             <h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-4">
               {txt.finalCta.title}
             </h2>
@@ -535,7 +633,7 @@ export default function Home() {
               className="inline-flex items-center gap-3 px-10 py-5 text-xl font-bold text-white bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full hover:from-emerald-600 hover:to-cyan-600 transition-all shadow-xl shadow-emerald-500/30 hover:shadow-2xl hover:-translate-y-1"
             >
               {txt.finalCta.cta}
-              <span className="text-2xl">🚀</span>
+              <FloatingRocket className="w-8 h-8" />
             </Link>
           </div>
         </section>
