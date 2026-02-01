@@ -104,10 +104,7 @@ export default function Home() {
         items: [
           { name: "الرياضيات", iconType: "math", color: "from-blue-500 to-indigo-600" },
           { name: "العلوم", iconType: "science", color: "from-emerald-500 to-teal-600" },
-          { name: "اللغة العربية", iconType: "arabic", color: "from-amber-500 to-orange-600" },
           { name: "اللغة الإنجليزية", iconType: "globe", color: "from-violet-500 to-purple-600" },
-          { name: "التربية الإسلامية", iconType: "moonstar", color: "from-cyan-500 to-blue-600" },
-          { name: "الدراسات الاجتماعية", iconType: "map", color: "from-pink-500 to-rose-600" },
         ],
       },
       howItWorks: {
@@ -178,10 +175,7 @@ export default function Home() {
         items: [
           { name: "Mathematics", iconType: "math", color: "from-blue-500 to-indigo-600" },
           { name: "Science", iconType: "science", color: "from-emerald-500 to-teal-600" },
-          { name: "Arabic", iconType: "arabic", color: "from-amber-500 to-orange-600" },
           { name: "English", iconType: "globe", color: "from-violet-500 to-purple-600" },
-          { name: "Islamic Studies", iconType: "moonstar", color: "from-cyan-500 to-blue-600" },
-          { name: "Social Studies", iconType: "map", color: "from-pink-500 to-rose-600" },
         ],
       },
       howItWorks: {
@@ -445,21 +439,22 @@ export default function Home() {
               </h2>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto">
               {txt.subjects.items.map((subject, i) => (
                 <Link
                   key={i}
                   href="/auth/signup"
-                  className="group relative overflow-hidden rounded-2xl p-6 text-center transition-all hover:-translate-y-2 hover:shadow-xl"
+                  className="group relative overflow-hidden rounded-3xl p-8 text-center transition-all hover:-translate-y-2 hover:shadow-2xl"
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${subject.color}`} />
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                  <div className="absolute bottom-0 left-0 w-20 h-20 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
 
                   <div className="relative z-10">
-                    <div className="w-14 h-14 mx-auto mb-3 text-white drop-shadow-lg">
+                    <div className="w-20 h-20 mx-auto mb-4 text-white drop-shadow-lg">
                       <SubjectIcon type={subject.iconType} className="w-full h-full" />
                     </div>
-                    <span className="font-bold text-white text-sm">{subject.name}</span>
+                    <span className="font-bold text-white text-lg">{subject.name}</span>
                   </div>
                 </Link>
               ))}
