@@ -1,26 +1,99 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Premium Brand Palette */
+  --primary: #0F4D35;
+  /* Deep Forest Green - Trust, Institutional */
+  --primary-light: #1B6B4A;
+  /* Vibrant Green - Growth */
+  --secondary: #D97706;
+  /* Deep Amber - Warmth, Energy */
+  --secondary-light: #F59E0B;
+  /* Bright Amber */
+  --accent: #E11D48;
+  /* Rose - Urgency/Heart */
+
+  /* Backgrounds */
+  --bg-page: #FCFCFC;
+  /* Premium White (not stark) */
+  --bg-surface: #FFFFFF;
+  /* Pure White */
+  --bg-subtle: #F8FAFC;
+  /* Cool Grey Surface */
+
+  /* Text */
+  --text-main: #0F172A;
+  /* Slate 900 */
+  --text-muted: #64748B;
+  /* Slate 500 */
+
+  /* Gradients */
+  --gradient-main: linear-gradient(135deg, #0F4D35 0%, #1B6B4A 100%);
+  --gradient-warm: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--bg-page);
+  --color-foreground: var(--text-main);
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-arabic: var(--font-cairo), var(--font-inter), system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg-page);
+  color: var(--text-main);
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Premium Card Styles */
+.bento-card {
+  background: var(--bg-surface);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bento-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+  border-color: rgba(15, 77, 53, 0.15);
+}
+
+/* Animations */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Utility for text balance */
+.text-balance {
+  text-wrap: balance;
+}
+
+/* Smooth Scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+/* RTL Support */
+[dir="rtl"] {
+  font-family: var(--font-cairo);
 }
