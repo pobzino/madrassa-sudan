@@ -495,6 +495,361 @@ export const OwlSad = ({ className = "" }: { className?: string }) => (
   </svg>
 );
 
+// Reading owl - holding a book, for lessons
+export const OwlReading = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 72 64" fill="none">
+    {/* Ear tufts */}
+    <ellipse cx="22" cy="18" rx="5" ry="7" fill="#a01028" />
+    <ellipse cx="58" cy="18" rx="5" ry="7" fill="#a01028" />
+
+    {/* Main body - shifted right */}
+    <ellipse cx="40" cy="38" rx="24" ry="24" fill="#D21034" />
+
+    {/* Facial disc */}
+    <ellipse cx="40" cy="34" rx="18" ry="14" fill="#E8334F" />
+
+    {/* Belly */}
+    <ellipse cx="40" cy="52" rx="12" ry="8" fill="#FFF5F5" />
+
+    {/* Book */}
+    <rect x="4" y="36" width="20" height="16" rx="2" fill="#8B5CF6" />
+    <rect x="6" y="38" width="16" height="12" rx="1" fill="#F5F3FF" />
+    <path d="M14 38v12" stroke="#DDD6FE" strokeWidth="1" />
+    <path d="M9 42h4M9 46h4M17 42h3M17 46h3" stroke="#C4B5FD" strokeWidth="1" strokeLinecap="round" />
+
+    {/* Wing holding book */}
+    <ellipse cx="20" cy="44" rx="8" ry="6" fill="#a01028" />
+
+    {/* Eyes - focused downward */}
+    <ellipse cx="31" cy="32" rx="8" ry="9" fill="white" />
+    <circle cx="30" cy="35" r="5" fill="#000000" />
+    <circle cx="31" cy="33" r="2" fill="white" />
+
+    <ellipse cx="49" cy="32" rx="8" ry="9" fill="white" />
+    <circle cx="48" cy="35" r="5" fill="#000000" />
+    <circle cx="49" cy="33" r="2" fill="white" />
+
+    {/* Beak */}
+    <ellipse cx="40" cy="42" rx="4" ry="3" fill="#F59E0B" />
+
+    {/* Graduation cap */}
+    <path d="M20 16c0-2 9-4 20-4s20 2 20 4v3c0 1-9 2-20 2s-20-1-20-2v-3z" fill="#1a1a1a" />
+    <path d="M16 12l24-6 24 6-24 8-24-8z" fill="#007229" />
+    <circle cx="40" cy="10" r="2.5" fill="#1a1a1a" />
+    <path d="M40 10 Q48 14 52 22" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+    <ellipse cx="53" cy="24" rx="3" ry="4" fill="#F59E0B" />
+
+    {/* Feet */}
+    <ellipse cx="32" cy="60" rx="4" ry="2.5" fill="#F59E0B" />
+    <ellipse cx="48" cy="60" rx="4" ry="2.5" fill="#F59E0B" />
+  </svg>
+);
+
+// Excited owl - for achievements and streaks
+export const OwlExcited = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    <style>{`
+      @keyframes star-pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.3); opacity: 0.7; }
+      }
+      .star-animate { animation: star-pulse 0.6s ease-in-out infinite; }
+    `}</style>
+
+    {/* Stars around */}
+    <path className="star-animate" d="M8 12l2 4 4 2-4 2-2 4-2-4-4-2 4-2 2-4z" fill="#FBBF24" style={{ animationDelay: "0s" }} />
+    <path className="star-animate" d="M56 8l1.5 3 3 1.5-3 1.5-1.5 3-1.5-3-3-1.5 3-1.5 1.5-3z" fill="#FBBF24" style={{ animationDelay: "0.2s" }} />
+    <path className="star-animate" d="M4 40l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" fill="#FBBF24" style={{ animationDelay: "0.4s" }} />
+    <path className="star-animate" d="M60 36l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" fill="#FBBF24" style={{ animationDelay: "0.3s" }} />
+
+    {/* Ear tufts - perky */}
+    <ellipse cx="14" cy="16" rx="5" ry="8" fill="#a01028" />
+    <ellipse cx="50" cy="16" rx="5" ry="8" fill="#a01028" />
+
+    {/* Main body */}
+    <ellipse cx="32" cy="38" rx="24" ry="24" fill="#D21034" />
+
+    {/* Facial disc */}
+    <ellipse cx="32" cy="34" rx="18" ry="14" fill="#E8334F" />
+
+    {/* Belly */}
+    <ellipse cx="32" cy="52" rx="12" ry="8" fill="#FFF5F5" />
+
+    {/* Big excited eyes */}
+    <ellipse cx="23" cy="32" rx="9" ry="10" fill="white" />
+    <circle cx="25" cy="30" r="6" fill="#000000" />
+    <circle cx="27" cy="28" r="2.5" fill="white" />
+    <circle cx="24" cy="32" r="1" fill="white" />
+
+    <ellipse cx="41" cy="32" rx="9" ry="10" fill="white" />
+    <circle cx="39" cy="30" r="6" fill="#000000" />
+    <circle cx="41" cy="28" r="2.5" fill="white" />
+    <circle cx="38" cy="32" r="1" fill="white" />
+
+    {/* Open happy beak */}
+    <ellipse cx="32" cy="44" rx="5" ry="4" fill="#F59E0B" />
+    <ellipse cx="32" cy="46" rx="3" ry="2" fill="#92400E" />
+
+    {/* Blush */}
+    <circle cx="16" cy="38" r="4" fill="#FDBA74" opacity="0.4" />
+    <circle cx="48" cy="38" r="4" fill="#FDBA74" opacity="0.4" />
+
+    {/* Graduation cap */}
+    <path d="M12 14c0-2 9-4 20-4s20 2 20 4v3c0 1-9 2-20 2s-20-1-20-2v-3z" fill="#1a1a1a" />
+    <path d="M8 10l24-6 24 6-24 8-24-8z" fill="#007229" />
+    <circle cx="32" cy="8" r="2.5" fill="#1a1a1a" />
+    <path d="M32 8 Q40 12 44 20" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+    <ellipse cx="45" cy="22" rx="3" ry="4" fill="#F59E0B" />
+
+    {/* Feet */}
+    <ellipse cx="24" cy="60" rx="4" ry="2.5" fill="#F59E0B" />
+    <ellipse cx="40" cy="60" rx="4" ry="2.5" fill="#F59E0B" />
+  </svg>
+);
+
+// Sleeping owl - for break time or inactive states
+export const OwlSleeping = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 72 64" fill="none">
+    <style>{`
+      @keyframes zzz-float {
+        0%, 100% { transform: translateY(0); opacity: 1; }
+        50% { transform: translateY(-4px); opacity: 0.7; }
+      }
+      .zzz-1 { animation: zzz-float 2s ease-in-out infinite; }
+      .zzz-2 { animation: zzz-float 2s ease-in-out 0.3s infinite; }
+      .zzz-3 { animation: zzz-float 2s ease-in-out 0.6s infinite; }
+    `}</style>
+
+    {/* Zzz */}
+    <text className="zzz-1" x="52" y="16" fill="#007229" fontSize="10" fontWeight="bold">Z</text>
+    <text className="zzz-2" x="58" y="10" fill="#007229" fontSize="12" fontWeight="bold">z</text>
+    <text className="zzz-3" x="66" y="6" fill="#007229" fontSize="8" fontWeight="bold">z</text>
+
+    {/* Ear tufts - relaxed */}
+    <ellipse cx="14" cy="20" rx="5" ry="6" fill="#a01028" transform="rotate(-10 14 20)" />
+    <ellipse cx="50" cy="20" rx="5" ry="6" fill="#a01028" transform="rotate(10 50 20)" />
+
+    {/* Main body */}
+    <ellipse cx="32" cy="38" rx="24" ry="24" fill="#D21034" />
+
+    {/* Facial disc */}
+    <ellipse cx="32" cy="34" rx="18" ry="14" fill="#E8334F" />
+
+    {/* Belly */}
+    <ellipse cx="32" cy="52" rx="12" ry="8" fill="#FFF5F5" />
+
+    {/* Closed sleeping eyes */}
+    <path d="M16 32 Q23 28 30 32" stroke="#000" strokeWidth="3" strokeLinecap="round" fill="none" />
+    <path d="M34 32 Q41 28 48 32" stroke="#000" strokeWidth="3" strokeLinecap="round" fill="none" />
+
+    {/* Small content smile */}
+    <path d="M28 44c2 2 6 2 8 0" stroke="#F59E0B" strokeWidth="3" strokeLinecap="round" fill="none" />
+
+    {/* Blush */}
+    <circle cx="18" cy="36" r="4" fill="#FDBA74" opacity="0.5" />
+    <circle cx="46" cy="36" r="4" fill="#FDBA74" opacity="0.5" />
+
+    {/* Graduation cap - slightly tilted forward */}
+    <g transform="rotate(5 32 16)">
+      <path d="M12 16c0-2 9-4 20-4s20 2 20 4v3c0 1-9 2-20 2s-20-1-20-2v-3z" fill="#1a1a1a" />
+      <path d="M8 12l24-6 24 6-24 8-24-8z" fill="#007229" />
+      <circle cx="32" cy="10" r="2.5" fill="#1a1a1a" />
+      <path d="M32 10 Q40 14 44 22" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+      <ellipse cx="45" cy="24" rx="3" ry="4" fill="#F59E0B" />
+    </g>
+
+    {/* Feet */}
+    <ellipse cx="24" cy="60" rx="4" ry="2.5" fill="#F59E0B" />
+    <ellipse cx="40" cy="60" rx="4" ry="2.5" fill="#F59E0B" />
+  </svg>
+);
+
+// Pointing owl - for tips and highlights
+export const OwlPointing = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 80 64" fill="none">
+    {/* Ear tufts */}
+    <ellipse cx="22" cy="18" rx="5" ry="7" fill="#a01028" />
+    <ellipse cx="58" cy="18" rx="5" ry="7" fill="#a01028" />
+
+    {/* Main body - centered */}
+    <ellipse cx="40" cy="38" rx="24" ry="24" fill="#D21034" />
+
+    {/* Facial disc */}
+    <ellipse cx="40" cy="34" rx="18" ry="14" fill="#E8334F" />
+
+    {/* Belly */}
+    <ellipse cx="40" cy="52" rx="12" ry="8" fill="#FFF5F5" />
+
+    {/* Pointing wing */}
+    <ellipse cx="72" cy="32" rx="6" ry="4" fill="#a01028" transform="rotate(-20 72 32)" />
+    <ellipse cx="68" cy="34" rx="8" ry="5" fill="#a01028" />
+    <path d="M66 32 L78 26" stroke="#a01028" strokeWidth="4" strokeLinecap="round" />
+
+    {/* Eyes - looking at pointing direction */}
+    <ellipse cx="31" cy="32" rx="8" ry="9" fill="white" />
+    <circle cx="34" cy="31" r="5" fill="#000000" />
+    <circle cx="36" cy="29" r="2" fill="white" />
+
+    <ellipse cx="49" cy="32" rx="8" ry="9" fill="white" />
+    <circle cx="52" cy="31" r="5" fill="#000000" />
+    <circle cx="54" cy="29" r="2" fill="white" />
+
+    {/* Beak - slight smile */}
+    <ellipse cx="40" cy="42" rx="4" ry="3" fill="#F59E0B" />
+    <path d="M36 43 Q40 46 44 43" stroke="#E08A05" strokeWidth="1.5" fill="none" />
+
+    {/* Graduation cap */}
+    <path d="M20 16c0-2 9-4 20-4s20 2 20 4v3c0 1-9 2-20 2s-20-1-20-2v-3z" fill="#1a1a1a" />
+    <path d="M16 12l24-6 24 6-24 8-24-8z" fill="#007229" />
+    <circle cx="40" cy="10" r="2.5" fill="#1a1a1a" />
+    <path d="M40 10 Q48 14 52 22" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+    <ellipse cx="53" cy="24" rx="3" ry="4" fill="#F59E0B" />
+
+    {/* Feet */}
+    <ellipse cx="32" cy="60" rx="4" ry="2.5" fill="#F59E0B" />
+    <ellipse cx="48" cy="60" rx="4" ry="2.5" fill="#F59E0B" />
+  </svg>
+);
+
+// Confused owl - for help needed or errors
+export const OwlConfused = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 72 64" fill="none">
+    {/* Question mark */}
+    <g>
+      <circle cx="60" cy="16" r="10" fill="#007229" opacity="0.2" />
+      <path d="M56 12c0-4 2-6 4-6s4 2 4 4c0 2-2 3-4 4v2" stroke="#007229" strokeWidth="2" strokeLinecap="round" fill="none" />
+      <circle cx="60" cy="22" r="1.5" fill="#007229" />
+    </g>
+
+    {/* Ear tufts - one up, one tilted */}
+    <ellipse cx="14" cy="18" rx="5" ry="7" fill="#a01028" />
+    <ellipse cx="50" cy="20" rx="5" ry="6" fill="#a01028" transform="rotate(15 50 20)" />
+
+    {/* Main body */}
+    <ellipse cx="32" cy="38" rx="24" ry="24" fill="#D21034" />
+
+    {/* Facial disc */}
+    <ellipse cx="32" cy="34" rx="18" ry="14" fill="#E8334F" />
+
+    {/* Belly */}
+    <ellipse cx="32" cy="52" rx="12" ry="8" fill="#FFF5F5" />
+
+    {/* Confused eyes - one squinting, one wide */}
+    <ellipse cx="23" cy="32" rx="8" ry="9" fill="white" />
+    <circle cx="24" cy="33" r="5" fill="#000000" />
+    <circle cx="26" cy="31" r="2" fill="white" />
+
+    <ellipse cx="41" cy="32" rx="7" ry="7" fill="white" />
+    <path d="M36 30 Q41 28 46 30" stroke="#000" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+
+    {/* Raised eyebrow */}
+    <path d="M36 26 Q41 22 46 26" stroke="#a01028" strokeWidth="2" strokeLinecap="round" fill="none" />
+
+    {/* Beak - puzzled expression */}
+    <ellipse cx="32" cy="42" rx="4" ry="3" fill="#F59E0B" />
+    <path d="M29 44 L35 43" stroke="#E08A05" strokeWidth="2" strokeLinecap="round" fill="none" />
+
+    {/* Graduation cap - tilted */}
+    <g transform="rotate(-5 32 16)">
+      <path d="M12 16c0-2 9-4 20-4s20 2 20 4v3c0 1-9 2-20 2s-20-1-20-2v-3z" fill="#1a1a1a" />
+      <path d="M8 12l24-6 24 6-24 8-24-8z" fill="#007229" />
+      <circle cx="32" cy="10" r="2.5" fill="#1a1a1a" />
+      <path d="M32 10 Q40 14 44 22" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+      <ellipse cx="45" cy="24" rx="3" ry="4" fill="#F59E0B" />
+    </g>
+
+    {/* Feet */}
+    <ellipse cx="24" cy="60" rx="4" ry="2.5" fill="#F59E0B" />
+    <ellipse cx="40" cy="60" rx="4" ry="2.5" fill="#F59E0B" />
+  </svg>
+);
+
+// Encouraging owl - for motivation and positive reinforcement
+export const OwlEncouraging = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 72 64" fill="none">
+    {/* Heart */}
+    <path d="M60 18c-2-3-6-3-8 0l-1 1-1-1c-2-3-6-3-8 0-3 4 0 8 9 14 9-6 12-10 9-14z" fill="#F43F5E" />
+
+    {/* Ear tufts */}
+    <ellipse cx="14" cy="18" rx="5" ry="7" fill="#a01028" />
+    <ellipse cx="50" cy="18" rx="5" ry="7" fill="#a01028" />
+
+    {/* Main body */}
+    <ellipse cx="32" cy="38" rx="24" ry="24" fill="#D21034" />
+
+    {/* Facial disc */}
+    <ellipse cx="32" cy="34" rx="18" ry="14" fill="#E8334F" />
+
+    {/* Belly */}
+    <ellipse cx="32" cy="52" rx="12" ry="8" fill="#FFF5F5" />
+
+    {/* Wing giving thumbs up */}
+    <ellipse cx="8" cy="38" rx="6" ry="10" fill="#a01028" />
+    <circle cx="6" cy="30" r="4" fill="#a01028" />
+
+    {/* Happy winking eyes */}
+    <ellipse cx="23" cy="32" rx="8" ry="9" fill="white" />
+    <circle cx="25" cy="32" r="5" fill="#000000" />
+    <circle cx="27" cy="30" r="2" fill="white" />
+
+    {/* Winking eye */}
+    <path d="M34 32 Q41 28 48 32" stroke="#000" strokeWidth="3" strokeLinecap="round" fill="none" />
+
+    {/* Big smile */}
+    <path d="M26 44c0 4 3 6 6 6s6-2 6-6" stroke="#F59E0B" strokeWidth="3" strokeLinecap="round" fill="none" />
+    <ellipse cx="32" cy="42" rx="4" ry="3" fill="#F59E0B" />
+
+    {/* Blush */}
+    <circle cx="18" cy="38" r="3" fill="#FDBA74" opacity="0.5" />
+    <circle cx="46" cy="38" r="3" fill="#FDBA74" opacity="0.5" />
+
+    {/* Graduation cap */}
+    <path d="M12 16c0-2 9-4 20-4s20 2 20 4v3c0 1-9 2-20 2s-20-1-20-2v-3z" fill="#1a1a1a" />
+    <path d="M8 12l24-6 24 6-24 8-24-8z" fill="#007229" />
+    <circle cx="32" cy="10" r="2.5" fill="#1a1a1a" />
+    <path d="M32 10 Q40 14 44 22" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+    <ellipse cx="45" cy="24" rx="3" ry="4" fill="#F59E0B" />
+
+    {/* Feet */}
+    <ellipse cx="24" cy="60" rx="4" ry="2.5" fill="#F59E0B" />
+    <ellipse cx="40" cy="60" rx="4" ry="2.5" fill="#F59E0B" />
+  </svg>
+);
+
+// Simple owl head icon - for compact use (favicon, small icons)
+export const OwlHead = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Ear tufts */}
+    <ellipse cx="14" cy="20" rx="6" ry="8" fill="#a01028" />
+    <ellipse cx="50" cy="20" rx="6" ry="8" fill="#a01028" />
+
+    {/* Head */}
+    <ellipse cx="32" cy="38" rx="26" ry="24" fill="#D21034" />
+
+    {/* Facial disc */}
+    <ellipse cx="32" cy="36" rx="20" ry="16" fill="#E8334F" />
+
+    {/* Eyes */}
+    <ellipse cx="22" cy="34" rx="9" ry="10" fill="white" />
+    <ellipse cx="42" cy="34" rx="9" ry="10" fill="white" />
+    <circle cx="24" cy="34" r="6" fill="#000000" />
+    <circle cx="26" cy="32" r="2.5" fill="white" />
+    <circle cx="40" cy="34" r="6" fill="#000000" />
+    <circle cx="42" cy="32" r="2.5" fill="white" />
+
+    {/* Beak */}
+    <ellipse cx="32" cy="46" rx="5" ry="4" fill="#F59E0B" />
+    <path d="M27 46 Q32 52 37 46" fill="#E08A05" />
+
+    {/* Graduation cap */}
+    <path d="M10 18c0-2 10-5 22-5s22 3 22 5v4c0 1-10 3-22 3s-22-2-22-3v-4z" fill="#1a1a1a" />
+    <path d="M6 14l26-7 26 7-26 9-26-9z" fill="#007229" />
+    <circle cx="32" cy="11" r="3" fill="#1a1a1a" />
+    <path d="M32 11 Q42 16 46 24" stroke="#F59E0B" strokeWidth="3" strokeLinecap="round" fill="none" />
+    <ellipse cx="47" cy="26" rx="4" ry="5" fill="#F59E0B" />
+  </svg>
+);
+
 // ============================================
 // NAV ICONS - Colorful sidebar navigation icons
 // ============================================

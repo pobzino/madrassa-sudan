@@ -16,6 +16,7 @@ import {
   OwlTutorIcon,
   OwlWaving,
   OwlThinking,
+  MadrassaLogo,
 } from "@/components/illustrations";
 
 const translations = {
@@ -240,13 +241,8 @@ export default function DashboardPage() {
     <div className={`flex flex-col h-full bg-white ${mobile ? "" : "border-r border-gray-100"}`}>
       {/* Logo */}
       <div className="p-5 border-b border-gray-100">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-500/30">
-            م
-          </div>
-          <span className="font-bold text-gray-900 text-lg">
-            {language === "ar" ? "مدرسة السودان" : "Madrassa"}
-          </span>
+        <Link href="/">
+          <MadrassaLogo size="md" />
         </Link>
       </div>
 
@@ -325,8 +321,8 @@ export default function DashboardPage() {
         >
           {Icons.menu}
         </button>
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold shadow-md">م</div>
+        <Link href="/">
+          <OwlTutorIcon className="w-9 h-9" />
         </Link>
         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold text-sm shadow-md">
           {firstName.charAt(0)}
