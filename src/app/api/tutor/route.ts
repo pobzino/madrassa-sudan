@@ -6,6 +6,13 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Available OpenAI models (as of 2025):
+// - gpt-5.2: Latest flagship model, best quality
+// - gpt-5-mini: Fast & affordable, good for most tasks
+// - gpt-4.1: Previous generation, still excellent
+// - gpt-4o-mini: Older mini model (deprecated)
+const AI_MODEL = "gpt-5-mini";
+
 const SYSTEM_PROMPT = `You are a friendly, patient tutor helping Sudanese students learn. Your name is "معلم البومة" (Owl Teacher).
 
 Guidelines:
@@ -113,7 +120,7 @@ export async function POST(request: NextRequest) {
 
     // Call OpenAI
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: AI_MODEL,
       messages,
       max_tokens: 1000,
       temperature: 0.7,
