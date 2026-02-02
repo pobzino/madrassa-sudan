@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { Profile } from "@/lib/database.types";
+import { clearAuthCache, getCachedProfile, getCachedUser } from "@/lib/supabase/auth-cache";
 import {
   FloatingBook,
   FloatingRocket,
@@ -31,6 +32,7 @@ const translations = {
     homework: "الواجبات",
     aiTutor: "المعلم الذكي",
     myClasses: "فصولي",
+    teacherAdmin: "لوحة المعلم",
     progress: "التقدم",
     settings: "الإعدادات",
     logout: "تسجيل الخروج",
@@ -43,6 +45,7 @@ const translations = {
     homework: "Homework",
     aiTutor: "AI Tutor",
     myClasses: "My Classes",
+    teacherAdmin: "Teacher Admin",
     progress: "Progress",
     settings: "Settings",
     logout: "Log out",
@@ -122,13 +125,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     authCheckRef.current = true;
 
     async function loadProfile() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCachedUser(supabase);
       if (!user) {
         router.push("/auth/login");
         return;
       }
 
-      const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+      const profileData = await getCachedProfile(supabase, user.id);
       if (profileData) setProfile(profileData);
       setAuthChecked(true);
     }
@@ -137,6 +140,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    clearAuthCache();
     router.push("/");
   };
 
@@ -151,6 +155,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { href: "/cohorts", label: t.myClasses, icon: <UsersNavIcon className="w-5 h-5" /> },
     { href: "/progress", label: t.progress, icon: <ChartNavIcon className="w-5 h-5" /> },
   ];
+
+  if (profile?.role === "teacher" || profile?.role === "admin") {
+    navItems.push({
+      href: "/teacher",
+      label: t.teacherAdmin,
+      icon: <GraduationCapIcon className="w-5 h-5" />,
+    });
+  }
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";

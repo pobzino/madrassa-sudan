@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
+import { getCachedUser } from "@/lib/supabase/auth-cache";
 import {
   FloatingBook,
   FloatingPencil,
@@ -77,7 +78,7 @@ export default function Home() {
 
   useEffect(() => {
     async function checkAuth() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCachedUser(supabase);
       setIsAuthenticated(!!user);
     }
     checkAuth();
@@ -237,9 +238,9 @@ export default function Home() {
       {/* Navbar */}
       <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
-          <Link href="/">
-            <MadrassaLogo size="sm" className="sm:hidden" />
-            <MadrassaLogo size="md" className="hidden sm:block" />
+          <Link href="/" className="flex items-center">
+            <MadrassaLogo size="sm" className="flex sm:hidden" />
+            <MadrassaLogo size="md" className="hidden sm:flex" />
           </Link>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
@@ -457,9 +458,8 @@ export default function Home() {
         </section>
 
         {/* Subjects Section */}
-        <section className="py-10 sm:py-16 relative overflow-hidden">
+        <section className="py-10 sm:py-16 bg-white relative overflow-hidden">
           {/* Background decoration */}
-          <div className="absolute top-0 left-0 w-full h-32 bg-gray-50" />
           <div className="absolute inset-0">
             <div className="absolute top-40 left-20 w-64 h-64 bg-cyan-100/30 rounded-full blur-3xl hidden sm:block" />
             <div className="absolute bottom-20 right-20 w-80 h-80 bg-violet-100/30 rounded-full blur-3xl hidden sm:block" />
@@ -475,22 +475,22 @@ export default function Home() {
               </h2>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 sm:gap-6 max-w-3xl mx-auto">
+            <div className="grid grid-cols-3 gap-3 sm:gap-6 lg:gap-8">
               {txt.subjects.items.map((subject, i) => (
                 <Link
                   key={i}
                   href="/auth/signup"
-                  className="group relative overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-8 text-center transition-all hover:-translate-y-2 hover:shadow-2xl"
+                  className="group relative overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-8 lg:p-10 text-center transition-all hover:-translate-y-2 hover:shadow-2xl min-h-[120px] sm:min-h-[180px] lg:min-h-[220px] flex items-center justify-center"
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${subject.color}`} />
-                  <div className="absolute top-0 right-0 w-16 sm:w-24 h-16 sm:h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                  <div className="absolute bottom-0 left-0 w-12 sm:w-20 h-12 sm:h-20 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+                  <div className="absolute top-0 right-0 w-16 sm:w-24 lg:w-32 h-16 sm:h-24 lg:h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                  <div className="absolute bottom-0 left-0 w-12 sm:w-20 lg:w-28 h-12 sm:h-20 lg:h-28 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
 
                   <div className="relative z-10">
-                    <div className="w-12 h-12 sm:w-20 sm:h-20 mx-auto mb-2 sm:mb-4 text-white drop-shadow-lg">
+                    <div className="w-12 h-12 sm:w-20 sm:h-20 lg:w-24 lg:h-24 mx-auto mb-2 sm:mb-4 text-white drop-shadow-lg">
                       <SubjectIcon type={subject.iconType} className="w-full h-full" />
                     </div>
-                    <span className="font-bold text-white text-xs sm:text-lg">{subject.name}</span>
+                    <span className="font-bold text-white text-sm sm:text-lg lg:text-xl">{subject.name}</span>
                   </div>
                 </Link>
               ))}

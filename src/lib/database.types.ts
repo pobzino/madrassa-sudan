@@ -78,6 +78,8 @@ export type Database = {
           created_at: string
           id: string
           role: string
+          tool_calls: Json | null
+          tool_results: Json | null
         }
         Insert: {
           content: string
@@ -85,6 +87,8 @@ export type Database = {
           created_at?: string
           id?: string
           role: string
+          tool_calls?: Json | null
+          tool_results?: Json | null
         }
         Update: {
           content?: string
@@ -92,6 +96,8 @@ export type Database = {
           created_at?: string
           id?: string
           role?: string
+          tool_calls?: Json | null
+          tool_results?: Json | null
         }
         Relationships: [
           {
@@ -718,6 +724,85 @@ export type Database = {
           },
         ]
       }
+      lesson_content_blocks: {
+        Row: {
+          id: string
+          lesson_id: string
+          language: string
+          content: string
+          source_type: string
+          sequence: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          lesson_id: string
+          language: string
+          content: string
+          source_type?: string
+          sequence?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          lesson_id?: string
+          language?: string
+          content?: string
+          source_type?: string
+          sequence?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_content_blocks_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lesson_chunk_embeddings: {
+        Row: {
+          id: string
+          lesson_id: string
+          language: string
+          source_type: string
+          chunk_index: number
+          content: string
+          embedding: number[]
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          lesson_id: string
+          language: string
+          source_type?: string
+          chunk_index: number
+          content: string
+          embedding: number[]
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          lesson_id?: string
+          language?: string
+          source_type?: string
+          chunk_index?: number
+          content?: string
+          embedding?: number[]
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_chunk_embeddings_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_members: {
         Row: {
           created_at: string
@@ -905,7 +990,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      match_lesson_chunks: {
+        Args: {
+          query_embedding: number[]
+          match_count?: number
+          filter_subject_id?: string | null
+          filter_grade_level?: number | null
+          filter_language?: string | null
+        }
+        Returns: {
+          lesson_id: string
+          content: string
+          similarity: number
+          source_type: string
+          lesson_title_ar: string | null
+          lesson_title_en: string | null
+          subject_name_ar: string | null
+          subject_name_en: string | null
+        }[]
+      }
     }
     Enums: {
       homework_question_type:
@@ -944,6 +1047,8 @@ export type Subject = Tables<"subjects">
 export type Lesson = Tables<"lessons">
 export type LessonQuestion = Tables<"lesson_questions">
 export type LessonProgress = Tables<"lesson_progress">
+export type LessonContentBlock = Tables<"lesson_content_blocks">
+export type LessonChunkEmbedding = Tables<"lesson_chunk_embeddings">
 export type Cohort = Tables<"cohorts">
 export type HomeworkAssignment = Tables<"homework_assignments">
 export type HomeworkQuestion = Tables<"homework_questions">

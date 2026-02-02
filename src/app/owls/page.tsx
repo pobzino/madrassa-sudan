@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  OwlDuoStyle,
   OwlTutorIcon,
   OwlWaving,
   OwlCelebrating,
@@ -28,6 +29,8 @@ import {
   Confetti,
   ConfettiBurst,
   MadrassaLogo,
+  SecretaryBirdIcon,
+  MadrassaBirdLogo,
 } from "@/components/illustrations";
 
 export default function OwlShowcasePage() {
@@ -35,6 +38,13 @@ export default function OwlShowcasePage() {
 
   const owls = [
     // Core owls
+    {
+      name: "Duo Style (TEST)",
+      description: "Wings integrated into body silhouette like Duolingo",
+      component: OwlDuoStyle,
+      usage: "Testing new style",
+      category: "Core",
+    },
     {
       name: "Owl Tutor",
       description: "The main mascot - wise owl with graduation cap",
@@ -212,8 +222,43 @@ export default function OwlShowcasePage() {
         {/* Header */}
         <div className="text-center mb-12">
           <MadrassaLogo size="lg" className="justify-center mb-6" />
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Owl Mascot Collection</h1>
-          <p className="text-gray-500">23 owl variations for the Madrassa Sudan app</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Mascot Collection</h1>
+          <p className="text-gray-500">Mascot options for the Madrassa Sudan app</p>
+        </div>
+
+        {/* Secretary Bird - Sudan's National Bird */}
+        <div className="mb-12 bg-gradient-to-r from-green-50 to-amber-50 rounded-3xl p-8 border-2 border-green-200">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="px-4 py-1.5 rounded-full bg-gradient-to-r from-green-600 to-emerald-700 text-white text-sm font-semibold">
+              🇸🇩 Sudan&apos;s National Bird
+            </div>
+            <div className="h-px flex-1 bg-green-200" />
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 items-center">
+            <div className="flex flex-col items-center">
+              <SecretaryBirdIcon className="w-32 h-32 mb-4" />
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Secretary Bird</h2>
+              <p className="text-sm text-gray-600 text-center">طائر الكاتب - The national emblem of Sudan</p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl p-4 shadow-sm">
+                <p className="text-sm font-medium text-gray-700 mb-2">Logo Preview:</p>
+                <MadrassaBirdLogo size="lg" />
+              </div>
+              <div className="bg-white rounded-2xl p-4 shadow-sm">
+                <p className="text-sm font-medium text-gray-700 mb-3">Key Features:</p>
+                <ul className="text-sm text-gray-600 space-y-1">
+                  <li>• Black crest feathers (like quill pens)</li>
+                  <li>• Orange face patches around eyes</li>
+                  <li>• Long elegant legs</li>
+                  <li>• Sudan flag colors (red cap, green body)</li>
+                  <li>• Friendly, child-appropriate style</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Owl Grid by Category */}
