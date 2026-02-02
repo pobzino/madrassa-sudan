@@ -190,7 +190,14 @@ export default function DashboardPage() {
       if (profileData) setProfile(profileData);
 
       const { data: subjectsData } = await supabase.from("subjects").select("*").order("display_order");
-      if (subjectsData) setSubjects(subjectsData);
+      if (subjectsData) {
+        // Filter to only show Math, English, and Science on dashboard
+        const coreSubjects = subjectsData.filter((s) => {
+          const name = s.name_en?.toLowerCase() || "";
+          return name.includes("math") || name.includes("english") || name.includes("science");
+        });
+        setSubjects(coreSubjects);
+      }
 
       const { data: streakData } = await supabase.from("student_streaks").select("*").eq("student_id", user.id).single();
       if (streakData) {
