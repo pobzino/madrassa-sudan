@@ -14,8 +14,8 @@ import { getAvailableLessons, getLessonDetails, getLessonContentChunk, getLesson
 import { getStudentHomework, getHomeworkDetails, getHomeworkQuestionContext, createHomeworkAssignment } from "@/lib/ai/tools/homework-tools";
 import { getMistakePatterns } from "@/lib/ai/tools/insights-tools";
 
-// Available OpenAI models
-const AI_MODEL = "gpt-5.2";
+// Available OpenAI models (override via OPENAI_MODEL)
+const AI_MODEL = process.env.OPENAI_MODEL || "gpt-5.2";
 
 // Enhanced system prompt with tool awareness
 const SYSTEM_PROMPT = `# Role and Identity
@@ -61,9 +61,9 @@ DO NOT write practice questions as text. ALWAYS use the tool.
 
 **Simple workflow:**
 1. Student says "give me math practice" or "I need addition problems"
-2. YOU CALL: create_homework_assignment({ title_ar, reason, questions, subject_name/subject_id, difficulty_level })
+2. YOU CALL: create_homework_assignment({ subject_name/subject_id, difficulty_level, topic?, question_count? })
 3. Tool shows preview, student confirms
-4. YOU CALL AGAIN: create_homework_assignment({ title_ar, reason, questions, subject_name/subject_id, difficulty_level, confirm: true })
+4. YOU CALL AGAIN: create_homework_assignment({ subject_name/subject_id, difficulty_level, confirm: true })
 5. Done - homework is created and tracked
 
 **Examples of requests that REQUIRE the tool:**
@@ -427,17 +427,19 @@ export async function POST(request: NextRequest) {
 
 DO NOT write practice questions as plain text - use this tool instead.
 
-Provide a title, reason, subject, difficulty, and a short list of questions.`,
+Provide subject and difficulty. You can omit title/reason/questions and the tool will auto-generate them.`,
         inputSchema: z.object({
-          title_ar: z.string().describe("Arabic title for the assignment"),
-          title_en: z.string().optional().describe("English title for the assignment"),
-          instructions_ar: z.string().optional().describe("Arabic instructions for the student"),
-          instructions_en: z.string().optional().describe("English instructions for the student"),
+          title_ar: z.string().optional().describe("Arabic title for the assignment (optional)"),
+          title_en: z.string().optional().describe("English title for the assignment (optional)"),
+          instructions_ar: z.string().optional().describe("Arabic instructions for the student (optional)"),
+          instructions_en: z.string().optional().describe("English instructions for the student (optional)"),
           subject_id: z.string().optional().describe("Subject ID (from get_subjects). Either subject_id or subject_name required"),
           subject_name: z.string().optional().describe("Subject name if you don't have an ID"),
+          topic: z.string().optional().describe("Optional topic for auto-generated questions (e.g., addition, fractions)"),
           difficulty_level: z.enum(["easy", "medium", "hard"]).describe("Difficulty level based on student's understanding"),
-          reason: z.string().describe("Why this assignment is helpful for the student"),
+          reason: z.string().optional().describe("Why this assignment is helpful for the student (optional)"),
           due_days: z.number().optional().describe("Number of days until due (default: 3)"),
+          question_count: z.number().optional().describe("Optional number of questions to generate (default: 5)"),
           confirm: z.boolean().optional().describe("First call without confirm (shows preview), then call with confirm=true after user approves"),
           questions: z.array(z.object({
             question_type: z.enum(["multiple_choice", "short_answer", "long_answer"]),
@@ -446,7 +448,7 @@ Provide a title, reason, subject, difficulty, and a short list of questions.`,
             options: z.array(z.string()).optional().describe("Answer options for multiple choice"),
             correct_answer: z.string().optional().describe("Correct answer for multiple choice questions"),
             points: z.number().describe("Point value for this question"),
-          })).describe("Array of questions for the assignment (3-5 recommended)"),
+          })).optional().describe("Array of questions for the assignment (optional, 3-5 recommended)"),
         }),
         execute: async (params) => {
           // Only rate limit and log actual creations (confirm=true), not previews

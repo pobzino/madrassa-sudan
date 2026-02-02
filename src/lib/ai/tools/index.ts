@@ -299,7 +299,7 @@ export const toolDefinitions: ToolDefinition[] = [
     type: "function",
     function: {
       name: "create_homework_assignment",
-      description: "Create a new personalized homework assignment for the student. Use this when the student needs extra practice on a topic or asks for practice problems.",
+      description: "Create a new personalized homework assignment for the student. Use this when the student needs extra practice on a topic or asks for practice problems. You can omit title/reason/questions and the tool will auto-generate them.",
       parameters: {
         type: "object",
         properties: {
@@ -327,6 +327,10 @@ export const toolDefinitions: ToolDefinition[] = [
             type: "string",
             description: "Subject name if you don't have an ID (e.g., Math, Science)",
           },
+          topic: {
+            type: "string",
+            description: "Optional topic for generating practice questions (e.g., addition, fractions)",
+          },
           difficulty_level: {
             type: "string",
             enum: ["easy", "medium", "hard"],
@@ -339,6 +343,10 @@ export const toolDefinitions: ToolDefinition[] = [
           due_days: {
             type: "number",
             description: "Number of days until due (default: 3)",
+          },
+          question_count: {
+            type: "number",
+            description: "Optional number of questions to generate (default: 5)",
           },
           confirm: {
             type: "boolean",
@@ -380,7 +388,7 @@ export const toolDefinitions: ToolDefinition[] = [
             },
           },
         },
-        required: ["title_ar", "difficulty_level", "reason", "questions"],
+        required: ["difficulty_level"],
       },
     },
   },

@@ -53,15 +53,15 @@ export interface HomeworkQuestion {
 }
 
 export interface CreateHomeworkParams {
-  title_ar: string;
+  title_ar?: string;
   title_en?: string;
   instructions_ar?: string;
   instructions_en?: string;
   subject_id?: string; // Optional if subject_name provided
   subject_name?: string; // Alternative to subject_id
   difficulty_level: "easy" | "medium" | "hard";
-  reason: string;
-  questions: HomeworkQuestion[];
+  reason?: string;
+  questions?: HomeworkQuestion[];
   due_days?: number;
   confirm?: boolean;
   _last_user_message?: string;

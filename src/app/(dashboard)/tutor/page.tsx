@@ -63,6 +63,8 @@ const translations = {
     mic: "التحدث",
     listening: "يستمع...",
     micUnsupported: "التحدث غير مدعوم على هذا الجهاز",
+    chatError: "حدث خطأ في رد المعلم",
+    chatErrorDesc: "حاول مرة أخرى الآن.",
   },
   en: {
     aiTutor: "AI Tutor",
@@ -114,6 +116,8 @@ const translations = {
     mic: "Speak",
     listening: "Listening...",
     micUnsupported: "Speech input not supported on this device",
+    chatError: "Something went wrong",
+    chatErrorDesc: "Please try again.",
   },
 };
 
@@ -796,12 +800,14 @@ export default function TutorPage() {
       // Tool invocations only count as content when output is available
       if (part.type.startsWith("tool-")) {
         const toolPart = part as { state?: string; output?: unknown };
-        // Only show content for completed tool calls with output
-        if (toolPart.state === "output-available" && toolPart.output) {
+        // Show tool calls while input or output is pending/available
+        if (toolPart.state === "input-streaming" || toolPart.state === "input-available") {
           return true;
         }
-        // Error states also count as content
-        if (toolPart.state === "output-error") {
+        if (toolPart.state === "output-available") {
+          return true;
+        }
+        if (toolPart.state === "output-error" || toolPart.state === "output-denied") {
           return true;
         }
       }
@@ -865,9 +871,19 @@ export default function TutorPage() {
               return <HomeworkCreatedCard key={index} data={output as HomeworkCreatedData} t={t} isRtl={isRtl} />;
             }
 
-            // Fallback - show raw output for debugging
-            console.log("Unexpected homework tool output:", output);
-            return null;
+            // Fallback - show message or a generic success instead of empty bubble
+            if (output?.message) {
+              return (
+                <div key={index} className="bg-emerald-50 rounded-xl p-3 border border-emerald-200">
+                  <p className="text-sm text-emerald-700">{String(output.message)}</p>
+                </div>
+              );
+            }
+            return (
+              <div key={index} className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+                <p className="text-sm text-gray-500">{isRtl ? "✓ تم التنفيذ" : "✓ Action completed"}</p>
+              </div>
+            );
           case "output-error":
             return <div key={index} className="text-red-500 text-sm">Error: {part.errorText}</div>;
         }
@@ -1160,7 +1176,14 @@ export default function TutorPage() {
         }
 
         // For output-available, try to show meaningful content
-        if (toolState === "output-available" && toolOutput) {
+        if (toolState === "output-available") {
+          if (!toolOutput) {
+            return (
+              <div key={index} className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+                <p className="text-sm text-gray-500">{isRtl ? "✓ تم التنفيذ" : "✓ Action completed"}</p>
+              </div>
+            );
+          }
           // Check if it has an error
           if (typeof toolOutput === "object" && "error" in toolOutput) {
             return (
@@ -1179,6 +1202,13 @@ export default function TutorPage() {
               </div>
             );
           }
+          if (output.message) {
+            return (
+              <div key={index} className="bg-blue-50 rounded-xl p-3 border border-blue-200">
+                <p className="text-sm text-blue-700">{String(output.message)}</p>
+              </div>
+            );
+          }
 
           // Generic success
           return (
@@ -1188,7 +1218,7 @@ export default function TutorPage() {
           );
         }
 
-        if (toolState === "output-error") {
+        if (toolState === "output-error" || toolState === "output-denied") {
           const errorText = (part as { errorText?: string }).errorText;
           return (
             <div key={index} className="bg-red-50 rounded-xl p-3 border border-red-200">
@@ -1196,6 +1226,9 @@ export default function TutorPage() {
             </div>
           );
         }
+
+        // Fallback for unknown tool states
+        return <ToolLoadingIndicator key={index} message={t.thinking} />;
       }
 
       return null;
@@ -1411,6 +1444,11 @@ export default function TutorPage() {
                     return null;
                   }
 
+                  const renderedParts = renderMessageParts(msg).filter(Boolean);
+                  if (msg.role === "assistant" && renderedParts.length === 0) {
+                    return null;
+                  }
+
                   return (
                   <div
                     key={msg.id}
@@ -1433,7 +1471,7 @@ export default function TutorPage() {
                           : "bg-white border border-gray-200"
                       }`}>
                         <div className="space-y-3">
-                          {renderMessageParts(msg)}
+                          {renderedParts}
                         </div>
                         {msg.role === "assistant" && speechSupported && getMessageText(msg) && (
                           <div className="mt-3 flex items-center gap-2">
@@ -1470,6 +1508,19 @@ export default function TutorPage() {
                           <div className="w-2 h-2 bg-[#007229] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                           <span className="text-sm">{t.thinking}</span>
                         </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error indicator */}
+                {status === "error" && (
+                  <div className={`flex ${isRtl ? "justify-end" : "justify-start"}`}>
+                    <div className="flex gap-3 max-w-[85%]">
+                      <OwlTutorIcon className="w-8 h-8 flex-shrink-0" />
+                      <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
+                        <p className="text-sm font-medium text-red-700">{t.chatError}</p>
+                        <p className="text-xs text-red-600 mt-1">{error?.message || t.chatErrorDesc}</p>
                       </div>
                     </div>
                   </div>
