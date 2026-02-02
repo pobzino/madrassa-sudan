@@ -1,34 +1,43 @@
 @import "tailwindcss";
 
 :root {
-  /* Premium Brand Palette */
-  --primary: #0F4D35;
-  /* Deep Forest Green - Trust, Institutional */
-  --primary-light: #1B6B4A;
-  /* Vibrant Green - Growth */
+  /* Sudan Flag Brand Palette */
+  --sudan-green: #007229;
+  --sudan-green-light: #00913D;
+  --sudan-green-dark: #005C22;
+  --sudan-red: #D21034;
+  --sudan-red-light: #E8334F;
+  --sudan-red-dark: #a01028;
+  --sudan-black: #1a1a1a;
+  --sudan-white: #FFFFFF;
+
+  /* Primary uses Sudan Green */
+  --primary: #007229;
+  --primary-light: #00913D;
+  --primary-dark: #005C22;
+
+  /* Accent uses Sudan Red */
+  --accent: #D21034;
+  --accent-light: #E8334F;
+
+  /* Secondary - warm gold for highlights */
   --secondary: #D97706;
-  /* Deep Amber - Warmth, Energy */
   --secondary-light: #F59E0B;
-  /* Bright Amber */
-  --accent: #E11D48;
-  /* Rose - Urgency/Heart */
 
   /* Backgrounds */
   --bg-page: #FCFCFC;
-  /* Premium White (not stark) */
   --bg-surface: #FFFFFF;
-  /* Pure White */
   --bg-subtle: #F8FAFC;
-  /* Cool Grey Surface */
+  --bg-green-subtle: #F0FDF4;
+  --bg-red-subtle: #FEF2F2;
 
   /* Text */
   --text-main: #0F172A;
-  /* Slate 900 */
   --text-muted: #64748B;
-  /* Slate 500 */
 
-  /* Gradients */
-  --gradient-main: linear-gradient(135deg, #0F4D35 0%, #1B6B4A 100%);
+  /* Gradients - Sudan themed */
+  --gradient-main: linear-gradient(135deg, #007229 0%, #00913D 100%);
+  --gradient-accent: linear-gradient(135deg, #D21034 0%, #E8334F 100%);
   --gradient-warm: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
 }
 
@@ -37,6 +46,11 @@
   --color-foreground: var(--text-main);
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-arabic: var(--font-cairo), var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-fredoka), system-ui, sans-serif;
+}
+
+.font-fredoka {
+  font-family: var(--font-fredoka), system-ui, sans-serif;
 }
 
 * {

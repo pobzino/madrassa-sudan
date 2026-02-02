@@ -6,6 +6,17 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { Profile, Subject } from "@/lib/database.types";
+import {
+  MathIcon,
+  ScienceIcon,
+  GlobeIcon,
+  TrophyIcon,
+  FloatingRocket,
+  BookOpenIcon,
+  OwlTutorIcon,
+  OwlWaving,
+  OwlThinking,
+} from "@/components/illustrations";
 
 const translations = {
   ar: {
@@ -54,11 +65,28 @@ const translations = {
   },
 };
 
+// Subject icon mapping based on subject name
+const getSubjectIcon = (subject: Subject, className: string = "w-12 h-12") => {
+  const name = subject.name_en?.toLowerCase() || "";
+
+  if (name.includes("math")) return <MathIcon className={className} />;
+  if (name.includes("science")) return <ScienceIcon className={className} />;
+  if (name.includes("english")) return <GlobeIcon className={className} />;
+
+  // Default fallback
+  return <BookOpenIcon className={className} />;
+};
+
 // Icons
 const Icons = {
+  wave: (
+    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.05 4.575a1.575 1.575 0 10-3.15 0v3m3.15-3v-1.5a1.575 1.575 0 013.15 0v1.5m-3.15 0l.075 5.925m3.075.75V4.575m0 0a1.575 1.575 0 013.15 0V15M6.9 7.575a1.575 1.575 0 10-3.15 0v8.175a6.75 6.75 0 006.75 6.75h2.018a5.25 5.25 0 003.712-1.538l1.732-1.732a5.25 5.25 0 001.538-3.712l.003-2.024a.668.668 0 01.198-.471 1.575 1.575 0 10-2.228-2.228 3.818 3.818 0 00-1.12 2.687M6.9 7.575V12m6.27 4.318A4.49 4.49 0 0116.35 15m.002 0h-.002" />
+    </svg>
+  ),
   dashboard: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
     </svg>
   ),
   book: (
@@ -69,11 +97,6 @@ const Icons = {
   clipboard: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-    </svg>
-  ),
-  cpu: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25zm.75-12h9v9h-9v-9z" />
     </svg>
   ),
   users: (
@@ -183,11 +206,9 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-cyan-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-[#007229]/5 via-white to-[#D21034]/5 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold text-3xl mx-auto mb-4 animate-bounce shadow-lg">
-            م
-          </div>
+          <OwlThinking className="w-20 h-20 mx-auto mb-4" />
           <p className="text-gray-500 text-lg">{t.loading}</p>
         </div>
       </div>
@@ -200,19 +221,19 @@ export default function DashboardPage() {
     { href: "/dashboard", label: t.dashboard, icon: Icons.dashboard, active: true, color: "text-emerald-600" },
     { href: "/lessons", label: t.lessons, icon: Icons.book, color: "text-violet-600" },
     { href: "/homework", label: t.homework, icon: Icons.clipboard, color: "text-amber-600" },
-    { href: "/tutor", label: t.aiTutor, icon: Icons.cpu, color: "text-cyan-600" },
+    { href: "/tutor", label: t.aiTutor, icon: <OwlTutorIcon className="w-5 h-5" />, color: "text-cyan-600" },
     { href: "/cohorts", label: t.myClasses, icon: Icons.users, color: "text-pink-600" },
     { href: "/progress", label: t.progress, icon: Icons.chart, color: "text-blue-600" },
   ];
 
-  // Subject card colors
+  // Subject card colors - Sudan themed
   const subjectColors = [
-    "from-violet-500 to-purple-600",
-    "from-cyan-500 to-blue-600",
-    "from-emerald-500 to-teal-600",
+    "from-[#007229] to-[#00913D]",
+    "from-[#D21034] to-[#E8334F]",
+    "from-[#005C22] to-[#007229]",
     "from-amber-500 to-orange-600",
-    "from-pink-500 to-rose-600",
-    "from-indigo-500 to-violet-600",
+    "from-[#a01028] to-[#D21034]",
+    "from-[#00913D] to-[#007229]",
   ];
 
   const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
@@ -233,9 +254,9 @@ export default function DashboardPage() {
       <div className="p-4">
         <Link
           href="/lessons"
-          className="flex items-center justify-center gap-2 w-full py-3.5 px-4 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-0.5"
+          className="group flex items-center justify-center gap-2 w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-0.5"
         >
-          {Icons.rocket}
+          <FloatingRocket className="w-6 h-6 group-hover:animate-bounce" />
           <span>{t.startLearning}</span>
         </Link>
       </div>
@@ -337,17 +358,19 @@ export default function DashboardPage() {
       <main className={`pt-16 lg:pt-0 ${isRtl ? "lg:mr-64" : "lg:ml-64"}`}>
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Welcome Banner */}
-          <div className="relative mb-8 p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-white overflow-hidden">
+          <div className="relative mb-8 p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-[#007229] via-[#00913D] to-[#007229] text-white overflow-hidden">
             {/* Decorative elements */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
             <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
 
+            {/* Waving owl mascot */}
+            <div className="absolute -bottom-2 right-4 sm:right-8 hidden sm:block">
+              <OwlWaving className="w-28 h-28 drop-shadow-lg" />
+            </div>
+
             <div className="relative">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-3xl">👋</span>
-                <h1 className="text-2xl sm:text-3xl font-bold">{t.welcomeBack}, {firstName}!</h1>
-              </div>
-              <p className="text-emerald-100 text-lg">{t.welcomeSubtitle}</p>
+              <h1 className="text-2xl sm:text-3xl font-bold mb-2">{t.welcomeBack}, {firstName}!</h1>
+              <p className="text-green-100 text-lg">{t.welcomeSubtitle}</p>
 
               {/* Quick stats in banner */}
               <div className="flex flex-wrap gap-4 mt-6">
@@ -366,8 +389,8 @@ export default function DashboardPage() {
           {/* Stats Grid */}
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/30">
-                {Icons.trophy}
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                <TrophyIcon className="w-7 h-7" />
               </div>
               <h2 className="text-xl font-bold text-gray-900">{t.yourProgress}</h2>
             </div>
@@ -391,12 +414,12 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="relative overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-5 text-white shadow-lg shadow-emerald-500/30">
+              <div className="relative overflow-hidden bg-gradient-to-br from-[#007229] to-[#00913D] rounded-2xl p-5 text-white shadow-lg shadow-[#007229]/30">
                 <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
                 <div className="relative">
-                  <div className="text-emerald-200 mb-1">{Icons.clipboard}</div>
+                  <div className="text-green-200 mb-1">{Icons.clipboard}</div>
                   <p className="text-4xl font-bold">{stats.homework}</p>
-                  <p className="text-emerald-200 text-sm font-medium">{t.homeworkDone}</p>
+                  <p className="text-green-200 text-sm font-medium">{t.homeworkDone}</p>
                 </div>
               </div>
 
@@ -414,8 +437,8 @@ export default function DashboardPage() {
           {/* Subjects */}
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/30">
-                {Icons.book}
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#007229] to-[#00913D] flex items-center justify-center shadow-lg shadow-[#007229]/30">
+                <BookOpenIcon className="w-7 h-7 text-white" />
               </div>
               <h2 className="text-xl font-bold text-gray-900">{t.subjects}</h2>
             </div>
@@ -431,8 +454,10 @@ export default function DashboardPage() {
                   <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
                   <div className="absolute bottom-0 left-0 w-12 h-12 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
 
-                  <div className="relative text-center">
-                    <span className="text-5xl mb-3 block drop-shadow-lg">{subject.icon}</span>
+                  <div className="relative text-center flex flex-col items-center">
+                    <div className="mb-3 drop-shadow-lg">
+                      {getSubjectIcon(subject, "w-14 h-14")}
+                    </div>
                     <span className="font-bold text-white/90 group-hover:text-white transition-colors">
                       {language === "ar" ? subject.name_ar : subject.name_en}
                     </span>

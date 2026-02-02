@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Cairo } from "next/font/google";
+import { Inter, Cairo, Fredoka } from "next/font/google";
 import "./globals.css";
 import { LanguageWrapper } from "@/components/LanguageWrapper";
 
@@ -13,6 +13,13 @@ const cairo = Cairo({
   variable: "--font-cairo",
   subsets: ["arabic", "latin"],
   display: "swap",
+});
+
+const fredoka = Fredoka({
+  variable: "--font-fredoka",
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -34,7 +41,7 @@ export default function RootLayout({
   // Default to Arabic (RTL) - client-side will update based on user preference
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
-      <body className={`${inter.variable} ${cairo.variable} font-cairo antialiased`}>
+      <body className={`${inter.variable} ${cairo.variable} ${fredoka.variable} font-cairo antialiased`}>
         <LanguageWrapper>{children}</LanguageWrapper>
       </body>
     </html>

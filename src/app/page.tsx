@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { createClient } from "@/lib/supabase/client";
 import {
   FloatingBook,
   FloatingPencil,
@@ -17,6 +18,7 @@ import {
   MathIcon,
   ScienceIcon,
   ArabicIcon,
+  MadrassaLogo,
   GlobeIcon,
   MoonStarIcon,
   MapIcon,
@@ -70,12 +72,23 @@ const StepIcon = ({ type, className }: { type: string; className?: string }) => 
 export default function Home() {
   const { language, setLanguage, isRtl } = useLanguage();
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const supabase = createClient();
+
+  useEffect(() => {
+    async function checkAuth() {
+      const { data: { user } } = await supabase.auth.getUser();
+      setIsAuthenticated(!!user);
+    }
+    checkAuth();
+  }, [supabase]);
 
   const t = {
     ar: {
       nav: { features: "المميزات", howItWorks: "كيف يعمل", teachers: "للمعلمين", faq: "الأسئلة" },
       login: "تسجيل الدخول",
       getStarted: "ابدأ الآن",
+      goToDashboard: "لوحة التحكم",
       hero: {
         title1: "أفضل مكان",
         titleHighlight1: "للتعلم",
@@ -92,9 +105,9 @@ export default function Home() {
         title: "تعلم بطريقة",
         titleHighlight: "ممتعة",
         items: [
-          { title: "دروس ممتعة", desc: "فيديوهات تفاعلية مع رسوم متحركة تجعل التعلم مغامرة", color: "from-violet-500 to-purple-600", iconType: "video" },
-          { title: "المعلم الذكي", desc: "صديقك الذكي الذي يساعدك على فهم أي سؤال بالعربية", color: "from-cyan-500 to-blue-600", iconType: "robot" },
-          { title: "الألعاب التعليمية", desc: "اختبارات وتحديات ممتعة تجعلك تتعلم وأنت تلعب", color: "from-emerald-500 to-teal-600", iconType: "gamepad" },
+          { title: "دروس ممتعة", desc: "فيديوهات تفاعلية مع رسوم متحركة تجعل التعلم مغامرة", color: "from-[#007229] to-[#00913D]", iconType: "video" },
+          { title: "المعلم الذكي", desc: "صديقك الذكي الذي يساعدك على فهم أي سؤال بالعربية", color: "from-[#D21034] to-[#E8334F]", iconType: "robot" },
+          { title: "الألعاب التعليمية", desc: "اختبارات وتحديات ممتعة تجعلك تتعلم وأنت تلعب", color: "from-[#005C22] to-[#007229]", iconType: "gamepad" },
           { title: "شهادات وجوائز", desc: "اجمع النقاط واحصل على شهادات وشارات تقدير", color: "from-amber-500 to-orange-600", iconType: "trophy" },
         ],
       },
@@ -102,9 +115,9 @@ export default function Home() {
         label: "المواد الدراسية",
         title: "اختر مادتك المفضلة",
         items: [
-          { name: "الرياضيات", iconType: "math", color: "from-blue-500 to-indigo-600" },
-          { name: "العلوم", iconType: "science", color: "from-emerald-500 to-teal-600" },
-          { name: "اللغة الإنجليزية", iconType: "globe", color: "from-violet-500 to-purple-600" },
+          { name: "الرياضيات", iconType: "math", color: "from-[#007229] to-[#00913D]" },
+          { name: "العلوم", iconType: "science", color: "from-[#D21034] to-[#E8334F]" },
+          { name: "اللغة الإنجليزية", iconType: "globe", color: "from-[#005C22] to-[#007229]" },
         ],
       },
       howItWorks: {
@@ -147,6 +160,7 @@ export default function Home() {
       nav: { features: "Features", howItWorks: "How it works", teachers: "For Teachers", faq: "FAQ" },
       login: "Log in",
       getStarted: "Start Now",
+      goToDashboard: "Dashboard",
       hero: {
         title1: "The best place to",
         titleHighlight1: "learn",
@@ -163,9 +177,9 @@ export default function Home() {
         title: "Learn in a",
         titleHighlight: "fun way",
         items: [
-          { title: "Fun Lessons", desc: "Interactive videos with animations that make learning an adventure", color: "from-violet-500 to-purple-600", iconType: "video" },
-          { title: "AI Tutor", desc: "Your smart friend who helps you understand any question in Arabic", color: "from-cyan-500 to-blue-600", iconType: "robot" },
-          { title: "Learning Games", desc: "Fun quizzes and challenges that let you learn while playing", color: "from-emerald-500 to-teal-600", iconType: "gamepad" },
+          { title: "Fun Lessons", desc: "Interactive videos with animations that make learning an adventure", color: "from-[#007229] to-[#00913D]", iconType: "video" },
+          { title: "AI Tutor", desc: "Your smart friend who helps you understand any question in Arabic", color: "from-[#D21034] to-[#E8334F]", iconType: "robot" },
+          { title: "Learning Games", desc: "Fun quizzes and challenges that let you learn while playing", color: "from-[#005C22] to-[#007229]", iconType: "gamepad" },
           { title: "Badges & Awards", desc: "Collect points and earn certificates and achievement badges", color: "from-amber-500 to-orange-600", iconType: "trophy" },
         ],
       },
@@ -173,9 +187,9 @@ export default function Home() {
         label: "Subjects",
         title: "Pick your favorite subject",
         items: [
-          { name: "Mathematics", iconType: "math", color: "from-blue-500 to-indigo-600" },
-          { name: "Science", iconType: "science", color: "from-emerald-500 to-teal-600" },
-          { name: "English", iconType: "globe", color: "from-violet-500 to-purple-600" },
+          { name: "Mathematics", iconType: "math", color: "from-[#007229] to-[#00913D]" },
+          { name: "Science", iconType: "science", color: "from-[#D21034] to-[#E8334F]" },
+          { name: "English", iconType: "globe", color: "from-[#005C22] to-[#007229]" },
         ],
       },
       howItWorks: {
@@ -223,20 +237,15 @@ export default function Home() {
       {/* Navbar */}
       <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-500/30">
-              م
-            </div>
-            <span className="text-lg font-bold text-gray-900 hidden sm:block">
-              {isRtl ? "مدرسة السودان" : "Madrassa Sudan"}
-            </span>
+          <Link href="/">
+            <MadrassaLogo size="md" />
           </Link>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
-            <a href="#features" className="hover:text-emerald-600 transition-colors">{txt.nav.features}</a>
-            <a href="#how-it-works" className="hover:text-emerald-600 transition-colors">{txt.nav.howItWorks}</a>
-            <a href="#teachers" className="hover:text-emerald-600 transition-colors">{txt.nav.teachers}</a>
-            <a href="#faq" className="hover:text-emerald-600 transition-colors">{txt.nav.faq}</a>
+            <a href="#features" className="hover:text-[#007229] transition-colors">{txt.nav.features}</a>
+            <a href="#how-it-works" className="hover:text-[#007229] transition-colors">{txt.nav.howItWorks}</a>
+            <a href="#teachers" className="hover:text-[#007229] transition-colors">{txt.nav.teachers}</a>
+            <a href="#faq" className="hover:text-[#007229] transition-colors">{txt.nav.faq}</a>
           </div>
 
           <div className="flex items-center gap-3">
@@ -246,15 +255,29 @@ export default function Home() {
             >
               {language === "ar" ? "EN" : "عربي"}
             </button>
-            <Link href="/auth/login" className="hidden sm:block text-sm font-semibold text-gray-600 hover:text-gray-900">
-              {txt.login}
-            </Link>
-            <Link
-              href="/auth/signup"
-              className="px-5 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full hover:from-emerald-600 hover:to-cyan-600 transition-all shadow-lg shadow-emerald-500/30"
-            >
-              {txt.getStarted}
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                href="/dashboard"
+                className="px-5 py-2.5 text-sm font-bold text-white bg-[#007229] rounded-full hover:bg-[#005C22] transition-all shadow-lg shadow-[#007229]/30 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                {txt.goToDashboard}
+              </Link>
+            ) : (
+              <>
+                <Link href="/auth/login" className="hidden sm:block text-sm font-semibold text-gray-600 hover:text-gray-900">
+                  {txt.login}
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  className="px-5 py-2.5 text-sm font-bold text-white bg-[#007229] rounded-full hover:bg-[#005C22] transition-all shadow-lg shadow-[#007229]/30"
+                >
+                  {txt.getStarted}
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -266,9 +289,9 @@ export default function Home() {
           <div className="absolute inset-0 overflow-hidden">
             {/* Soft gradient blobs - more subtle */}
             <div className="absolute top-10 left-10 w-64 h-64 bg-violet-200/30 rounded-full blur-3xl" />
-            <div className="absolute top-20 right-10 w-72 h-72 bg-cyan-200/30 rounded-full blur-3xl" />
+            <div className="absolute top-20 right-10 w-72 h-72 bg-[#007229]/10 rounded-full blur-3xl" />
             <div className="absolute bottom-0 left-1/4 w-64 h-64 bg-amber-200/30 rounded-full blur-3xl" />
-            <div className="absolute bottom-10 right-1/4 w-56 h-56 bg-emerald-200/30 rounded-full blur-3xl" />
+            <div className="absolute bottom-10 right-1/4 w-56 h-56 bg-[#D21034]/10 rounded-full blur-3xl" />
 
             {/* Floating decorative elements - better distributed */}
             <div className="absolute top-24 left-[8%] w-12 h-12 animate-bounce hidden sm:block" style={{ animationDelay: "0s", animationDuration: "3s" }}>
@@ -301,7 +324,7 @@ export default function Home() {
           <div className="relative z-10 max-w-5xl mx-auto px-6 py-8">
             <div className="text-center">
               {/* Main headline with colorful highlights */}
-              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold text-gray-900 leading-tight mb-6">
+              <h1 className="font-fredoka text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-medium text-gray-900 leading-[1.1] mb-6">
                 {txt.hero.title1}
                 <br />
                 <span className="relative inline-block text-violet-600">
@@ -311,10 +334,10 @@ export default function Home() {
                   </svg>
                 </span>
                 {" "}{txt.hero.titleAnd}{" "}
-                <span className="relative inline-block text-emerald-500">
+                <span className="relative inline-block text-[#007229]">
                   {txt.hero.titleHighlight2}
                   <svg className="absolute -bottom-2 left-0 w-full" viewBox="0 0 200 12" fill="none">
-                    <path d="M2 8 Q 50 2 100 8 T 198 8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="text-emerald-400" />
+                    <path d="M2 8 Q 50 2 100 8 T 198 8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="text-[#00913D]" />
                   </svg>
                 </span>
                 <br />
@@ -327,18 +350,30 @@ export default function Home() {
 
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
-                <Link
-                  href="/auth/signup"
-                  className="group px-8 py-4 text-lg font-bold text-white bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full hover:from-emerald-600 hover:to-cyan-600 transition-all shadow-xl shadow-emerald-500/30 hover:shadow-2xl hover:shadow-emerald-500/40 hover:-translate-y-1 flex items-center gap-2"
-                >
-                  {txt.hero.cta1}
-                  <CelebrationIcon className="w-6 h-6" />
-                </Link>
+                {isAuthenticated ? (
+                  <Link
+                    href="/dashboard"
+                    className="group px-8 py-4 text-lg font-bold text-white bg-[#007229] rounded-full hover:bg-[#005C22] transition-all shadow-xl shadow-[#007229]/30 hover:shadow-2xl hover:shadow-[#007229]/40 hover:-translate-y-1 flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                    {txt.goToDashboard}
+                  </Link>
+                ) : (
+                  <Link
+                    href="/auth/signup"
+                    className="group px-8 py-4 text-lg font-bold text-white bg-[#007229] rounded-full hover:bg-[#005C22] transition-all shadow-xl shadow-[#007229]/30 hover:shadow-2xl hover:shadow-[#007229]/40 hover:-translate-y-1 flex items-center gap-2"
+                  >
+                    {txt.hero.cta1}
+                    <CelebrationIcon className="w-6 h-6" />
+                  </Link>
+                )}
                 <a
                   href="#how-it-works"
                   className="px-8 py-4 text-lg font-semibold text-gray-700 bg-white border-2 border-gray-200 rounded-full hover:border-gray-300 hover:bg-gray-50 transition-all flex items-center gap-2"
                 >
-                  <PlayIcon className="w-6 h-6 text-emerald-500" />
+                  <PlayIcon className="w-6 h-6 text-[#007229]" />
                   {txt.hero.cta2}
                 </a>
               </div>
@@ -352,7 +387,7 @@ export default function Home() {
                   <div className="text-gray-600 font-medium mt-1">{txt.hero.stats.students}</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600">
+                  <div className="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#007229] to-[#00913D]">
                     500+
                   </div>
                   <div className="text-gray-600 font-medium mt-1">{txt.hero.stats.lessons}</div>
@@ -383,7 +418,7 @@ export default function Home() {
               <span className="inline-block px-4 py-2 bg-violet-100 text-violet-700 rounded-full text-sm font-bold mb-4">
                 {txt.features.label}
               </span>
-              <h2 className="text-3xl md:text-5xl font-extrabold text-gray-900">
+              <h2 className="font-fredoka text-3xl md:text-5xl font-semibold text-gray-900">
                 {txt.features.title}{" "}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-purple-600">
                   {txt.features.titleHighlight}
@@ -434,7 +469,7 @@ export default function Home() {
               <span className="inline-block px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full text-sm font-bold mb-4">
                 {txt.subjects.label}
               </span>
-              <h2 className="text-3xl md:text-5xl font-extrabold text-gray-900">
+              <h2 className="font-fredoka text-3xl md:text-5xl font-semibold text-gray-900">
                 {txt.subjects.title}
               </h2>
             </div>
@@ -477,7 +512,7 @@ export default function Home() {
               <span className="inline-block px-4 py-2 bg-white/20 text-white rounded-full text-sm font-bold mb-4">
                 {txt.howItWorks.label}
               </span>
-              <h2 className="text-3xl md:text-5xl font-extrabold text-white">
+              <h2 className="font-fredoka text-3xl md:text-5xl font-semibold text-white">
                 {txt.howItWorks.title}
               </h2>
             </div>
@@ -525,7 +560,7 @@ export default function Home() {
                   <span className="inline-block px-4 py-2 bg-white/20 rounded-full text-sm font-bold mb-4">
                     {txt.teachers.label}
                   </span>
-                  <h2 className="text-3xl md:text-4xl font-extrabold mb-4">{txt.teachers.title}</h2>
+                  <h2 className="font-fredoka text-3xl md:text-4xl font-semibold mb-4">{txt.teachers.title}</h2>
                   <p className="text-white/90 text-lg mb-8">{txt.teachers.subtitle}</p>
 
                   <ul className="space-y-4 mb-8">
@@ -563,7 +598,7 @@ export default function Home() {
           <div className="max-w-3xl mx-auto px-6">
             <div className="text-center mb-12">
               <div className="inline-flex items-center gap-3">
-                <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">
+                <h2 className="font-fredoka text-3xl md:text-4xl font-semibold text-gray-900">
                   {txt.faq.title}
                 </h2>
                 <QuestionIcon className="w-10 h-10 text-violet-500" />
@@ -612,13 +647,25 @@ export default function Home() {
               {txt.finalCta.title}
             </h2>
             <p className="text-xl text-gray-600 mb-10">{txt.finalCta.subtitle}</p>
-            <Link
-              href="/auth/signup"
-              className="inline-flex items-center gap-3 px-10 py-5 text-xl font-bold text-white bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full hover:from-emerald-600 hover:to-cyan-600 transition-all shadow-xl shadow-emerald-500/30 hover:shadow-2xl hover:-translate-y-1"
-            >
-              {txt.finalCta.cta}
-              <FloatingRocket className="w-8 h-8" />
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-3 px-10 py-5 text-xl font-bold text-white bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full hover:from-emerald-600 hover:to-cyan-600 transition-all shadow-xl shadow-emerald-500/30 hover:shadow-2xl hover:-translate-y-1"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                {txt.goToDashboard}
+              </Link>
+            ) : (
+              <Link
+                href="/auth/signup"
+                className="inline-flex items-center gap-3 px-10 py-5 text-xl font-bold text-white bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full hover:from-emerald-600 hover:to-cyan-600 transition-all shadow-xl shadow-emerald-500/30 hover:shadow-2xl hover:-translate-y-1"
+              >
+                {txt.finalCta.cta}
+                <FloatingRocket className="w-8 h-8" />
+              </Link>
+            )}
           </div>
         </section>
       </main>
@@ -627,20 +674,15 @@ export default function Home() {
       <footer className="border-t border-gray-200 bg-white py-12">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold shadow-md">
-                م
-              </div>
-              <div>
-                <span className="font-bold text-gray-900">Madrassa Sudan</span>
-                <p className="text-sm text-gray-500">{txt.footer.tagline}</p>
-              </div>
+            <div className="flex flex-col items-center md:items-start gap-1">
+              <MadrassaLogo size="sm" />
+              <p className="text-sm text-gray-500">{txt.footer.tagline}</p>
             </div>
 
             <div className="flex items-center gap-8 text-sm text-gray-600">
-              <a href="#" className="hover:text-emerald-600 transition-colors">{txt.footer.links.privacy}</a>
-              <a href="#" className="hover:text-emerald-600 transition-colors">{txt.footer.links.contact}</a>
-              <a href="#" className="hover:text-emerald-600 transition-colors">{txt.footer.links.donate}</a>
+              <a href="#" className="hover:text-[#007229] transition-colors">{txt.footer.links.privacy}</a>
+              <a href="#" className="hover:text-[#007229] transition-colors">{txt.footer.links.contact}</a>
+              <a href="#" className="hover:text-[#D21034] transition-colors">{txt.footer.links.donate}</a>
             </div>
 
             <p className="text-sm text-gray-500">{txt.footer.copyright}</p>
