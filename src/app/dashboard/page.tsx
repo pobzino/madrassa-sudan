@@ -452,12 +452,12 @@ export default function DashboardPage() {
               <h2 className="text-xl font-bold text-gray-900">{t.subjects}</h2>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {subjects.map((subject, index) => (
                 <Link
                   key={subject.id}
                   href={`/lessons?subject=${subject.id}`}
-                  className="group relative overflow-hidden rounded-2xl p-6 text-white transition-all hover:-translate-y-1 hover:shadow-xl"
+                  className="group relative overflow-hidden rounded-2xl p-8 text-white transition-all hover:-translate-y-1 hover:shadow-xl"
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${subjectColors[index % subjectColors.length]}`} />
                   <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
