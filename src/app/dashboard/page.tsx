@@ -17,6 +17,12 @@ import {
   OwlWaving,
   OwlThinking,
   MadrassaLogo,
+  HomeNavIcon,
+  BookNavIcon,
+  ClipboardNavIcon,
+  UsersNavIcon,
+  ChartNavIcon,
+  SettingsNavIcon,
 } from "@/components/illustrations";
 
 const translations = {
@@ -219,12 +225,12 @@ export default function DashboardPage() {
   const firstName = profile?.full_name?.split(" ")[0] || "Student";
 
   const navItems = [
-    { href: "/dashboard", label: t.dashboard, icon: Icons.dashboard, active: true, color: "text-emerald-600" },
-    { href: "/lessons", label: t.lessons, icon: Icons.book, color: "text-violet-600" },
-    { href: "/homework", label: t.homework, icon: Icons.clipboard, color: "text-amber-600" },
-    { href: "/tutor", label: t.aiTutor, icon: <OwlTutorIcon className="w-5 h-5" />, color: "text-cyan-600" },
-    { href: "/cohorts", label: t.myClasses, icon: Icons.users, color: "text-pink-600" },
-    { href: "/progress", label: t.progress, icon: Icons.chart, color: "text-blue-600" },
+    { href: "/dashboard", label: t.dashboard, icon: <HomeNavIcon className="w-5 h-5" />, active: true },
+    { href: "/lessons", label: t.lessons, icon: <BookNavIcon className="w-5 h-5" /> },
+    { href: "/homework", label: t.homework, icon: <ClipboardNavIcon className="w-5 h-5" /> },
+    { href: "/tutor", label: t.aiTutor, icon: <OwlTutorIcon className="w-5 h-5" /> },
+    { href: "/cohorts", label: t.myClasses, icon: <UsersNavIcon className="w-5 h-5" /> },
+    { href: "/progress", label: t.progress, icon: <ChartNavIcon className="w-5 h-5" /> },
   ];
 
   // Subject card colors - Sudan themed
@@ -270,7 +276,7 @@ export default function DashboardPage() {
                 : "text-gray-600 hover:bg-gray-50"
             }`}
           >
-            <span className={item.active ? "text-emerald-600" : "text-gray-400"}>{item.icon}</span>
+            {item.icon}
             {item.label}
           </Link>
         ))}
@@ -282,7 +288,7 @@ export default function DashboardPage() {
           href="/settings"
           className="flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium text-gray-600 hover:bg-gray-50 transition-colors"
         >
-          <span className="text-gray-400">{Icons.settings}</span>
+          <SettingsNavIcon className="w-5 h-5" />
           {t.settings}
         </Link>
 
