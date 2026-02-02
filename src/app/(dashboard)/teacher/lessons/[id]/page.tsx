@@ -135,7 +135,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       question_text_en: q.question_text_en || "",
       options: (q.options as string[] | null) || (q.question_type === "true_false" ? ["True", "False"] : ["", "", "", ""]),
       correct_answer: q.correct_answer || "",
-      points: q.points || 10,
+      points: 10,
       timestamp_seconds: q.timestamp_seconds || 0,
       is_required: q.is_required ?? true,
       allow_retry: q.allow_retry ?? true,

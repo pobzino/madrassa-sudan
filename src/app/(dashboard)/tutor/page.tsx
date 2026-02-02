@@ -1103,6 +1103,24 @@ export default function TutorPage() {
         }
       }
 
+      // Handle tool-get_subjects - internal lookup tool, hidden from users
+      if (part.type === "tool-get_subjects") {
+        // This is an internal tool for the AI to look up subject IDs
+        // Don't show any UI to users
+        return null;
+      }
+
+      // Internal RAG/lookup tools - hidden from users
+      if (
+        part.type === "tool-search_lessons" ||
+        part.type === "tool-get_lesson_content_chunk" ||
+        part.type === "tool-get_homework_question_context"
+      ) {
+        // These are internal tools for fetching lesson/homework content
+        // The AI uses them to build context but they shouldn't show UI
+        return null;
+      }
+
       // Handle tool-get_available_lessons (lessons list)
       if (part.type === "tool-get_available_lessons") {
         switch (part.state) {

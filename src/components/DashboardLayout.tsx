@@ -26,27 +26,43 @@ import {
 
 const translations = {
   ar: {
+    // Student nav
     dashboard: "لوحة التحكم",
     startLearning: "ابدأ التعلم",
     lessons: "الدروس",
     homework: "الواجبات",
     aiTutor: "المعلم الذكي",
     myClasses: "فصولي",
-    teacherAdmin: "لوحة المعلم",
     progress: "التقدم",
+    // Teacher nav
+    teacherDashboard: "لوحة المعلم",
+    manageLessons: "إدارة الدروس",
+    manageHomework: "إدارة الواجبات",
+    gradeSubmissions: "تصحيح الواجبات",
+    manageClasses: "إدارة الفصول",
+    studentView: "عرض الطالب",
+    // Common
     settings: "الإعدادات",
     logout: "تسجيل الخروج",
     loading: "جاري التحميل...",
   },
   en: {
+    // Student nav
     dashboard: "Dashboard",
     startLearning: "Start Learning",
     lessons: "Lessons",
     homework: "Homework",
     aiTutor: "AI Tutor",
     myClasses: "My Classes",
-    teacherAdmin: "Teacher Admin",
     progress: "Progress",
+    // Teacher nav
+    teacherDashboard: "Teacher Dashboard",
+    manageLessons: "Manage Lessons",
+    manageHomework: "Manage Homework",
+    gradeSubmissions: "Grade Submissions",
+    manageClasses: "Manage Classes",
+    studentView: "Student View",
+    // Common
     settings: "Settings",
     logout: "Log out",
     loading: "Loading...",
@@ -147,7 +163,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   // Get first name or default - don't block render for this
   const firstName = profile?.full_name?.split(" ")[0] || "";
 
-  const navItems = [
+  const isTeacherOrAdmin = profile?.role === "teacher" || profile?.role === "admin";
+
+  // Show teacher nav when on /teacher/* routes, student nav otherwise
+  const isInTeacherView = pathname.startsWith("/teacher");
+
+  // Different nav items for teachers vs students
+  const studentNavItems = [
     { href: "/dashboard", label: t.dashboard, icon: <HomeNavIcon className="w-5 h-5" /> },
     { href: "/lessons", label: t.lessons, icon: <BookNavIcon className="w-5 h-5" /> },
     { href: "/homework", label: t.homework, icon: <ClipboardNavIcon className="w-5 h-5" /> },
@@ -156,13 +178,24 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { href: "/progress", label: t.progress, icon: <ChartNavIcon className="w-5 h-5" /> },
   ];
 
-  if (profile?.role === "teacher" || profile?.role === "admin") {
-    navItems.push({
+  // Add teacher link for teachers/admins when in student view
+  if (isTeacherOrAdmin && !isInTeacherView) {
+    studentNavItems.push({
       href: "/teacher",
-      label: t.teacherAdmin,
+      label: t.teacherDashboard,
       icon: <GraduationCapIcon className="w-5 h-5" />,
     });
   }
+
+  const teacherNavItems = [
+    { href: "/teacher", label: t.teacherDashboard, icon: <HomeNavIcon className="w-5 h-5" /> },
+    { href: "/teacher/lessons", label: t.manageLessons, icon: <BookNavIcon className="w-5 h-5" /> },
+    { href: "/teacher/homework", label: t.manageHomework, icon: <ClipboardNavIcon className="w-5 h-5" /> },
+    { href: "/teacher/cohorts", label: t.manageClasses, icon: <UsersNavIcon className="w-5 h-5" /> },
+    { href: "/dashboard", label: t.studentView, icon: <GraduationCapIcon className="w-5 h-5" /> },
+  ];
+
+  const navItems = isInTeacherView ? teacherNavItems : studentNavItems;
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -178,15 +211,24 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </Link>
       </div>
 
-      {/* Start Learning Button */}
+      {/* Primary Action Button */}
       <div className="p-4">
         <Link
-          href="/lessons"
+          href={isInTeacherView ? "/teacher/homework/create" : "/lessons"}
           onClick={() => mobile && setSidebarOpen(false)}
           className="group flex items-center justify-center gap-2 w-full py-3 px-4 bg-[#007229] hover:bg-[#005C22] text-white font-bold rounded-xl transition-all shadow-lg shadow-[#007229]/30 hover:shadow-xl hover:shadow-[#007229]/40 hover:-translate-y-0.5"
         >
-          <FloatingRocket className="w-6 h-6 group-hover:animate-bounce" />
-          <span>{t.startLearning}</span>
+          {isInTeacherView ? (
+            <>
+              <ClipboardNavIcon className="w-6 h-6" />
+              <span>{language === "ar" ? "إنشاء واجب" : "Create Assignment"}</span>
+            </>
+          ) : (
+            <>
+              <FloatingRocket className="w-6 h-6 group-hover:animate-bounce" />
+              <span>{t.startLearning}</span>
+            </>
+          )}
         </Link>
       </div>
 

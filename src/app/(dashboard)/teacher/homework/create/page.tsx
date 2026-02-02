@@ -21,7 +21,7 @@ interface Subject {
 
 interface Question {
   id: string;
-  type: "multiple_choice" | "short_answer" | "long_answer";
+  type: "multiple_choice" | "short_answer" | "long_answer" | "file_upload";
   question_ar: string;
   question_en: string;
   options: string[];
@@ -260,7 +260,7 @@ function CreateHomeworkContent() {
         .map((student) => ({
           assignment_id: assignmentIdToUse,
           student_id: student.student_id,
-          status: "not_started",
+          status: "not_started" as const,
         }));
 
       if (newRows.length > 0) {
