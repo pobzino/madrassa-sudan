@@ -18,12 +18,11 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#007229",
-          borderRadius: "6px",
+          background: "transparent",
         }}
       >
-        {/* Simplified owl face for favicon */}
-        <svg width="28" height="28" viewBox="0 0 64 64" fill="none">
+        {/* Owl favicon - full size */}
+        <svg width="32" height="32" viewBox="0 0 64 64" fill="none">
           {/* Ear tufts */}
           <ellipse cx="14" cy="18" rx="5" ry="7" fill="#a01028" />
           <ellipse cx="50" cy="18" rx="5" ry="7" fill="#a01028" />
