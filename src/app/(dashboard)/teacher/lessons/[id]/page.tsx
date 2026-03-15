@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import BunnyVideoUploader from "@/components/teacher/BunnyVideoUploader";
+import AIContentGenerator from "@/components/teacher/AIContentGenerator";
 
 type Subject = {
   id: string;
@@ -433,6 +434,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                     video_url_360p: urls.video_url_360p,
                     video_url_480p: urls.video_url_480p,
                     video_url_720p: urls.video_url_720p,
+                    ...(urls.duration_seconds ? { video_duration_seconds: String(urls.duration_seconds) } : {}),
                   }));
                 }}
                 currentVideoUrl={form.video_url_720p || undefined}
@@ -505,6 +507,39 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             <span className="w-4 h-4 bg-white rounded-full shadow" />
           </button>
         </div>
+      </div>
+
+      {/* AI Content Generator */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">AI Content Generator</h2>
+        <AIContentGenerator
+          lessonId={id}
+          hasVideo={!!(form.video_url_360p || form.video_url_480p || form.video_url_720p)}
+          hasExistingContent={questions.length > 0 || contentBlocks.length > 0}
+          onGenerated={(data) => {
+            const newQuestions: QuestionForm[] = data.questions.map((q, idx) => ({
+              id: crypto.randomUUID(),
+              question_type: q.question_type,
+              question_text_ar: q.question_text_ar,
+              question_text_en: q.question_text_en,
+              options: q.options || (q.question_type === "true_false" ? ["صحيح", "خطأ"] : []),
+              correct_answer: q.correct_answer,
+              points: 10,
+              timestamp_seconds: q.timestamp_seconds,
+              is_required: q.is_required,
+              allow_retry: q.allow_retry,
+            }));
+            setQuestions(newQuestions);
+
+            const newBlocks: ContentBlock[] = data.contentBlocks.map((b) => ({
+              language: b.language,
+              content: b.content,
+              source_type: b.source_type,
+              sequence: b.sequence,
+            }));
+            setContentBlocks(newBlocks);
+          }}
+        />
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">

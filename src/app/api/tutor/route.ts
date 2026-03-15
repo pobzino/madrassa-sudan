@@ -1,36 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import OpenAI from "openai";
 import { UIMessage, createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { StudentContext } from "@/lib/ai/types";
 import { Json } from "@/lib/database.types";
 import { checkRateLimit } from "@/lib/ai/rate-limiter";
 import { logToolStart, logToolComplete, logRateLimited } from "@/lib/ai/logger";
 import { toolDefinitions } from "@/lib/ai/tools";
+import { getOpenAIClient, AI_MODEL } from "@/lib/ai/openai-client";
 
 // Import tool implementations
 import { getStudentProfile, getStudentProgress, getWeakAreas, getSubjects } from "@/lib/ai/tools/student-tools";
 import { getAvailableLessons, getLessonDetails, getLessonContentChunk, getLessonContext, searchLessons, suggestLearningPath } from "@/lib/ai/tools/lesson-tools";
 import { getStudentHomework, getHomeworkDetails, getHomeworkQuestionContext, createHomeworkAssignment } from "@/lib/ai/tools/homework-tools";
 import { getMistakePatterns } from "@/lib/ai/tools/insights-tools";
-
-// Available OpenAI models (override via OPENAI_MODEL)
-const AI_MODEL = process.env.OPENAI_MODEL || "gpt-5.2";
-
-let openaiClientSingleton: OpenAI | null = null;
-
-function getOpenAIClient() {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    return null;
-  }
-
-  if (!openaiClientSingleton) {
-    openaiClientSingleton = new OpenAI({ apiKey });
-  }
-
-  return openaiClientSingleton;
-}
 
 type SupabaseErrorLike = {
   code?: string | null;

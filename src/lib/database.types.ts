@@ -786,6 +786,8 @@ export type Database = {
       }
       lessons: {
         Row: {
+          ai_generated_at: string | null
+          ai_transcript: string | null
           captions_ar_url: string | null
           captions_en_url: string | null
           created_at: string
@@ -808,6 +810,8 @@ export type Database = {
           video_url_720p: string | null
         }
         Insert: {
+          ai_generated_at?: string | null
+          ai_transcript?: string | null
           captions_ar_url?: string | null
           captions_en_url?: string | null
           created_at?: string
@@ -830,6 +834,8 @@ export type Database = {
           video_url_720p?: string | null
         }
         Update: {
+          ai_generated_at?: string | null
+          ai_transcript?: string | null
           captions_ar_url?: string | null
           captions_en_url?: string | null
           created_at?: string

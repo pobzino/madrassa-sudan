@@ -13,6 +13,7 @@ interface BunnyVideoUploaderProps {
     video_url_360p: string;
     video_url_480p: string;
     video_url_720p: string;
+    duration_seconds?: number;
   }) => void;
   currentVideoUrl?: string;
 }
@@ -76,6 +77,7 @@ export default function BunnyVideoUploader({
             video_url_360p: data.urls.video_url_360p,
             video_url_480p: data.urls.video_url_480p,
             video_url_720p: data.urls.video_url_720p,
+            duration_seconds: data.durationSeconds,
           });
         } else if (data.status === 'error') {
           if (pollingRef.current) clearInterval(pollingRef.current);
