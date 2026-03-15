@@ -65,6 +65,7 @@ const translations = {
     micUnsupported: "التحدث غير مدعوم على هذا الجهاز",
     chatError: "حدث خطأ في رد المعلم",
     chatErrorDesc: "حاول مرة أخرى الآن.",
+    deleteChat: "حذف المحادثة",
   },
   en: {
     aiTutor: "AI Tutor",
@@ -118,6 +119,7 @@ const translations = {
     micUnsupported: "Speech input not supported on this device",
     chatError: "Something went wrong",
     chatErrorDesc: "Please try again.",
+    deleteChat: "Delete chat",
   },
 };
 
@@ -187,6 +189,11 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
     </svg>
   ),
+  trash: (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+    </svg>
+  ),
 };
 
 type SpeechRecognitionLike = {
@@ -206,6 +213,19 @@ type SpeechRecognitionLike = {
 };
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+type TutorMessagesResponse = {
+  messages?: Array<{
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    tool_results?: Array<{ type: string; state?: string; output?: unknown }> | null;
+  }>;
+};
+
+type TutorConversationsResponse = {
+  conversations?: AIConversation[];
+};
 
 // Tool Result Components
 type HomeworkCreatedData = {
@@ -408,6 +428,47 @@ export default function TutorPage() {
   const homeworkId = searchParams.get("homework");
   const subjectId = searchParams.get("subject");
 
+  const fetchConversationHistory = async (): Promise<AIConversation[]> => {
+    try {
+      const response = await fetch("/api/tutor", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const payload = (await response.json()) as TutorConversationsResponse;
+      return Array.isArray(payload.conversations) ? payload.conversations : [];
+    } catch (fetchError) {
+      console.warn("Failed to fetch conversation history:", fetchError);
+      return [];
+    }
+  };
+
+  const fetchConversationMessages = async (activeConversationId: string) => {
+    try {
+      const response = await fetch(
+        `/api/tutor?conversation_id=${encodeURIComponent(activeConversationId)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const payload = (await response.json()) as TutorMessagesResponse;
+      return Array.isArray(payload.messages) ? payload.messages : [];
+    } catch (fetchError) {
+      console.warn("Failed to fetch conversation messages:", fetchError);
+      return [];
+    }
+  };
+
   // AI SDK useChat hook
   const { messages, sendMessage, status, setMessages, error } = useChat({
     transport: new DefaultChatTransport({
@@ -452,27 +513,6 @@ export default function TutorPage() {
           (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         );
       });
-
-      void (async () => {
-        const { data } = await supabase
-          .from("ai_conversations")
-          .select("*")
-          .eq("id", nextConversationId)
-          .single();
-
-        if (data) {
-          setConversations((prev) => {
-            const exists = prev.find((c) => c.id === data.id);
-            const updated = exists
-              ? prev.map((c) => (c.id === data.id ? data : c))
-              : [data, ...prev];
-
-            return updated.sort(
-              (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-            );
-          });
-        }
-      })();
     },
   });
 
@@ -608,16 +648,8 @@ export default function TutorPage() {
       setUserId(user.id);
 
       // Load conversation history
-      const { data: conversationsData } = await supabase
-        .from("ai_conversations")
-        .select("*")
-        .eq("student_id", user.id)
-        .order("updated_at", { ascending: false })
-        .limit(20);
-
-      if (conversationsData) {
-        setConversations(conversationsData);
-      }
+      const conversationsData = await fetchConversationHistory();
+      setConversations(conversationsData);
 
       setLoading(false);
     }
@@ -642,13 +674,9 @@ export default function TutorPage() {
         return;
       }
 
-      const { data: messagesData } = await supabase
-        .from("ai_messages")
-        .select("id, role, content, tool_results, created_at")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true });
+      const messagesData = await fetchConversationMessages(conversationId);
 
-      if (messagesData) {
+      if (messagesData.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const loadedMessages: any[] = messagesData.map((msg) => {
           // Build parts array
@@ -679,6 +707,8 @@ export default function TutorPage() {
           };
         });
         setMessages(loadedMessages);
+      } else {
+        setMessages([]);
       }
     }
 
@@ -690,6 +720,27 @@ export default function TutorPage() {
     setConversationId(undefined);
     setMessages([]);
     setShowSidebar(false);
+  };
+
+  // Delete conversation
+  const deleteConversation = async (convId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent selecting the conversation when clicking delete
+
+    // Delete from database when available; ignore when persistence tables are missing.
+    try {
+      await supabase.from("ai_conversations").delete().eq("id", convId);
+    } catch (deleteError) {
+      console.warn("Failed to delete conversation from persistence layer:", deleteError);
+    }
+
+    // Remove from local state
+    setConversations((prev) => prev.filter((c) => c.id !== convId));
+
+    // If the deleted conversation was selected, clear the view
+    if (conversationId === convId) {
+      setConversationId(undefined);
+      setMessages([]);
+    }
   };
 
   // Send message
@@ -789,12 +840,25 @@ export default function TutorPage() {
     return groups;
   };
 
+  // Internal tools that should be hidden from users
+  const HIDDEN_TOOLS = [
+    "tool-get_subjects",
+    "tool-search_lessons",
+    "tool-get_lesson_content_chunk",
+    "tool-get_homework_question_context",
+  ];
+
   // Check if a message has actual content to display (not just loading states)
   const hasMessageContent = (message: typeof messages[0]): boolean => {
     return message.parts.some((part) => {
       // Text content counts as content
       if (part.type === "text" && part.text.trim()) {
         return true;
+      }
+
+      // Skip hidden internal tools - they don't count as visible content
+      if (HIDDEN_TOOLS.includes(part.type)) {
+        return false;
       }
 
       // Tool invocations only count as content when output is available
@@ -921,12 +985,8 @@ export default function TutorPage() {
                 </div>
               );
             }
-            // Show positive message if no weak areas
-            return (
-              <div key={index} className="bg-green-50 rounded-xl p-3 border border-green-200">
-                <p className="text-sm text-green-700">🎉 {isRtl ? "أداء ممتاز! لا توجد مواد ضعيفة" : "Great job! No weak areas found"}</p>
-              </div>
-            );
+            // No weak areas - return null, let the model explain
+            return null;
           case "output-error":
             return <div key={index} className="text-red-500 text-sm">Error: {part.errorText}</div>;
         }
@@ -1319,25 +1379,32 @@ export default function TutorPage() {
                   <div className="mb-4">
                     <p className="text-xs font-medium text-gray-400 px-2 mb-2">{t.today}</p>
                     {grouped.today.map((conv) => (
-                      <button
+                      <div
                         key={conv.id}
-                        onClick={() => {
-                          setConversationId(conv.id);
-                          setShowSidebar(false);
-                        }}
-                        className={`w-full text-left p-3 rounded-xl mb-1 transition-colors ${
+                        className={`group relative w-full text-left p-3 rounded-xl mb-1 transition-colors cursor-pointer ${
                           conversationId === conv.id
                             ? "bg-cyan-100 text-cyan-700"
                             : "hover:bg-gray-100 text-gray-700"
                         }`}
+                        onClick={() => {
+                          setConversationId(conv.id);
+                          setShowSidebar(false);
+                        }}
                       >
-                        <p className="text-sm font-medium truncate">{conv.title || "New conversation"}</p>
+                        <p className="text-sm font-medium truncate pe-6">{conv.title || "New conversation"}</p>
                         {(conv.lesson_id || conv.homework_id) && (
                           <p className="text-xs text-gray-400 mt-1">
                             {t.relatedTo} {conv.lesson_id ? t.lesson : t.homework}
                           </p>
                         )}
-                      </button>
+                        <button
+                          onClick={(e) => deleteConversation(conv.id, e)}
+                          className="absolute top-3 end-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all"
+                          title={t.deleteChat}
+                        >
+                          {Icons.trash}
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -1346,20 +1413,27 @@ export default function TutorPage() {
                   <div className="mb-4">
                     <p className="text-xs font-medium text-gray-400 px-2 mb-2">{t.yesterday}</p>
                     {grouped.yesterday.map((conv) => (
-                      <button
+                      <div
                         key={conv.id}
-                        onClick={() => {
-                          setConversationId(conv.id);
-                          setShowSidebar(false);
-                        }}
-                        className={`w-full text-left p-3 rounded-xl mb-1 transition-colors ${
+                        className={`group relative w-full text-left p-3 rounded-xl mb-1 transition-colors cursor-pointer ${
                           conversationId === conv.id
                             ? "bg-cyan-100 text-cyan-700"
                             : "hover:bg-gray-100 text-gray-700"
                         }`}
+                        onClick={() => {
+                          setConversationId(conv.id);
+                          setShowSidebar(false);
+                        }}
                       >
-                        <p className="text-sm font-medium truncate">{conv.title || "New conversation"}</p>
-                      </button>
+                        <p className="text-sm font-medium truncate pe-6">{conv.title || "New conversation"}</p>
+                        <button
+                          onClick={(e) => deleteConversation(conv.id, e)}
+                          className="absolute top-3 end-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all"
+                          title={t.deleteChat}
+                        >
+                          {Icons.trash}
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -1368,20 +1442,27 @@ export default function TutorPage() {
                   <div>
                     <p className="text-xs font-medium text-gray-400 px-2 mb-2">{t.earlier}</p>
                     {grouped.earlier.map((conv) => (
-                      <button
+                      <div
                         key={conv.id}
-                        onClick={() => {
-                          setConversationId(conv.id);
-                          setShowSidebar(false);
-                        }}
-                        className={`w-full text-left p-3 rounded-xl mb-1 transition-colors ${
+                        className={`group relative w-full text-left p-3 rounded-xl mb-1 transition-colors cursor-pointer ${
                           conversationId === conv.id
                             ? "bg-cyan-100 text-cyan-700"
                             : "hover:bg-gray-100 text-gray-700"
                         }`}
+                        onClick={() => {
+                          setConversationId(conv.id);
+                          setShowSidebar(false);
+                        }}
                       >
-                        <p className="text-sm font-medium truncate">{conv.title || "New conversation"}</p>
-                      </button>
+                        <p className="text-sm font-medium truncate pe-6">{conv.title || "New conversation"}</p>
+                        <button
+                          onClick={(e) => deleteConversation(conv.id, e)}
+                          className="absolute top-3 end-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all"
+                          title={t.deleteChat}
+                        >
+                          {Icons.trash}
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}

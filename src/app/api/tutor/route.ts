@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { openai } from "@ai-sdk/openai";
-import { streamText, convertToModelMessages, UIMessage, tool } from "ai";
-import { z } from "zod";
+import OpenAI from "openai";
+import { UIMessage, createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { StudentContext } from "@/lib/ai/types";
 import { Json } from "@/lib/database.types";
 import { checkRateLimit } from "@/lib/ai/rate-limiter";
 import { logToolStart, logToolComplete, logRateLimited } from "@/lib/ai/logger";
+import { toolDefinitions } from "@/lib/ai/tools";
 
 // Import tool implementations
 import { getStudentProfile, getStudentProgress, getWeakAreas, getSubjects } from "@/lib/ai/tools/student-tools";
@@ -16,6 +16,41 @@ import { getMistakePatterns } from "@/lib/ai/tools/insights-tools";
 
 // Available OpenAI models (override via OPENAI_MODEL)
 const AI_MODEL = process.env.OPENAI_MODEL || "gpt-5.2";
+
+let openaiClientSingleton: OpenAI | null = null;
+
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    return null;
+  }
+
+  if (!openaiClientSingleton) {
+    openaiClientSingleton = new OpenAI({ apiKey });
+  }
+
+  return openaiClientSingleton;
+}
+
+type SupabaseErrorLike = {
+  code?: string | null;
+  message?: string | null;
+  hint?: string | null;
+};
+
+function isMissingTableError(error: SupabaseErrorLike | null | undefined, tableName: string) {
+  if (!error) return false;
+
+  const message = `${error.message || ""} ${error.hint || ""}`.toLowerCase();
+  const normalizedName = tableName.toLowerCase();
+
+  return (
+    error.code === "PGRST205" ||
+    message.includes(`public.${normalizedName}`) ||
+    message.includes(`table 'public.${normalizedName}'`) ||
+    message.includes(`relation "${normalizedName}" does not exist`)
+  );
+}
 
 // Enhanced system prompt with tool awareness
 const SYSTEM_PROMPT = `# Role and Identity
@@ -53,32 +88,25 @@ You are "معلم البومة" (Owl Teacher), an AI tutor for Madrassa Sudan - 
    - Offer alternative explanations or approaches
    - Remind them that struggle is part of learning
 
-# Tool Usage - MANDATORY
+# Tool Usage - VERY IMPORTANT
 
-**RULE: When student asks for practice/exercises/problems → CALL create_homework_assignment tool**
+## NEVER use tools for:
+- Greetings: "hi", "hello", "hey", "good morning", etc.
+- Single words: "yes", "no", "ok", "really", "thanks"
+- Casual chat or small talk
+- Questions you can answer from general knowledge
 
-DO NOT write practice questions as text. ALWAYS use the tool.
+For these, just reply with friendly conversational text. NO TOOLS.
 
-**Simple workflow:**
-1. Student says "give me math practice" or "I need addition problems"
-2. YOU CALL: create_homework_assignment({ subject_name/subject_id, difficulty_level, topic?, question_count? })
-3. Tool shows preview, student confirms
-4. YOU CALL AGAIN: create_homework_assignment({ subject_name/subject_id, difficulty_level, confirm: true })
-5. Done - homework is created and tracked
+## ONLY use tools when student EXPLICITLY asks:
+- Progress/performance → get_student_progress (e.g., "how am I doing?", "show my progress")
+- Weak areas → get_weak_areas (e.g., "what should I study?", "where am I struggling?")
+- Practice/exercises → create_homework_assignment (e.g., "give me homework", "I need practice")
+- Available lessons → get_available_lessons (e.g., "what lessons are there?")
 
-**Examples of requests that REQUIRE the tool:**
-- "give me some math problems" → use tool
-- "I want to practice addition" → use tool
-- "can you make me some exercises?" → use tool
-- "help me practice fractions" → use tool
+If unsure whether to use a tool, DON'T. Just have a conversation.
 
-**Other tools:**
-- get_student_progress: Check completed lessons or scores
-- get_weak_areas: Analyze struggling topics
-- get_mistake_patterns: Use when the student is stuck or repeats errors; personalize hints
-- get_available_lessons: Recommend platform lessons
-- get_lesson_context: Use to ground explanations in actual lesson content
-- get_student_homework: Show assigned homework
+For homework creation: First call shows preview, student confirms, then call again with confirm=true.
 
 # Response Format
 - Keep responses concise and focused (under 200 words when possible)
@@ -94,9 +122,29 @@ DO NOT write practice questions as text. ALWAYS use the tool.
 - Do NOT provide medical, legal, or financial advice
 - If asked about non-educational topics, gently redirect to learning`;
 
+function createErrorStream(message: string) {
+  const stream = createUIMessageStream({
+    execute: ({ writer }) => {
+      const id = "error";
+      writer.write({ type: "start" });
+      writer.write({ type: "text-start", id });
+      writer.write({ type: "text-delta", id, delta: message });
+      writer.write({ type: "text-end", id });
+      writer.write({ type: "finish", finishReason: "error" });
+    },
+  });
+
+  return createUIMessageStreamResponse({ stream });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
+    const openaiClient = getOpenAIClient();
+    if (!openaiClient) {
+      console.error("Tutor API misconfigured: OPENAI_API_KEY is missing");
+      return createErrorStream("Tutor AI is not configured yet. Please contact support.");
+    }
 
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -142,6 +190,7 @@ export async function POST(request: NextRequest) {
 
     // Get or create conversation
     let conversationId = conversation_id;
+    let canPersistConversation = true;
     if (!conversationId) {
       const title = lastUserMessage?.parts?.find(p => p.type === "text")?.text?.substring(0, 50) || "New conversation";
 
@@ -158,10 +207,23 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (convError) {
-        console.error("Error creating conversation:", convError);
-        return NextResponse.json({ error: "Failed to create conversation" }, { status: 500 });
+        if (isMissingTableError(convError, "ai_conversations")) {
+          canPersistConversation = false;
+          conversationId = crypto.randomUUID();
+          console.warn("ai_conversations table is missing. Continuing tutor chat without persistence.");
+        } else {
+          console.error("Error creating conversation:", convError);
+          return NextResponse.json({ error: "Failed to create conversation" }, { status: 500 });
+        }
+      } else {
+        conversationId = newConversation.id;
       }
-      conversationId = newConversation.id;
+    }
+
+    if (!conversationId) {
+      canPersistConversation = false;
+      conversationId = crypto.randomUUID();
+      console.warn("No conversation id available. Falling back to non-persistent tutor session.");
     }
 
     // Build context string for current session
@@ -197,371 +259,387 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Define tools using AI SDK format
-    const tools = {
-      get_student_profile: tool({
-        description: "Get detailed student profile info. RARELY NEEDED - basic info (name, grade, language) is already in session context. Only use if you need additional profile details not in context.",
-        inputSchema: z.object({
-          _placeholder: z.string().optional().describe("Not used"),
-        }),
-        execute: async () => {
+    const responseTools = toolDefinitions.map((toolDef) => ({
+      type: "function" as const,
+      name: toolDef.function.name,
+      description: toolDef.function.description,
+      parameters: toolDef.function.parameters,
+      strict: false,
+    }));
+
+    const executeTool = async (toolName: string, params: Record<string, unknown>) => {
+      switch (toolName) {
+        case "get_student_profile": {
           const rateCheck = await checkRateLimit(supabase, studentContext.id, "get_student_profile");
           if (!rateCheck.allowed) {
-            await logRateLimited(supabase, conversationId, studentContext.id, "get_student_profile", {}, rateCheck.reason || "Rate limited");
-            return { error: rateCheck.reason };
+            await logRateLimited(supabase, conversationId, studentContext.id, "get_student_profile", params, rateCheck.reason || "Rate limited");
+            return { success: false, output: { error: rateCheck.reason } };
           }
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_student_profile", {});
-          const result = await getStudentProfile(supabase, studentContext, {});
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_student_profile", params);
+          const result = await getStudentProfile(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      get_student_progress: tool({
-        description: "Get the student's learning progress including completed lessons, homework scores, and streak data",
-        inputSchema: z.object({
-          subject_id: z.string().optional().describe("Optional: Filter progress by specific subject ID"),
-        }),
-        execute: async ({ subject_id }) => {
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "get_student_progress": {
           const rateCheck = await checkRateLimit(supabase, studentContext.id, "get_student_progress");
           if (!rateCheck.allowed) {
-            await logRateLimited(supabase, conversationId, studentContext.id, "get_student_progress", { subject_id }, rateCheck.reason || "Rate limited");
-            return { error: rateCheck.reason };
+            await logRateLimited(supabase, conversationId, studentContext.id, "get_student_progress", params, rateCheck.reason || "Rate limited");
+            return { success: false, output: { error: rateCheck.reason } };
           }
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_student_progress", { subject_id });
-          const result = await getStudentProgress(supabase, studentContext, { subject_id });
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_student_progress", params);
+          const result = await getStudentProgress(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      get_weak_areas: tool({
-        description: "Analyze the student's performance to identify subjects or topics where they are struggling",
-        inputSchema: z.object({
-          _placeholder: z.string().optional().describe("Not used"),
-        }),
-        execute: async () => {
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "get_weak_areas": {
           const rateCheck = await checkRateLimit(supabase, studentContext.id, "get_weak_areas");
           if (!rateCheck.allowed) {
-            await logRateLimited(supabase, conversationId, studentContext.id, "get_weak_areas", {}, rateCheck.reason || "Rate limited");
-            return { error: rateCheck.reason };
+            await logRateLimited(supabase, conversationId, studentContext.id, "get_weak_areas", params, rateCheck.reason || "Rate limited");
+            return { success: false, output: { error: rateCheck.reason } };
           }
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_weak_areas", {});
-          const result = await getWeakAreas(supabase, studentContext, {});
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_weak_areas", params);
+          const result = await getWeakAreas(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      get_mistake_patterns: tool({
-        description: "Analyze recent performance to identify mistake patterns and weak spots",
-        inputSchema: z.object({
-          subject_id: z.string().optional().describe("Optional: Focus on a specific subject ID"),
-          limit: z.number().optional().describe("Maximum items to return (default 5)"),
-        }),
-        execute: async ({ subject_id, limit }) => {
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "get_mistake_patterns": {
           const rateCheck = await checkRateLimit(supabase, studentContext.id, "get_mistake_patterns");
           if (!rateCheck.allowed) {
-            await logRateLimited(supabase, conversationId, studentContext.id, "get_mistake_patterns", { subject_id, limit }, rateCheck.reason || "Rate limited");
-            return { error: rateCheck.reason };
+            await logRateLimited(supabase, conversationId, studentContext.id, "get_mistake_patterns", params, rateCheck.reason || "Rate limited");
+            return { success: false, output: { error: rateCheck.reason } };
           }
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_mistake_patterns", { subject_id, limit });
-          const result = await getMistakePatterns(supabase, studentContext, { subject_id, limit });
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_mistake_patterns", params);
+          const result = await getMistakePatterns(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      get_subjects: tool({
-        description: "Get list of all available subjects with their IDs. ALWAYS call this BEFORE creating homework to get valid subject IDs.",
-        inputSchema: z.object({
-          _placeholder: z.string().optional().describe("Not used"),
-        }),
-        execute: async () => {
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_subjects", {});
-          const result = await getSubjects(supabase, studentContext, {});
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "get_subjects": {
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_subjects", params);
+          const result = await getSubjects(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      get_available_lessons: tool({
-        description: "Find lessons available for the student based on their grade level",
-        inputSchema: z.object({
-          subject_id: z.string().optional().describe("Optional: Filter by subject ID"),
-          limit: z.number().optional().describe("Maximum number of lessons to return (default 10)"),
-        }),
-        execute: async ({ subject_id, limit }) => {
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_available_lessons", { subject_id, limit });
-          const result = await getAvailableLessons(supabase, studentContext, { subject_id, limit });
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "get_available_lessons": {
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_available_lessons", params);
+          const result = await getAvailableLessons(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      get_lesson_details: tool({
-        description: "Get detailed information about a specific lesson including content and student's progress",
-        inputSchema: z.object({
-          lesson_id: z.string().describe("The ID of the lesson to retrieve"),
-        }),
-        execute: async ({ lesson_id }) => {
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_lesson_details", { lesson_id });
-          const result = await getLessonDetails(supabase, studentContext, { lesson_id });
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "get_lesson_details": {
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_lesson_details", params);
+          const result = await getLessonDetails(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      get_lesson_content_chunk: tool({
-        description: "Get a chunk of lesson content for focused tutoring context",
-        inputSchema: z.object({
-          lesson_id: z.string().describe("The ID of the lesson"),
-          offset: z.number().optional().describe("Character offset to start from (default 0)"),
-          limit: z.number().optional().describe("Maximum characters to return (default 1200, max 2000)"),
-        }),
-        execute: async ({ lesson_id, offset, limit }) => {
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_lesson_content_chunk", { lesson_id, offset, limit });
-          const result = await getLessonContentChunk(supabase, studentContext, { lesson_id, offset, limit });
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "get_lesson_content_chunk": {
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_lesson_content_chunk", params);
+          const result = await getLessonContentChunk(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      get_lesson_context: tool({
-        description: "Get lesson references and snippets related to a query for grounded tutoring",
-        inputSchema: z.object({
-          query: z.string().describe("Search query"),
-          subject_id: z.string().optional().describe("Optional: Filter by subject ID"),
-          limit: z.number().optional().describe("Maximum sources to return (default 3)"),
-        }),
-        execute: async ({ query, subject_id, limit }) => {
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "get_lesson_context": {
           const rateCheck = await checkRateLimit(supabase, studentContext.id, "get_lesson_context");
           if (!rateCheck.allowed) {
-            await logRateLimited(supabase, conversationId, studentContext.id, "get_lesson_context", { query, subject_id, limit }, rateCheck.reason || "Rate limited");
-            return { error: rateCheck.reason };
+            await logRateLimited(supabase, conversationId, studentContext.id, "get_lesson_context", params, rateCheck.reason || "Rate limited");
+            return { success: false, output: { error: rateCheck.reason } };
           }
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_lesson_context", { query, subject_id, limit });
-          const result = await getLessonContext(supabase, studentContext, { query, subject_id, limit });
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_lesson_context", params);
+          const result = await getLessonContext(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      search_lessons: tool({
-        description: "Search lessons by keyword and optional subject/grade filters",
-        inputSchema: z.object({
-          query: z.string().describe("Search query"),
-          subject_id: z.string().optional().describe("Optional: Filter by subject ID"),
-          limit: z.number().optional().describe("Maximum results to return (default 10)"),
-        }),
-        execute: async ({ query, subject_id, limit }) => {
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "search_lessons", { query, subject_id, limit });
-          const result = await searchLessons(supabase, studentContext, { query, subject_id, limit });
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "search_lessons": {
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "search_lessons", params);
+          const result = await searchLessons(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      suggest_learning_path: tool({
-        description: "Generate a recommended sequence of lessons based on student's progress and weak areas",
-        inputSchema: z.object({
-          subject_id: z.string().optional().describe("Optional: Focus on a specific subject"),
-          goal: z.string().optional().describe("Optional: Specific learning goal to work towards"),
-        }),
-        execute: async ({ subject_id, goal }) => {
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "suggest_learning_path": {
           const rateCheck = await checkRateLimit(supabase, studentContext.id, "suggest_learning_path");
           if (!rateCheck.allowed) {
-            await logRateLimited(supabase, conversationId, studentContext.id, "suggest_learning_path", { subject_id, goal }, rateCheck.reason || "Rate limited");
-            return { error: rateCheck.reason };
+            await logRateLimited(supabase, conversationId, studentContext.id, "suggest_learning_path", params, rateCheck.reason || "Rate limited");
+            return { success: false, output: { error: rateCheck.reason } };
           }
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "suggest_learning_path", { subject_id, goal });
-          const result = await suggestLearningPath(supabase, studentContext, { subject_id, goal });
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "suggest_learning_path", params);
+          const result = await suggestLearningPath(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      get_student_homework: tool({
-        description: "View the student's assigned homework with status and due dates",
-        inputSchema: z.object({
-          status: z.enum(["not_started", "in_progress", "submitted", "graded", "all"]).optional().describe("Filter by homework status (default: all)"),
-          subject_id: z.string().optional().describe("Optional: Filter by subject ID"),
-        }),
-        execute: async ({ status, subject_id }) => {
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_student_homework", { status, subject_id });
-          const result = await getStudentHomework(supabase, studentContext, { status, subject_id });
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "get_student_homework": {
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_student_homework", params);
+          const result = await getStudentHomework(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      get_homework_details: tool({
-        description: "Get detailed information about a specific homework assignment including questions",
-        inputSchema: z.object({
-          homework_id: z.string().describe("The ID of the homework assignment to retrieve"),
-        }),
-        execute: async ({ homework_id }) => {
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_homework_details", { homework_id });
-          const result = await getHomeworkDetails(supabase, studentContext, { homework_id });
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "get_homework_details": {
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_homework_details", params);
+          const result = await getHomeworkDetails(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      get_homework_question_context: tool({
-        description: "Get a specific homework question with the student's current response for targeted help",
-        inputSchema: z.object({
-          submission_id: z.string().describe("Homework submission ID"),
-          question_id: z.string().describe("Homework question ID"),
-        }),
-        execute: async ({ submission_id, question_id }) => {
-          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_homework_question_context", { submission_id, question_id });
-          const result = await getHomeworkQuestionContext(supabase, studentContext, { submission_id, question_id });
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "get_homework_question_context": {
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_homework_question_context", params);
+          const result = await getHomeworkQuestionContext(supabase, studentContext, params);
           if (logId) await logToolComplete(supabase, logId, result);
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
-
-      create_homework_assignment: tool({
-        description: `MUST USE THIS TOOL when student asks for practice, exercises, problems, or homework.
-
-DO NOT write practice questions as plain text - use this tool instead.
-
-Provide subject and difficulty. You can omit title/reason/questions and the tool will auto-generate them.`,
-        inputSchema: z.object({
-          title_ar: z.string().optional().describe("Arabic title for the assignment (optional)"),
-          title_en: z.string().optional().describe("English title for the assignment (optional)"),
-          instructions_ar: z.string().optional().describe("Arabic instructions for the student (optional)"),
-          instructions_en: z.string().optional().describe("English instructions for the student (optional)"),
-          subject_id: z.string().optional().describe("Subject ID (from get_subjects). Either subject_id or subject_name required"),
-          subject_name: z.string().optional().describe("Subject name if you don't have an ID"),
-          topic: z.string().optional().describe("Optional topic for auto-generated questions (e.g., addition, fractions)"),
-          difficulty_level: z.enum(["easy", "medium", "hard"]).describe("Difficulty level based on student's understanding"),
-          reason: z.string().optional().describe("Why this assignment is helpful for the student (optional)"),
-          due_days: z.number().optional().describe("Number of days until due (default: 3)"),
-          question_count: z.number().optional().describe("Optional number of questions to generate (default: 5)"),
-          confirm: z.boolean().optional().describe("First call without confirm (shows preview), then call with confirm=true after user approves"),
-          questions: z.array(z.object({
-            question_type: z.enum(["multiple_choice", "short_answer", "long_answer"]),
-            question_text_ar: z.string().describe("Question text in Arabic"),
-            question_text_en: z.string().optional().describe("Question text in English"),
-            options: z.array(z.string()).optional().describe("Answer options for multiple choice"),
-            correct_answer: z.string().optional().describe("Correct answer for multiple choice questions"),
-            points: z.number().describe("Point value for this question"),
-          })).optional().describe("Array of questions for the assignment (optional, 3-5 recommended)"),
-        }),
-        execute: async (params) => {
-          // Only rate limit and log actual creations (confirm=true), not previews
-          if (params.confirm === true) {
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        case "create_homework_assignment": {
+          const shouldRateLimit = params.confirm === true;
+          if (shouldRateLimit) {
             const rateCheck = await checkRateLimit(supabase, studentContext.id, "create_homework_assignment");
             if (!rateCheck.allowed) {
               await logRateLimited(supabase, conversationId, studentContext.id, "create_homework_assignment", params, rateCheck.reason || "Rate limited");
-              return { error: rateCheck.reason };
+              return { success: false, output: { error: rateCheck.reason } };
             }
           }
-
           const result = await createHomeworkAssignment(supabase, studentContext, {
             ...params,
             _last_user_message: lastUserText,
           });
-
-          // Only log actual homework creations (when result shows "created" status)
           if (result.success && result.data && (result.data as Record<string, unknown>).status === "created") {
             const logId = await logToolStart(supabase, conversationId, studentContext.id, "create_homework_assignment", params);
             if (logId) await logToolComplete(supabase, logId, result);
           }
-
-          return result.success ? result.data : { error: result.error };
-        },
-      }),
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
+        default:
+          return { success: false, output: { error: `Unknown tool: ${toolName}` } };
+      }
     };
 
-    // Filter messages to only include valid parts for the model
-    // Tool result parts (tool-xxx) are for UI display only, not for the model
-    const filteredMessages = messages.map(msg => ({
-      ...msg,
-      parts: msg.parts?.filter(part =>
-        part.type === "text" ||
-        part.type === "tool-invocation" ||
-        part.type === "tool-result"
-      ) || []
-    })).filter(msg => msg.parts.length > 0);
+    const inputMessages: Array<
+      | { type: "message"; role: "user" | "assistant"; content: string }
+      | { type: "function_call_output"; call_id: string; output: string }
+    > = [];
 
-    // Use AI SDK streamText with tools
-    const result = streamText({
-      model: openai(AI_MODEL),
-      system: SYSTEM_PROMPT + sessionContext,
-      messages: await convertToModelMessages(filteredMessages as UIMessage[]),
-      tools,
+    messages
+      .filter((msg) => msg.role === "user" || msg.role === "assistant")
+      .forEach((msg) => {
+        const text = msg.parts
+          ?.filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join(" ")
+          .trim();
+
+        if (text) {
+          inputMessages.push({ type: "message", role: msg.role as "user" | "assistant", content: text });
+        }
+
+        // Include tool outputs in context when available (helps with confirmation flows)
+        msg.parts
+          ?.filter((part) => part.type.startsWith("tool-"))
+          .forEach((part) => {
+            const toolPart = part as { toolCallId?: string; output?: unknown; state?: string; errorText?: string };
+            if (!toolPart.toolCallId) return;
+            if (toolPart.state === "output-error") {
+              inputMessages.push({
+                type: "function_call_output",
+                call_id: toolPart.toolCallId,
+                output: JSON.stringify({ error: toolPart.errorText || "Tool error" }),
+              });
+              return;
+            }
+            if (toolPart.state === "output-available" && toolPart.output) {
+              inputMessages.push({
+                type: "function_call_output",
+                call_id: toolPart.toolCallId,
+                output: JSON.stringify(toolPart.output),
+              });
+            }
+          });
+      });
+
+    const toolResultsForUi: Array<{
+      toolName: string;
+      toolCallId: string;
+      input: Record<string, unknown>;
+      output: Record<string, unknown>;
+      state: "output-available" | "output-error";
+      errorText?: string;
+    }> = [];
+
+    const getResponseText = (response: { output_text?: string; output?: Array<{ type: string; content?: Array<{ type: string; text: string }> }> }) => {
+      if (response.output_text) return response.output_text;
+      const outputs = response.output || [];
+      const messagesText = outputs
+        .filter((item) => item.type === "message")
+        .flatMap((item) => item.content || [])
+        .filter((content) => content.type === "output_text")
+        .map((content) => content.text);
+      return messagesText.join("\n").trim();
+    };
+
+    const extractToolCalls = (response: { output?: Array<{ type: string; name?: string; call_id?: string; arguments?: string }> }) => {
+      return (response.output || []).filter((item) => item.type === "function_call");
+    };
+
+    let response = await openaiClient.responses.create({
+      model: AI_MODEL,
+      instructions: SYSTEM_PROMPT + sessionContext,
+      input: inputMessages,
+      tools: responseTools,
+      tool_choice: "auto",
     });
 
-    // Return streaming response
-    return result.toUIMessageStreamResponse({
-      originalMessages: messages,
-      messageMetadata: ({ part }) => {
-        if (part.type === "start" || part.type === "finish") {
-          return { conversation_id: conversationId };
-        }
-        return undefined;
-      },
-      onFinish: async ({ responseMessage }) => {
-        // Save conversation messages to database
+    let toolCalls = extractToolCalls(response);
+    let guard = 0;
+
+    while (toolCalls.length > 0 && guard < 3) {
+      const toolOutputs: Array<{ type: "function_call_output"; call_id: string; output: string }> = [];
+
+      for (const call of toolCalls) {
+        const toolName = call.name || "";
+        const callId = call.call_id || crypto.randomUUID();
+        let parsedArgs: Record<string, unknown> = {};
         try {
-          // Extract text content from the response message
-          const assistantText = responseMessage.parts
-            ?.filter(p => p.type === "text")
-            .map(p => (p as { type: "text"; text: string }).text)
-            .join("") || "";
-
-          // Extract tool results from response message parts (cast to Json-compatible format)
-          const toolResults = responseMessage.parts
-            ?.filter(p => p.type.startsWith("tool-"))
-            .map(p => ({
-              type: p.type as string,
-              toolName: p.type.replace("tool-", "") as string,
-              state: ((p as { state?: string }).state || "output-available") as string,
-              output: JSON.parse(JSON.stringify((p as { output?: unknown }).output)) as Record<string, unknown>,
-            })) || [];
-
-          // Get the last user message text
-          const lastUserMessage = messages.filter(m => m.role === "user").pop();
-          const userText = lastUserMessage?.parts?.find(p => p.type === "text")?.text || "";
-
-          // Save user message
-          if (userText) {
-            await supabase.from("ai_messages").insert({
-              conversation_id: conversationId,
-              role: "user",
-              content: userText,
-            });
-          }
-
-          // Save assistant message with tool results
-          if (assistantText || toolResults.length > 0) {
-            await supabase.from("ai_messages").insert({
-              conversation_id: conversationId,
-              role: "assistant",
-              content: assistantText,
-              tool_results: toolResults.length > 0 ? (toolResults as unknown as Json) : null,
-            });
-          }
-
-          // Update conversation timestamp
-          await supabase
-            .from("ai_conversations")
-            .update({ updated_at: new Date().toISOString() })
-            .eq("id", conversationId);
+          parsedArgs = call.arguments ? JSON.parse(call.arguments) : {};
         } catch (error) {
+          parsedArgs = {};
+        }
+
+        const toolResult = await executeTool(toolName, parsedArgs);
+        const output = toolResult.output as Record<string, unknown>;
+
+        toolResultsForUi.push({
+          toolName,
+          toolCallId: callId,
+          input: parsedArgs,
+          output,
+          state: toolResult.success ? "output-available" : "output-error",
+          errorText: toolResult.success ? undefined : String(output.error || "Tool error"),
+        });
+
+        toolOutputs.push({
+          type: "function_call_output",
+          call_id: callId,
+          output: JSON.stringify(output),
+        });
+      }
+
+      response = await openaiClient.responses.create({
+        model: AI_MODEL,
+        instructions: SYSTEM_PROMPT + sessionContext,
+        previous_response_id: response.id,
+        input: toolOutputs,
+        tools: responseTools,
+        tool_choice: "auto",
+      });
+
+      toolCalls = extractToolCalls(response);
+      guard += 1;
+    }
+
+    const assistantText = getResponseText(response as { output_text?: string; output?: Array<{ type: string; content?: Array<{ type: string; text: string }> }> });
+
+    // Save conversation messages to database
+    if (canPersistConversation) {
+      try {
+        const lastUserMessage = messages.filter((m) => m.role === "user").pop();
+        const userText = lastUserMessage?.parts?.find((p) => p.type === "text")?.text || "";
+
+        if (userText) {
+          const { error: userInsertError } = await supabase.from("ai_messages").insert({
+            conversation_id: conversationId,
+            role: "user",
+            content: userText,
+          });
+          if (userInsertError) {
+            throw userInsertError;
+          }
+        }
+
+        const persistedToolResults = toolResultsForUi.map((toolResult) => ({
+          type: `tool-${toolResult.toolName}`,
+          toolName: toolResult.toolName,
+          state: toolResult.state,
+          output: toolResult.output,
+        }));
+
+        if (assistantText || persistedToolResults.length > 0) {
+          const { error: assistantInsertError } = await supabase.from("ai_messages").insert({
+            conversation_id: conversationId,
+            role: "assistant",
+            content: assistantText || "",
+            tool_results: persistedToolResults.length > 0 ? (persistedToolResults as unknown as Json) : null,
+          });
+          if (assistantInsertError) {
+            throw assistantInsertError;
+          }
+        }
+
+        const { error: conversationUpdateError } = await supabase
+          .from("ai_conversations")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", conversationId);
+        if (conversationUpdateError) {
+          throw conversationUpdateError;
+        }
+      } catch (error) {
+        if (
+          isMissingTableError(error as SupabaseErrorLike, "ai_messages") ||
+          isMissingTableError(error as SupabaseErrorLike, "ai_conversations")
+        ) {
+          canPersistConversation = false;
+          console.warn("Tutor persistence tables are missing. Continuing without saving messages.");
+        } else {
           console.error("Error saving messages:", error);
         }
+      }
+    }
+
+    const responseMetadata = canPersistConversation ? { conversation_id: conversationId } : undefined;
+
+    const stream = createUIMessageStream({
+      execute: ({ writer }) => {
+        const messageId = crypto.randomUUID();
+        writer.write({
+          type: "start",
+          messageId,
+          ...(responseMetadata ? { messageMetadata: responseMetadata } : {}),
+        });
+
+        toolResultsForUi.forEach((toolResult) => {
+          writer.write({
+            type: "tool-input-available",
+            toolCallId: toolResult.toolCallId,
+            toolName: toolResult.toolName,
+            input: toolResult.input,
+          });
+
+          if (toolResult.state === "output-error") {
+            writer.write({
+              type: "tool-output-error",
+              toolCallId: toolResult.toolCallId,
+              errorText: toolResult.errorText || "Tool error",
+            });
+          } else {
+            writer.write({
+              type: "tool-output-available",
+              toolCallId: toolResult.toolCallId,
+              output: toolResult.output,
+            });
+          }
+        });
+
+        if (assistantText) {
+          const textId = crypto.randomUUID();
+          writer.write({ type: "text-start", id: textId });
+          writer.write({ type: "text-delta", id: textId, delta: assistantText });
+          writer.write({ type: "text-end", id: textId });
+        }
+
+        writer.write({
+          type: "finish",
+          finishReason: "stop",
+          ...(responseMetadata ? { messageMetadata: responseMetadata } : {}),
+        });
       },
     });
+
+    return createUIMessageStreamResponse({ stream });
   } catch (error) {
     console.error("Tutor API error:", error);
-    return NextResponse.json(
-      { error: "An error occurred while processing your request" },
-      { status: 500 }
-    );
+    return createErrorStream("An error occurred while processing your request.");
   }
 }
 
@@ -587,6 +665,9 @@ export async function GET(request: NextRequest) {
         .order("created_at", { ascending: true });
 
       if (error) {
+        if (isMissingTableError(error, "ai_messages")) {
+          return NextResponse.json({ messages: [] });
+        }
         return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 });
       }
 
@@ -601,6 +682,9 @@ export async function GET(request: NextRequest) {
         .limit(50);
 
       if (error) {
+        if (isMissingTableError(error, "ai_conversations")) {
+          return NextResponse.json({ conversations: [] });
+        }
         return NextResponse.json({ error: "Failed to fetch conversations" }, { status: 500 });
       }
 

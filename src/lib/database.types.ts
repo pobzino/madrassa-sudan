@@ -6,6 +6,14 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+export interface QuizSettings {
+  require_pass_to_continue: boolean
+  min_pass_questions: number
+  allow_retries: boolean
+  max_attempts: number | null
+  show_explanation: boolean
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -324,11 +332,13 @@ export type Database = {
           created_at: string
           display_order: number
           id: string
+          instructions: string | null
           options: Json | null
           points: number
           question_text_ar: string
           question_text_en: string | null
           question_type: Database["public"]["Enums"]["homework_question_type"]
+          rubric: Json | null
         }
         Insert: {
           assignment_id: string
@@ -336,11 +346,13 @@ export type Database = {
           created_at?: string
           display_order?: number
           id?: string
+          instructions?: string | null
           options?: Json | null
           points?: number
           question_text_ar: string
           question_text_en?: string | null
           question_type: Database["public"]["Enums"]["homework_question_type"]
+          rubric?: Json | null
         }
         Update: {
           assignment_id?: string
@@ -348,11 +360,13 @@ export type Database = {
           created_at?: string
           display_order?: number
           id?: string
+          instructions?: string | null
           options?: Json | null
           points?: number
           question_text_ar?: string
           question_text_en?: string | null
           question_type?: Database["public"]["Enums"]["homework_question_type"]
+          rubric?: Json | null
         }
         Relationships: [
           {
@@ -371,6 +385,7 @@ export type Database = {
           points_earned: number | null
           question_id: string
           response_file_url: string | null
+          response_file_urls: Json | null
           response_text: string | null
           submission_id: string
           teacher_comment: string | null
@@ -382,6 +397,7 @@ export type Database = {
           points_earned?: number | null
           question_id: string
           response_file_url?: string | null
+          response_file_urls?: Json | null
           response_text?: string | null
           submission_id: string
           teacher_comment?: string | null
@@ -393,6 +409,7 @@ export type Database = {
           points_earned?: number | null
           question_id?: string
           response_file_url?: string | null
+          response_file_urls?: Json | null
           response_text?: string | null
           submission_id?: string
           teacher_comment?: string | null
@@ -423,10 +440,13 @@ export type Database = {
           graded_at: string | null
           graded_by: string | null
           id: string
+          overall_feedback: string | null
           score: number | null
+          started_at: string | null
           status: Database["public"]["Enums"]["submission_status"]
           student_id: string
           submitted_at: string | null
+          time_spent_seconds: number | null
           updated_at: string
         }
         Insert: {
@@ -436,10 +456,13 @@ export type Database = {
           graded_at?: string | null
           graded_by?: string | null
           id?: string
+          overall_feedback?: string | null
           score?: number | null
+          started_at?: string | null
           status?: Database["public"]["Enums"]["submission_status"]
           student_id: string
           submitted_at?: string | null
+          time_spent_seconds?: number | null
           updated_at?: string
         }
         Update: {
@@ -449,10 +472,13 @@ export type Database = {
           graded_at?: string | null
           graded_by?: string | null
           id?: string
+          overall_feedback?: string | null
           score?: number | null
+          started_at?: string | null
           status?: Database["public"]["Enums"]["submission_status"]
           student_id?: string
           submitted_at?: string | null
+          time_spent_seconds?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -479,6 +505,109 @@ export type Database = {
           },
         ]
       }
+      guardian_invites: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string
+          expires_at: string
+          id: string
+          relationship_type: string
+          student_id: string
+          used_at: string | null
+          used_by: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by: string
+          expires_at: string
+          id?: string
+          relationship_type?: string
+          student_id: string
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string
+          expires_at?: string
+          id?: string
+          relationship_type?: string
+          student_id?: string
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_invites_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_invites_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_invites_used_by_fkey"
+            columns: ["used_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guardian_students: {
+        Row: {
+          created_at: string
+          guardian_id: string
+          id: string
+          is_approved: boolean | null
+          relationship_type: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          guardian_id: string
+          id?: string
+          is_approved?: boolean | null
+          relationship_type: string
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          guardian_id?: string
+          id?: string
+          is_approved?: boolean | null
+          relationship_type?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_students_guardian_id_fkey"
+            columns: ["guardian_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_students_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lesson_progress: {
         Row: {
           completed: boolean
@@ -489,6 +618,8 @@ export type Database = {
           lesson_id: string
           questions_answered: number
           questions_correct: number
+          quiz_attempts: number
+          quiz_passed: boolean
           student_id: string
           total_watch_time_seconds: number
           updated_at: string
@@ -502,6 +633,8 @@ export type Database = {
           lesson_id: string
           questions_answered?: number
           questions_correct?: number
+          quiz_attempts?: number
+          quiz_passed?: boolean
           student_id: string
           total_watch_time_seconds?: number
           updated_at?: string
@@ -515,6 +648,8 @@ export type Database = {
           lesson_id?: string
           questions_answered?: number
           questions_correct?: number
+          quiz_attempts?: number
+          quiz_passed?: boolean
           student_id?: string
           total_watch_time_seconds?: number
           updated_at?: string
@@ -539,7 +674,9 @@ export type Database = {
       lesson_question_responses: {
         Row: {
           answer: string
+          attempt_number: number
           attempts: number
+          attempts_history: Json
           created_at: string
           id: string
           is_correct: boolean
@@ -549,7 +686,9 @@ export type Database = {
         }
         Insert: {
           answer: string
+          attempt_number?: number
           attempts?: number
+          attempts_history?: Json
           created_at?: string
           id?: string
           is_correct: boolean
@@ -559,7 +698,9 @@ export type Database = {
         }
         Update: {
           answer?: string
+          attempt_number?: number
           attempts?: number
+          attempts_history?: Json
           created_at?: string
           id?: string
           is_correct?: boolean
@@ -655,6 +796,7 @@ export type Database = {
           grade_level: number
           id: string
           is_published: boolean
+          quiz_settings: QuizSettings | null
           subject_id: string
           thumbnail_url: string | null
           title_ar: string
@@ -676,6 +818,7 @@ export type Database = {
           grade_level: number
           id?: string
           is_published?: boolean
+          quiz_settings?: QuizSettings | null
           subject_id: string
           thumbnail_url?: string | null
           title_ar: string
@@ -697,6 +840,7 @@ export type Database = {
           grade_level?: number
           id?: string
           is_published?: boolean
+          quiz_settings?: QuizSettings | null
           subject_id?: string
           thumbnail_url?: string | null
           title_ar?: string
@@ -955,6 +1099,198 @@ export type Database = {
           },
         ]
       }
+      diagnostic_questions: {
+        Row: {
+          id: string
+          subject_id: string
+          grade_level: number
+          question_text_ar: string
+          question_text_en: string | null
+          question_type: string
+          options: Json | null
+          correct_answer: string
+          difficulty: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          subject_id: string
+          grade_level: number
+          question_text_ar: string
+          question_text_en?: string | null
+          question_type?: string
+          options?: Json | null
+          correct_answer: string
+          difficulty?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          subject_id?: string
+          grade_level?: number
+          question_text_ar?: string
+          question_text_en?: string | null
+          question_type?: string
+          options?: Json | null
+          correct_answer?: string
+          difficulty?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnostic_questions_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      diagnostic_attempts: {
+        Row: {
+          id: string
+          student_id: string
+          subject_id: string
+          started_at: string
+          completed_at: string | null
+          questions_answered: number
+          questions_correct: number
+          recommended_grade: number | null
+          is_complete: boolean
+        }
+        Insert: {
+          id?: string
+          student_id: string
+          subject_id: string
+          started_at?: string
+          completed_at?: string | null
+          questions_answered?: number
+          questions_correct?: number
+          recommended_grade?: number | null
+          is_complete?: boolean
+        }
+        Update: {
+          id?: string
+          student_id?: string
+          subject_id?: string
+          started_at?: string
+          completed_at?: string | null
+          questions_answered?: number
+          questions_correct?: number
+          recommended_grade?: number | null
+          is_complete?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnostic_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diagnostic_attempts_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      diagnostic_responses: {
+        Row: {
+          id: string
+          attempt_id: string
+          question_id: string
+          selected_answer: string | null
+          is_correct: boolean | null
+          answered_at: string
+        }
+        Insert: {
+          id?: string
+          attempt_id: string
+          question_id: string
+          selected_answer?: string | null
+          is_correct?: boolean | null
+          answered_at?: string
+        }
+        Update: {
+          id?: string
+          attempt_id?: string
+          question_id?: string
+          selected_answer?: string | null
+          is_correct?: boolean | null
+          answered_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnostic_responses_attempt_id_fkey"
+            columns: ["attempt_id"]
+            isOneToOne: false
+            referencedRelation: "diagnostic_attempts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diagnostic_responses_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "diagnostic_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_placements: {
+        Row: {
+          id: string
+          student_id: string
+          subject_id: string
+          placed_grade: number
+          confidence: string | null
+          attempt_id: string | null
+          placed_at: string
+        }
+        Insert: {
+          id?: string
+          student_id: string
+          subject_id: string
+          placed_grade: number
+          confidence?: string | null
+          attempt_id?: string | null
+          placed_at?: string
+        }
+        Update: {
+          id?: string
+          student_id?: string
+          subject_id?: string
+          placed_grade?: number
+          confidence?: string | null
+          attempt_id?: string | null
+          placed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_placements_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_placements_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_placements_attempt_id_fkey"
+            columns: ["attempt_id"]
+            isOneToOne: false
+            referencedRelation: "diagnostic_attempts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subjects: {
         Row: {
           created_at: string
@@ -1016,7 +1352,8 @@ export type Database = {
         | "short_answer"
         | "long_answer"
         | "file_upload"
-      question_type: "multiple_choice" | "true_false" | "fill_blank"
+        | "true_false"
+      question_type: "multiple_choice" | "true_false" | "fill_in_blank"
       submission_status:
         | "not_started"
         | "in_progress"

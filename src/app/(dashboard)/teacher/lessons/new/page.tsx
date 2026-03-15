@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
+import { getDisallowedLessonVideoFields } from "@/lib/lessons/video-url-guards";
 
 type Subject = {
   id: string;
@@ -55,6 +56,19 @@ export default function NewLessonPage() {
       alert("Please fill in the required fields.");
       return;
     }
+
+    const blockedVideoFields = getDisallowedLessonVideoFields({
+      "Video URL 360p": form.video_url_360p,
+      "Video URL 480p": form.video_url_480p,
+      "Video URL 720p": form.video_url_720p,
+    });
+    if (blockedVideoFields.length > 0) {
+      alert(
+        `YouTube video links are not allowed. Use ad-free hosted video URLs instead.\nBlocked fields: ${blockedVideoFields.join(", ")}`
+      );
+      return;
+    }
+
     setSaving(true);
     const supabase = createClient();
     const user = await getCachedUser(supabase);

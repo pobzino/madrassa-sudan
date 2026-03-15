@@ -14,6 +14,11 @@ const translations = {
     passwordLabel: "كلمة المرور",
     signIn: "تسجيل الدخول",
     signingIn: "جاري تسجيل الدخول...",
+    resendConfirmation: "إعادة إرسال رسالة التأكيد",
+    sendingConfirmation: "جاري الإرسال...",
+    confirmationSent: "تم إرسال رسالة التأكيد. تحقق من البريد والرسائل غير المرغوب فيها.",
+    enterEmailFirst: "أدخل بريدك الإلكتروني أولاً.",
+    emailNotConfirmed: "بريدك غير مؤكد بعد.",
     noAccount: "ليس لديك حساب؟",
     createAccount: "إنشاء حساب",
   },
@@ -24,6 +29,11 @@ const translations = {
     passwordLabel: "Password",
     signIn: "Sign In",
     signingIn: "Signing in...",
+    resendConfirmation: "Resend confirmation email",
+    sendingConfirmation: "Sending...",
+    confirmationSent: "Confirmation email sent. Check your inbox and spam folder.",
+    enterEmailFirst: "Enter your email first.",
+    emailNotConfirmed: "Your email is not confirmed yet.",
     noAccount: "Don't have an account?",
     createAccount: "Create Account",
   },
@@ -34,15 +44,28 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
   const { language, isRtl } = useLanguage();
   const t = translations[language];
+  const isEmailNotConfirmedError =
+    (error ?? "").toLowerCase().includes("email not confirmed");
+
+  const getRedirectUrl = () => (
+    typeof window !== "undefined"
+      ? `${window.location.origin}/auth/callback`
+      : process.env.NEXT_PUBLIC_SITE_URL
+        ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
+        : "https://madrassasudan.netlify.app/auth/callback"
+  );
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setResendMessage(null);
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -56,6 +79,31 @@ export default function LoginPage() {
       router.push("/dashboard");
       router.refresh();
     }
+  };
+
+  const handleResendConfirmation = async () => {
+    setError(null);
+    setResendMessage(null);
+
+    if (!email.trim()) {
+      setError(t.enterEmailFirst);
+      return;
+    }
+
+    setResendLoading(true);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: email.trim(),
+      options: { emailRedirectTo: getRedirectUrl() },
+    });
+
+    if (error) {
+      setError(error.message);
+    } else {
+      setResendMessage(t.confirmationSent);
+    }
+
+    setResendLoading(false);
   };
 
   return (
@@ -77,6 +125,11 @@ export default function LoginPage() {
             <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
               <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               {error}
+            </div>
+          )}
+          {resendMessage && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl text-sm">
+              {resendMessage}
             </div>
           )}
 
@@ -132,6 +185,20 @@ export default function LoginPage() {
               </>
             ) : t.signIn}
           </button>
+
+          {isEmailNotConfirmedError && (
+            <div className="space-y-2">
+              <p className="text-sm text-amber-700">{t.emailNotConfirmed}</p>
+              <button
+                type="button"
+                onClick={handleResendConfirmation}
+                disabled={resendLoading}
+                className="w-full py-3 px-4 border border-[var(--primary)] text-[var(--primary)] font-semibold rounded-xl hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {resendLoading ? t.sendingConfirmation : t.resendConfirmation}
+              </button>
+            </div>
+          )}
 
           <p className="text-center text-sm text-gray-500">
             {t.noAccount}{" "}

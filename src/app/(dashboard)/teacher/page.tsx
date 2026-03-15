@@ -29,6 +29,7 @@ interface TeacherInsights {
 
 export default function TeacherDashboard() {
   const { loading: authLoading } = useTeacherGuard();
+  const teacherDevBypass = process.env.NEXT_PUBLIC_DEV_ALLOW_TEACHER_VIEW === "1";
   const [stats, setStats] = useState<TeacherStats>({
     totalStudents: 0,
     totalClasses: 0,
@@ -59,8 +60,9 @@ export default function TeacherDashboard() {
       .eq("id", user.id)
       .single();
 
-    if (profile?.role !== "teacher" && profile?.role !== "admin") {
-      // Redirect non-teachers
+    const isTeacher = profile?.role === "teacher" || profile?.role === "admin";
+    if (!isTeacher && !teacherDevBypass) {
+      // Redirect non-teachers unless explicit local dev bypass is enabled.
       window.location.href = "/dashboard";
       return;
     }

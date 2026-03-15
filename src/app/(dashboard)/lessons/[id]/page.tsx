@@ -8,6 +8,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import type { Lesson, LessonQuestion, LessonProgress, Subject } from "@/lib/database.types";
 import { OwlTutorIcon, OwlCelebrating, Confetti } from "@/components/illustrations";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
+import EnhancedQuizOverlay from "@/components/lessons/EnhancedQuizOverlay";
+import ProgressGateModal from "@/components/lessons/ProgressGateModal";
 
 const translations = {
   ar: {
@@ -160,6 +162,11 @@ export default function LessonPlayerPage() {
   // Question overlay state
   const [activeQuestion, setActiveQuestion] = useState<QuestionState | null>(null);
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
+  const [questionsCorrect, setQuestionsCorrect] = useState(0);
+
+  // Progress gate state
+  const [showProgressGate, setShowProgressGate] = useState(false);
+  const [quizSettings, setQuizSettings] = useState<Record<string, unknown> | null>(null);
 
   // Celebration state
   const [showConfetti, setShowConfetti] = useState(false);
@@ -186,6 +193,7 @@ export default function LessonPlayerPage() {
         return;
       }
       setLesson(lessonData);
+      if (lessonData.quiz_settings) setQuizSettings(lessonData.quiz_settings as unknown as Record<string, unknown>);
 
       // Fetch subject
       if (lessonData.subject_id) {
@@ -388,9 +396,40 @@ export default function LessonPlayerPage() {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  // Handle quiz response from EnhancedQuizOverlay
+  const handleQuizResponse = async (data: { questionId: string; answer: string; isCorrect: boolean }) => {
+    try {
+      const res = await fetch(`/api/lessons/${lessonId}/responses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question_id: data.questionId,
+          answer: data.answer,
+          is_correct: data.isCorrect,
+        }),
+      });
+      const json = await res.json();
+      if (data.isCorrect) {
+        setQuestionsCorrect((prev) => prev + 1);
+      }
+      return { canRetry: json.can_retry ?? false };
+    } catch {
+      return { canRetry: false };
+    }
+  };
+
   // Mark lesson as complete
   const handleMarkComplete = async () => {
     if (!userId || !lessonId) return;
+
+    // Check quiz pass requirement
+    const requirePass = quizSettings?.require_pass as boolean | undefined;
+    const minRequired = (quizSettings?.min_questions_required as number | undefined) ?? 1;
+    if (requirePass && questionsCorrect < minRequired) {
+      setShowProgressGate(true);
+      return;
+    }
+
     await supabase.from("lesson_progress").upsert({
       student_id: userId,
       lesson_id: lessonId,
@@ -519,128 +558,16 @@ export default function LessonPlayerPage() {
 
             {/* Question Overlay */}
             {activeQuestion && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-4">
-                <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl animate-fade-up">
-                  <div className="flex items-center gap-2 text-[#007229] font-semibold mb-4">
-                    <span className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-lg">?</span>
-                    <span>{t.question}</span>
-                  </div>
-
-                  <p className="text-lg font-medium text-gray-900 mb-4">
-                    {language === "ar"
-                      ? activeQuestion.question.question_text_ar
-                      : activeQuestion.question.question_text_en || activeQuestion.question.question_text_ar}
-                  </p>
-
-                  {/* Multiple choice options */}
-                  {activeQuestion.question.question_type === "multiple_choice" && activeQuestion.question.options && (
-                    <div className="space-y-2 mb-4">
-                      {(activeQuestion.question.options as string[]).map((option, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => !activeQuestion.isSubmitted && setActiveQuestion({
-                            ...activeQuestion,
-                            selectedAnswer: option,
-                          })}
-                          disabled={activeQuestion.isSubmitted}
-                          className={`w-full p-3 rounded-xl border text-left transition-all ${
-                            activeQuestion.selectedAnswer === option
-                              ? activeQuestion.isSubmitted
-                                ? activeQuestion.isCorrect
-                                  ? "bg-emerald-100 border-emerald-500 text-emerald-800"
-                                  : option === activeQuestion.question.correct_answer
-                                    ? "bg-emerald-100 border-emerald-500 text-emerald-800"
-                                    : "bg-red-100 border-red-500 text-red-800"
-                                : "bg-[#007229]/10 border-emerald-500"
-                              : activeQuestion.isSubmitted && option === activeQuestion.question.correct_answer
-                                ? "bg-emerald-100 border-emerald-500 text-emerald-800"
-                                : "bg-gray-50 border-gray-200 hover:bg-gray-100"
-                          }`}
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* True/False */}
-                  {activeQuestion.question.question_type === "true_false" && (
-                    <div className="flex gap-3 mb-4">
-                      {["true", "false"].map((option) => (
-                        <button
-                          key={option}
-                          onClick={() => !activeQuestion.isSubmitted && setActiveQuestion({
-                            ...activeQuestion,
-                            selectedAnswer: option,
-                          })}
-                          disabled={activeQuestion.isSubmitted}
-                          className={`flex-1 p-3 rounded-xl border font-medium transition-all ${
-                            activeQuestion.selectedAnswer === option
-                              ? activeQuestion.isSubmitted
-                                ? activeQuestion.isCorrect
-                                  ? "bg-emerald-100 border-emerald-500 text-emerald-800"
-                                  : "bg-red-100 border-red-500 text-red-800"
-                                : "bg-[#007229]/10 border-emerald-500"
-                              : "bg-gray-50 border-gray-200 hover:bg-gray-100"
-                          }`}
-                        >
-                          {option === "true" ? (language === "ar" ? "صحيح" : "True") : (language === "ar" ? "خطأ" : "False")}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Feedback */}
-                  {activeQuestion.isSubmitted && (
-                    <div className={`p-3 rounded-xl mb-4 ${
-                      activeQuestion.isCorrect ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        {activeQuestion.isCorrect && <OwlCelebrating className="w-10 h-10" />}
-                        <p className="font-semibold">
-                          {activeQuestion.isCorrect ? t.correct : t.incorrect}
-                        </p>
-                      </div>
-                      {(activeQuestion.question.explanation_ar || activeQuestion.question.explanation_en) && (
-                        <p className="text-sm mt-1">
-                          {language === "ar"
-                            ? activeQuestion.question.explanation_ar
-                            : activeQuestion.question.explanation_en}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Actions */}
-                  <div className="flex gap-3">
-                    {!activeQuestion.isSubmitted ? (
-                      <button
-                        onClick={handleSubmitAnswer}
-                        disabled={!activeQuestion.selectedAnswer}
-                        className="flex-1 py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {t.submit}
-                      </button>
-                    ) : (
-                      <>
-                        <Link
-                          href={`/tutor?lesson=${lessonId}`}
-                          className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors"
-                        >
-                          <OwlTutorIcon className="w-5 h-5" />
-                          <span>{t.askTutor}</span>
-                        </Link>
-                        <button
-                          onClick={handleContinue}
-                          className="flex-1 py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 transition-colors"
-                        >
-                          {t.continue}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <EnhancedQuizOverlay
+                question={activeQuestion.question}
+                lessonId={lessonId}
+                onComplete={() => {
+                  setActiveQuestion(null);
+                  videoRef.current?.play();
+                  setIsPlaying(true);
+                }}
+                onResponse={handleQuizResponse}
+              />
             )}
 
             {/* Video Controls */}
@@ -818,6 +745,20 @@ export default function LessonPlayerPage() {
           </div>
         </div>
       </div>
+
+      {/* Progress Gate Modal */}
+      {showProgressGate && (
+        <ProgressGateModal
+          questionsCorrect={questionsCorrect}
+          questionsRequired={(quizSettings?.min_questions_required as number | undefined) ?? 1}
+          onRewatch={() => {
+            setShowProgressGate(false);
+            videoRef.current?.play();
+            setIsPlaying(true);
+          }}
+          onClose={() => setShowProgressGate(false)}
+        />
+      )}
     </div>
   );
 }

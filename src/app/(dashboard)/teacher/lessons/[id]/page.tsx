@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
+import BunnyVideoUploader from "@/components/teacher/BunnyVideoUploader";
 
 type Subject = {
   id: string;
@@ -31,7 +32,7 @@ type LessonForm = {
 
 type QuestionForm = {
   id: string;
-  question_type: "multiple_choice" | "true_false" | "fill_blank";
+  question_type: "multiple_choice" | "true_false" | "fill_in_blank";
   question_text_ar: string;
   question_text_en: string;
   options: string[];
@@ -59,6 +60,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [savingQuestions, setSavingQuestions] = useState(false);
   const [savingBlocks, setSavingBlocks] = useState(false);
   const [embeddingStatus, setEmbeddingStatus] = useState<string | null>(null);
+  const [videoInputMode, setVideoInputMode] = useState<"upload" | "manual">("upload");
 
   const [form, setForm] = useState<LessonForm>({
     title_ar: "",
@@ -239,7 +241,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       question_type: q.question_type,
       question_text_ar: q.question_text_ar,
       question_text_en: q.question_text_en || null,
-      options: q.question_type === "fill_blank" ? null : q.options.filter((opt) => opt.trim()),
+      options: q.question_type === "fill_in_blank" ? null : q.options.filter((opt) => opt.trim()),
       correct_answer: q.correct_answer,
       explanation_ar: null,
       explanation_en: null,
@@ -381,42 +383,99 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           />
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Thumbnail URL</label>
-            <input
-              value={form.thumbnail_url}
-              onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Video URL 360p</label>
-            <input
-              value={form.video_url_360p}
-              onChange={(e) => setForm({ ...form, video_url_360p: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Video URL 480p</label>
-            <input
-              value={form.video_url_480p}
-              onChange={(e) => setForm({ ...form, video_url_480p: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl"
-            />
-          </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Thumbnail URL</label>
+          <input
+            value={form.thumbnail_url}
+            onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })}
+            className="w-full px-3 py-2 border border-gray-200 rounded-xl"
+          />
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Video URL 720p</label>
-            <input
-              value={form.video_url_720p}
-              onChange={(e) => setForm({ ...form, video_url_720p: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl"
-            />
+        {/* Video Upload / Manual URLs */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Video</span>
+            <div className="flex gap-1 ml-2">
+              <button
+                type="button"
+                onClick={() => setVideoInputMode("upload")}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  videoInputMode === "upload"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                Upload
+              </button>
+              <button
+                type="button"
+                onClick={() => setVideoInputMode("manual")}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  videoInputMode === "manual"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                Manual URLs
+              </button>
+            </div>
           </div>
+
+          {videoInputMode === "upload" ? (
+            <div className="space-y-3">
+              <BunnyVideoUploader
+                lessonId={id}
+                lessonTitle={form.title_ar || form.title_en || "Untitled"}
+                onVideosReady={(urls) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    video_url_360p: urls.video_url_360p,
+                    video_url_480p: urls.video_url_480p,
+                    video_url_720p: urls.video_url_720p,
+                  }));
+                }}
+                currentVideoUrl={form.video_url_720p || undefined}
+              />
+              {form.video_url_720p && (
+                <div className="text-xs text-gray-400 space-y-0.5">
+                  <p>360p: {form.video_url_360p}</p>
+                  <p>480p: {form.video_url_480p}</p>
+                  <p>720p: {form.video_url_720p}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Video URL 360p</label>
+                <input
+                  value={form.video_url_360p}
+                  onChange={(e) => setForm({ ...form, video_url_360p: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Video URL 480p</label>
+                <input
+                  value={form.video_url_480p}
+                  onChange={(e) => setForm({ ...form, video_url_480p: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Video URL 720p</label>
+                <input
+                  value={form.video_url_720p}
+                  onChange={(e) => setForm({ ...form, video_url_720p: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Captions (Arabic)</label>
             <input
@@ -506,7 +565,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                     >
                       <option value="multiple_choice">Multiple Choice</option>
                       <option value="true_false">True / False</option>
-                      <option value="fill_blank">Fill in the Blank</option>
+                      <option value="fill_in_blank">Fill in the Blank</option>
                     </select>
                   </div>
                   <div>
@@ -537,7 +596,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                   </div>
                 </div>
 
-                {question.question_type !== "fill_blank" && (
+                {question.question_type !== "fill_in_blank" && (
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-2">Options</label>
                     <div className="grid md:grid-cols-2 gap-2">

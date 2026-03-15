@@ -10,6 +10,7 @@ export function useTeacherGuard() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const teacherDevBypass = process.env.NEXT_PUBLIC_DEV_ALLOW_TEACHER_VIEW === "1";
 
   useEffect(() => {
     const supabase = createClient();
@@ -22,7 +23,8 @@ export function useTeacherGuard() {
       }
 
       const profileData = await getCachedProfile(supabase, user.id);
-      if (!profileData || (profileData.role !== "teacher" && profileData.role !== "admin")) {
+      const isTeacher = profileData?.role === "teacher" || profileData?.role === "admin";
+      if (!isTeacher && !teacherDevBypass) {
         router.push("/dashboard");
         return;
       }
@@ -32,7 +34,7 @@ export function useTeacherGuard() {
     }
 
     checkRole();
-  }, [router]);
+  }, [router, teacherDevBypass]);
 
   return { profile, loading };
 }

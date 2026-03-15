@@ -48,6 +48,16 @@ const translations = {
     exploreSubjects: "اكتشف المواد",
     loading: "جاري التحميل...",
     keepGoing: "استمر! أنت تبلي بلاءً حسناً",
+    inviteGuardian: "دعوة ولي أمر",
+    inviteModalTitle: "دعوة ولي أمر/وصي",
+    inviteModalSubtitle: "شارك هذا الرمز مع ولي أمرك ليتمكن من متابعة تقدمك",
+    inviteCode: "رمز الدعوة",
+    copyCode: "نسخ الرمز",
+    codeCopied: "تم النسخ!",
+    generating: "جاري الإنشاء...",
+    expiresIn: "ينتهي في 7 أيام",
+    closeButton: "إغلاق",
+    shareInstructions: "شارك هذا الرمز مع ولي أمرك واطلب منه زيارة صفحة ربط الحساب",
   },
   en: {
     dashboard: "Dashboard",
@@ -70,6 +80,16 @@ const translations = {
     exploreSubjects: "Explore Subjects",
     loading: "Loading...",
     keepGoing: "Keep going! You're doing great",
+    inviteGuardian: "Invite Parent/Guardian",
+    inviteModalTitle: "Invite Parent/Guardian",
+    inviteModalSubtitle: "Share this code with your parent/guardian so they can track your progress",
+    inviteCode: "Invitation Code",
+    copyCode: "Copy Code",
+    codeCopied: "Copied!",
+    generating: "Generating...",
+    expiresIn: "Expires in 7 days",
+    closeButton: "Close",
+    shareInstructions: "Share this code with your parent/guardian and ask them to visit the link account page",
   },
 };
 
@@ -176,6 +196,11 @@ export default function DashboardPage() {
   const [stats, setStats] = useState({ lessons: 0, streak: 0, homework: 0, points: 0 });
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [codeCopied, setCodeCopied] = useState(false);
   const router = useRouter();
   const supabase = createClient();
   const { language, setLanguage } = useLanguage();
@@ -217,6 +242,51 @@ export default function DashboardPage() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/");
+  };
+
+  const handleGenerateInvite = async () => {
+    setInviteLoading(true);
+    setInviteError("");
+
+    try {
+      const response = await fetch("/api/guardian/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relationshipType: "parent" }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setInviteError(data.error || "Failed to generate code");
+        setInviteLoading(false);
+        return;
+      }
+
+      setInviteCode(data.code);
+      setInviteLoading(false);
+    } catch (error) {
+      console.error("Error generating invite:", error);
+      setInviteError("An error occurred");
+      setInviteLoading(false);
+    }
+  };
+
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteCode);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy code:", error);
+    }
+  };
+
+  const openInviteModal = () => {
+    setShowInviteModal(true);
+    setInviteCode("");
+    setInviteError("");
+    handleGenerateInvite();
   };
 
   if (loading) {
@@ -445,6 +515,91 @@ export default function DashboardPage() {
           <span className="text-yellow-500">{Icons.sparkle}</span>
         </p>
       </div>
+
+      {/* Invite Guardian Button */}
+      {profile?.role === "student" && (
+        <div className="mt-8 text-center">
+          <button
+            onClick={openInviteModal}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            {t.inviteGuardian}
+          </button>
+        </div>
+      )}
+
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowInviteModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8" onClick={(e) => e.stopPropagation()} dir={isRtl ? "rtl" : "ltr"}>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">{t.inviteModalTitle}</h2>
+            <p className="text-gray-600 mb-6">{t.inviteModalSubtitle}</p>
+
+            {inviteLoading ? (
+              <div className="text-center py-8">
+                <svg className="animate-spin h-12 w-12 mx-auto mb-4 text-[#007229]" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                <p className="text-gray-500">{t.generating}</p>
+              </div>
+            ) : inviteCode ? (
+              <div>
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    {t.inviteCode}
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 px-4 py-3 text-center text-3xl font-mono tracking-widest bg-gray-50 border-2 border-gray-300 rounded-xl">
+                      {inviteCode}
+                    </div>
+                    <button
+                      onClick={handleCopyCode}
+                      className="px-4 py-3 bg-[#007229] text-white rounded-xl hover:bg-[#00913D] transition-colors"
+                      title={codeCopied ? t.codeCopied : t.copyCode}
+                    >
+                      {codeCopied ? (
+                        <span className="text-sm font-semibold">{t.codeCopied}</span>
+                      ) : (
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-2">{t.expiresIn}</p>
+                </div>
+
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl mb-6">
+                  <p className="text-sm text-blue-900">{t.shareInstructions}</p>
+                </div>
+
+                <button
+                  onClick={() => setShowInviteModal(false)}
+                  className="w-full py-3 bg-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-300 transition-colors"
+                >
+                  {t.closeButton}
+                </button>
+              </div>
+            ) : inviteError ? (
+              <div>
+                <div className="p-4 bg-red-50 border border-red-200 rounded-xl mb-4">
+                  <p className="text-red-800">{inviteError}</p>
+                </div>
+                <button
+                  onClick={() => setShowInviteModal(false)}
+                  className="w-full py-3 bg-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-300 transition-colors"
+                >
+                  {t.closeButton}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

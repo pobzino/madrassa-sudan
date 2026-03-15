@@ -6,10 +6,20 @@ import { ToolExecutionResult, StudentContext, LessonSummary } from "../types";
 import { getPreferredLanguage, localizeSubjectName, localizeText } from "./utils";
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-const hasOpenAIKey = Boolean(process.env.OPENAI_API_KEY);
+const hasOpenAIKey = Boolean(process.env.OPENAI_API_KEY?.trim());
+let openaiClientSingleton: OpenAI | null = null;
+
+function getOpenAIClient() {
+  if (!hasOpenAIKey) return null;
+
+  if (!openaiClientSingleton) {
+    openaiClientSingleton = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+
+  return openaiClientSingleton;
+}
 
 // Get available lessons for student
 export async function getAvailableLessons(
@@ -351,7 +361,8 @@ export async function searchLessons(
     }
 
     try {
-      if (hasOpenAIKey) {
+      const openai = getOpenAIClient();
+      if (openai) {
         const embeddingResponse = await openai.embeddings.create({
           model: EMBEDDING_MODEL,
           input: queryText,

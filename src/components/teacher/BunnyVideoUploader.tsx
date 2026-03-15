@@ -1,0 +1,311 @@
+'use client';
+
+import { useState, useRef, useEffect, useCallback } from 'react';
+import * as tus from 'tus-js-client';
+
+type UploadState = 'idle' | 'uploading' | 'uploaded' | 'transcoding' | 'ready' | 'error';
+
+interface BunnyVideoUploaderProps {
+  lessonId: string;
+  lessonTitle: string;
+  onVideosReady: (urls: {
+    video_url_360p: string;
+    video_url_480p: string;
+    video_url_720p: string;
+  }) => void;
+  currentVideoUrl?: string;
+}
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5 GB
+const POLL_INTERVAL = 5000; // 5 seconds
+const POLL_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+
+export default function BunnyVideoUploader({
+  lessonId,
+  lessonTitle,
+  onVideosReady,
+  currentVideoUrl,
+}: BunnyVideoUploaderProps) {
+  const [state, setState] = useState<UploadState>(currentVideoUrl ? 'ready' : 'idle');
+  const [progress, setProgress] = useState(0);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+
+  const uploadRef = useRef<tus.Upload | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingStartRef = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (uploadRef.current) {
+        try { uploadRef.current.abort(); } catch { /* ignore */ }
+      }
+    };
+  }, []);
+
+  const pollTranscodeStatus = useCallback((videoId: string) => {
+    setState('transcoding');
+    pollingStartRef.current = Date.now();
+
+    pollingRef.current = setInterval(async () => {
+      // Timeout check
+      if (Date.now() - pollingStartRef.current > POLL_TIMEOUT) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        setState('error');
+        setErrorMessage('Transcoding is taking longer than expected. Try checking again later.');
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/bunny/status?videoId=${videoId}`);
+        if (!res.ok) return; // retry on next tick
+
+        const data = await res.json();
+
+        if (data.status === 'finished' && data.urls) {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          setState('ready');
+          onVideosReady({
+            video_url_360p: data.urls.video_url_360p,
+            video_url_480p: data.urls.video_url_480p,
+            video_url_720p: data.urls.video_url_720p,
+          });
+        } else if (data.status === 'error') {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          setState('error');
+          setErrorMessage('Video transcoding failed. Please try uploading again.');
+        }
+      } catch {
+        // Network error, will retry on next tick
+      }
+    }, POLL_INTERVAL);
+  }, [onVideosReady]);
+
+  const startUpload = useCallback(async (file: File) => {
+    if (file.size > MAX_FILE_SIZE) {
+      setState('error');
+      setErrorMessage('File is too large. Maximum size is 5 GB.');
+      return;
+    }
+
+    setFileName(file.name);
+    setState('uploading');
+    setProgress(0);
+    setErrorMessage('');
+
+    try {
+      // Get upload credentials from our API
+      const credRes = await fetch('/api/bunny/create-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: lessonTitle || file.name, lessonId }),
+      });
+
+      if (!credRes.ok) {
+        const err = await credRes.json();
+        throw new Error(err.error || 'Failed to create video');
+      }
+
+      const { videoId, libraryId, tusEndpoint, authSignature, authExpire } =
+        await credRes.json();
+
+      // Start TUS upload directly to Bunny
+      const upload = new tus.Upload(file, {
+        endpoint: tusEndpoint,
+        retryDelays: [0, 3000, 5000, 10000, 20000],
+        headers: {
+          AuthorizationSignature: authSignature,
+          AuthorizationExpire: String(authExpire),
+          VideoId: videoId,
+          LibraryId: libraryId,
+        },
+        metadata: {
+          filetype: file.type,
+          title: lessonTitle || file.name,
+        },
+        onError: (error) => {
+          setState('error');
+          setErrorMessage(error.message || 'Upload failed');
+        },
+        onProgress: (bytesUploaded, bytesTotal) => {
+          setProgress(Math.round((bytesUploaded / bytesTotal) * 100));
+        },
+        onSuccess: () => {
+          setState('uploaded');
+          pollTranscodeStatus(videoId);
+        },
+      });
+
+      uploadRef.current = upload;
+      upload.start();
+    } catch (error) {
+      setState('error');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Upload failed'
+      );
+    }
+  }, [lessonId, lessonTitle, pollTranscodeStatus]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) startUpload(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('video/')) {
+      startUpload(file);
+    }
+  };
+
+  const handleCancel = () => {
+    if (uploadRef.current) {
+      try { uploadRef.current.abort(); } catch { /* ignore */ }
+    }
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    setState('idle');
+    setProgress(0);
+    setFileName('');
+    setErrorMessage('');
+  };
+
+  const handleRetry = () => {
+    setState('idle');
+    setProgress(0);
+    setErrorMessage('');
+  };
+
+  // Idle state — drop zone
+  if (state === 'idle') {
+    return (
+      <div
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
+        className={`
+          border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors
+          ${isDragging
+            ? 'border-emerald-500 bg-emerald-50'
+            : 'border-gray-300 hover:border-emerald-400 hover:bg-gray-50'
+          }
+        `}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="video/*"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <svg className="mx-auto h-10 w-10 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+        </svg>
+        <p className="text-sm font-medium text-gray-700">
+          Drop a video file here or click to browse
+        </p>
+        <p className="text-xs text-gray-500 mt-1">
+          MP4, MOV, WebM — up to 5 GB
+        </p>
+      </div>
+    );
+  }
+
+  // Uploading state — progress bar
+  if (state === 'uploading') {
+    return (
+      <div className="border border-gray-200 rounded-xl p-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-gray-700 truncate">{fileName}</p>
+          <button
+            onClick={handleCancel}
+            className="text-xs text-red-600 hover:text-red-700 font-medium"
+          >
+            Cancel
+          </button>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div
+            className="bg-emerald-600 h-2.5 rounded-full transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <p className="text-xs text-gray-500 text-center">
+          Uploading... {progress}%
+        </p>
+      </div>
+    );
+  }
+
+  // Uploaded / Transcoding state — spinner
+  if (state === 'uploaded' || state === 'transcoding') {
+    return (
+      <div className="border border-gray-200 rounded-xl p-6 text-center space-y-3">
+        <div className="flex justify-center">
+          <svg className="animate-spin h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+        </div>
+        <p className="text-sm font-medium text-gray-700">
+          Processing video...
+        </p>
+        <p className="text-xs text-gray-500">
+          Bunny Stream is transcoding your video into multiple qualities. This usually takes 1–5 minutes.
+        </p>
+        <button
+          onClick={handleCancel}
+          className="text-xs text-gray-500 hover:text-gray-700 underline"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  // Ready state — success
+  if (state === 'ready') {
+    return (
+      <div className="border border-emerald-200 bg-emerald-50 rounded-xl p-6 space-y-3">
+        <div className="flex items-center gap-2">
+          <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          <p className="text-sm font-medium text-emerald-800">
+            Video ready — URLs have been populated below
+          </p>
+        </div>
+        <button
+          onClick={handleRetry}
+          className="text-xs text-emerald-700 hover:text-emerald-800 underline"
+        >
+          Upload a different video
+        </button>
+      </div>
+    );
+  }
+
+  // Error state
+  return (
+    <div className="border border-red-200 bg-red-50 rounded-xl p-6 space-y-3">
+      <div className="flex items-center gap-2">
+        <svg className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        <p className="text-sm font-medium text-red-800">{errorMessage}</p>
+      </div>
+      <button
+        onClick={handleRetry}
+        className="text-xs text-red-700 hover:text-red-800 underline"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}

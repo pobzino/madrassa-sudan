@@ -50,6 +50,10 @@ const translations = {
     signIn: "تسجيل الدخول",
     checkEmail: "تحقق من بريدك الإلكتروني",
     sentConfirmation: "لقد أرسلنا رابط التأكيد إلى",
+    resendConfirmation: "إعادة إرسال رسالة التأكيد",
+    sendingConfirmation: "جاري الإرسال...",
+    confirmationSent: "تم إرسال رسالة تأكيد جديدة. تحقق من البريد والرسائل غير المرغوب فيها.",
+    resendHint: "إذا لم تصلك الرسالة خلال دقيقة، أعد الإرسال.",
     backToLogin: "العودة لتسجيل الدخول",
   },
   en: {
@@ -69,6 +73,10 @@ const translations = {
     signIn: "Sign In",
     checkEmail: "Check your email",
     sentConfirmation: "We've sent a confirmation link to",
+    resendConfirmation: "Resend confirmation email",
+    sendingConfirmation: "Sending...",
+    confirmationSent: "A new confirmation email has been sent. Check your inbox and spam folder.",
+    resendHint: "If you don't receive it within a minute, resend it.",
     backToLogin: "Back to Login",
   },
 };
@@ -81,6 +89,9 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
   const { language, isRtl } = useLanguage();
@@ -92,23 +103,26 @@ export default function SignupPage() {
     { id: "parent" as UserRole, label: t.parent, icon: RoleIcons.parent },
   ];
 
+  const getRedirectUrl = () => (
+    typeof window !== "undefined"
+      ? `${window.location.origin}/auth/callback`
+      : process.env.NEXT_PUBLIC_SITE_URL
+        ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
+        : "https://madrassasudan.netlify.app/auth/callback"
+  );
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-
-    // Determine the correct redirect URL based on environment
-    const redirectUrl = typeof window !== 'undefined'
-      ? `${window.location.origin}/auth/callback`
-      : process.env.NEXT_PUBLIC_SITE_URL
-        ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
-        : 'https://madrassasudan.netlify.app/auth/callback';
+    setResendError(null);
+    setResendMessage(null);
 
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: redirectUrl,
+        emailRedirectTo: getRedirectUrl(),
         data: {
           full_name: fullName,
           role: role,
@@ -124,6 +138,26 @@ export default function SignupPage() {
     }
   };
 
+  const handleResendConfirmation = async () => {
+    setResendLoading(true);
+    setResendError(null);
+    setResendMessage(null);
+
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: email.trim(),
+      options: { emailRedirectTo: getRedirectUrl() },
+    });
+
+    if (error) {
+      setResendError(error.message);
+    } else {
+      setResendMessage(t.confirmationSent);
+    }
+
+    setResendLoading(false);
+  };
+
   if (success) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 relative overflow-hidden">
@@ -137,6 +171,25 @@ export default function SignupPage() {
             {t.sentConfirmation} <br />
             <span className="font-semibold text-gray-900" dir="ltr">{email}</span>
           </p>
+          <p className="text-sm text-gray-500 mb-4">{t.resendHint}</p>
+          {resendError && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm mb-4">
+              {resendError}
+            </div>
+          )}
+          {resendMessage && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl text-sm mb-4">
+              {resendMessage}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleResendConfirmation}
+            disabled={resendLoading}
+            className="w-full mb-3 inline-flex items-center justify-center px-6 py-3 border border-[var(--primary)] text-[var(--primary)] font-semibold rounded-xl hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {resendLoading ? t.sendingConfirmation : t.resendConfirmation}
+          </button>
           <Link
             href="/auth/login"
             className="inline-flex items-center justify-center px-6 py-3 bg-[var(--primary)] text-white font-semibold rounded-xl hover:bg-[var(--primary-light)] transition-colors shadow-lg shadow-green-900/20"

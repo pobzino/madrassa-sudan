@@ -4,6 +4,22 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { ToolExecutionResult, StudentContext, StudentProgress } from "../types";
 import { getPreferredLanguage, localizeText, localizeSubjectName } from "./utils";
 
+type SupabaseErrorLike = {
+  code?: string;
+  message?: string;
+};
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.length > 0) {
+      return message;
+    }
+  }
+  return fallback;
+}
+
 // Get all available subjects with their IDs
 export async function getSubjects(
   supabase: SupabaseClient,
@@ -122,32 +138,64 @@ export async function getStudentProgress(
 ): Promise<ToolExecutionResult> {
   try {
     const subjectId = params.subject_id as string | undefined;
-
     const lang = getPreferredLanguage(studentContext.preferred_language);
+    const warnings: string[] = [];
 
-    // Get lesson progress
     let lessonQuery = supabase
       .from("lesson_progress")
       .select("lesson_id, completed, questions_correct, questions_answered")
       .eq("student_id", studentContext.id);
 
+    let skipLessonQuery = false;
+
     if (subjectId) {
-      // Filter by subject through lessons
-      const { data: subjectLessons } = await supabase
+      const { data: subjectLessons, error: subjectLessonsError } = await supabase
         .from("lessons")
         .select("id")
         .eq("subject_id", subjectId);
 
-      if (subjectLessons) {
-        lessonQuery = lessonQuery.in("lesson_id", subjectLessons.map(l => l.id));
+      if (subjectLessonsError) {
+        console.warn("getStudentProgress: failed to apply subject filter", subjectLessonsError);
+        warnings.push(
+          localizeText(
+            lang,
+            "تعذر تطبيق تصفية المادة، لذلك تم عرض جميع الدروس.",
+            "Couldn't apply the subject filter, so all lessons are shown.",
+            "Couldn't apply the subject filter, so all lessons are shown."
+          )
+        );
+      } else if (subjectLessons && subjectLessons.length > 0) {
+        lessonQuery = lessonQuery.in("lesson_id", subjectLessons.map((l) => l.id));
+      } else if (subjectLessons && subjectLessons.length === 0) {
+        skipLessonQuery = true;
       }
     }
 
-    const { data: lessonProgress, error: lessonError } = await lessonQuery;
-    if (lessonError) throw lessonError;
+    let lessonProgress: Array<{
+      lesson_id: string;
+      completed: boolean | null;
+      questions_correct: number | null;
+      questions_answered: number | null;
+    }> = [];
 
-    // Get homework submissions
-    let homeworkQuery = supabase
+    if (!skipLessonQuery) {
+      const { data: lessonProgressData, error: lessonError } = await lessonQuery;
+      if (lessonError) {
+        console.warn("getStudentProgress: lesson progress query failed", lessonError);
+        warnings.push(
+          localizeText(
+            lang,
+            "تعذر جلب تقدم الدروس الآن.",
+            "Could not load lesson progress right now.",
+            "Could not load lesson progress right now."
+          )
+        );
+      } else if (lessonProgressData) {
+        lessonProgress = lessonProgressData;
+      }
+    }
+
+    const { data: homeworkSubmissionsData, error: homeworkError } = await supabase
       .from("homework_submissions")
       .select(`
         status,
@@ -159,32 +207,65 @@ export async function getStudentProgress(
       `)
       .eq("student_id", studentContext.id);
 
-    const { data: homeworkSubmissions, error: homeworkError } = await homeworkQuery;
-    if (homeworkError) throw homeworkError;
+    let homeworkSubmissions: Array<{
+      status: string | null;
+      score: number | null;
+      assignment: { total_points: number | null; subject_id: string | null } | null;
+    }> = [];
 
-    // Get streak data
-    const { data: streak, error: streakError } = await supabase
+    if (homeworkError) {
+      const err = homeworkError as SupabaseErrorLike;
+      console.warn("getStudentProgress: homework query failed", err);
+      warnings.push(
+        localizeText(
+          lang,
+          "تعذر جلب بيانات الواجبات الآن.",
+          "Could not load homework progress right now.",
+          "Could not load homework progress right now."
+        )
+      );
+    } else if (homeworkSubmissionsData) {
+      homeworkSubmissions = (homeworkSubmissionsData as unknown) as Array<{
+        status: string | null;
+        score: number | null;
+        assignment: { total_points: number | null; subject_id: string | null } | null;
+      }>;
+    }
+
+    const { data: streakData, error: streakError } = await supabase
       .from("student_streaks")
       .select("current_streak_days, longest_streak_days, total_lessons_completed, total_homework_completed")
       .eq("student_id", studentContext.id)
       .single();
 
-    // Calculate statistics
-    const lessonsCompleted = lessonProgress?.filter(l => l.completed).length || 0;
-    const totalLessons = lessonProgress?.length || 0;
+    if (streakError) {
+      console.warn("getStudentProgress: streak query failed", streakError);
+      warnings.push(
+        localizeText(
+          lang,
+          "تعذر جلب بيانات أيام التتابع الآن.",
+          "Could not load streak data right now.",
+          "Could not load streak data right now."
+        )
+      );
+    }
 
-    const gradedHomework = homeworkSubmissions?.filter(h => h.status === "graded") || [];
+    const lessonsCompleted = lessonProgress.filter((l) => l.completed === true).length;
+    const totalLessons = lessonProgress.length;
+
+    const gradedHomework = homeworkSubmissions.filter((h) => h.status === "graded");
     const homeworkCompleted = gradedHomework.length;
-    const homeworkPending = homeworkSubmissions?.filter(h =>
-      h.status === "not_started" || h.status === "in_progress"
-    ).length || 0;
+    const homeworkPending = homeworkSubmissions.filter(
+      (h) => h.status === "not_started" || h.status === "in_progress"
+    ).length;
 
-    // Calculate average score
     let averageScore: number | null = null;
     if (gradedHomework.length > 0) {
       const totalScore = gradedHomework.reduce((sum, h) => {
         const score = h.score || 0;
-        const total = (h.assignment as unknown as { total_points: number })?.total_points || 100;
+        const total = h.assignment?.total_points && h.assignment.total_points > 0
+          ? h.assignment.total_points
+          : 100;
         return sum + (score / total) * 100;
       }, 0);
       averageScore = Math.round(totalScore / gradedHomework.length);
@@ -196,27 +277,40 @@ export async function getStudentProgress(
       homework_completed: homeworkCompleted,
       homework_pending: homeworkPending,
       average_score: averageScore,
-      current_streak: streak?.current_streak_days || 0,
-      longest_streak: streak?.longest_streak_days || 0,
-      weak_subjects: [], // Will be populated by getWeakAreas
+      current_streak: streakData?.current_streak_days || 0,
+      longest_streak: streakData?.longest_streak_days || 0,
+      weak_subjects: [],
     };
+
+    const summaryBase = localizeText(
+      lang,
+      `أنجزت ${lessonsCompleted} من ${totalLessons} درسًا، ولديك ${homeworkPending} واجبات قيد الانتظار.`,
+      `You completed ${lessonsCompleted} of ${totalLessons} lessons, with ${homeworkPending} homework pending.`,
+      `You completed ${lessonsCompleted} of ${totalLessons} lessons, with ${homeworkPending} homework pending.`
+    );
+
+    const summary = warnings.length > 0
+      ? `${summaryBase} ${localizeText(
+          lang,
+          "بعض البيانات غير متاحة الآن.",
+          "Some data is currently unavailable.",
+          "Some data is currently unavailable."
+        )}`
+      : summaryBase;
 
     return {
       success: true,
       data: {
         ...progress,
-        summary: localizeText(
-          lang,
-          `أنجزت ${lessonsCompleted} من ${totalLessons} درسًا، ولديك ${homeworkPending} واجبات قيد الانتظار.`,
-          `You completed ${lessonsCompleted} of ${totalLessons} lessons, with ${homeworkPending} homework pending.`,
-          ""
-        ),
+        summary,
+        partial_data: warnings.length > 0,
+        data_warnings: warnings,
       },
     };
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to get student progress",
+      error: getErrorMessage(error, "Failed to get student progress"),
     };
   }
 }
