@@ -1,4 +1,4 @@
-# Madrassa Sudan — Feature Audit
+# Amal Madrassa — Feature Audit
 
 _Generated: 2026-03-15_
 
@@ -53,7 +53,7 @@ Login page has no "forgot password" link.
 - **Files:** `src/app/auth/login/page.tsx`
 
 ### 11. Hardcoded Redirect URL
-Falls back to `madrassasudan.netlify.app` — breaks for other deployments.
+Falls back to `amalmadrassa.netlify.app` — breaks for other deployments.
 - **Files:** `src/app/auth/login/page.tsx:34-40`
 
 ### 12. Subject Icon Mapping Hardcoded

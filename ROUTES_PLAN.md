@@ -1,4 +1,4 @@
-# Madrassa Sudan - Routes Implementation Plan
+# Amal Madrassa - Routes Implementation Plan
 
 ## Current State
 

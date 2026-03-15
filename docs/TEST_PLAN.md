@@ -1,4 +1,4 @@
-# Madrassa Sudan — Pre-Deployment Testing Plan
+# Amal Madrassa — Pre-Deployment Testing Plan
 
 **Version:** 1.0  
 **Created:** 2026-02-24  

@@ -77,6 +77,7 @@ export async function POST(
     // --- Step 1: Download video from Bunny CDN ---
     const videoResponse = await fetch(videoUrl, {
       signal: AbortSignal.timeout(60000),
+      headers: { Referer: process.env.NEXT_PUBLIC_SITE_URL || "https://amalmadrassa.netlify.app" },
     });
 
     if (!videoResponse.ok) {
@@ -130,7 +131,7 @@ export async function POST(
       ? segments.map((s) => `[${formatTime(s.start)} - ${formatTime(s.end)}] ${s.text}`).join("\n")
       : transcriptText;
 
-    const prompt = `You are an expert curriculum designer for Madrassa Sudan, an educational platform for Sudanese children.
+    const prompt = `You are an expert curriculum designer for Amal Madrassa, an educational platform for Sudanese children.
 
 Given the following video lesson transcript, generate quiz questions and bilingual content summaries.
 
@@ -202,7 +203,7 @@ Requirements:
                   },
                   required: [
                     "question_type", "question_text_ar", "question_text_en",
-                    "correct_answer", "explanation_ar", "explanation_en",
+                    "options", "correct_answer", "explanation_ar", "explanation_en",
                     "timestamp_seconds", "display_order", "is_required", "allow_retry",
                   ],
                   additionalProperties: false,

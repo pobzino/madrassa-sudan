@@ -1,10 +1,10 @@
-# Privacy Policy — Madrassa Sudan
+# Privacy Policy — Amal Madrassa
 
 **Last Updated:** February 24, 2026
 
 ## Introduction
 
-Madrassa Sudan ("we," "our," "us") operates an educational platform designed to support displaced Sudanese children through AI-powered tutoring, diagnostic assessments, and teacher-facilitated homework systems. We are committed to protecting the privacy and safety of all users, especially children.
+Amal Madrassa ("we," "our," "us") operates an educational platform designed to support displaced Sudanese children through AI-powered tutoring, diagnostic assessments, and teacher-facilitated homework systems. We are committed to protecting the privacy and safety of all users, especially children.
 
 This Privacy Policy explains what data we collect, why we collect it, how we use it, and your rights regarding your personal information.
 
@@ -182,7 +182,7 @@ We take special care with children's data:
 
 ## International Data Transfers
 
-Madrassa Sudan is designed for deployment in regions serving Sudanese displaced children (e.g., Sudan, Egypt, Chad, refugee camps). Data may be transferred internationally depending on:
+Amal Madrassa is designed for deployment in regions serving Sudanese displaced children (e.g., Sudan, Egypt, Chad, refugee camps). Data may be transferred internationally depending on:
 
 - **Supabase hosting region** (typically EU or US regions)
 - **OpenAI API processing** (globally distributed, subject to OpenAI's data localization policies)
@@ -226,7 +226,7 @@ Depending on your location, you may have the following rights:
 
 ### Correction and Deletion
 - **Update Information:** Correct profile information (name, grade level, language preference) via account settings
-- **Delete Account:** Request full account deletion by contacting [support@madrassasudan.org] — data will be removed within 30 days
+- **Delete Account:** Request full account deletion by contacting [support@amalmadrassa.org] — data will be removed within 30 days
 - **Delete Conversations:** Students can delete AI tutor conversations from their history (subject to 30-day safety retention)
 
 ### Restriction and Objection
@@ -241,9 +241,9 @@ Depending on your location, you may have the following rights:
 
 To exercise any of these rights, contact us:
 
-**Email:** [privacy@madrassasudan.org] (replace with actual contact)  
-**Guardian Portal:** [https://app.madrassasudan.org/guardian] — access student data directly  
-**Data Protection Officer (if applicable):** [dpo@madrassasudan.org]
+**Email:** [privacy@amalmadrassa.org] (replace with actual contact)  
+**Guardian Portal:** [https://app.amalmadrassa.org/guardian] — access student data directly  
+**Data Protection Officer (if applicable):** [dpo@amalmadrassa.org]
 
 We will respond to requests within 30 days. For deletion requests, we may retain certain data if required by law or legitimate educational purposes (e.g., final grade transcripts).
 
@@ -275,15 +275,15 @@ Continued use of the platform after notification constitutes acceptance of chang
 
 For privacy questions, concerns, or complaints:
 
-**Madrassa Sudan Privacy Team**  
-Email: [privacy@madrassasudan.org]  
-Website: [https://madrassasudan.org]
+**Amal Madrassa Privacy Team**  
+Email: [privacy@amalmadrassa.org]  
+Website: [https://amalmadrassa.org]
 
 **For GDPR/EU Users:**  
 You have the right to lodge a complaint with your local data protection authority.
 
 **For Child Safety Concerns:**  
-Report concerning AI tutor interactions or platform misuse to: [safety@madrassasudan.org]
+Report concerning AI tutor interactions or platform misuse to: [safety@amalmadrassa.org]
 
 ---
 

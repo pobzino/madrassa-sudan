@@ -1,18 +1,18 @@
-# Terms of Service — Madrassa Sudan
+# Terms of Service — Amal Madrassa
 
 **Last Updated:** February 24, 2026
 
 ## Welcome
 
-Welcome to Madrassa Sudan, an educational platform designed to support displaced Sudanese children through AI-powered tutoring, diagnostic assessments, and teacher-facilitated learning. These Terms of Service ("Terms") govern your use of our platform.
+Welcome to Amal Madrassa, an educational platform designed to support displaced Sudanese children through AI-powered tutoring, diagnostic assessments, and teacher-facilitated learning. These Terms of Service ("Terms") govern your use of our platform.
 
-By accessing or using Madrassa Sudan, you agree to these Terms. If you are a parent or guardian creating an account for a child under 13, you agree to these Terms on behalf of your child.
+By accessing or using Amal Madrassa, you agree to these Terms. If you are a parent or guardian creating an account for a child under 13, you agree to these Terms on behalf of your child.
 
 **If you do not agree to these Terms, please do not use the platform.**
 
 ## Platform Purpose
 
-Madrassa Sudan is designed to provide:
+Amal Madrassa is designed to provide:
 
 1. **Educational Content:** Lessons in Math, Science, English, and Arabic aligned with Sudanese curriculum standards
 2. **AI Tutoring:** Interactive learning support via "معلم البومة" (Owl Teacher), an AI tutor powered by OpenAI
@@ -165,7 +165,7 @@ Guardians agree to:
 
 ### Platform Content
 
-All lessons, quizzes, diagnostic assessments, and platform design are the intellectual property of Madrassa Sudan and its licensors. You may **not**:
+All lessons, quizzes, diagnostic assessments, and platform design are the intellectual property of Amal Madrassa and its licensors. You may **not**:
 - Copy or redistribute lesson materials for commercial purposes
 - Modify or reverse-engineer the platform code
 - Remove copyright or attribution notices
@@ -225,7 +225,7 @@ We reserve the right to suspend or terminate the platform, in whole or in part, 
 
 ### Educational Disclaimer
 
-**Madrassa Sudan is a learning tool, not a certified school.** We do **not**:
+**Amal Madrassa is a learning tool, not a certified school.** We do **not**:
 - Guarantee academic outcomes or grade improvements
 - Provide official diplomas or transcripts recognized by governments
 - Replace formal education or professional tutoring
@@ -241,7 +241,7 @@ THE PLATFORM IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPL
 
 ### Limitation of Liability
 
-TO THE MAXIMUM EXTENT PERMITTED BY LAW, MADRASSA SUDAN AND ITS STAFF, PARTNERS, AND SERVICE PROVIDERS SHALL NOT BE LIABLE FOR:
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, AMAL MADRASSA AND ITS STAFF, PARTNERS, AND SERVICE PROVIDERS SHALL NOT BE LIABLE FOR:
 - INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES (e.g., lost learning time, emotional distress)
 - DAMAGES RESULTING FROM UNAUTHORIZED ACCESS TO USER ACCOUNTS
 - ERRORS IN AI TUTOR RESPONSES OR GRADING
@@ -258,7 +258,7 @@ These limitations do **not apply** to:
 
 ## Indemnification
 
-You agree to indemnify and hold harmless Madrassa Sudan, its staff, and partners from any claims, damages, or expenses (including legal fees) arising from:
+You agree to indemnify and hold harmless Amal Madrassa, its staff, and partners from any claims, damages, or expenses (including legal fees) arising from:
 - Your violation of these Terms
 - Your misuse of the platform
 - Content you submit (e.g., offensive homework submissions)
@@ -273,7 +273,7 @@ These Terms are governed by the laws of [specify jurisdiction, e.g., "the Europe
 ### Resolution Process
 
 If you have a complaint or dispute:
-1. **Contact Us First:** Email [support@madrassasudan.org] to resolve the issue informally
+1. **Contact Us First:** Email [support@amalmadrassa.org] to resolve the issue informally
 2. **Escalation:** If unresolved, contact our Data Protection Officer or partner NGO
 3. **Mediation:** We encourage mediation before legal action
 
@@ -291,7 +291,7 @@ We are committed to protecting children. If you observe or experience:
 - Safety concerns about another user
 
 **Report immediately to:**
-- **Safety Team:** [safety@madrassasudan.org]
+- **Safety Team:** [safety@amalmadrassa.org]
 - **In-App Reporting:** Use the "Report" button on conversations or homework submissions
 - **Emergency:** Contact local authorities or child protection services
 
@@ -315,13 +315,13 @@ We may update these Terms to reflect:
 
 For questions about these Terms:
 
-**Madrassa Sudan Support Team**  
-Email: [support@madrassasudan.org]  
-Website: [https://madrassasudan.org]
+**Amal Madrassa Support Team**  
+Email: [support@amalmadrassa.org]  
+Website: [https://amalmadrassa.org]
 
 **For Legal or Compliance Inquiries:**  
-Email: [legal@madrassasudan.org]
+Email: [legal@amalmadrassa.org]
 
 ---
 
-**Thank you for using Madrassa Sudan.** We are honored to support your learning journey. Together, we can build a brighter future for displaced children through education.
+**Thank you for using Amal Madrassa.** We are honored to support your learning journey. Together, we can build a brighter future for displaced children through education.

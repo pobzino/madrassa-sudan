@@ -35,7 +35,7 @@ const RoleIcons = {
 const translations = {
   ar: {
     createAccount: "إنشاء حساب",
-    joinSubtitle: "انضم إلى مدرسة السودان اليوم",
+    joinSubtitle: "انضم إلى أمل مدرسة اليوم",
     fullNameLabel: "الاسم الكامل",
     fullNamePlaceholder: "أحمد محمد",
     emailLabel: "البريد الإلكتروني",
@@ -58,7 +58,7 @@ const translations = {
   },
   en: {
     createAccount: "Create Account",
-    joinSubtitle: "Join Madrassa Sudan today",
+    joinSubtitle: "Join Amal Madrassa today",
     fullNameLabel: "Full Name",
     fullNamePlaceholder: "Ahmed Mohamed",
     emailLabel: "Email Address",
@@ -108,7 +108,7 @@ export default function SignupPage() {
       ? `${window.location.origin}/auth/callback`
       : process.env.NEXT_PUBLIC_SITE_URL
         ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
-        : "https://madrassasudan.netlify.app/auth/callback"
+        : "https://amalmadrassa.netlify.app/auth/callback"
   );
 
   const handleSignup = async (e: React.FormEvent) => {

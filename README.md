@@ -1,14 +1,14 @@
-# Madrassa Sudan 🦉
+# Amal Madrassa 🦉
 
 **AI-Powered Education Platform for Displaced Sudanese Children**
 
-Madrassa Sudan is a free, open educational platform designed to support displaced Sudanese children through AI-powered tutoring, diagnostic assessments, teacher-facilitated homework, and parent/guardian progress tracking. Built with Next.js, Supabase, and OpenAI.
+Amal Madrassa is a free, open educational platform designed to support displaced Sudanese children through AI-powered tutoring, diagnostic assessments, teacher-facilitated homework, and parent/guardian progress tracking. Built with Next.js, Supabase, and OpenAI.
 
 ---
 
 ## Mission
 
-Millions of Sudanese children have been displaced by conflict, losing access to consistent education. Madrassa Sudan provides:
+Millions of Sudanese children have been displaced by conflict, losing access to consistent education. Amal Madrassa provides:
 
 - **Personalized AI tutoring** in Arabic and English, adapting to each student's grade level
 - **Diagnostic assessments** to identify learning gaps and place students appropriately
@@ -69,8 +69,8 @@ Millions of Sudanese children have been displaced by conflict, losing access to 
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/your-org/madrassa-sudan.git
-   cd madrassa-sudan
+   git clone https://github.com/your-org/amal-madrassa.git
+   cd amal-madrassa
    ```
 
 2. **Install dependencies:**
@@ -144,7 +144,7 @@ Millions of Sudanese children have been displaced by conflict, losing access to 
 ## Project Structure
 
 ```
-madrassa-sudan/
+amal-madrassa/
 ├── src/
 │   ├── app/                  # Next.js app router pages
 │   │   ├── api/              # API routes (tutor, homework, auth)
@@ -276,29 +276,29 @@ For production deployment, follow the **[Deployment Guide](./docs/DEPLOYMENT.md)
 
 This project is open-source to maximize impact. NGOs and educators are free to deploy, modify, and distribute this platform.
 
-**If you use this platform, we'd love to hear about it!** Contact us at [hello@madrassasudan.org].
+**If you use this platform, we'd love to hear about it!** Contact us at [hello@amalmadrassa.org].
 
 ---
 
 ## Partners and Supporters
 
-Madrassa Sudan is made possible by:
+Amal Madrassa is made possible by:
 
 - **[Partner NGO 1]** — Providing teacher training and student recruitment
 - **[Partner NGO 2]** — Field deployment and offline infrastructure
 - **[OpenAI]** — AI technology and discounted API credits (if applicable)
 - **Individual Contributors** — Developers, educators, and volunteers worldwide
 
-**Want to partner?** Contact [partnerships@madrassasudan.org].
+**Want to partner?** Contact [partnerships@amalmadrassa.org].
 
 ---
 
 ## Contact
 
-- **Website:** [https://madrassasudan.org](https://madrassasudan.org)
-- **Email:** [hello@madrassasudan.org]
-- **Privacy/Safety Concerns:** [safety@madrassasudan.org]
-- **GitHub:** [https://github.com/your-org/madrassa-sudan](https://github.com/your-org/madrassa-sudan)
+- **Website:** [https://amalmadrassa.org](https://amalmadrassa.org)
+- **Email:** [hello@amalmadrassa.org]
+- **Privacy/Safety Concerns:** [safety@amalmadrassa.org]
+- **GitHub:** [https://github.com/your-org/amal-madrassa](https://github.com/your-org/amal-madrassa)
 
 ---
 

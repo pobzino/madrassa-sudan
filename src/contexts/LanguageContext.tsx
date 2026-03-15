@@ -15,8 +15,8 @@ interface LanguageContextType {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-const LANGUAGE_KEY = "madrassa-sudan-language";
-const HAS_SELECTED_KEY = "madrassa-sudan-has-selected-language";
+const LANGUAGE_KEY = "amal-madrassa-language";
+const HAS_SELECTED_KEY = "amal-madrassa-has-selected-language";
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>("ar");

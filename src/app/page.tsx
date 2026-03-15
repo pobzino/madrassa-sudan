@@ -154,7 +154,7 @@ export default function Home() {
       footer: {
         tagline: "نبني مستقبل السودان، طفل بطفل",
         links: { privacy: "الخصوصية", contact: "تواصل معنا", donate: "تبرّع" },
-        copyright: "© ٢٠٢٦ مدرسة السودان",
+        copyright: "© ٢٠٢٦ أمل مدرسة",
       },
     },
     en: {
@@ -226,7 +226,7 @@ export default function Home() {
       footer: {
         tagline: "Building Sudan's future, one child at a time",
         links: { privacy: "Privacy", contact: "Contact", donate: "Donate" },
-        copyright: "© 2026 Madrassa Sudan",
+        copyright: "© 2026 Amal Madrassa",
       },
     },
   };

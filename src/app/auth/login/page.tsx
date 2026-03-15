@@ -58,7 +58,7 @@ export default function LoginPage() {
       ? `${window.location.origin}/auth/callback`
       : process.env.NEXT_PUBLIC_SITE_URL
         ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
-        : "https://madrassasudan.netlify.app/auth/callback"
+        : "https://amalmadrassa.netlify.app/auth/callback"
   );
 
   const handleLogin = async (e: React.FormEvent) => {

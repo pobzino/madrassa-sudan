@@ -23,20 +23,20 @@ const fredoka = Fredoka({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://madrassa-sudan.vercel.app"),
-  title: "مدرسة السودان | Madrassa Sudan",
+  metadataBase: new URL("https://amalmadrassa.netlify.app"),
+  title: "أمل مدرسة | Amal Madrassa",
   description: "AI-powered online learning platform providing educational continuity for Sudanese children affected by conflict. Access quality education anywhere, anytime.",
   keywords: ["Sudan", "education", "online learning", "AI tutor", "refugee education", "Arabic", "children"],
   openGraph: {
-    title: "مدرسة السودان | Madrassa Sudan",
+    title: "أمل مدرسة | Amal Madrassa",
     description: "Quality education for every Sudanese child, anywhere in the world.",
     type: "website",
-    siteName: "Madrassa Sudan",
+    siteName: "Amal Madrassa",
     locale: "ar_SD",
   },
   twitter: {
     card: "summary_large_image",
-    title: "مدرسة السودان | Madrassa Sudan",
+    title: "أمل مدرسة | Amal Madrassa",
     description: "Quality education for every Sudanese child, anywhere in the world.",
   },
 };

@@ -223,7 +223,7 @@ export default function OwlShowcasePage() {
         <div className="text-center mb-12">
           <MadrassaLogo size="lg" className="justify-center mb-6" />
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Mascot Collection</h1>
-          <p className="text-gray-500">Mascot options for the Madrassa Sudan app</p>
+          <p className="text-gray-500">Mascot options for the Amal Madrassa app</p>
         </div>
 
         {/* Secretary Bird - Sudan's National Bird */}

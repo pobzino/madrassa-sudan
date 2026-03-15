@@ -1,4 +1,4 @@
-# E2E Test Results — Madrassa Sudan
+# E2E Test Results — Amal Madrassa
 
 **Date:** 2026-02-24  
 **Tester:** Automated (Claude subagent)  

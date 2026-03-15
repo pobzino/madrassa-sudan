@@ -29,10 +29,10 @@ export function LanguageSelector() {
 
           {/* Title - Both languages */}
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            مرحباً بكم في مدرسة السودان
+            مرحباً بكم في أمل مدرسة
           </h1>
           <p className="text-lg text-gray-600 mb-8">
-            Welcome to Madrassa Sudan
+            Welcome to Amal Madrassa
           </p>
 
           {/* Language selection prompt */}

@@ -122,7 +122,7 @@ export default function Home() {
       footer: {
         tagline: "Bringing hope through education",
         links: ["About Us", "Contact", "Privacy Policy", "Terms of Service"],
-        copyright: "© 2026 Madrassa Sudan. A non-profit initiative.",
+        copyright: "© 2026 Amal Madrassa. A non-profit initiative.",
       },
     },
     ar: {
@@ -198,7 +198,7 @@ export default function Home() {
       footer: {
         tagline: "نزرع الأمل من خلال التعليم",
         links: ["عن المنصة", "اتصل بنا", "سياسة الخصوصية", "شروط الخدمة"],
-        copyright: "© ٢٠٢٦ مدرسة السودان. مبادرة غير ربحية.",
+        copyright: "© ٢٠٢٦ أمل مدرسة. مبادرة غير ربحية.",
       },
     },
   };
@@ -227,7 +227,7 @@ export default function Home() {
                 م
               </div>
               <span className="font-semibold text-lg" style={{ color: 'var(--primary)' }}>
-                {isArabic ? 'مدرسة السودان' : 'Madrassa Sudan'}
+                {isArabic ? 'أمل مدرسة' : 'Amal Madrassa'}
               </span>
             </div>
 
@@ -509,7 +509,7 @@ export default function Home() {
               </div>
               <div>
                 <div className="font-semibold" style={{ color: 'var(--primary)' }}>
-                  {isArabic ? 'مدرسة السودان' : 'Madrassa Sudan'}
+                  {isArabic ? 'أمل مدرسة' : 'Amal Madrassa'}
                 </div>
                 <div className="text-sm" style={{ color: 'var(--muted)' }}>
                   {t.footer.tagline}

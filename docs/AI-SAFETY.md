@@ -1,10 +1,10 @@
-# AI Safety & Moderation Guide — Madrassa Sudan
+# AI Safety & Moderation Guide — Amal Madrassa
 
 **Last Updated:** February 24, 2026
 
 ## Purpose
 
-This document outlines the safety measures, content moderation practices, and ethical guidelines for the AI tutor ("معلم البومة" / Owl Teacher) on the Madrassa Sudan platform. It is intended for:
+This document outlines the safety measures, content moderation practices, and ethical guidelines for the AI tutor ("معلم البومة" / Owl Teacher) on the Amal Madrassa platform. It is intended for:
 
 - **Teachers:** To understand how the AI operates and what to monitor
 - **Guardians:** To make informed decisions about their children's use of the AI tutor
@@ -32,7 +32,7 @@ The AI tutor is an interactive learning assistant powered by **OpenAI's GPT-5.2 
 
 ### 1. Trauma-Informed Design
 
-Many Madrassa Sudan students have experienced displacement, conflict, or loss. The AI tutor is programmed with trauma-informed response guidelines:
+Many Amal Madrassa students have experienced displacement, conflict, or loss. The AI tutor is programmed with trauma-informed response guidelines:
 
 **Guiding Principles:**
 - **Non-Triggering Language:** Avoid references to violence, conflict, or distressing scenarios in examples
@@ -341,8 +341,8 @@ Per [OpenAI API Data Usage Policy](https://openai.com/policies/api-data-usage-po
 
 **How to Report Issues:**
 - **Incorrect AI Response:** Click "Report" button on message → Teacher reviews
-- **Inappropriate Content:** Email [safety@madrassasudan.org]
-- **Privacy Concern:** Email [privacy@madrassasudan.org]
+- **Inappropriate Content:** Email [safety@amalmadrassa.org]
+- **Privacy Concern:** Email [privacy@amalmadrassa.org]
 
 **Monthly Review:**
 - Platform staff analyze:
@@ -378,6 +378,6 @@ This AI Safety Guide aligns with:
 ---
 
 **Questions or Concerns?**  
-Contact our Safety Team: [safety@madrassasudan.org]
+Contact our Safety Team: [safety@amalmadrassa.org]
 
 **We are committed to creating a safe, supportive learning environment for every child.**

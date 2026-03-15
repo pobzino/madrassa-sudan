@@ -1,8 +1,8 @@
-# Deployment Guide — Madrassa Sudan
+# Deployment Guide — Amal Madrassa
 
 **Last Updated:** February 24, 2026
 
-This guide walks through deploying Madrassa Sudan for production use by NGOs and educational partners. Follow each step carefully to ensure a secure, compliant deployment.
+This guide walks through deploying Amal Madrassa for production use by NGOs and educational partners. Follow each step carefully to ensure a secure, compliant deployment.
 
 ---
 
@@ -26,7 +26,7 @@ Before deploying, ensure you have:
 1. Go to [supabase.com](https://supabase.com) and create a free account
 2. Click **"New Project"**
 3. **Project Settings:**
-   - **Name:** `madrassa-sudan-[environment]` (e.g., `madrassa-sudan-prod`)
+   - **Name:** `amal-madrassa-[environment]` (e.g., `amal-madrassa-prod`)
    - **Database Password:** Generate a strong password (save securely)
    - **Region:** Choose closest to your users (e.g., `eu-west-1` for Europe, `me-south-1` for Middle East if available)
 4. Wait for project initialization (~2 minutes)
@@ -100,7 +100,7 @@ ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
 1. Navigate to **API Keys**
 2. Click **"Create new secret key"**
-3. **Name:** `madrassa-sudan-prod`
+3. **Name:** `amal-madrassa-prod`
 4. **Permissions:** Select "All" (or restrict to "Model capabilities" only for tighter security)
 5. Copy the key (starts with `sk-...`) — **this is shown only once!**
 
@@ -150,14 +150,14 @@ OPENAI_MODEL=gpt-4-turbo
 # ============================================
 # APPLICATION CONFIGURATION
 # ============================================
-# Public URL of your deployed app (e.g., https://app.madrassasudan.org)
+# Public URL of your deployed app (e.g., https://app.amalmadrassa.org)
 NEXT_PUBLIC_SITE_URL=https://your-domain.com
 
 # ============================================
 # OPTIONAL: EMAIL CONFIGURATION
 # ============================================
 # If using Resend, SendGrid, or other email service
-# EMAIL_FROM=noreply@madrassasudan.org
+# EMAIL_FROM=noreply@amalmadrassa.org
 # EMAIL_SERVICE_API_KEY=your_email_api_key
 
 # ============================================
@@ -237,7 +237,7 @@ If not using Vercel:
    ```nginx
    server {
        listen 443 ssl;
-       server_name app.madrassasudan.org;
+       server_name app.amalmadrassa.org;
        
        ssl_certificate /path/to/cert.pem;
        ssl_certificate_key /path/to/key.pem;
@@ -251,7 +251,7 @@ If not using Vercel:
 
 4. **Process Manager:** Use PM2 or systemd to keep the app running:
    ```bash
-   pm2 start npm --name madrassa-sudan -- start
+   pm2 start npm --name amal-madrassa -- start
    pm2 save
    pm2 startup
    ```
@@ -454,7 +454,7 @@ Before going live, verify:
 ## Support and Resources
 
 **Technical Support:**
-- Email: [devs@madrassasudan.org] (replace with actual contact)
+- Email: [devs@amalmadrassa.org] (replace with actual contact)
 - GitHub Issues: (if using open-source model)
 
 **Documentation:**
@@ -469,6 +469,6 @@ Before going live, verify:
 
 **You're Ready to Deploy!** 🚀
 
-Follow this checklist step-by-step, and you'll have a secure, scalable Madrassa Sudan deployment. If you encounter issues not covered here, document them and update this guide for future deployments.
+Follow this checklist step-by-step, and you'll have a secure, scalable Amal Madrassa deployment. If you encounter issues not covered here, document them and update this guide for future deployments.
 
 **Remember:** This platform serves displaced children — prioritize safety, privacy, and reliability above all else.
