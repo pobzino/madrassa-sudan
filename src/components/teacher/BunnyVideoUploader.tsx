@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import * as tus from 'tus-js-client';
 
 type UploadState = 'idle' | 'uploading' | 'uploaded' | 'transcoding' | 'ready' | 'error';
+type InputTab = 'file' | 'url';
 
 interface BunnyVideoUploaderProps {
   lessonId: string;
@@ -31,6 +32,9 @@ export default function BunnyVideoUploader({
   const [errorMessage, setErrorMessage] = useState('');
   const [fileName, setFileName] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const [inputTab, setInputTab] = useState<InputTab>('file');
+  const [urlInput, setUrlInput] = useState('');
+  const [urlLoading, setUrlLoading] = useState(false);
 
   const uploadRef = useRef<tus.Upload | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -52,7 +56,6 @@ export default function BunnyVideoUploader({
     pollingStartRef.current = Date.now();
 
     pollingRef.current = setInterval(async () => {
-      // Timeout check
       if (Date.now() - pollingStartRef.current > POLL_TIMEOUT) {
         if (pollingRef.current) clearInterval(pollingRef.current);
         setState('error');
@@ -62,7 +65,7 @@ export default function BunnyVideoUploader({
 
       try {
         const res = await fetch(`/api/bunny/status?videoId=${videoId}`);
-        if (!res.ok) return; // retry on next tick
+        if (!res.ok) return;
 
         const data = await res.json();
 
@@ -77,7 +80,7 @@ export default function BunnyVideoUploader({
         } else if (data.status === 'error') {
           if (pollingRef.current) clearInterval(pollingRef.current);
           setState('error');
-          setErrorMessage('Video transcoding failed. Please try uploading again.');
+          setErrorMessage('Video transcoding failed. Please try again.');
         }
       } catch {
         // Network error, will retry on next tick
@@ -98,7 +101,6 @@ export default function BunnyVideoUploader({
     setErrorMessage('');
 
     try {
-      // Get upload credentials from our API
       const credRes = await fetch('/api/bunny/create-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -113,7 +115,6 @@ export default function BunnyVideoUploader({
       const { videoId, libraryId, tusEndpoint, authSignature, authExpire } =
         await credRes.json();
 
-      // Start TUS upload directly to Bunny
       const upload = new tus.Upload(file, {
         endpoint: tusEndpoint,
         retryDelays: [0, 3000, 5000, 10000, 20000],
@@ -150,6 +151,38 @@ export default function BunnyVideoUploader({
     }
   }, [lessonId, lessonTitle, pollTranscodeStatus]);
 
+  const startUrlImport = useCallback(async () => {
+    const url = urlInput.trim();
+    if (!url) return;
+
+    setUrlLoading(true);
+    setErrorMessage('');
+
+    try {
+      const res = await fetch('/api/bunny/fetch-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, title: lessonTitle || 'Video', lessonId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to import video');
+      }
+
+      setUrlLoading(false);
+      setUrlInput('');
+      pollTranscodeStatus(data.videoId);
+    } catch (error) {
+      setUrlLoading(false);
+      setState('error');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Import failed'
+      );
+    }
+  }, [urlInput, lessonId, lessonTitle, pollTranscodeStatus]);
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) startUpload(file);
@@ -173,46 +206,108 @@ export default function BunnyVideoUploader({
     setProgress(0);
     setFileName('');
     setErrorMessage('');
+    setUrlLoading(false);
   };
 
   const handleRetry = () => {
     setState('idle');
     setProgress(0);
     setErrorMessage('');
+    setUrlLoading(false);
   };
 
-  // Idle state — drop zone
+  // Idle state
   if (state === 'idle') {
     return (
-      <div
-        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={`
-          border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors
-          ${isDragging
-            ? 'border-emerald-500 bg-emerald-50'
-            : 'border-gray-300 hover:border-emerald-400 hover:bg-gray-50'
-          }
-        `}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="video/*"
-          onChange={handleFileSelect}
-          className="hidden"
-        />
-        <svg className="mx-auto h-10 w-10 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-        </svg>
-        <p className="text-sm font-medium text-gray-700">
-          Drop a video file here or click to browse
-        </p>
-        <p className="text-xs text-gray-500 mt-1">
-          MP4, MOV, WebM — up to 5 GB
-        </p>
+      <div className="space-y-3">
+        {/* Tab switcher */}
+        <div className="flex gap-1 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => setInputTab('file')}
+            className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+              inputTab === 'file'
+                ? 'border-emerald-600 text-emerald-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            File Upload
+          </button>
+          <button
+            type="button"
+            onClick={() => setInputTab('url')}
+            className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+              inputTab === 'url'
+                ? 'border-emerald-600 text-emerald-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Import from URL
+          </button>
+        </div>
+
+        {inputTab === 'file' ? (
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`
+              border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors
+              ${isDragging
+                ? 'border-emerald-500 bg-emerald-50'
+                : 'border-gray-300 hover:border-emerald-400 hover:bg-gray-50'
+              }
+            `}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/*"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <svg className="mx-auto h-10 w-10 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+            <p className="text-sm font-medium text-gray-700">
+              Drop a video file here or click to browse
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              MP4, MOV, WebM — up to 5 GB
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder="Paste Google Drive or direct video URL"
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && urlInput.trim()) {
+                    e.preventDefault();
+                    startUrlImport();
+                  }
+                }}
+                disabled={urlLoading}
+              />
+              <button
+                type="button"
+                onClick={startUrlImport}
+                disabled={!urlInput.trim() || urlLoading}
+                className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {urlLoading ? 'Importing...' : 'Import'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              Google Drive: share the file with &quot;Anyone with the link&quot; and paste the share URL. Also supports direct .mp4/.mov/.webm links and Dropbox.
+            </p>
+          </div>
+        )}
       </div>
     );
   }
