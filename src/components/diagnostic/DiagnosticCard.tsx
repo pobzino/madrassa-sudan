@@ -84,18 +84,18 @@ export function DiagnosticCard({
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6">
+    <div className="bg-white rounded-2xl shadow-md border border-gray-200 p-6">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-            <div className="w-6 h-6 text-blue-600 dark:text-blue-400">
+          <div className="w-12 h-12 bg-[#007229]/10 rounded-xl flex items-center justify-center">
+            <div className="w-6 h-6 text-[#007229]">
               <BookOpenIcon />
             </div>
           </div>
           <div>
             <h3 className="font-semibold text-lg">{subject.name}</h3>
             {subject.name_ar && (
-              <p className="text-sm text-gray-600 dark:text-gray-400" dir="rtl">
+              <p className="text-sm text-gray-600 text-gray-500" dir="rtl">
                 {subject.name_ar}
               </p>
             )}
@@ -109,7 +109,7 @@ export function DiagnosticCard({
                 <div className="w-5 h-5 text-green-500">
                   <CheckCircleIcon />
                 </div>
-                <span className="text-sm text-gray-600 dark:text-gray-400">Completed</span>
+                <span className="text-sm text-gray-600 text-gray-500">Completed</span>
               </div>
               <div className="text-right">
                 <p className="font-semibold text-lg">Grade {placement.placed_grade}</p>
@@ -133,12 +133,12 @@ export function DiagnosticCard({
         </div>
       </div>
 
-      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="mt-4 pt-4 border-t border-gray-200">
         {placement ? (
           <button
             onClick={onRetake}
-            className="w-full py-2 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600
-                     text-gray-700 dark:text-gray-300 rounded-lg transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2 px-4 bg-gray-100 hover:bg-gray-200
+                     text-gray-700 rounded-xl transition-colors flex items-center justify-center gap-2"
           >
             <div className="w-4 h-4">
               <RotateCcwIcon />
@@ -148,7 +148,7 @@ export function DiagnosticCard({
         ) : hasIncompleteAttempt ? (
           <button
             onClick={onContinue}
-            className="w-full py-2 px-4 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg
+            className="w-full py-2 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl
                      transition-colors flex items-center justify-center gap-2"
           >
             <div className="w-4 h-4">
@@ -159,7 +159,7 @@ export function DiagnosticCard({
         ) : (
           <button
             onClick={onStart}
-            className="w-full py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg
+            className="w-full py-2 px-4 bg-[#007229] hover:bg-[#005C22] text-white rounded-xl
                      transition-colors flex items-center justify-center gap-2"
           >
             <div className="w-4 h-4">

@@ -5,11 +5,29 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { Lesson, LessonQuestion, LessonProgress, Subject } from "@/lib/database.types";
-import { OwlTutorIcon, OwlCelebrating, Confetti } from "@/components/illustrations";
+import type {
+  Lesson,
+  LessonProgress,
+  LessonQuestion,
+  LessonSlideResponse,
+  QuizSettings,
+  Subject,
+} from "@/lib/database.types";
+import type { LessonTask } from "@/lib/tasks.types";
+import type { Slide } from "@/lib/slides.types";
+import { Confetti } from "@/components/illustrations";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import EnhancedQuizOverlay from "@/components/lessons/EnhancedQuizOverlay";
 import ProgressGateModal from "@/components/lessons/ProgressGateModal";
+import TaskOverlay from "@/components/tasks/TaskOverlay";
+import SlideInteractionOverlay from "@/components/lessons/SlideInteractionOverlay";
+import {
+  getInteractiveSlides,
+  getSlideInteractionStorageKey,
+  readStoredSlideInteractionResponses,
+  type SlideInteractionResult,
+  type StoredSlideInteractionResponses,
+} from "@/lib/slide-interactions";
 
 const translations = {
   ar: {
@@ -123,11 +141,59 @@ const Icons = {
 
 type VideoQuality = "360p" | "480p" | "720p";
 
-interface QuestionState {
-  question: LessonQuestion;
-  selectedAnswer: string | null;
-  isSubmitted: boolean;
-  isCorrect: boolean | null;
+const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
+  require_pass_to_continue: false,
+  min_pass_questions: 1,
+  allow_retries: true,
+  max_attempts: null,
+  show_explanation: true,
+};
+
+function resolveQuizSettings(value: unknown): QuizSettings {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_QUIZ_SETTINGS;
+  }
+
+  const settings = value as Partial<QuizSettings>;
+
+  return {
+    require_pass_to_continue: settings.require_pass_to_continue ?? DEFAULT_QUIZ_SETTINGS.require_pass_to_continue,
+    min_pass_questions: settings.min_pass_questions ?? DEFAULT_QUIZ_SETTINGS.min_pass_questions,
+    allow_retries: settings.allow_retries ?? DEFAULT_QUIZ_SETTINGS.allow_retries,
+    max_attempts: settings.max_attempts ?? DEFAULT_QUIZ_SETTINGS.max_attempts,
+    show_explanation: settings.show_explanation ?? DEFAULT_QUIZ_SETTINGS.show_explanation,
+  };
+}
+
+function mapSlideResponsesToStoredState(
+  responses: LessonSlideResponse[] | null | undefined
+): StoredSlideInteractionResponses {
+  if (!responses || responses.length === 0) {
+    return {};
+  }
+
+  return responses.reduce<StoredSlideInteractionResponses>((acc, response) => {
+    const payload =
+      response.response_data && typeof response.response_data === "object" && !Array.isArray(response.response_data)
+        ? (response.response_data as Record<string, unknown>)
+        : {};
+
+    acc[response.slide_id] = {
+      answer:
+        payload.answer === null ||
+        typeof payload.answer === "string" ||
+        typeof payload.answer === "number" ||
+        typeof payload.answer === "boolean" ||
+        (Array.isArray(payload.answer) && payload.answer.every((item) => typeof item === "string"))
+          ? (payload.answer as SlideInteractionResult["answer"])
+          : null,
+      completedAt: response.completed_at,
+      isCorrect: response.is_correct,
+      timeSpentSeconds: response.time_spent_seconds,
+    };
+
+    return acc;
+  }, {});
 }
 
 export default function LessonPlayerPage() {
@@ -160,13 +226,23 @@ export default function LessonPlayerPage() {
   const [volume, setVolume] = useState(1);
 
   // Question overlay state
-  const [activeQuestion, setActiveQuestion] = useState<QuestionState | null>(null);
+  const [activeQuestion, setActiveQuestion] = useState<LessonQuestion | null>(null);
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
-  const [questionsCorrect, setQuestionsCorrect] = useState(0);
+  const [correctQuestions, setCorrectQuestions] = useState<Set<string>>(new Set());
+
+  // Task overlay state
+  const [tasks, setTasks] = useState<LessonTask[]>([]);
+  const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
+  const [activeTask, setActiveTask] = useState<LessonTask | null>(null);
+
+  // Slide interaction state
+  const [slideDeck, setSlideDeck] = useState<Slide[]>([]);
+  const [activeSlideInteraction, setActiveSlideInteraction] = useState<Slide | null>(null);
+  const [slideInteractionResponses, setSlideInteractionResponses] = useState<StoredSlideInteractionResponses>({});
 
   // Progress gate state
   const [showProgressGate, setShowProgressGate] = useState(false);
-  const [quizSettings, setQuizSettings] = useState<Record<string, unknown> | null>(null);
+  const [quizSettings, setQuizSettings] = useState<QuizSettings>(DEFAULT_QUIZ_SETTINGS);
 
   // Celebration state
   const [showConfetti, setShowConfetti] = useState(false);
@@ -180,6 +256,11 @@ export default function LessonPlayerPage() {
         return;
       }
       setUserId(user.id);
+      const storageKey = getSlideInteractionStorageKey(lessonId, user.id);
+      const localSlideResponses = readStoredSlideInteractionResponses(
+        window.localStorage.getItem(storageKey)
+      );
+      setSlideInteractionResponses(localSlideResponses);
 
       // Fetch lesson
       const { data: lessonData } = await supabase
@@ -193,7 +274,28 @@ export default function LessonPlayerPage() {
         return;
       }
       setLesson(lessonData);
-      if (lessonData.quiz_settings) setQuizSettings(lessonData.quiz_settings as unknown as Record<string, unknown>);
+      setQuizSettings(resolveQuizSettings(lessonData.quiz_settings));
+
+      const [slidesRes, slideResponsesRes] = await Promise.all([
+        fetch(`/api/lessons/${lessonId}/slides`)
+          .then((response) => (response.ok ? response.json() : null))
+          .catch(() => null),
+        fetch(`/api/lessons/${lessonId}/slide-responses`)
+          .then((response) => (response.ok ? response.json() : null))
+          .catch(() => null),
+      ]);
+
+      if (Array.isArray(slidesRes?.slideDeck?.slides)) {
+        setSlideDeck(slidesRes.slideDeck.slides as Slide[]);
+      }
+
+      if (Array.isArray(slideResponsesRes?.responses)) {
+        const mappedResponses = mapSlideResponsesToStoredState(
+          slideResponsesRes.responses as LessonSlideResponse[]
+        );
+        setSlideInteractionResponses(mappedResponses);
+        window.localStorage.setItem(storageKey, JSON.stringify(mappedResponses));
+      }
 
       // Fetch subject
       if (lessonData.subject_id) {
@@ -211,7 +313,50 @@ export default function LessonPlayerPage() {
         .select("*")
         .eq("lesson_id", lessonId)
         .order("timestamp_seconds");
-      if (questionsData) setQuestions(questionsData);
+      if (questionsData) {
+        setQuestions(questionsData);
+
+        if (questionsData.length > 0) {
+          const { data: responseData } = await supabase
+            .from("lesson_question_responses")
+            .select("question_id, is_correct")
+            .eq("student_id", user.id)
+            .in("question_id", questionsData.map((question) => question.id));
+
+          if (responseData) {
+            setAnsweredQuestions(new Set(responseData.map((response) => response.question_id)));
+            setCorrectQuestions(
+              new Set(
+                responseData
+                  .filter((response) => response.is_correct)
+                  .map((response) => response.question_id)
+              )
+            );
+          }
+        }
+      }
+
+      // Fetch tasks
+      const { data: tasksData } = await supabase
+        .from("lesson_tasks")
+        .select("*")
+        .eq("lesson_id", lessonId)
+        .order("timestamp_seconds");
+      if (tasksData) {
+        setTasks(tasksData as unknown as LessonTask[]);
+
+        if (tasksData.length > 0) {
+          const { data: taskResponseData } = await supabase
+            .from("lesson_task_responses")
+            .select("task_id")
+            .eq("student_id", user.id)
+            .in("task_id", tasksData.map((task) => task.id));
+
+          if (taskResponseData) {
+            setCompletedTasks(new Set(taskResponseData.map((response) => response.task_id)));
+          }
+        }
+      }
 
       // Fetch progress
       const { data: progressData } = await supabase
@@ -222,7 +367,6 @@ export default function LessonPlayerPage() {
         .single();
       if (progressData) {
         setProgress(progressData);
-        setAnsweredQuestions(new Set()); // We'd need to track this separately
       }
 
       // Fetch adjacent lessons
@@ -246,6 +390,67 @@ export default function LessonPlayerPage() {
     loadData();
   }, [lessonId, router, supabase]);
 
+  const persistSlideInteractionResponse = useCallback(
+    async (slideId: string, result: SlideInteractionResult) => {
+      if (!userId) {
+        return;
+      }
+
+      const storageKey = getSlideInteractionStorageKey(lessonId, userId);
+      let nextResult = result;
+
+      try {
+        const response = await fetch(`/api/lessons/${lessonId}/slide-responses`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slide_id: slideId,
+            answer: result.answer,
+            time_spent_seconds: result.timeSpentSeconds ?? 0,
+          }),
+        });
+
+        if (response.ok) {
+          const json = await response.json();
+          nextResult = {
+            ...result,
+            isCorrect: json.is_correct ?? result.isCorrect,
+          };
+        }
+      } catch {
+        // Fallback to local persistence below.
+      }
+
+      setSlideInteractionResponses((prev) => {
+        const next = {
+          ...prev,
+          [slideId]: nextResult,
+        };
+
+        window.localStorage.setItem(storageKey, JSON.stringify(next));
+        return next;
+      });
+    },
+    [lessonId, userId]
+  );
+
+  const findDueInteractiveSlide = useCallback(
+    (atSecond: number) => {
+      const interactiveSlides = getInteractiveSlides(
+        slideDeck,
+        duration || lesson?.video_duration_seconds || null
+      );
+
+      return (
+        interactiveSlides.find(
+          ({ slide, triggerSecond }) =>
+            triggerSecond <= atSecond && !slideInteractionResponses[slide.id]
+        )?.slide || null
+      );
+    },
+    [duration, lesson?.video_duration_seconds, slideDeck, slideInteractionResponses]
+  );
+
   // Get video URL based on quality
   const getVideoUrl = useCallback(() => {
     if (!lesson) return "";
@@ -267,8 +472,9 @@ export default function LessonPlayerPage() {
     const currentPosition = Math.floor(videoRef.current.currentTime);
     const totalWatchTime = progress?.total_watch_time_seconds || 0;
     const isCompleted = duration > 0 && currentPosition / duration >= 0.9;
+    const questionsCorrect = correctQuestions.size;
 
-    await supabase.from("lesson_progress").upsert({
+    const { data: updatedProgress } = await supabase.from("lesson_progress").upsert({
       student_id: userId,
       lesson_id: lessonId,
       last_position_seconds: currentPosition,
@@ -276,11 +482,16 @@ export default function LessonPlayerPage() {
       completed: isCompleted,
       completed_at: isCompleted ? new Date().toISOString() : null,
       questions_answered: answeredQuestions.size,
-      questions_correct: 0, // Would need to track this
+      questions_correct: questionsCorrect,
+      quiz_passed: questionsCorrect >= quizSettings.min_pass_questions,
     }, {
       onConflict: "student_id,lesson_id",
-    });
-  }, [userId, lessonId, duration, progress, answeredQuestions.size, supabase]);
+    }).select().single();
+
+    if (updatedProgress) {
+      setProgress(updatedProgress);
+    }
+  }, [userId, lessonId, duration, progress, answeredQuestions.size, correctQuestions, quizSettings.min_pass_questions, supabase]);
 
   // Auto-save progress every 10 seconds
   useEffect(() => {
@@ -290,31 +501,46 @@ export default function LessonPlayerPage() {
     return () => clearInterval(interval);
   }, [isPlaying, saveProgress]);
 
-  // Check for questions at current timestamp
-  useEffect(() => {
-    if (!isPlaying || activeQuestion) return;
+  // Handle video time update
+  const handleTimeUpdate = () => {
+    if (!videoRef.current) return;
 
-    const currentSecond = Math.floor(currentTime);
+    const nextTime = videoRef.current.currentTime;
+    setCurrentTime(nextTime);
+
+    if (!isPlaying || activeQuestion || activeTask || activeSlideInteraction) {
+      return;
+    }
+
+    const currentSecond = Math.floor(nextTime);
     const questionAtTime = questions.find(
-      (q) => q.timestamp_seconds === currentSecond && !answeredQuestions.has(q.id)
+      (question) => question.timestamp_seconds === currentSecond && !answeredQuestions.has(question.id)
     );
 
     if (questionAtTime) {
-      videoRef.current?.pause();
+      videoRef.current.pause();
       setIsPlaying(false);
-      setActiveQuestion({
-        question: questionAtTime,
-        selectedAnswer: null,
-        isSubmitted: false,
-        isCorrect: null,
-      });
+      setActiveQuestion(questionAtTime);
+      return;
     }
-  }, [currentTime, questions, answeredQuestions, isPlaying, activeQuestion]);
 
-  // Handle video time update
-  const handleTimeUpdate = () => {
-    if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
+    const taskAtTime = tasks.find(
+      (task) => task.timestamp_seconds === currentSecond && !completedTasks.has(task.id)
+    );
+
+    if (taskAtTime) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+      setActiveTask(taskAtTime);
+      return;
+    }
+
+    const interactiveSlideAtTime = findDueInteractiveSlide(currentSecond);
+
+    if (interactiveSlideAtTime) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+      setActiveSlideInteraction(interactiveSlideAtTime);
     }
   };
 
@@ -331,7 +557,7 @@ export default function LessonPlayerPage() {
 
   // Toggle play/pause
   const togglePlay = () => {
-    if (!videoRef.current || activeQuestion) return;
+    if (!videoRef.current || activeQuestion || activeTask || activeSlideInteraction) return;
     if (isPlaying) {
       videoRef.current.pause();
     } else {
@@ -346,47 +572,6 @@ export default function LessonPlayerPage() {
     const time = parseFloat(e.target.value);
     videoRef.current.currentTime = time;
     setCurrentTime(time);
-  };
-
-  // Submit question answer
-  const handleSubmitAnswer = async () => {
-    if (!activeQuestion || !activeQuestion.selectedAnswer) return;
-
-    const isCorrect = activeQuestion.selectedAnswer === activeQuestion.question.correct_answer;
-
-    setActiveQuestion({
-      ...activeQuestion,
-      isSubmitted: true,
-      isCorrect,
-    });
-
-    setAnsweredQuestions((prev) => new Set(prev).add(activeQuestion.question.id));
-
-    // Celebrate correct answers!
-    if (isCorrect) {
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 3000);
-    }
-
-    // Save response to database
-    if (userId) {
-      await supabase.from("lesson_question_responses").upsert({
-        student_id: userId,
-        question_id: activeQuestion.question.id,
-        answer: activeQuestion.selectedAnswer,
-        is_correct: isCorrect,
-        attempts: 1,
-      }, {
-        onConflict: "student_id,question_id",
-      });
-    }
-  };
-
-  // Continue after question
-  const handleContinue = () => {
-    setActiveQuestion(null);
-    videoRef.current?.play();
-    setIsPlaying(true);
   };
 
   // Format time
@@ -409,8 +594,11 @@ export default function LessonPlayerPage() {
         }),
       });
       const json = await res.json();
+      setAnsweredQuestions((prev) => new Set(prev).add(data.questionId));
       if (data.isCorrect) {
-        setQuestionsCorrect((prev) => prev + 1);
+        setCorrectQuestions((prev) => new Set(prev).add(data.questionId));
+        setShowConfetti(true);
+        setTimeout(() => setShowConfetti(false), 3000);
       }
       return { canRetry: json.can_retry ?? false };
     } catch {
@@ -418,29 +606,72 @@ export default function LessonPlayerPage() {
     }
   };
 
+  const handleRewatchQuiz = useCallback(() => {
+    const nextQuestion = questions
+      .filter((question) => !correctQuestions.has(question.id))
+      .sort((a, b) => a.timestamp_seconds - b.timestamp_seconds)[0];
+
+    setShowProgressGate(false);
+
+    if (videoRef.current && nextQuestion) {
+      videoRef.current.currentTime = nextQuestion.timestamp_seconds;
+      setCurrentTime(nextQuestion.timestamp_seconds);
+      videoRef.current.play();
+      setIsPlaying(true);
+      return;
+    }
+
+    videoRef.current?.play();
+    setIsPlaying(true);
+  }, [correctQuestions, questions]);
+
+  const handleVideoEnded = useCallback(() => {
+    const pendingInteractiveSlide = findDueInteractiveSlide(Math.floor(duration || 0));
+
+    if (pendingInteractiveSlide) {
+      setActiveSlideInteraction(pendingInteractiveSlide);
+      setIsPlaying(false);
+      return;
+    }
+
+    if (quizSettings.require_pass_to_continue && correctQuestions.size < quizSettings.min_pass_questions) {
+      setShowProgressGate(true);
+    }
+  }, [correctQuestions, duration, findDueInteractiveSlide, quizSettings]);
+
   // Mark lesson as complete
   const handleMarkComplete = async () => {
     if (!userId || !lessonId) return;
 
-    // Check quiz pass requirement
-    const requirePass = quizSettings?.require_pass as boolean | undefined;
-    const minRequired = (quizSettings?.min_questions_required as number | undefined) ?? 1;
-    if (requirePass && questionsCorrect < minRequired) {
+    const pendingInteractiveSlide = findDueInteractiveSlide(Math.floor(duration || 0));
+
+    if (pendingInteractiveSlide) {
+      setActiveSlideInteraction(pendingInteractiveSlide);
+      return;
+    }
+
+    if (quizSettings.require_pass_to_continue && correctQuestions.size < quizSettings.min_pass_questions) {
       setShowProgressGate(true);
       return;
     }
 
-    await supabase.from("lesson_progress").upsert({
+    const { data: updatedProgress } = await supabase.from("lesson_progress").upsert({
       student_id: userId,
       lesson_id: lessonId,
       completed: true,
       completed_at: new Date().toISOString(),
       last_position_seconds: Math.floor(duration),
       total_watch_time_seconds: Math.floor(duration),
+      questions_answered: answeredQuestions.size,
+      questions_correct: correctQuestions.size,
+      quiz_passed: correctQuestions.size >= quizSettings.min_pass_questions,
     }, {
       onConflict: "student_id,lesson_id",
-    });
-    setProgress((prev) => prev ? { ...prev, completed: true } : null);
+    }).select().single();
+
+    if (updatedProgress) {
+      setProgress(updatedProgress);
+    }
 
     // Celebrate lesson completion!
     setShowConfetti(true);
@@ -449,12 +680,12 @@ export default function LessonPlayerPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-[#FCFCFC] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br bg-[#007229] flex items-center justify-center text-white font-bold text-3xl mx-auto mb-4 animate-bounce shadow-lg">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#007229] to-[#00913D] flex items-center justify-center text-white font-bold text-3xl mx-auto mb-4 animate-bounce shadow-lg shadow-[#007229]/30">
             م
           </div>
-          <p className="text-gray-400 text-lg">{t.loading}</p>
+          <p className="text-gray-500 text-lg">{t.loading}</p>
         </div>
       </div>
     );
@@ -462,12 +693,12 @@ export default function LessonPlayerPage() {
 
   if (!lesson) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-[#FCFCFC] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-400 text-lg mb-4">{t.lessonNotFound}</p>
+          <p className="text-gray-500 text-lg mb-4">{t.lessonNotFound}</p>
           <Link
             href="/lessons"
-            className="px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
+            className="px-6 py-3 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-lg shadow-[#007229]/30"
           >
             {t.backToLessons}
           </Link>
@@ -477,27 +708,34 @@ export default function LessonPlayerPage() {
   }
 
   const videoUrl = getVideoUrl();
+  const timedInteractiveSlides = getInteractiveSlides(
+    slideDeck,
+    duration || lesson.video_duration_seconds || null
+  );
+  const completedInteractiveSlideCount = timedInteractiveSlides.filter(
+    ({ slide }) => slideInteractionResponses[slide.id]
+  ).length;
 
   return (
-    <div className="min-h-screen bg-gray-900" dir={isRtl ? "rtl" : "ltr"}>
+    <div className="min-h-screen bg-[#FCFCFC]" dir={isRtl ? "rtl" : "ltr"}>
       {/* Celebration confetti */}
       {showConfetti && <Confetti />}
 
       {/* Top bar */}
-      <div className="bg-gray-800 border-b border-gray-700">
+      <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
               href="/lessons"
-              className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-[#007229] hover:bg-[#007229]/5 rounded-xl transition-colors"
             >
               <span className={isRtl ? "rotate-180 inline-block" : ""}>{Icons.back}</span>
             </Link>
             <div>
-              <h1 className="text-white font-semibold">
+              <h1 className="text-gray-900 font-semibold">
                 {language === "ar" ? lesson.title_ar : lesson.title_en}
               </h1>
-              <div className="flex items-center gap-2 text-sm text-gray-400">
+              <div className="flex items-center gap-2 text-sm text-gray-500">
                 {subject && <span>{language === "ar" ? subject.name_ar : subject.name_en}</span>}
                 <span>•</span>
                 <span>{t.grade} {lesson.grade_level}</span>
@@ -507,14 +745,14 @@ export default function LessonPlayerPage() {
 
           {/* Completion status */}
           {progress?.completed ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600/20 text-emerald-400 rounded-full text-sm font-medium">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-[#007229]/10 text-[#007229] rounded-full text-sm font-medium">
               {Icons.check}
               <span>{t.completed}</span>
             </div>
           ) : (
             <button
               onClick={handleMarkComplete}
-              className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium"
+              className="px-4 py-2 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors text-sm font-medium shadow-lg shadow-[#007229]/20"
             >
               {t.markComplete}
             </button>
@@ -532,6 +770,7 @@ export default function LessonPlayerPage() {
               className="w-full h-full"
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
+              onEnded={handleVideoEnded}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
               onClick={togglePlay}
@@ -545,7 +784,7 @@ export default function LessonPlayerPage() {
             </video>
 
             {/* Play button overlay when paused */}
-            {!isPlaying && !activeQuestion && (
+            {!isPlaying && !activeQuestion && !activeTask && !activeSlideInteraction && (
               <div
                 className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer"
                 onClick={togglePlay}
@@ -559,14 +798,52 @@ export default function LessonPlayerPage() {
             {/* Question Overlay */}
             {activeQuestion && (
               <EnhancedQuizOverlay
-                question={activeQuestion.question}
-                lessonId={lessonId}
+                question={activeQuestion}
+                settings={quizSettings}
                 onComplete={() => {
                   setActiveQuestion(null);
                   videoRef.current?.play();
                   setIsPlaying(true);
                 }}
                 onResponse={handleQuizResponse}
+              />
+            )}
+
+            {/* Task Overlay */}
+            {activeTask && (
+              <TaskOverlay
+                task={activeTask}
+                lessonId={lessonId}
+                onComplete={() => {
+                  setCompletedTasks(prev => new Set(prev).add(activeTask.id));
+                  setActiveTask(null);
+                  videoRef.current?.play();
+                  setIsPlaying(true);
+                }}
+                onSkip={() => {
+                  setCompletedTasks(prev => new Set(prev).add(activeTask.id));
+                  setActiveTask(null);
+                  videoRef.current?.play();
+                  setIsPlaying(true);
+                }}
+              />
+            )}
+
+            {/* Slide Interaction Overlay */}
+            {activeSlideInteraction && (
+              <SlideInteractionOverlay
+                slide={activeSlideInteraction}
+                language={language}
+                onComplete={(result) => {
+                  persistSlideInteractionResponse(activeSlideInteraction.id, result);
+                  if (result.isCorrect) {
+                    setShowConfetti(true);
+                    setTimeout(() => setShowConfetti(false), 3000);
+                  }
+                  setActiveSlideInteraction(null);
+                  videoRef.current?.play();
+                  setIsPlaying(true);
+                }}
               />
             )}
 
@@ -699,11 +976,11 @@ export default function LessonPlayerPage() {
       </div>
 
       {/* Bottom info & navigation */}
-      <div className="bg-gray-800 border-t border-gray-700">
+      <div className="bg-white border-t border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4">
           {/* Lesson description */}
           {(lesson.description_ar || lesson.description_en) && (
-            <p className="text-gray-300 mb-4">
+            <p className="text-gray-600 mb-4">
               {language === "ar" ? lesson.description_ar : lesson.description_en}
             </p>
           )}
@@ -713,7 +990,7 @@ export default function LessonPlayerPage() {
             {adjacentLessons.prev ? (
               <Link
                 href={`/lessons/${adjacentLessons.prev.id}`}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-gray-300 rounded-xl hover:bg-gray-600 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
               >
                 {isRtl ? Icons.chevronRight : Icons.chevronLeft}
                 <span className="hidden sm:inline">{t.prevLesson}</span>
@@ -723,10 +1000,20 @@ export default function LessonPlayerPage() {
             )}
 
             {/* Progress indicator */}
-            <div className="text-gray-400 text-sm">
+            <div className="text-gray-500 text-sm flex items-center gap-3">
               {questions.length > 0 && (
                 <span>
-                  {t.progress}: {answeredQuestions.size} {t.of} {questions.length}
+                  {t.question}: {answeredQuestions.size}/{questions.length}
+                </span>
+              )}
+              {tasks.length > 0 && (
+                <span>
+                  {language === "ar" ? "مهام" : "Tasks"}: {completedTasks.size}/{tasks.length}
+                </span>
+              )}
+              {timedInteractiveSlides.length > 0 && (
+                <span>
+                  {language === "ar" ? "شرائح تفاعلية" : "Interactive Slides"}: {completedInteractiveSlideCount}/{timedInteractiveSlides.length}
                 </span>
               )}
             </div>
@@ -734,7 +1021,7 @@ export default function LessonPlayerPage() {
             {adjacentLessons.next ? (
               <Link
                 href={`/lessons/${adjacentLessons.next.id}`}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-lg shadow-[#007229]/20"
               >
                 <span className="hidden sm:inline">{t.nextLesson}</span>
                 {isRtl ? Icons.chevronLeft : Icons.chevronRight}
@@ -749,13 +1036,9 @@ export default function LessonPlayerPage() {
       {/* Progress Gate Modal */}
       {showProgressGate && (
         <ProgressGateModal
-          questionsCorrect={questionsCorrect}
-          questionsRequired={(quizSettings?.min_questions_required as number | undefined) ?? 1}
-          onRewatch={() => {
-            setShowProgressGate(false);
-            videoRef.current?.play();
-            setIsPlaying(true);
-          }}
+          questionsCorrect={correctQuestions.size}
+          questionsRequired={quizSettings.min_pass_questions}
+          onRewatch={handleRewatchQuiz}
           onClose={() => setShowProgressGate(false)}
         />
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
@@ -57,17 +57,14 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
   });
 
   useEffect(() => {
-    if (!authLoading) {
-      loadCohortData();
-    }
-  }, [id, authLoading]);
-
-  useEffect(() => {
     const supabase = createClient();
     const search = studentSearch.trim();
     if (!search || search.length < 2) {
-      setStudentResults([]);
-      return;
+      const timeout = setTimeout(() => {
+        setStudentResults([]);
+      }, 0);
+
+      return () => clearTimeout(timeout);
     }
 
     const timeout = setTimeout(async () => {
@@ -88,7 +85,7 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
     return () => clearTimeout(timeout);
   }, [studentSearch, students]);
 
-  async function loadCohortData() {
+  const loadCohortData = useCallback(async () => {
     const supabase = createClient();
 
     // Get cohort details
@@ -189,7 +186,17 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
     setAssignments(assignmentsWithCounts);
 
     setLoading(false);
-  }
+  }, [id]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      const timeout = setTimeout(() => {
+        void loadCohortData();
+      }, 0);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [authLoading, loadCohortData]);
 
   function generateJoinCode() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -217,7 +224,7 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
 
     if (!error) {
       setShowEditModal(false);
-      loadCohortData();
+      void loadCohortData();
     }
     setSavingCohort(false);
   }
@@ -232,7 +239,7 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
       .update({ join_code: nextCode, updated_at: new Date().toISOString() })
       .eq("id", cohort.id);
     setRegeneratingCode(false);
-    loadCohortData();
+    void loadCohortData();
   }
 
   async function addStudent(studentId: string) {
@@ -259,7 +266,7 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
     setStudentSearch("");
     setStudentResults([]);
     setAddingStudentId(null);
-    loadCohortData();
+    void loadCohortData();
   }
 
   async function removeStudent(studentId: string) {
@@ -271,7 +278,7 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
       .eq("cohort_id", id)
       .eq("student_id", studentId);
     setRemovingStudentId(null);
-    loadCohortData();
+    void loadCohortData();
   }
 
   function copyJoinCode() {

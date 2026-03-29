@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import type { Database, Json } from '@/lib/database.types'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -16,6 +17,7 @@ const UpdateLessonSchema = z.object({
   title_en: z.string().optional(),
   description_ar: z.string().optional(),
   description_en: z.string().optional(),
+  curriculum_topic: z.unknown().optional(),
   is_published: z.boolean().optional()
 })
 
@@ -93,11 +95,18 @@ export async function PATCH(
   }
 
   const updates = validation.data
+  const { curriculum_topic, ...restUpdates } = updates
+  const lessonUpdates: Database['public']['Tables']['lessons']['Update'] = {
+    ...restUpdates,
+    ...(curriculum_topic !== undefined
+      ? { curriculum_topic: curriculum_topic as Json | null }
+      : {}),
+  }
 
   // Update lesson
   const { data: updatedLesson, error: updateError } = await supabase
     .from('lessons')
-    .update(updates)
+    .update(lessonUpdates)
     .eq('id', lessonId)
     .select()
     .single()

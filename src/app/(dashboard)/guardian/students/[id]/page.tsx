@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import type { AIMessage } from "@/lib/database.types";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 
 interface SubjectProgress {
@@ -109,7 +110,7 @@ export default function StudentDetailPage({ params: paramsPromise }: { params: P
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [expandedConversation, setExpandedConversation] = useState<string | null>(null);
-  const [conversationMessages, setConversationMessages] = useState<Record<string, any[]>>({});
+  const [conversationMessages, setConversationMessages] = useState<Record<string, AIMessage[]>>({});
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
@@ -475,7 +476,7 @@ export default function StudentDetailPage({ params: paramsPromise }: { params: P
                       {expandedConversation === conv.id && conversationMessages[conv.id] && (
                         <div className="border-t border-gray-200 bg-gray-50 p-4 max-h-96 overflow-y-auto">
                           <div className="space-y-3">
-                            {conversationMessages[conv.id].map((msg: any, idx: number) => (
+                            {conversationMessages[conv.id].map((msg: AIMessage, idx: number) => (
                               <div
                                 key={idx}
                                 className={`p-3 rounded-lg ${

@@ -1,0 +1,81 @@
+import type { Slide } from '@/lib/slides.types';
+import { OwlCelebrating } from '@/components/illustrations';
+import SlideImage from './SlideImage';
+import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
+
+interface Props {
+  slide: Slide;
+  language: 'ar' | 'en';
+}
+
+export default function SummarySlide({ slide, language }: Props) {
+  const isAr = language === 'ar';
+  const title = isAr ? slide.title_ar : slide.title_en;
+  const body = isAr ? slide.body_ar : slide.body_en;
+  const bullets = (isAr ? slide.bullets_ar : slide.bullets_en) || [];
+  const lines = bullets.length > 0 ? bullets : body.split('\n').filter(Boolean);
+  const hasImage = !!slide.image_url;
+
+  return (
+    <div
+      dir={isAr ? 'rtl' : 'ltr'}
+      className="relative w-full h-full bg-gradient-to-br from-[#007229] via-[#00913D] to-[#004D1A] flex flex-col items-center justify-center p-8 sm:p-12 overflow-hidden"
+    >
+      {/* Decorative circles */}
+      <div className="absolute top-[-40px] left-[-40px] w-[160px] h-[160px] rounded-full bg-white/8" />
+      <div className="absolute bottom-[-60px] right-[-60px] w-[200px] h-[200px] rounded-full bg-white/5" />
+
+      {/* Floating stars — celebration! */}
+      <svg className="absolute top-[8%] right-[10%] w-6 h-6 text-[#F59E0B]/60" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2l2.4 7.2H22l-6 4.8 2.4 7.2L12 16.4 5.6 21.2 8 14 2 9.2h7.6z" />
+      </svg>
+      <svg className="absolute top-[15%] left-[7%] w-4 h-4 text-white/30" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2l2.4 7.2H22l-6 4.8 2.4 7.2L12 16.4 5.6 21.2 8 14 2 9.2h7.6z" />
+      </svg>
+      <svg className="absolute bottom-[12%] left-[10%] w-5 h-5 text-[#F59E0B]/40" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2l2.4 7.2H22l-6 4.8 2.4 7.2L12 16.4 5.6 21.2 8 14 2 9.2h7.6z" />
+      </svg>
+      <div className="absolute bottom-[30%] right-[5%] w-3 h-3 rounded-full bg-[#F59E0B]/40" />
+
+      {/* Wavy decoration */}
+      <svg className="absolute bottom-0 left-0 right-0 w-full" viewBox="0 0 400 25" preserveAspectRatio="none" fill="white" opacity="0.06">
+        <path d="M0 15 Q50 0 100 15 Q150 30 200 15 Q250 0 300 15 Q350 30 400 15 V25 H0Z" />
+      </svg>
+
+      {/* Image or Owl celebrating */}
+      <div className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 mb-2 sm:mb-3">
+        {hasImage ? (
+          <SlideImage src={slide.image_url!} className="w-full h-full shadow-lg" />
+        ) : (
+          <OwlCelebrating />
+        )}
+      </div>
+
+      {/* Badge */}
+      <span className="relative z-10 inline-block px-5 py-2 bg-[#F59E0B] text-white rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-5 shadow-md">
+        {isAr ? '🌟 ملخص' : '🌟 Summary'}
+      </span>
+
+      {/* Title */}
+      <h2 className={`relative z-10 font-fredoka font-bold text-white text-center mb-4 sm:mb-6 ${getSlideTitleClasses(slide.title_size, 'hero')} ${isAr ? 'font-cairo' : ''}`}>
+        {title}
+      </h2>
+
+      {/* Key takeaways */}
+      <div className="relative z-10 w-full max-w-[85%] space-y-2 sm:space-y-3">
+        {lines.map((line, i) => (
+          <div key={i} className="flex items-start gap-3 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2.5">
+            <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-[#F59E0B] text-white flex items-center justify-center shadow-sm">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <p className={`flex-1 text-white/95 pt-0.5 ${getSlideBodyClasses(slide.body_size, 'list')} ${isAr ? 'font-cairo' : 'font-inter'}`}>
+              {line}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -98,26 +99,18 @@ type LessonWithProgress = Lesson & {
 };
 
 export default function LessonsPage() {
-  const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSubject, setSelectedSubject] = useState<string>("all");
-  const [selectedGrade, setSelectedGrade] = useState<string>("all");
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
   const { language } = useLanguage();
   const t = translations[language];
   const isRtl = language === "ar";
-
-  // Get subject from URL params
-  useEffect(() => {
-    const subjectParam = searchParams.get("subject");
-    if (subjectParam) {
-      setSelectedSubject(subjectParam);
-    }
-  }, [searchParams]);
+  const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSubject, setSelectedSubject] = useState<string>(() => searchParams.get("subject") ?? "all");
+  const [selectedGrade, setSelectedGrade] = useState<string>("all");
 
   useEffect(() => {
     async function loadData() {
@@ -324,10 +317,12 @@ export default function LessonsPage() {
                   {/* Thumbnail */}
                   <div className="relative h-40 bg-gradient-to-br from-gray-100 to-gray-200">
                     {lesson.thumbnail_url ? (
-                      <img
+                      <Image
                         src={lesson.thumbnail_url}
                         alt={language === "ar" ? lesson.title_ar : lesson.title_en}
-                        className="w-full h-full object-cover"
+                        fill
+                        sizes="288px"
+                        className="object-cover"
                       />
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center text-gray-400">
@@ -382,10 +377,12 @@ export default function LessonsPage() {
                   {/* Thumbnail */}
                   <div className="relative h-44 bg-gradient-to-br from-gray-100 to-gray-200">
                     {lesson.thumbnail_url ? (
-                      <img
+                      <Image
                         src={lesson.thumbnail_url}
                         alt={language === "ar" ? lesson.title_ar : lesson.title_en}
-                        className="w-full h-full object-cover"
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover"
                       />
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center text-gray-300">

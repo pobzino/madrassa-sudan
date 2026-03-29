@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useLanguage } from '@/contexts/LanguageContext'
+import type { QuizSettings } from '@/lib/database.types'
 
 interface QuizQuestion {
   id: string
   question_text_ar: string
   question_text_en: string | null
   question_type: 'multiple_choice' | 'true_false' | 'fill_in_blank'
-  options: any
+  options: unknown
   correct_answer: string
   explanation_ar: string | null
   explanation_en: string | null
@@ -17,14 +18,14 @@ interface QuizQuestion {
 
 interface QuizOverlayProps {
   question: QuizQuestion
-  lessonId: string
+  settings: QuizSettings
   onComplete: () => void
   onResponse: (data: { questionId: string; answer: string; isCorrect: boolean }) => Promise<{ canRetry: boolean }>
 }
 
 export default function EnhancedQuizOverlay({
   question,
-  lessonId,
+  settings,
   onComplete,
   onResponse
 }: QuizOverlayProps) {
@@ -70,9 +71,21 @@ export default function EnhancedQuizOverlay({
   const text = t[language]
   const questionText = language === 'ar' ? question.question_text_ar : (question.question_text_en || question.question_text_ar)
   const explanation = language === 'ar' ? question.explanation_ar : (question.explanation_en || question.explanation_ar)
+  let options: string[] = []
+
+  if (Array.isArray(question.options)) {
+    options = question.options.filter((option): option is string => typeof option === 'string')
+  } else if (typeof question.options === 'string') {
+    try {
+      const parsed = JSON.parse(question.options)
+      options = Array.isArray(parsed) ? parsed.filter((option): option is string => typeof option === 'string') : []
+    } catch {
+      options = []
+    }
+  }
 
   const handleSubmit = async () => {
-    if (isSubmitting || !selectedAnswer && !fillInAnswer) return
+    if (isSubmitting || (!selectedAnswer && !fillInAnswer)) return
 
     setIsSubmitting(true)
     setAttemptCount(prev => prev + 1)
@@ -95,9 +108,9 @@ export default function EnhancedQuizOverlay({
       })
 
       setIsCorrect(correct)
-      setCanRetry(result.canRetry)
+      setCanRetry(question.allow_retry && settings.allow_retries && result.canRetry)
       setHasAnswered(true)
-      setShowExplanation(true)
+      setShowExplanation(settings.show_explanation)
     } finally {
       setIsSubmitting(false)
     }
@@ -118,17 +131,16 @@ export default function EnhancedQuizOverlay({
     if (hasAnswered) return null
 
     if (question.question_type === 'multiple_choice') {
-      const options = question.options ? JSON.parse(question.options) : []
       return (
         <div className="space-y-3">
           {options.map((option: string, index: number) => (
             <button
               key={index}
               onClick={() => setSelectedAnswer(option)}
-              className={`w-full p-4 text-left rounded-lg border-2 transition-all ${
+              className={`w-full p-4 text-left rounded-xl border-2 transition-all ${
                 selectedAnswer === option
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-300 hover:border-blue-300 bg-white'
+                  ? 'border-[#007229] bg-[#007229]/5'
+                  : 'border-gray-200 hover:border-[#007229]/40 bg-white'
               }`}
             >
               {option}
@@ -174,7 +186,7 @@ export default function EnhancedQuizOverlay({
             onChange={(e) => setFillInAnswer(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
             placeholder={text.fillBlank}
-            className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+            className="w-full px-4 py-3 text-lg border-2 border-gray-200 rounded-xl focus:border-[#007229] focus:outline-none"
             autoFocus
           />
         </div>
@@ -186,7 +198,7 @@ export default function EnhancedQuizOverlay({
     if (!hasAnswered) return null
 
     return (
-      <div className={`p-6 rounded-lg ${isCorrect ? 'bg-green-50 border-2 border-green-500' : 'bg-red-50 border-2 border-red-500'}`}>
+      <div className={`p-6 rounded-xl ${isCorrect ? 'bg-green-50 border-2 border-green-500' : 'bg-red-50 border-2 border-red-500'}`}>
         <div className="flex items-center gap-3 mb-4">
           {isCorrect ? (
             <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center text-white text-2xl">
@@ -234,7 +246,7 @@ export default function EnhancedQuizOverlay({
           )}
           <button
             onClick={handleContinue}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            className="px-6 py-2 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] font-medium"
           >
             {text.continue} →
           </button>
@@ -245,12 +257,12 @@ export default function EnhancedQuizOverlay({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           {/* Header */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
-              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+              <span className="px-3 py-1 bg-[#007229]/10 text-[#007229] rounded-full text-sm font-medium">
                 {text.question}
               </span>
               {attemptCount > 0 && (
@@ -270,7 +282,7 @@ export default function EnhancedQuizOverlay({
             <button
               onClick={handleSubmit}
               disabled={isSubmitting || (!selectedAnswer && !fillInAnswer)}
-              className="mt-4 w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="mt-4 w-full px-6 py-3 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {isSubmitting ? '...' : text.submit}
             </button>

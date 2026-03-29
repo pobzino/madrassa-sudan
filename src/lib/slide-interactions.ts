@@ -1,0 +1,124 @@
+import type { Slide } from '@/lib/slides.types';
+
+export interface SlideInteractionResult {
+  answer: boolean | number | string | string[] | null;
+  completedAt: string;
+  isCorrect: boolean;
+  timeSpentSeconds?: number;
+}
+
+export type StoredSlideInteractionResponses = Record<string, SlideInteractionResult>;
+
+export interface TimedInteractiveSlide {
+  slide: Slide;
+  triggerSecond: number;
+}
+
+export function hasStudentInteraction(slide: Slide): boolean {
+  return Boolean(slide.interaction_type);
+}
+
+export function getSlideInteractionStorageKey(lessonId: string, userId: string): string {
+  return `lesson-slide-interactions:${userId}:${lessonId}`;
+}
+
+export function getInteractiveSlides(slides: Slide[], videoDurationSeconds: number | null): TimedInteractiveSlide[] {
+  const interactiveSlides = slides
+    .filter(hasStudentInteraction)
+    .sort((a, b) => a.sequence - b.sequence);
+
+  if (interactiveSlides.length === 0) {
+    return [];
+  }
+
+  const usableDuration = Math.max(60, Math.round(videoDurationSeconds || 0));
+  const startWindow = Math.max(8, Math.floor(usableDuration * 0.2));
+  const endWindow = Math.max(startWindow + 5, Math.floor(usableDuration * 0.85));
+  const spread = Math.max(1, interactiveSlides.length + 1);
+
+  return interactiveSlides.map((slide, index) => {
+    if (typeof slide.timestamp_seconds === 'number' && Number.isFinite(slide.timestamp_seconds)) {
+      return {
+        slide,
+        triggerSecond: Math.max(0, Math.round(slide.timestamp_seconds)),
+      };
+    }
+
+    const ratio = (index + 1) / spread;
+    const derivedSecond = Math.round(startWindow + (endWindow - startWindow) * ratio);
+
+    return {
+      slide,
+      triggerSecond: derivedSecond,
+    };
+  });
+}
+
+export function getSlideInteractionPrompt(slide: Slide, language: 'ar' | 'en'): string {
+  if (language === 'ar') {
+    return slide.interaction_prompt_ar?.trim() || slide.body_ar?.trim() || slide.title_ar?.trim() || '';
+  }
+
+  return slide.interaction_prompt_en?.trim() || slide.body_en?.trim() || slide.title_en?.trim() || '';
+}
+
+export function getSlideInteractionOptions(slide: Slide, language: 'ar' | 'en'): string[] {
+  const primary = language === 'ar' ? slide.interaction_options_ar : slide.interaction_options_en;
+  const fallback = language === 'ar' ? slide.interaction_options_en : slide.interaction_options_ar;
+
+  return (primary && primary.length > 0 ? primary : fallback) || [];
+}
+
+export function computeSlideInteractionCorrectness(
+  slide: Slide,
+  answer: boolean | number | string | string[] | null
+): boolean {
+  if (!slide.interaction_type) {
+    return false;
+  }
+
+  if (slide.interaction_type === 'choose_correct') {
+    if (typeof answer === 'number') {
+      return answer === slide.interaction_correct_index;
+    }
+
+    if (typeof answer === 'string') {
+      const options = [
+        ...(slide.interaction_options_ar || []),
+        ...(slide.interaction_options_en || []),
+      ];
+      const correctIndex = slide.interaction_correct_index ?? -1;
+      return options[correctIndex] === answer;
+    }
+
+    return false;
+  }
+
+  if (slide.interaction_type === 'true_false') {
+    return answer === slide.interaction_true_false_answer;
+  }
+
+  if (slide.interaction_type === 'tap_to_count') {
+    return Number(answer) === Number(slide.interaction_count_target ?? 0);
+  }
+
+  return false;
+}
+
+export function readStoredSlideInteractionResponses(raw: string | null): StoredSlideInteractionResponses {
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as StoredSlideInteractionResponses;
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return parsed;
+  } catch {
+    return {};
+  }
+}

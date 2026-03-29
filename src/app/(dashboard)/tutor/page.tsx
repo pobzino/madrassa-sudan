@@ -66,6 +66,16 @@ const translations = {
     chatError: "حدث خطأ في رد المعلم",
     chatErrorDesc: "حاول مرة أخرى الآن.",
     deleteChat: "حذف المحادثة",
+    voiceMode: "وضع الصوت",
+    tapToSpeak: "اضغط للتحدث",
+    voiceRecording: "جاري الاستماع...",
+    voiceProcessing: "جاري المعالجة...",
+    voicePlaying: "جاري الرد...",
+    voiceError: "حدث خطأ في الصوت",
+    exitVoice: "خروج",
+    you: "أنت",
+    tutor: "المعلم",
+    micPermissionDenied: "يرجى السماح بالوصول للميكروفون",
   },
   en: {
     aiTutor: "AI Tutor",
@@ -120,6 +130,16 @@ const translations = {
     chatError: "Something went wrong",
     chatErrorDesc: "Please try again.",
     deleteChat: "Delete chat",
+    voiceMode: "Voice Mode",
+    tapToSpeak: "Tap to speak",
+    voiceRecording: "Listening...",
+    voiceProcessing: "Thinking...",
+    voicePlaying: "Speaking...",
+    voiceError: "Voice error",
+    exitVoice: "Exit",
+    you: "You",
+    tutor: "Tutor",
+    micPermissionDenied: "Please allow microphone access",
   },
 };
 
@@ -141,7 +161,7 @@ const Icons = {
   ),
   sparkle: (
     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-      <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3zm6 10l.75 2.25L21 16l-2.25.75L18 19l-.75-2.25L15 16l2.25-.75L18 13zM6 13l.75 2.25L9 16l-2.25.75L6 19l-.75-2.25L3 16l2.25-.75L6 13z"/>
+      <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3zm6 10l.75 2.25L21 16l-2.25.75L18 19l-.75-2.25L15 16l2.25-.75L18 13zM6 13l.75 2.25L9 16l-2.25.75L6 19l-.75-2.25L3 16l2.25-.75L6 13z" />
     </svg>
   ),
   menu: (
@@ -411,10 +431,17 @@ export default function TutorPage() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const [ttsEnabled, setTtsEnabled] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(true);
+  const [ttsLoading, setTtsLoading] = useState(false);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [speechInputSupported, setSpeechInputSupported] = useState(true);
   const [listening, setListening] = useState(false);
+
+  // Voice mode state
+  const [voiceModeActive, setVoiceModeActive] = useState(false);
+  const [voiceState, setVoiceState] = useState<"idle" | "recording" | "processing" | "playing">("idle");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceTranscripts, setVoiceTranscripts] = useState<Array<{ role: "user" | "assistant"; text: string }>>([]);
+  const [voiceConversationId, setVoiceConversationId] = useState<string | undefined>(undefined);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -422,6 +449,11 @@ export default function TutorPage() {
   const lastSpokenMessageId = useRef<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const speechBaseRef = useRef<string>("");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const voiceMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+  const voiceTranscriptsEndRef = useRef<HTMLDivElement>(null);
 
   // Context from URL params
   const lessonId = searchParams.get("lesson");
@@ -527,33 +559,55 @@ export default function TutorPage() {
       .join(" ")
       .trim() || "";
 
-  const speakText = (text: string, messageId?: string) => {
-    if (!speechSupported || typeof window === "undefined" || !window.speechSynthesis) return;
+  const speakText = async (text: string, messageId?: string) => {
     if (!text) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = language === "ar" ? "ar" : "en-US";
-    utterance.rate = 0.95;
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find((voice) =>
-      voice.lang.toLowerCase().startsWith(language === "ar" ? "ar" : "en")
-    );
-    if (preferredVoice) utterance.voice = preferredVoice;
-    utterance.onend = () => setSpeakingId(null);
-    utterance.onerror = () => setSpeakingId(null);
+    // Stop any current playback
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setTtsLoading(true);
     setSpeakingId(messageId || null);
-    window.speechSynthesis.speak(utterance);
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error("TTS request failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => {
+        setSpeakingId(null);
+        URL.revokeObjectURL(url);
+        audioRef.current = null;
+      };
+      audio.onerror = () => {
+        setSpeakingId(null);
+        URL.revokeObjectURL(url);
+        audioRef.current = null;
+      };
+      setTtsLoading(false);
+      await audio.play();
+    } catch (err) {
+      console.error("TTS error:", err);
+      setSpeakingId(null);
+      setTtsLoading(false);
+    }
   };
 
   const stopSpeaking = () => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     setSpeakingId(null);
   };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setSpeechSupported("speechSynthesis" in window);
     const stored = window.localStorage.getItem("tutor_tts_enabled");
     if (stored !== null) {
       setTtsEnabled(stored === "true");
@@ -561,7 +615,7 @@ export default function TutorPage() {
   }, []);
 
   useEffect(() => {
-    if (!ttsEnabled || !speechSupported || isLoading) return;
+    if (!ttsEnabled || isLoading) return;
     const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
     if (!lastAssistant) return;
     if (lastAssistant.id === lastSpokenMessageId.current) return;
@@ -569,7 +623,8 @@ export default function TutorPage() {
     if (!text) return;
     speakText(text, lastAssistant.id);
     lastSpokenMessageId.current = lastAssistant.id;
-  }, [messages, ttsEnabled, speechSupported, isLoading, language]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, ttsEnabled, isLoading, language]);
 
   const toggleTts = () => {
     const next = !ttsEnabled;
@@ -592,6 +647,187 @@ export default function TutorPage() {
     recognition.lang = language === "ar" ? "ar" : "en-US";
     recognition.start();
   };
+
+  // ─── Voice Mode Functions ───
+  const startVoiceMode = () => {
+    setVoiceModeActive(true);
+    setVoiceState("idle");
+    setVoiceError(null);
+    setVoiceTranscripts([]);
+    setVoiceConversationId(conversationId);
+  };
+
+  const exitVoiceMode = () => {
+    // Stop any recording or playback
+    if (voiceMediaRecorderRef.current && voiceMediaRecorderRef.current.state !== "inactive") {
+      voiceMediaRecorderRef.current.stop();
+    }
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.pause();
+      voiceAudioRef.current = null;
+    }
+    setVoiceModeActive(false);
+    setVoiceState("idle");
+    setVoiceError(null);
+
+    // Reload conversation to pick up voice messages
+    if (voiceConversationId && voiceConversationId !== conversationId) {
+      setConversationId(voiceConversationId);
+    } else if (voiceConversationId === conversationId && voiceTranscripts.length > 0) {
+      // Trigger a reload of messages for the current conversation
+      setConversationId(undefined);
+      setTimeout(() => setConversationId(voiceConversationId), 50);
+    }
+  };
+
+  const startVoiceRecording = async () => {
+    if (voiceState !== "idle") return;
+    setVoiceError(null);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "audio/webm",
+      });
+
+      voiceChunksRef.current = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) voiceChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        // Stop all tracks
+        stream.getTracks().forEach(track => track.stop());
+
+        const blob = new Blob(voiceChunksRef.current, { type: "audio/webm" });
+        voiceChunksRef.current = [];
+
+        if (blob.size < 100) {
+          setVoiceState("idle");
+          return;
+        }
+
+        await processVoiceRecording(blob);
+      };
+
+      voiceMediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      setVoiceState("recording");
+    } catch (err) {
+      console.error("Mic access error:", err);
+      setVoiceError(t.micPermissionDenied);
+      setVoiceState("idle");
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    if (voiceMediaRecorderRef.current && voiceMediaRecorderRef.current.state !== "inactive") {
+      voiceMediaRecorderRef.current.stop();
+      setVoiceState("processing");
+    }
+  };
+
+  const toggleVoiceRecording = () => {
+    if (voiceState === "idle") {
+      startVoiceRecording();
+    } else if (voiceState === "recording") {
+      stopVoiceRecording();
+    }
+  };
+
+  const processVoiceRecording = async (audioBlob: Blob) => {
+    setVoiceState("processing");
+    setVoiceError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "audio.webm");
+      formData.append("language", language);
+      if (voiceConversationId) formData.append("conversation_id", voiceConversationId);
+
+      const contextObj = {
+        lesson_id: lessonId,
+        homework_id: homeworkId,
+        subject_id: subjectId,
+      };
+      formData.append("context", JSON.stringify(contextObj));
+
+      // Send recent voice transcripts as message history for context
+      const messagesForContext = voiceTranscripts.slice(-10).map(t2 => ({
+        role: t2.role,
+        content: t2.text,
+      }));
+      formData.append("messages", JSON.stringify(messagesForContext));
+
+      const response = await fetch("/api/tutor/voice", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error((errData as { error?: string }).error || "Voice request failed");
+      }
+
+      // Extract transcripts from headers
+      const userTranscript = decodeURIComponent(response.headers.get("X-User-Transcript") || "");
+      const assistantTranscript = decodeURIComponent(response.headers.get("X-Assistant-Transcript") || "");
+      const returnedConvId = response.headers.get("X-Conversation-Id");
+
+      if (returnedConvId && !voiceConversationId) {
+        setVoiceConversationId(returnedConvId);
+      }
+
+      // Add transcripts
+      const newTranscripts: Array<{ role: "user" | "assistant"; text: string }> = [];
+      if (userTranscript) newTranscripts.push({ role: "user", text: userTranscript });
+      if (assistantTranscript) newTranscripts.push({ role: "assistant", text: assistantTranscript });
+
+      setVoiceTranscripts(prev => [...prev, ...newTranscripts]);
+
+      // Play audio response
+      const audioResponseBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioResponseBlob);
+      const audio = new Audio(audioUrl);
+      voiceAudioRef.current = audio;
+
+      setVoiceState("playing");
+
+      audio.onended = () => {
+        setVoiceState("idle");
+        URL.revokeObjectURL(audioUrl);
+        voiceAudioRef.current = null;
+      };
+      audio.onerror = () => {
+        setVoiceState("idle");
+        URL.revokeObjectURL(audioUrl);
+        voiceAudioRef.current = null;
+      };
+
+      await audio.play();
+    } catch (err) {
+      console.error("Voice processing error:", err);
+      setVoiceError(err instanceof Error ? err.message : t.voiceError);
+      setVoiceState("idle");
+    }
+  };
+
+  // Auto-scroll voice transcripts
+  useEffect(() => {
+    voiceTranscriptsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [voiceTranscripts]);
+
+  // Clean up voice mode on unmount
+  useEffect(() => {
+    return () => {
+      if (voiceAudioRef.current) {
+        voiceAudioRef.current.pause();
+        voiceAudioRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     return () => stopSpeaking();
@@ -1336,18 +1572,23 @@ export default function TutorPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={toggleTts}
-              title={speechSupported ? t.readAloud : t.speechUnsupported}
-              disabled={!speechSupported}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-                speechSupported
-                  ? ttsEnabled
-                    ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  : "bg-gray-50 text-gray-300 cursor-not-allowed"
-              }`}
+              title={t.readAloud}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${ttsEnabled
+                ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
             >
               {ttsEnabled ? Icons.speaker : Icons.speakerOff}
               <span className="hidden sm:inline">{ttsEnabled ? t.readAloudOn : t.readAloudOff}</span>
+            </button>
+
+            <button
+              onClick={startVoiceMode}
+              title={t.voiceMode}
+              className="flex items-center gap-2 px-3 py-2 bg-violet-100 text-violet-700 hover:bg-violet-200 rounded-xl text-sm font-medium transition-colors"
+            >
+              {Icons.mic}
+              <span className="hidden sm:inline">{t.voiceMode}</span>
             </button>
 
             <button
@@ -1363,9 +1604,8 @@ export default function TutorPage() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        <div className={`${
-          showSidebar ? "translate-x-0" : isRtl ? "translate-x-full" : "-translate-x-full"
-        } lg:translate-x-0 absolute lg:relative z-10 w-72 h-full bg-white border-e border-gray-200 transition-transform lg:block flex-shrink-0`}>
+        <div className={`${showSidebar ? "translate-x-0" : isRtl ? "translate-x-full" : "-translate-x-full"
+          } lg:translate-x-0 absolute lg:relative z-10 w-72 h-full bg-white border-e border-gray-200 transition-transform lg:block flex-shrink-0`}>
           <div className="p-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-900">{t.history}</h2>
           </div>
@@ -1381,11 +1621,10 @@ export default function TutorPage() {
                     {grouped.today.map((conv) => (
                       <div
                         key={conv.id}
-                        className={`group relative w-full text-left p-3 rounded-xl mb-1 transition-colors cursor-pointer ${
-                          conversationId === conv.id
-                            ? "bg-cyan-100 text-cyan-700"
-                            : "hover:bg-gray-100 text-gray-700"
-                        }`}
+                        className={`group relative w-full text-left p-3 rounded-xl mb-1 transition-colors cursor-pointer ${conversationId === conv.id
+                          ? "bg-cyan-100 text-cyan-700"
+                          : "hover:bg-gray-100 text-gray-700"
+                          }`}
                         onClick={() => {
                           setConversationId(conv.id);
                           setShowSidebar(false);
@@ -1415,11 +1654,10 @@ export default function TutorPage() {
                     {grouped.yesterday.map((conv) => (
                       <div
                         key={conv.id}
-                        className={`group relative w-full text-left p-3 rounded-xl mb-1 transition-colors cursor-pointer ${
-                          conversationId === conv.id
-                            ? "bg-cyan-100 text-cyan-700"
-                            : "hover:bg-gray-100 text-gray-700"
-                        }`}
+                        className={`group relative w-full text-left p-3 rounded-xl mb-1 transition-colors cursor-pointer ${conversationId === conv.id
+                          ? "bg-cyan-100 text-cyan-700"
+                          : "hover:bg-gray-100 text-gray-700"
+                          }`}
                         onClick={() => {
                           setConversationId(conv.id);
                           setShowSidebar(false);
@@ -1444,11 +1682,10 @@ export default function TutorPage() {
                     {grouped.earlier.map((conv) => (
                       <div
                         key={conv.id}
-                        className={`group relative w-full text-left p-3 rounded-xl mb-1 transition-colors cursor-pointer ${
-                          conversationId === conv.id
-                            ? "bg-cyan-100 text-cyan-700"
-                            : "hover:bg-gray-100 text-gray-700"
-                        }`}
+                        className={`group relative w-full text-left p-3 rounded-xl mb-1 transition-colors cursor-pointer ${conversationId === conv.id
+                          ? "bg-cyan-100 text-cyan-700"
+                          : "hover:bg-gray-100 text-gray-700"
+                          }`}
                         onClick={() => {
                           setConversationId(conv.id);
                           setShowSidebar(false);
@@ -1531,49 +1768,51 @@ export default function TutorPage() {
                   }
 
                   return (
-                  <div
-                    key={msg.id}
-                    className={`flex ${msg.role === "user" ? (isRtl ? "justify-start" : "justify-end") : (isRtl ? "justify-end" : "justify-start")}`}
-                  >
-                    <div className={`flex gap-3 max-w-[85%] ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-                      {/* Avatar */}
-                      {msg.role === "user" ? (
-                        <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-[#007229]/100 text-white">
-                          أ
-                        </div>
-                      ) : (
-                        <OwlTutorIcon className="w-8 h-8 flex-shrink-0" />
-                      )}
+                    <div
+                      key={msg.id}
+                      className={`flex ${msg.role === "user" ? (isRtl ? "justify-start" : "justify-end") : (isRtl ? "justify-end" : "justify-start")}`}
+                    >
+                      <div className={`flex gap-3 max-w-[85%] ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+                        {/* Avatar */}
+                        {msg.role === "user" ? (
+                          <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-[#007229]/100 text-white">
+                            أ
+                          </div>
+                        ) : (
+                          <OwlTutorIcon className="w-8 h-8 flex-shrink-0" />
+                        )}
 
-                      {/* Message bubble */}
-                      <div className={`p-4 rounded-2xl ${
-                        msg.role === "user"
+                        {/* Message bubble */}
+                        <div className={`p-4 rounded-2xl ${msg.role === "user"
                           ? "bg-[#007229]/100 text-white"
                           : "bg-white border border-gray-200"
-                      }`}>
-                        <div className="space-y-3">
-                          {renderedParts}
-                        </div>
-                        {msg.role === "assistant" && speechSupported && getMessageText(msg) && (
-                          <div className="mt-3 flex items-center gap-2">
-                            <button
-                              onClick={() => {
-                                if (speakingId === msg.id) {
-                                  stopSpeaking();
-                                } else {
-                                  speakText(getMessageText(msg), msg.id);
-                                }
-                              }}
-                              className="inline-flex items-center gap-2 text-xs text-gray-600 hover:text-gray-800"
-                            >
-                              {speakingId === msg.id ? Icons.speakerOff : Icons.speaker}
-                              {speakingId === msg.id ? t.stop : t.speak}
-                            </button>
+                          }`}>
+                          <div className="space-y-3">
+                            {renderedParts}
                           </div>
-                        )}
+                          {msg.role === "assistant" && getMessageText(msg) && (
+                            <div className="mt-3 flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  if (speakingId === msg.id) {
+                                    stopSpeaking();
+                                  } else {
+                                    speakText(getMessageText(msg), msg.id);
+                                  }
+                                }}
+                                disabled={ttsLoading && speakingId === msg.id}
+                                className="inline-flex items-center gap-2 text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50"
+                              >
+                                {ttsLoading && speakingId === msg.id ? (
+                                  <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                                ) : speakingId === msg.id ? Icons.speakerOff : Icons.speaker}
+                                {ttsLoading && speakingId === msg.id ? t.speak : speakingId === msg.id ? t.stop : t.speak}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
                   );
                 })}
 
@@ -1630,13 +1869,12 @@ export default function TutorPage() {
                   onClick={toggleListening}
                   disabled={!speechInputSupported}
                   title={speechInputSupported ? (listening ? t.listening : t.mic) : t.micUnsupported}
-                  className={`px-3 py-3 rounded-xl border transition-colors ${
-                    !speechInputSupported
-                      ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
-                      : listening
-                        ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                  }`}
+                  className={`px-3 py-3 rounded-xl border transition-colors ${!speechInputSupported
+                    ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
+                    : listening
+                      ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                      : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                    }`}
                 >
                   {listening ? Icons.micOff : Icons.mic}
                 </button>
@@ -1654,6 +1892,124 @@ export default function TutorPage() {
           </div>
         </div>
       </div>
+
+      {/* Voice Mode Overlay */}
+      {voiceModeActive && (
+        <div className="fixed inset-0 z-50 bg-gradient-to-b from-gray-900 via-gray-900 to-black flex flex-col">
+          {/* Voice Header */}
+          <div className="flex items-center justify-between px-6 py-4">
+            <div className="flex items-center gap-3">
+              <OwlTutorIcon className="w-9 h-9" />
+              <div>
+                <h2 className="text-white font-semibold text-lg">{t.voiceMode}</h2>
+                <p className="text-gray-400 text-xs">{t.subtitle}</p>
+              </div>
+            </div>
+            <button
+              onClick={exitVoiceMode}
+              className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors text-sm"
+            >
+              {Icons.close}
+              <span>{t.exitVoice}</span>
+            </button>
+          </div>
+
+          {/* Voice Transcripts */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="max-w-lg mx-auto space-y-3">
+              {voiceTranscripts.map((entry, idx) => (
+                <div
+                  key={idx}
+                  className={`flex ${entry.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl ${entry.role === "user"
+                    ? "bg-violet-600/80 text-white"
+                    : "bg-white/10 text-gray-200"
+                    }`}>
+                    <p className="text-xs font-medium mb-1 opacity-60">
+                      {entry.role === "user" ? t.you : t.tutor}
+                    </p>
+                    <p className="text-sm leading-relaxed">{entry.text}</p>
+                  </div>
+                </div>
+              ))}
+              <div ref={voiceTranscriptsEndRef} />
+            </div>
+          </div>
+
+          {/* Error display */}
+          {voiceError && (
+            <div className="mx-6 mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm text-center">
+              {voiceError}
+            </div>
+          )}
+
+          {/* Voice Control Area */}
+          <div className="flex flex-col items-center pb-12 pt-6">
+            {/* State label */}
+            <p className={`text-sm font-medium mb-6 ${voiceState === "recording" ? "text-red-400" :
+              voiceState === "processing" ? "text-amber-400" :
+                voiceState === "playing" ? "text-emerald-400" :
+                  "text-gray-400"
+              }`}>
+              {voiceState === "recording" ? t.voiceRecording :
+                voiceState === "processing" ? t.voiceProcessing :
+                  voiceState === "playing" ? t.voicePlaying :
+                    t.tapToSpeak}
+            </p>
+
+            {/* Main button */}
+            <button
+              onClick={toggleVoiceRecording}
+              disabled={voiceState === "processing" || voiceState === "playing"}
+              className={`relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 ${voiceState === "recording"
+                ? "bg-red-500 scale-110 shadow-[0_0_40px_rgba(239,68,68,0.5)]"
+                : voiceState === "processing"
+                  ? "bg-amber-500/80 cursor-wait"
+                  : voiceState === "playing"
+                    ? "bg-emerald-500/80 cursor-default"
+                    : "bg-violet-600 hover:bg-violet-500 hover:scale-105 shadow-[0_0_30px_rgba(139,92,246,0.4)]"
+                } disabled:cursor-not-allowed`}
+            >
+              {/* Pulse ring for recording */}
+              {voiceState === "recording" && (
+                <>
+                  <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-30" />
+                  <span className="absolute -inset-2 rounded-full border-2 border-red-400/50 animate-pulse" />
+                </>
+              )}
+
+              {/* Spinner for processing */}
+              {voiceState === "processing" && (
+                <span className="absolute inset-0 rounded-full border-4 border-amber-300/30 border-t-amber-300 animate-spin" />
+              )}
+
+              {/* Sound waves for playing */}
+              {voiceState === "playing" && (
+                <span className="absolute -inset-2 rounded-full border-2 border-emerald-400/40 animate-pulse" />
+              )}
+
+              {/* Icon */}
+              <svg
+                className={`w-10 h-10 text-white relative z-10 ${voiceState === "processing" ? "animate-pulse" : ""
+                  }`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                {voiceState === "playing" ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 9v6m0 0H5a2 2 0 01-2-2v-2a2 2 0 012-2h4m0 6l5 4V5l-5 4zM16.5 8.5a4 4 0 010 7M18.5 6a7 7 0 010 12" />
+                ) : voiceState === "recording" ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a4.5 4.5 0 004.5-4.5v-6a4.5 4.5 0 00-9 0v6a4.5 4.5 0 004.5 4.5zm0 0v3m-3 0h6" />
+                )}
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

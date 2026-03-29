@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import type { QuizSettings } from '@/lib/database.types'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -8,6 +9,30 @@ const ResponseSchema = z.object({
   is_correct: z.boolean()
 })
 
+const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
+  require_pass_to_continue: false,
+  min_pass_questions: 1,
+  allow_retries: true,
+  max_attempts: null,
+  show_explanation: true
+}
+
+function parseQuizSettings(value: unknown): QuizSettings {
+  if (!value || typeof value !== 'object') {
+    return DEFAULT_QUIZ_SETTINGS
+  }
+
+  const settings = value as Partial<QuizSettings>
+
+  return {
+    require_pass_to_continue: settings.require_pass_to_continue ?? DEFAULT_QUIZ_SETTINGS.require_pass_to_continue,
+    min_pass_questions: settings.min_pass_questions ?? DEFAULT_QUIZ_SETTINGS.min_pass_questions,
+    allow_retries: settings.allow_retries ?? DEFAULT_QUIZ_SETTINGS.allow_retries,
+    max_attempts: settings.max_attempts ?? DEFAULT_QUIZ_SETTINGS.max_attempts,
+    show_explanation: settings.show_explanation ?? DEFAULT_QUIZ_SETTINGS.show_explanation
+  }
+}
+
 // POST - Submit answer to a question (with retry support)
 export async function POST(
   request: NextRequest,
@@ -16,13 +41,11 @@ export async function POST(
   const supabase = await createClient()
   const { id: lessonId } = await context.params
 
-  // Check auth
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Parse and validate request body
   const body = await request.json()
   const validation = ResponseSchema.safeParse(body)
 
@@ -35,7 +58,6 @@ export async function POST(
 
   const { question_id, answer, is_correct } = validation.data
 
-  // Fetch the question to check retry settings
   const { data: question, error: questionError } = await supabase
     .from('lesson_questions')
     .select('allow_retry, lesson_id')
@@ -50,7 +72,14 @@ export async function POST(
     return NextResponse.json({ error: 'Question does not belong to this lesson' }, { status: 400 })
   }
 
-  // Check if there's an existing response
+  const { data: lesson } = await supabase
+    .from('lessons')
+    .select('quiz_settings')
+    .eq('id', lessonId)
+    .single()
+
+  const quizSettings = parseQuizSettings(lesson?.quiz_settings)
+
   const { data: existingResponse, error: fetchError } = await supabase
     .from('lesson_question_responses')
     .select('*')
@@ -62,19 +91,21 @@ export async function POST(
     return NextResponse.json({ error: fetchError.message }, { status: 500 })
   }
 
-  let responseData: any
+  const retryAllowed =
+    question.allow_retry &&
+    quizSettings.allow_retries &&
+    (quizSettings.max_attempts == null || !existingResponse || existingResponse.attempt_number < quizSettings.max_attempts)
+
+  if (existingResponse && !retryAllowed) {
+    return NextResponse.json(
+      { error: 'No more attempts allowed for this question', can_retry: false },
+      { status: 400 }
+    )
+  }
+
+  let responseData
 
   if (existingResponse) {
-    // This is a retry
-    if (!question.allow_retry && existingResponse.is_correct) {
-      // Already answered correctly, no retry allowed
-      return NextResponse.json(
-        { error: 'Question already answered correctly' },
-        { status: 400 }
-      )
-    }
-
-    // Build attempts history
     const attemptsHistory = Array.isArray(existingResponse.attempts_history)
       ? existingResponse.attempts_history
       : []
@@ -86,10 +117,8 @@ export async function POST(
       timestamp: new Date().toISOString()
     })
 
-    // Increment attempt number
     const newAttemptNumber = existingResponse.attempt_number + 1
 
-    // Update response
     const { data: updatedResponse, error: updateError } = await supabase
       .from('lesson_question_responses')
       .update({
@@ -110,7 +139,6 @@ export async function POST(
 
     responseData = updatedResponse
   } else {
-    // First attempt - insert new response
     const { data: newResponse, error: insertError } = await supabase
       .from('lesson_question_responses')
       .insert({
@@ -132,33 +160,35 @@ export async function POST(
     responseData = newResponse
   }
 
-  // Update lesson progress
-  await updateLessonProgress(supabase, user.id, lessonId)
+  const progressSummary = await updateLessonProgress(supabase, user.id, lessonId)
+  const canRetry =
+    question.allow_retry &&
+    quizSettings.allow_retries &&
+    !is_correct &&
+    (quizSettings.max_attempts == null || responseData.attempt_number < quizSettings.max_attempts)
 
   return NextResponse.json({
     response: responseData,
-    can_retry: question.allow_retry && !is_correct
+    can_retry: canRetry,
+    quiz_passed: progressSummary?.quizPassed ?? false
   })
 }
 
-// Helper function to update lesson progress based on quiz responses
 async function updateLessonProgress(
-  supabase: any,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   studentId: string,
   lessonId: string
 ) {
-  // Fetch all questions for this lesson
   const { data: questions } = await supabase
     .from('lesson_questions')
-    .select('id, is_required')
+    .select('id')
     .eq('lesson_id', lessonId)
 
   if (!questions || questions.length === 0) {
-    return
+    return null
   }
 
-  // Fetch all responses for this student and lesson
-  const questionIds = questions.map((q: any) => q.id)
+  const questionIds = questions.map((question) => question.id)
   const { data: responses } = await supabase
     .from('lesson_question_responses')
     .select('question_id, is_correct, attempt_number')
@@ -166,32 +196,22 @@ async function updateLessonProgress(
     .in('question_id', questionIds)
 
   if (!responses) {
-    return
+    return null
   }
 
   const questionsAnswered = responses.length
-  const questionsCorrect = responses.filter((r: any) => r.is_correct).length
-  const totalAttempts = responses.reduce((sum: number, r: any) => sum + r.attempt_number, 0)
+  const questionsCorrect = responses.filter((response) => response.is_correct).length
+  const totalAttempts = responses.reduce((sum, response) => sum + response.attempt_number, 0)
 
-  // Fetch lesson quiz settings
   const { data: lesson } = await supabase
     .from('lessons')
     .select('quiz_settings')
     .eq('id', lessonId)
     .single()
 
-  const quizSettings = lesson?.quiz_settings || {
-    require_pass_to_continue: false,
-    min_pass_questions: 1,
-    allow_retries: true,
-    max_attempts: null,
-    show_explanation: true
-  }
-
-  // Determine if quiz is passed
+  const quizSettings = parseQuizSettings(lesson?.quiz_settings)
   const quizPassed = questionsCorrect >= quizSettings.min_pass_questions
 
-  // Update lesson progress
   const { data: existingProgress } = await supabase
     .from('lesson_progress')
     .select('id')
@@ -220,5 +240,12 @@ async function updateLessonProgress(
         quiz_attempts: totalAttempts,
         quiz_passed: quizPassed
       })
+  }
+
+  return {
+    quizPassed,
+    questionsAnswered,
+    questionsCorrect,
+    totalAttempts
   }
 }

@@ -5,9 +5,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { gradeSubmissionSchema } from "@/lib/homework.validation";
+import {
+  HOMEWORK_BUCKET,
+  isRemoteFileUrl,
+  normalizeHomeworkFileRefs,
+} from "@/lib/homework-files";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
+}
+
+async function signHomeworkFiles(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  fileRefs: string[]
+) {
+  const resolvedUrls = await Promise.all(
+    fileRefs.map(async (fileRef) => {
+      if (isRemoteFileUrl(fileRef)) {
+        return fileRef;
+      }
+
+      const { data, error } = await supabase.storage
+        .from(HOMEWORK_BUCKET)
+        .createSignedUrl(fileRef, 60 * 60);
+
+      if (error || !data?.signedUrl) {
+        return null;
+      }
+
+      return data.signedUrl;
+    })
+  );
+
+  return resolvedUrls.filter((value): value is string => typeof value === "string" && value.length > 0);
 }
 
 // GET - Get single submission with full details for grading
@@ -57,7 +87,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .eq("id", user.id)
       .single();
 
-    const isAdmin = profile?.role === "admin";
     const isTeacher = profile?.role === "teacher";
     const isStudent = profile?.role === "student";
 
@@ -96,6 +125,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const formattedResponses = questions.map((question) => {
       const response = responses?.find((r) => r.question_id === question.id);
+      const fileRefs = normalizeHomeworkFileRefs(
+        response?.response_file_urls,
+        response?.response_file_url || null
+      );
 
       return {
         response_id: response?.id || null,
@@ -109,14 +142,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         display_order: question.display_order,
         rubric: question.rubric,
         response_text: response?.response_text || null,
-        response_file_url: response?.response_file_url || null,
-        response_file_urls: response?.response_file_urls || null,
+        response_file_url: fileRefs[0] || null,
+        response_file_urls: fileRefs,
         points_earned: response?.points_earned || null,
         teacher_comment: response?.teacher_comment || null,
         created_at: response?.created_at || null,
         updated_at: response?.updated_at || null,
       };
     }).sort((a, b) => (a.display_order as number) - (b.display_order as number));
+
+    const responsesWithSignedUrls = await Promise.all(
+      formattedResponses.map(async (response) => {
+        const signedUrls = await signHomeworkFiles(supabase, response.response_file_urls || []);
+
+        return {
+          ...response,
+          response_file_url: signedUrls[0] || null,
+          response_file_urls: signedUrls,
+        };
+      })
+    );
 
     return NextResponse.json({
       success: true,
@@ -147,7 +192,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           subject_name: (assignment.subjects as { name_ar: string; name_en: string } | null)?.name_en ||
             (assignment.subjects as { name_ar: string; name_en: string } | null)?.name_ar || null,
         },
-        responses: formattedResponses,
+        responses: responsesWithSignedUrls,
       },
     });
   } catch (error) {

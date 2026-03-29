@@ -18,59 +18,71 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 const LANGUAGE_KEY = "amal-madrassa-language";
 const HAS_SELECTED_KEY = "amal-madrassa-has-selected-language";
 
+type BrowserLanguageState = {
+  cleanupParam: "lang" | "reset-lang" | null;
+  hasSelectedLanguage: boolean;
+  language: Language;
+};
+
+function getBrowserLanguageState(): BrowserLanguageState {
+  const urlParams = new URLSearchParams(window.location.search);
+  const langParam = urlParams.get("lang");
+  const resetParam = urlParams.get("reset-lang");
+  const storedLanguage = localStorage.getItem(LANGUAGE_KEY);
+  const storedHasSelected = localStorage.getItem(HAS_SELECTED_KEY);
+  const nextLanguage = storedLanguage === "ar" || storedLanguage === "en" ? storedLanguage : "ar";
+
+  if (resetParam !== null) {
+    localStorage.removeItem(HAS_SELECTED_KEY);
+    return {
+      cleanupParam: "reset-lang",
+      hasSelectedLanguage: false,
+      language: nextLanguage,
+    };
+  }
+
+  if (langParam === "ar" || langParam === "en") {
+    localStorage.setItem(LANGUAGE_KEY, langParam);
+    localStorage.setItem(HAS_SELECTED_KEY, "true");
+    return {
+      cleanupParam: "lang",
+      hasSelectedLanguage: true,
+      language: langParam,
+    };
+  }
+
+  return {
+    cleanupParam: null,
+    hasSelectedLanguage: storedHasSelected === "true",
+    language: nextLanguage,
+  };
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>("ar");
-  const [hasSelectedLanguage, setHasSelectedLanguageState] = useState(true); // Default to true to prevent flash
+  const [hasSelectedLanguage, setHasSelectedLanguageState] = useState(true); // Match SSR on first render.
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize from localStorage and URL params
   useEffect(() => {
-    // Check URL params for testing
-    const urlParams = new URLSearchParams(window.location.search);
-    const langParam = urlParams.get("lang") as Language | null;
-    const resetParam = urlParams.get("reset-lang");
+    const nextState = getBrowserLanguageState();
+    const initTimeout = setTimeout(() => {
+      if (nextState.cleanupParam) {
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.delete(nextState.cleanupParam);
+        const newUrl = urlParams.toString()
+          ? `${window.location.pathname}?${urlParams.toString()}`
+          : window.location.pathname;
+        window.history.replaceState({}, "", newUrl);
+      }
 
-    // Handle reset param - clears stored selection to show modal
-    if (resetParam !== null) {
-      localStorage.removeItem(HAS_SELECTED_KEY);
-      setHasSelectedLanguageState(false);
-      // Clean up URL
-      urlParams.delete("reset-lang");
-      const newUrl = urlParams.toString()
-        ? `${window.location.pathname}?${urlParams.toString()}`
-        : window.location.pathname;
-      window.history.replaceState({}, "", newUrl);
+      if (nextState.language !== "ar") {
+        setLanguageState(nextState.language);
+      }
+      setHasSelectedLanguageState(nextState.hasSelectedLanguage);
       setIsInitialized(true);
-      return;
-    }
+    }, 0);
 
-    // Handle lang param - forces specific language
-    if (langParam && (langParam === "ar" || langParam === "en")) {
-      setLanguageState(langParam);
-      localStorage.setItem(LANGUAGE_KEY, langParam);
-      localStorage.setItem(HAS_SELECTED_KEY, "true");
-      setHasSelectedLanguageState(true);
-      // Clean up URL
-      urlParams.delete("lang");
-      const newUrl = urlParams.toString()
-        ? `${window.location.pathname}?${urlParams.toString()}`
-        : window.location.pathname;
-      window.history.replaceState({}, "", newUrl);
-      setIsInitialized(true);
-      return;
-    }
-
-    // Normal initialization from localStorage
-    const storedLanguage = localStorage.getItem(LANGUAGE_KEY) as Language | null;
-    const storedHasSelected = localStorage.getItem(HAS_SELECTED_KEY);
-
-    if (storedLanguage) {
-      setLanguageState(storedLanguage);
-    }
-
-    // If user has never selected a language, show the selector
-    setHasSelectedLanguageState(storedHasSelected === "true");
-    setIsInitialized(true);
+    return () => clearTimeout(initTimeout);
   }, []);
 
   // Update localStorage and document direction when language changes

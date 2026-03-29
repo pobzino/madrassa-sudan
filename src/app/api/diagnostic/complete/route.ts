@@ -6,6 +6,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+type DiagnosticResponseRow = {
+  is_correct: boolean;
+  question: {
+    grade_level: number;
+  };
+};
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -50,7 +57,7 @@ export async function POST(request: NextRequest) {
     // Calculate performance by grade level
     const gradePerformance: Record<number, { correct: number; total: number }> = {};
 
-    responses.forEach((response: any) => {
+    (responses as DiagnosticResponseRow[]).forEach((response) => {
       const grade = response.question.grade_level;
       if (!gradePerformance[grade]) {
         gradePerformance[grade] = { correct: 0, total: 0 };

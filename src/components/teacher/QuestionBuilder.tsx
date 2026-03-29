@@ -1,14 +1,58 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Database } from '@/lib/database.types'
 
 type QuestionType = Database['public']['Enums']['question_type']
+type RawOptions = string[] | string | null | undefined
+
+interface QuestionBuilderQuestion {
+  question_type: QuestionType
+  question_text_ar: string
+  question_text_en: string | null
+  timestamp_seconds: number
+  correct_answer: string | null
+  options: RawOptions
+  explanation_ar: string | null
+  explanation_en: string | null
+  is_required: boolean
+  allow_retry: boolean
+}
+
+interface QuestionBuilderSaveData {
+  question_type: QuestionType
+  question_text_ar: string
+  question_text_en: string
+  timestamp_seconds: number
+  correct_answer: string
+  explanation_ar: string | null
+  explanation_en: string | null
+  is_required: boolean
+  allow_retry: boolean
+  options: string | null
+}
 
 interface QuestionBuilderProps {
-  question?: any // Existing question for editing
-  onSave: (questionData: any) => Promise<void>
+  question?: QuestionBuilderQuestion
+  onSave: (questionData: QuestionBuilderSaveData) => Promise<void>
   onCancel: () => void
+}
+
+function parseOptions(options: RawOptions): string[] {
+  if (Array.isArray(options)) {
+    return options
+  }
+
+  if (typeof options === 'string' && options.length > 0) {
+    try {
+      const parsed = JSON.parse(options)
+      return Array.isArray(parsed) ? parsed.filter((option): option is string => typeof option === 'string') : []
+    } catch {
+      return []
+    }
+  }
+
+  return []
 }
 
 export default function QuestionBuilder({
@@ -23,8 +67,9 @@ export default function QuestionBuilder({
   const [questionTextEn, setQuestionTextEn] = useState(question?.question_text_en || '')
   const [timestampSeconds, setTimestampSeconds] = useState(question?.timestamp_seconds || 0)
   const [correctAnswer, setCorrectAnswer] = useState(question?.correct_answer || '')
+  const initialOptions = question ? parseOptions(question.options) : []
   const [options, setOptions] = useState<string[]>(
-    question?.options ? JSON.parse(question.options) : ['', '', '', '']
+    initialOptions.length > 0 ? initialOptions : ['', '', '', '']
   )
   const [explanationAr, setExplanationAr] = useState(question?.explanation_ar || '')
   const [explanationEn, setExplanationEn] = useState(question?.explanation_en || '')
@@ -36,7 +81,7 @@ export default function QuestionBuilder({
     e.preventDefault()
     setIsSaving(true)
 
-    const questionData: any = {
+    const questionData: QuestionBuilderSaveData = {
       question_type: questionType,
       question_text_ar: questionTextAr,
       question_text_en: questionTextEn,
@@ -45,7 +90,8 @@ export default function QuestionBuilder({
       explanation_ar: explanationAr || null,
       explanation_en: explanationEn || null,
       is_required: isRequired,
-      allow_retry: allowRetry
+      allow_retry: allowRetry,
+      options: null
     }
 
     // Add options for multiple choice

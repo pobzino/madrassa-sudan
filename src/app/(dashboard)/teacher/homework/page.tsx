@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
@@ -14,15 +13,8 @@ export default function TeacherHomeworkPage() {
   const [assignments, setAssignments] = useState<AssignmentWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "draft" | "published">("all");
-  const router = useRouter();
 
-  useEffect(() => {
-    if (!authLoading) {
-      loadAssignments();
-    }
-  }, [authLoading, filter]);
-
-  async function loadAssignments() {
+  const loadAssignments = useCallback(async () => {
     setLoading(true);
     try {
       const supabase = createClient();
@@ -113,7 +105,17 @@ export default function TeacherHomeworkPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [filter]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      const timeout = setTimeout(() => {
+        void loadAssignments();
+      }, 0);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [authLoading, loadAssignments]);
 
   async function handleTogglePublish(id: string, publish: boolean) {
     try {

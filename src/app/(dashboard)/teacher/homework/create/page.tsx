@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useCallback, useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -45,13 +45,7 @@ function CreateHomeworkContent() {
   const [loadingAssignment, setLoadingAssignment] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!authLoading) {
-      loadData();
-    }
-  }, [authLoading]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const supabase = createClient();
     const user = await getCachedUser(supabase);
 
@@ -139,7 +133,17 @@ function CreateHomeworkContent() {
       setLoadingAssignment(false);
     }
     setLoading(false);
-  }
+  }, [assignmentId]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      const timeout = setTimeout(() => {
+        void loadData();
+      }, 0);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [authLoading, loadData]);
 
   function addQuestion(type: CreateQuestionInput["question_type"] = "multiple_choice") {
     const newQuestion: CreateQuestionInput = {

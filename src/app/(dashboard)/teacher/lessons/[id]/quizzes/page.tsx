@@ -1,19 +1,51 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import QuestionBuilder from '@/components/teacher/QuestionBuilder'
 import QuizSettingsPanel from '@/components/teacher/QuizSettingsPanel'
-import { QuizSettings } from '@/lib/database.types'
+import type { Database, QuizSettings } from '@/lib/database.types'
+
+type QuestionType = Database['public']['Enums']['question_type']
+type QuestionOptions = string[] | string | null
+
+type QuestionSaveData = {
+  question_type: QuestionType
+  question_text_ar: string
+  question_text_en: string
+  timestamp_seconds: number
+  correct_answer: string
+  explanation_ar: string | null
+  explanation_en: string | null
+  is_required: boolean
+  allow_retry: boolean
+  options: string | null
+}
+
+type TeacherLessonResponse = {
+  lesson: Lesson
+}
+
+type TeacherLessonQuestionsResponse = {
+  questions: Question[]
+}
+
+type ErrorResponse = {
+  error?: string
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
+}
 
 interface Question {
   id: string
   question_text_ar: string
   question_text_en: string | null
-  question_type: 'multiple_choice' | 'true_false' | 'fill_in_blank'
+  question_type: QuestionType
   timestamp_seconds: number
   correct_answer: string
-  options: any
+  options: QuestionOptions
   explanation_ar: string | null
   explanation_en: string | null
   display_order: number
@@ -40,32 +72,32 @@ export default function TeacherQuizzesPage() {
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchData()
-  }, [lessonId])
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true)
     try {
       // Fetch lesson details
       const lessonRes = await fetch(`/api/teacher/lessons/${lessonId}`)
       if (!lessonRes.ok) throw new Error('Failed to fetch lesson')
-      const lessonData = await lessonRes.json()
+      const lessonData = (await lessonRes.json()) as TeacherLessonResponse
       setLesson(lessonData.lesson)
 
       // Fetch questions
       const questionsRes = await fetch(`/api/teacher/lessons/${lessonId}/questions`)
       if (!questionsRes.ok) throw new Error('Failed to fetch questions')
-      const questionsData = await questionsRes.json()
+      const questionsData = (await questionsRes.json()) as TeacherLessonQuestionsResponse
       setQuestions(questionsData.questions || [])
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to fetch quiz data'))
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [lessonId])
 
-  const handleCreateQuestion = async (questionData: any) => {
+  useEffect(() => {
+    void fetchData()
+  }, [fetchData])
+
+  const handleCreateQuestion = async (questionData: QuestionSaveData) => {
     try {
       const res = await fetch(`/api/teacher/lessons/${lessonId}/questions`, {
         method: 'POST',
@@ -77,18 +109,18 @@ export default function TeacherQuizzesPage() {
       })
 
       if (!res.ok) {
-        const error = await res.json()
+        const error = (await res.json()) as ErrorResponse
         throw new Error(error.error || 'Failed to create question')
       }
 
       await fetchData()
       setIsCreating(false)
-    } catch (err: any) {
-      alert(err.message)
+    } catch (err: unknown) {
+      alert(getErrorMessage(err, 'Failed to create question'))
     }
   }
 
-  const handleUpdateQuestion = async (questionData: any) => {
+  const handleUpdateQuestion = async (questionData: QuestionSaveData) => {
     if (!editingQuestion) return
 
     try {
@@ -102,14 +134,14 @@ export default function TeacherQuizzesPage() {
       )
 
       if (!res.ok) {
-        const error = await res.json()
+        const error = (await res.json()) as ErrorResponse
         throw new Error(error.error || 'Failed to update question')
       }
 
       await fetchData()
       setEditingQuestion(null)
-    } catch (err: any) {
-      alert(err.message)
+    } catch (err: unknown) {
+      alert(getErrorMessage(err, 'Failed to update question'))
     }
   }
 
@@ -127,13 +159,13 @@ export default function TeacherQuizzesPage() {
       )
 
       if (!res.ok) {
-        const error = await res.json()
+        const error = (await res.json()) as ErrorResponse
         throw new Error(error.error || 'Failed to delete question')
       }
 
       await fetchData()
-    } catch (err: any) {
-      alert(err.message)
+    } catch (err: unknown) {
+      alert(getErrorMessage(err, 'Failed to delete question'))
     }
   }
 
@@ -146,13 +178,13 @@ export default function TeacherQuizzesPage() {
       })
 
       if (!res.ok) {
-        const error = await res.json()
+        const error = (await res.json()) as ErrorResponse
         throw new Error(error.error || 'Failed to save settings')
       }
 
       await fetchData()
-    } catch (err: any) {
-      alert(err.message)
+    } catch (err: unknown) {
+      alert(getErrorMessage(err, 'Failed to save settings'))
     }
   }
 
@@ -253,7 +285,7 @@ export default function TeacherQuizzesPage() {
         {(isCreating || editingQuestion) && (
           <div className="mb-6">
             <QuestionBuilder
-              question={editingQuestion}
+              question={editingQuestion ?? undefined}
               onSave={editingQuestion ? handleUpdateQuestion : handleCreateQuestion}
               onCancel={() => {
                 setIsCreating(false)

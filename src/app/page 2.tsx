@@ -463,7 +463,7 @@ export default function Home() {
       <section className="py-24" style={{ background: 'var(--background-alt)' }}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="glass rounded-3xl p-12 relative">
-            <div className="text-6xl mb-6" style={{ color: 'var(--secondary)' }}>"</div>
+            <div className="text-6xl mb-6" style={{ color: 'var(--secondary)' }}>&quot;</div>
             <blockquote className="text-2xl font-medium mb-8 leading-relaxed" style={{ color: 'var(--foreground)' }}>
               {t.testimonial.quote}
             </blockquote>

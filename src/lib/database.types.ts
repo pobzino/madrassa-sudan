@@ -614,6 +614,8 @@ export type Database = {
           completed_at: string | null
           created_at: string
           id: string
+          interactive_slides_completed: number
+          interactive_slides_correct: number
           last_position_seconds: number
           lesson_id: string
           questions_answered: number
@@ -621,6 +623,8 @@ export type Database = {
           quiz_attempts: number
           quiz_passed: boolean
           student_id: string
+          tasks_completed: number
+          tasks_total_score: number
           total_watch_time_seconds: number
           updated_at: string
         }
@@ -629,6 +633,8 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           id?: string
+          interactive_slides_completed?: number
+          interactive_slides_correct?: number
           last_position_seconds?: number
           lesson_id: string
           questions_answered?: number
@@ -636,6 +642,8 @@ export type Database = {
           quiz_attempts?: number
           quiz_passed?: boolean
           student_id: string
+          tasks_completed?: number
+          tasks_total_score?: number
           total_watch_time_seconds?: number
           updated_at?: string
         }
@@ -644,6 +652,8 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           id?: string
+          interactive_slides_completed?: number
+          interactive_slides_correct?: number
           last_position_seconds?: number
           lesson_id?: string
           questions_answered?: number
@@ -651,6 +661,8 @@ export type Database = {
           quiz_attempts?: number
           quiz_passed?: boolean
           student_id?: string
+          tasks_completed?: number
+          tasks_total_score?: number
           total_watch_time_seconds?: number
           updated_at?: string
         }
@@ -725,6 +737,185 @@ export type Database = {
           },
         ]
       }
+      lesson_task_responses: {
+        Row: {
+          id: string
+          task_id: string
+          student_id: string
+          response_data: Json
+          completion_score: number
+          is_completed: boolean
+          time_spent_seconds: number
+          attempts: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          task_id: string
+          student_id: string
+          response_data?: Json
+          completion_score?: number
+          is_completed?: boolean
+          time_spent_seconds?: number
+          attempts?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          task_id?: string
+          student_id?: string
+          response_data?: Json
+          completion_score?: number
+          is_completed?: boolean
+          time_spent_seconds?: number
+          attempts?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_task_responses_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "lesson_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_task_responses_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lesson_slide_responses: {
+        Row: {
+          attempts: number
+          completion_score: number
+          completed_at: string
+          created_at: string
+          id: string
+          interaction_type: string
+          is_correct: boolean
+          lesson_id: string
+          response_data: Json
+          slide_id: string
+          student_id: string
+          time_spent_seconds: number
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          completion_score?: number
+          completed_at?: string
+          created_at?: string
+          id?: string
+          interaction_type: string
+          is_correct?: boolean
+          lesson_id: string
+          response_data?: Json
+          slide_id: string
+          student_id: string
+          time_spent_seconds?: number
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          completion_score?: number
+          completed_at?: string
+          created_at?: string
+          id?: string
+          interaction_type?: string
+          is_correct?: boolean
+          lesson_id?: string
+          response_data?: Json
+          slide_id?: string
+          student_id?: string
+          time_spent_seconds?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_slide_responses_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_slide_responses_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lesson_tasks: {
+        Row: {
+          id: string
+          lesson_id: string
+          task_type: Database["public"]["Enums"]["task_type"]
+          title_ar: string
+          title_en: string | null
+          instruction_ar: string
+          instruction_en: string | null
+          timestamp_seconds: number
+          display_order: number
+          task_data: Json
+          timeout_seconds: number | null
+          is_skippable: boolean
+          points: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          lesson_id: string
+          task_type: Database["public"]["Enums"]["task_type"]
+          title_ar: string
+          title_en?: string | null
+          instruction_ar: string
+          instruction_en?: string | null
+          timestamp_seconds?: number
+          display_order?: number
+          task_data?: Json
+          timeout_seconds?: number | null
+          is_skippable?: boolean
+          points?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          lesson_id?: string
+          task_type?: Database["public"]["Enums"]["task_type"]
+          title_ar?: string
+          title_en?: string | null
+          instruction_ar?: string
+          instruction_en?: string | null
+          timestamp_seconds?: number
+          display_order?: number
+          task_data?: Json
+          timeout_seconds?: number | null
+          is_skippable?: boolean
+          points?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_tasks_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lesson_questions: {
         Row: {
           allow_retry: boolean
@@ -792,6 +983,7 @@ export type Database = {
           captions_en_url: string | null
           created_at: string
           created_by: string | null
+          curriculum_topic: Json | null
           description_ar: string | null
           description_en: string | null
           display_order: number
@@ -816,6 +1008,7 @@ export type Database = {
           captions_en_url?: string | null
           created_at?: string
           created_by?: string | null
+          curriculum_topic?: Json | null
           description_ar?: string | null
           description_en?: string | null
           display_order?: number
@@ -840,6 +1033,7 @@ export type Database = {
           captions_en_url?: string | null
           created_at?: string
           created_by?: string | null
+          curriculum_topic?: Json | null
           description_ar?: string | null
           description_en?: string | null
           display_order?: number
@@ -870,6 +1064,44 @@ export type Database = {
             columns: ["subject_id"]
             isOneToOne: false
             referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lesson_slides: {
+        Row: {
+          id: string
+          lesson_id: string
+          slides: Json
+          language_mode: string
+          generated_at: string | null
+          updated_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          lesson_id: string
+          slides?: Json
+          language_mode?: string
+          generated_at?: string | null
+          updated_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          lesson_id?: string
+          slides?: Json
+          language_mode?: string
+          generated_at?: string | null
+          updated_at?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_slides_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: true
+            referencedRelation: "lessons"
             referencedColumns: ["id"]
           },
         ]
@@ -1360,6 +1592,13 @@ export type Database = {
         | "file_upload"
         | "true_false"
       question_type: "multiple_choice" | "true_false" | "fill_in_blank"
+      task_type:
+        | "matching_pairs"
+        | "sorting_order"
+        | "fill_in_blank_enhanced"
+        | "drag_drop_label"
+        | "drawing_tracing"
+        | "audio_recording"
       submission_status:
         | "not_started"
         | "in_progress"
@@ -1399,8 +1638,12 @@ export type HomeworkSubmission = Tables<"homework_submissions">
 export type HomeworkResponse = Tables<"homework_responses">
 export type AIConversation = Tables<"ai_conversations">
 export type AIMessage = Tables<"ai_messages">
+export type LessonTask = Tables<"lesson_tasks">
+export type LessonTaskResponse = Tables<"lesson_task_responses">
+export type LessonSlideResponse = Tables<"lesson_slide_responses">
 
 export type UserRole = Enums<"user_role">
 export type QuestionType = Enums<"question_type">
 export type HomeworkQuestionType = Enums<"homework_question_type">
 export type SubmissionStatus = Enums<"submission_status">
+export type TaskType = Enums<"task_type">

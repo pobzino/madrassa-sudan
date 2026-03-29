@@ -8,6 +8,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { QuestionDisplay } from '@/components/diagnostic/QuestionDisplay';
+import { createClient } from '@/lib/supabase/client';
 
 // Icons
 const ChevronLeftIcon = () => (
@@ -42,6 +43,7 @@ export default function DiagnosticAssessmentPage() {
   const searchParams = useSearchParams();
   const subjectId = params.subjectId as string;
   const isRetake = searchParams.get('retake') === 'true';
+  const supabase = createClient();
 
   const [loading, setLoading] = useState(true);
   const [question, setQuestion] = useState<Question | null>(null);
@@ -59,6 +61,7 @@ export default function DiagnosticAssessmentPage() {
         body: JSON.stringify({
           subjectId,
           studentGrade: 3, // Default starting grade
+          retake: isRetake,
         }),
       });
 
@@ -75,17 +78,22 @@ export default function DiagnosticAssessmentPage() {
     } finally {
       setLoading(false);
     }
-  }, [subjectId]);
+  }, [isRetake, subjectId]);
 
   useEffect(() => {
-    // Fetch subject name
-    fetch(`/api/subjects/${subjectId}`)
-      .then(res => res.json())
-      .then(data => setSubjectName(data.name || 'Subject'))
-      .catch(() => setSubjectName('Subject'));
+    async function loadSubjectName() {
+      const { data } = await supabase
+        .from('subjects')
+        .select('name_ar, name_en')
+        .eq('id', subjectId)
+        .single();
 
-    startAssessment();
-  }, [subjectId, startAssessment]);
+      setSubjectName(data?.name_en || data?.name_ar || 'Subject');
+    }
+
+    void loadSubjectName();
+    void startAssessment();
+  }, [startAssessment, subjectId, supabase]);
 
   const handleSubmit = async (answer: string) => {
     if (!attemptId || !question) return;
@@ -147,8 +155,8 @@ export default function DiagnosticAssessmentPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="w-8 h-8 text-blue-500">
+      <div className="min-h-screen bg-[#FCFCFC] flex items-center justify-center">
+        <div className="w-8 h-8 text-[#007229]">
           <Loader2Icon />
         </div>
       </div>
@@ -156,19 +164,19 @@ export default function DiagnosticAssessmentPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6">
+    <div className="min-h-screen bg-[#FCFCFC] p-4 md:p-6">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <button
             onClick={() => router.push('/diagnostic')}
-            className="p-2 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            className="p-2 hover:bg-[#007229]/5 rounded-xl transition-colors"
           >
             <ChevronLeftIcon />
           </button>
           <div>
             <h1 className="text-xl font-semibold">{subjectName} Assessment</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-gray-600 text-gray-500">
               Answer questions to find your level
             </p>
           </div>
@@ -185,7 +193,7 @@ export default function DiagnosticAssessmentPage() {
           />
         ) : (
           <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-400">No questions available.</p>
+            <p className="text-gray-600 text-gray-500">No questions available.</p>
           </div>
         )}
       </div>

@@ -54,8 +54,8 @@ export const updateAssignmentSchema = createAssignmentSchema.partial().extend({
 export const submitAnswerSchema = z.object({
   question_id: z.string().uuid(),
   response_text: z.string().optional().nullable(),
-  response_file_url: z.string().url().optional().nullable(),
-  response_file_urls: z.array(z.string().url()).optional().nullable(),
+  response_file_url: z.string().min(1).optional().nullable(),
+  response_file_urls: z.array(z.string().min(1)).optional().nullable(),
 });
 
 // Submit homework schema

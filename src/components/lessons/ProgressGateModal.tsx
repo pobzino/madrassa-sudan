@@ -40,7 +40,7 @@ export default function ProgressGateModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
         {/* Icon */}
         <div className="flex justify-center mb-4">
           <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center">
@@ -62,11 +62,11 @@ export default function ProgressGateModal({
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-blue-50 rounded-lg p-4 text-center">
+          <div className="bg-[#007229]/5 rounded-xl p-4 text-center">
             <p className="text-sm text-gray-600 mb-1">{text.current}</p>
-            <p className="text-3xl font-bold text-blue-600">{questionsCorrect}</p>
+            <p className="text-3xl font-bold text-[#007229]">{questionsCorrect}</p>
           </div>
-          <div className="bg-green-50 rounded-lg p-4 text-center">
+          <div className="bg-green-50 rounded-xl p-4 text-center">
             <p className="text-sm text-gray-600 mb-1">{text.required}</p>
             <p className="text-3xl font-bold text-green-600">{questionsRequired}</p>
           </div>
@@ -76,7 +76,7 @@ export default function ProgressGateModal({
         <div className="mb-6">
           <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-500"
+              className="h-full bg-gradient-to-r from-[#007229] to-[#00913D] transition-all duration-500"
               style={{ width: `${Math.min(100, (questionsCorrect / questionsRequired) * 100)}%` }}
             />
           </div>
@@ -89,13 +89,13 @@ export default function ProgressGateModal({
         <div className="flex flex-col gap-3">
           <button
             onClick={onRewatch}
-            className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            className="w-full px-6 py-3 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] font-medium"
           >
             {text.rewatch}
           </button>
           <button
             onClick={onClose}
-            className="w-full px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+            className="w-full px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium"
           >
             {text.close}
           </button>

@@ -1,12 +1,23 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
+import CurriculumTopicSelector from "@/components/teacher/CurriculumTopicSelector";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import BunnyVideoUploader from "@/components/teacher/BunnyVideoUploader";
 import AIContentGenerator from "@/components/teacher/AIContentGenerator";
+import TaskEditor, { type TaskForm } from "@/components/teacher/TaskEditor";
+import {
+  getCurriculumRequirementMessage,
+  getCurriculumSelectionForLesson,
+  hasMappedCurriculum,
+  serializeCurriculumSelection,
+  type CurriculumSelection,
+} from "@/lib/curriculum";
+import type { Database } from "@/lib/database.types";
+import InteractionResultsPanel from "@/components/teacher/InteractionResultsPanel";
 
 type Subject = {
   id: string;
@@ -21,6 +32,7 @@ type LessonForm = {
   description_en: string;
   subject_id: string;
   grade_level: number;
+  curriculum_topic: CurriculumSelection | null;
   is_published: boolean;
   thumbnail_url: string;
   video_url_360p: string;
@@ -59,6 +71,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [loading, setLoading] = useState(true);
   const [savingLesson, setSavingLesson] = useState(false);
   const [savingQuestions, setSavingQuestions] = useState(false);
+  const [savingTasks, setSavingTasks] = useState(false);
   const [savingBlocks, setSavingBlocks] = useState(false);
   const [embeddingStatus, setEmbeddingStatus] = useState<string | null>(null);
   const [videoInputMode, setVideoInputMode] = useState<"upload" | "manual">("upload");
@@ -70,6 +83,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     description_en: "",
     subject_id: "",
     grade_level: 1,
+    curriculum_topic: null,
     is_published: false,
     thumbnail_url: "",
     video_url_360p: "",
@@ -81,15 +95,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   });
 
   const [questions, setQuestions] = useState<QuestionForm[]>([]);
+  const [lessonTasks, setLessonTasks] = useState<TaskForm[]>([]);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
 
-  useEffect(() => {
-    if (!authLoading) {
-      loadLesson();
-    }
-  }, [id, authLoading]);
-
-  async function loadLesson() {
+  const loadLesson = useCallback(async () => {
     const supabase = createClient();
     const user = await getCachedUser(supabase);
     if (!user) return;
@@ -107,6 +116,8 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       .single();
 
     if (lesson) {
+      const lessonSubject =
+        (subjectRows || []).find((subject) => subject.id === lesson.subject_id) ?? null;
       setForm({
         title_ar: lesson.title_ar || "",
         title_en: lesson.title_en || "",
@@ -114,6 +125,11 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         description_en: lesson.description_en || "",
         subject_id: lesson.subject_id || "",
         grade_level: lesson.grade_level || 1,
+        curriculum_topic: getCurriculumSelectionForLesson(
+          lessonSubject,
+          lesson.grade_level,
+          lesson.curriculum_topic
+        ),
         is_published: lesson.is_published,
         thumbnail_url: lesson.thumbnail_url || "",
         video_url_360p: lesson.video_url_360p || "",
@@ -145,6 +161,28 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     }));
     setQuestions(questionForms);
 
+    // Load tasks
+    const { data: taskRows } = await supabase
+      .from("lesson_tasks")
+      .select("*")
+      .eq("lesson_id", id)
+      .order("timestamp_seconds");
+
+    const taskForms: TaskForm[] = (taskRows || []).map((t: Record<string, unknown>) => ({
+      id: t.id as string,
+      task_type: t.task_type as TaskForm["task_type"],
+      title_ar: (t.title_ar as string) || "",
+      title_en: (t.title_en as string) || "",
+      instruction_ar: (t.instruction_ar as string) || "",
+      instruction_en: (t.instruction_en as string) || "",
+      timestamp_seconds: (t.timestamp_seconds as number) || 0,
+      task_data: (t.task_data as Record<string, unknown>) || {},
+      timeout_seconds: t.timeout_seconds as number | null,
+      is_skippable: (t.is_skippable as boolean) ?? true,
+      points: (t.points as number) || 10,
+    }));
+    setLessonTasks(taskForms);
+
     const { data: blocks } = await supabase
       .from("lesson_content_blocks")
       .select("id, language, content, source_type, sequence")
@@ -162,7 +200,25 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     );
 
     setLoading(false);
-  }
+  }, [id]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      const timeout = setTimeout(() => {
+        void loadLesson();
+      }, 0);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [authLoading, loadLesson]);
+
+  const selectedSubject = subjects.find((subject) => subject.id === form.subject_id) ?? null;
+  const requiresCurriculum = hasMappedCurriculum(selectedSubject, form.grade_level);
+  const contentGenerationBlockedReason = getCurriculumRequirementMessage(
+    selectedSubject,
+    form.grade_level,
+    form.curriculum_topic
+  );
 
   function updateQuestion(questionId: string, updates: Partial<QuestionForm>) {
     setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, ...updates } : q)));
@@ -207,9 +263,13 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       alert("Title and subject are required.");
       return;
     }
+    if (requiresCurriculum && !form.curriculum_topic) {
+      alert("Select a curriculum topic before saving this lesson.");
+      return;
+    }
     setSavingLesson(true);
     const supabase = createClient();
-    await supabase
+    const { error } = await supabase
       .from("lessons")
       .update({
         title_ar: form.title_ar.trim(),
@@ -218,6 +278,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         description_en: form.description_en.trim() || null,
         subject_id: form.subject_id,
         grade_level: form.grade_level,
+        curriculum_topic: serializeCurriculumSelection(form.curriculum_topic),
         is_published: form.is_published,
         thumbnail_url: form.thumbnail_url.trim() || null,
         video_url_360p: form.video_url_360p.trim() || null,
@@ -230,6 +291,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       })
       .eq("id", id);
     setSavingLesson(false);
+    if (error) {
+      alert("Save failed: " + error.message);
+      console.error("Save lesson error:", error);
+    }
   }
 
   async function saveQuestions() {
@@ -253,6 +318,30 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     }));
     await supabase.from("lesson_questions").insert(rows);
     setSavingQuestions(false);
+  }
+
+  async function saveTasks() {
+    setSavingTasks(true);
+    const supabase = createClient();
+    await supabase.from("lesson_tasks").delete().eq("lesson_id", id);
+    if (lessonTasks.length > 0) {
+      const rows: Database["public"]["Tables"]["lesson_tasks"]["Insert"][] = lessonTasks.map((t, index) => ({
+        lesson_id: id,
+        task_type: t.task_type as "matching_pairs" | "sorting_order" | "fill_in_blank_enhanced" | "drag_drop_label" | "drawing_tracing" | "audio_recording",
+        title_ar: t.title_ar,
+        title_en: t.title_en || null,
+        instruction_ar: t.instruction_ar,
+        instruction_en: t.instruction_en || null,
+        timestamp_seconds: t.timestamp_seconds || 0,
+        task_data: t.task_data as Database["public"]["Tables"]["lesson_tasks"]["Insert"]["task_data"],
+        timeout_seconds: t.timeout_seconds,
+        is_skippable: t.is_skippable,
+        points: t.points,
+        display_order: index,
+      }));
+      await supabase.from("lesson_tasks").insert(rows);
+    }
+    setSavingTasks(false);
   }
 
   async function saveContentBlocks() {
@@ -364,6 +453,20 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             </select>
           </div>
         </div>
+
+        {form.subject_id && (
+          <CurriculumTopicSelector
+            subject={selectedSubject}
+            gradeLevel={form.grade_level}
+            value={form.curriculum_topic}
+            onChange={(selection) =>
+              setForm((prev) => ({
+                ...prev,
+                curriculum_topic: selection,
+              }))
+            }
+          />
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Description (Arabic)</label>
@@ -516,8 +619,9 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           lessonId={id}
           hasVideo={!!(form.video_url_360p || form.video_url_480p || form.video_url_720p)}
           hasExistingContent={questions.length > 0 || contentBlocks.length > 0}
+          disabledReason={contentGenerationBlockedReason}
           onGenerated={(data) => {
-            const newQuestions: QuestionForm[] = data.questions.map((q, idx) => ({
+            const newQuestions: QuestionForm[] = data.questions.map((q) => ({
               id: crypto.randomUUID(),
               question_type: q.question_type,
               question_text_ar: q.question_text_ar,
@@ -538,8 +642,62 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
               sequence: b.sequence,
             }));
             setContentBlocks(newBlocks);
+
+            if (data.tasks && data.tasks.length > 0) {
+              const newTasks: TaskForm[] = data.tasks.map((t) => ({
+                id: crypto.randomUUID(),
+                task_type: t.task_type as TaskForm["task_type"],
+                title_ar: t.title_ar,
+                title_en: t.title_en,
+                instruction_ar: t.instruction_ar,
+                instruction_en: t.instruction_en,
+                timestamp_seconds: t.timestamp_seconds,
+                task_data: t.task_data,
+                timeout_seconds: null,
+                is_skippable: t.is_skippable,
+                points: t.points,
+              }));
+              setLessonTasks(newTasks);
+            }
           }}
         />
+      </div>
+
+      {/* Presentation Slides */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+              <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Presentation Slides</h2>
+              <p className="text-sm text-gray-500">Create the AI-generated presentation deck used for lesson recording.</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Link
+              href={`/teacher/lessons/${id}/slides`}
+              className="px-4 py-2 bg-[#007229] text-white rounded-xl text-sm font-medium hover:bg-[#005C22] transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+              Generate Presentation Slides
+            </Link>
+            <Link
+              href={`/teacher/lessons/${id}/slides`}
+              className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+              Open Slide Editor
+            </Link>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
@@ -686,6 +844,16 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         </div>
       </div>
 
+      {/* Interactive Tasks */}
+      <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-6">
+        <TaskEditor
+          tasks={lessonTasks}
+          onChange={setLessonTasks}
+          onSave={saveTasks}
+          saving={savingTasks}
+        />
+      </div>
+
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Lesson Content Blocks</h2>
@@ -772,6 +940,12 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           </button>
         </div>
         {embeddingStatus && <p className="text-sm text-gray-500">{embeddingStatus}</p>}
+      </div>
+
+      {/* Interaction Results */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-gray-900">Interaction Results</h2>
+        <InteractionResultsPanel lessonId={id} />
       </div>
     </div>
   );

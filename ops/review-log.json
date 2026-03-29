@@ -1,0 +1,205 @@
+{
+  "reviews": [
+    {
+      "taskId": "MS-001",
+      "project": "Amal Madrassa",
+      "score": 1,
+      "findings": [
+        "TypeScript build error: route.ts:375 — msg.role type mismatch (system not in union)",
+        "Fix is trivial: cast role after .filter() or use explicit type guard",
+        "Commit structure correct (2 logical commits, clean messages)",
+        "createErrorStream helper present and correct",
+        "Frontend changes (delete + hidden tools) look solid",
+        "openai dependency confirmed in package.json (^6.17.0)",
+        "Working tree clean except ops/"
+      ],
+      "action": "re-queued",
+      "timestamp": "2026-02-16T12:56:21.054621+00:00"
+    },
+    {
+      "taskId": "MS-001",
+      "project": "Amal Madrassa",
+      "score": 2,
+      "findings": [
+        "Retry successful: TS errors fixed with type casts (msg.role, response, empty string for null content)",
+        "Build passes with zero errors (npm run build + npx tsc --noEmit)",
+        "Three clean commits: backend refactor + frontend improvements + TS fix",
+        "All spec acceptance criteria met",
+        "Frontend delete + hidden tools correct",
+        "createErrorStream helper present",
+        "Working tree clean except ops/"
+      ],
+      "action": "approved",
+      "timestamp": "2026-02-16T13:33:00.000000+00:00"
+    },
+    {
+      "taskId": "MS-003",
+      "project": "Amal Madrassa",
+      "score": 2,
+      "findings": [
+        "30 files changed, 5,699 insertions, 1,135 deletions — comprehensive homework system",
+        "Build passes cleanly (zero errors after .next cache cleared)",
+        "5 question types supported: multiple_choice, short_answer, long_answer, file_upload, true_false",
+        "GradingInterface has keyboard shortcuts (0-9 scoring, N/P navigation, Cmd+Enter to advance) — good UX",
+        "6 API routes with proper auth checks (teacher role, cohort access verification), Zod validation on all inputs",
+        "POST /api/homework includes manual rollback if question insertion fails",
+        "DB migration well-structured: IF NOT EXISTS guards, RLS policies, triggers, SECURITY DEFINER helper functions",
+        "Bilingual AR/EN support throughout (RTL dir attribute on Arabic inputs)",
+        "Student homework page refactored to use shared StudentHomeworkList component (~160 lines removed)",
+        "Issue: N+1 query pattern in GET /api/homework — 4 queries per assignment for stats enrichment",
+        "Issue: N+1 in GET /api/homework/submissions — 1 query per submission for answered count",
+        "Issue: Quick feedback buttons in GradingInterface English-only despite bilingual design elsewhere",
+        "Issue: response_file_urls typed as JSONB in migration but string[] in TS — works but could be tighter",
+        "None of the issues are blockers at current scale"
+      ],
+      "action": "approved",
+      "timestamp": "2026-02-17T09:05:00Z"
+    },
+    {
+      "taskId": "MS-004",
+      "project": "Amal Madrassa",
+      "score": 1,
+      "findings": [
+        "BUILD FAILS: database.types.ts not updated with guardian_students and guardian_invites table types",
+        "Spec explicitly listed database.types.ts as a required modified file — this was missed",
+        "All 4 guardian pages and 2 API routes reference .from('guardian_students') / .from('guardian_invites') — Supabase client rejects unknown table names at compile time",
+        "Migration file is well-structured: RLS policies, indexes, helper function, triggers, proper constraints",
+        "Invite code generation uses ambiguity-free charset (no 0/O/1/I) with uniqueness retry loop — good",
+        "Link route has comprehensive validation: expiry, self-link, duplicate link, used code checks",
+        "Guardian dashboard queries N+1 pattern (streak + homework count + last lesson per student) — same pattern flagged in MS-003",
+        "Student detail page uses any types instead of proper interfaces for student data",
+        "AI tutor tab links to /tutor?conversation=ID but guardian may not have access to that route (read-only view was specified, not a redirect to existing tutor)",
+        "Copy code button has no visual feedback (handleCopyCode catches error but shows nothing on success)",
+        "Overall code quality is high; the only blocker is the missing types file update"
+      ],
+      "action": "re-queued",
+      "timestamp": "2026-02-18T18:00:00Z"
+    },
+    {
+      "taskId": "MS-004",
+      "project": "Amal Madrassa",
+      "score": 1,
+      "attempt": 2,
+      "commit": "23fcef8",
+      "findings": [
+        "Types for guardian_students and guardian_invites correctly added to database.types.ts (103 lines, proper Row/Insert/Update/Relationships with FK references)",
+        "TS errors reduced from 26 (pre-commit) to 2 (post-commit) — massive improvement",
+        "Copy button feedback implemented: codeCopied state + 2s setTimeout + 'Copied!' text swap + bilingual translations",
+        "any types replaced with proper interfaces: StudentData, SubjectProgress, HomeworkItem, ConversationItem",
+        "Inline conversation viewer: expandable accordion with loadConversationMessages, message caching, role-based styling, bilingual labels",
+        "Null guard added for student state before rendering",
+        "Remaining error 1: guardian/dashboard/page.tsx:142 — StudentLink interface expects relationship_type as 'parent'|'guardian'|'sibling'|'other' but DB types return string",
+        "Remaining error 2: guardian/students/[id]/page.tsx:177 — homework_assignments!inner join resolves to SelectQueryError despite FK relationship existing",
+        "Both remaining errors are Supabase type inference edge cases, not logic bugs",
+        "Build still fails — escalated to Opus build"
+      ],
+      "action": "escalated",
+      "timestamp": "2026-02-18T21:05:00Z"
+    },
+    {
+      "taskId": "MS-005",
+      "project": "Amal Madrassa",
+      "score": 2,
+      "commit": "44e1cb0",
+      "findings": [
+        "Clean targeted fix: 2 files, 5 insertions, 4 deletions",
+        "Double assertion (as unknown as StudentLink[]) for relationship_type string→union mismatch — pragmatic Supabase workaround",
+        "Replaced !inner join with regular join + .not() filter — avoids SelectQueryError while preserving filtering",
+        "Type assertions added for homework array and StudentData object",
+        "Build passes with 0 TypeScript errors",
+        "MS-004 guardian portal fully unblocked"
+      ],
+      "action": "approved",
+      "timestamp": "2026-02-19T09:00:00Z"
+    }
+    {
+      "taskId": "MS-006",
+      "project": "Amal Madrassa",
+      "score": 3,
+      "commit": "daad787",
+      "findings": [
+        "1,781 lines across 5 files — comprehensive MVP documentation package",
+        "All 8 acceptance criteria met",
+        "Privacy Policy (290 lines): GDPR/COPPA/UNCRC compliant, data retention table, children's protections, third-party processor details",
+        "Terms of Service (327 lines): Appropriate for educational platform serving children, covers AI tutor use, homework integrity, child safety",
+        "AI Safety & Moderation Guide (383 lines): References actual codebase — SYSTEM_PROMPT, checkRateLimit, tool names verified against route.ts",
+        "4-level escalation framework (minor → moderate → serious → critical) with clear response procedures",
+        "Honest about implementation vs. planned features (Moderation API noted as recommended addition)",
+        "Deployment Guide (474 lines): 9-step actionable guide with Supabase setup, env vars, Vercel deployment, troubleshooting, rollback plan, scaling cost estimates",
+        "README (307 lines): Mission-driven, feature breakdown by role, tech stack, contributing guidelines, roadmap",
+        "Build passes cleanly (0 TS errors)",
+        "Clean conventional commit message",
+        "Minor: placeholder values for jurisdiction, GitHub URL, contact emails — expected for MVP docs"
+      ],
+      "action": "approved",
+      "timestamp": "2026-02-24T09:05:00Z"
+    }
+    {
+      "taskId": "MS-007",
+      "project": "Amal Madrassa",
+      "score": 1,
+      "attempt": 1,
+      "commit": "08e7523",
+      "findings": [
+        "1,846 insertions, 521 deletions across 10 files — substantial implementation",
+        "Teacher-facing quiz management fully wired: /teacher/lessons/[id]/quizzes page works end-to-end with CRUD, QuestionBuilder (3 question types), QuizSettingsPanel (5 settings)",
+        "5 API routes created/updated: GET/POST/PATCH/DELETE/PUT questions, GET/PATCH lesson, POST responses",
+        "DB migration clean: question_type enum, quiz_settings JSONB, attempt_number, attempts_history, quiz_passed, quiz_attempts",
+        "database.types.ts properly updated with QuizSettings interface and all new columns",
+        "Bilingual AR/EN throughout all components",
+        "Net TS error reduction: 50 → 29",
+        "CRITICAL: EnhancedQuizOverlay.tsx created but NEVER imported — students won't see enhanced quiz",
+        "CRITICAL: ProgressGateModal.tsx created but NEVER imported — progress gating doesn't work",
+        "Lesson player page NOT modified — spec criteria #7, #8, #9 unmet",
+        "4x ZodError .errors bug (should be .issues) — runtime crash on validation failure",
+        "2 regression TS errors: fill_blank → fill_in_blank rename not propagated to teacher/lessons/[id]/page.tsx",
+        "quiz-management-client.tsx orphaned with broken imports (dead code, old page replaced)",
+        "MC correct answer tracked by option text value — fragile if text edited",
+        "PATTERN: Same 'built but not wired' failure as SG-007, SG-008, SG-011, LEX-003, LEX-005"
+      ],
+      "action": "re-queued",
+      "timestamp": "2026-03-03T09:00:00Z"
+    }
+  ],
+  "patterns": {
+    "sonnet45": {
+      "totalTasks": 8,
+      "avgScore": 1.88,
+      "strongAt": [
+        "OpenAI API migrations",
+        "Conventional commit discipline",
+        "Following retry guidance",
+        "Comprehensive feature implementation (30+ file commits)",
+        "Bilingual UI support",
+        "Thoughtful UX details (keyboard shortcuts, quick feedback, progress indicators)",
+        "Proper auth/authorization patterns",
+        "Professional-quality documentation with accurate code references",
+        "Zod validation schemas",
+        "RLS policy design",
+        "Invitation/linking flows with edge case handling",
+        "Teacher-facing CRUD management UIs"
+      ],
+      "weakAt": [
+        "TypeScript type narrowing on first attempt",
+        "N+1 query patterns in list endpoints",
+        "Incomplete bilingual coverage in secondary UI elements",
+        "Forgetting to update shared type definition files after schema changes",
+        "Supabase postgrest-js type inference edge cases (ambiguous FK joins, string vs union types)",
+        "Using any types instead of proper interfaces",
+        "PERSISTENT: Building components in isolation without wiring into existing pages (EnhancedQuizOverlay, ProgressGateModal — same pattern as 5+ prior tasks across all projects)",
+        "ZodError .errors vs .issues confusion",
+        "Not propagating enum/type renames to all consuming files"
+      ]
+    }
+  },
+  "escalationHistory": [
+    {
+      "taskId": "MS-004",
+      "reason": "Build still fails after 2 Sonnet attempts. Remaining 2 TS errors are Supabase type inference edge cases that require understanding of postgrest-js generics and type narrowing.",
+      "escalatedTo": "opus-build",
+      "timestamp": "2026-02-18T21:05:00Z",
+      "sonnetAttempts": 2,
+      "progressMade": "26 → 2 TS errors, all feature code and minor fixes completed"
+    }
+  ]
+}

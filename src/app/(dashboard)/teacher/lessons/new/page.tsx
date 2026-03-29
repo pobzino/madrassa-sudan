@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import CurriculumTopicSelector from "@/components/teacher/CurriculumTopicSelector";
+import {
+  hasMappedCurriculum,
+  serializeCurriculumSelection,
+  type CurriculumSelection,
+} from "@/lib/curriculum";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
@@ -28,6 +34,7 @@ export default function NewLessonPage() {
     description_en: "",
     grade_level: 1,
     subject_id: "",
+    curriculum_topic: null as CurriculumSelection | null,
     is_published: false,
     thumbnail_url: "",
     video_url_360p: "",
@@ -38,22 +45,34 @@ export default function NewLessonPage() {
     video_duration_seconds: "",
   });
 
-  useEffect(() => {
-    if (!authLoading) {
-      loadSubjects();
-    }
-  }, [authLoading]);
-
-  async function loadSubjects() {
+  const loadSubjects = useCallback(async () => {
     const supabase = createClient();
     const { data } = await supabase.from("subjects").select("id, name_ar, name_en").order("display_order");
     setSubjects(data || []);
     setLoading(false);
-  }
+  }, []);
+
+  const selectedSubject = subjects.find((subject) => subject.id === form.subject_id) ?? null;
+  const requiresCurriculum = hasMappedCurriculum(selectedSubject, form.grade_level);
+
+  useEffect(() => {
+    if (!authLoading) {
+      const timeout = setTimeout(() => {
+        void loadSubjects();
+      }, 0);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [authLoading, loadSubjects]);
 
   async function saveLesson() {
     if (!form.title_ar.trim() || !form.subject_id) {
       alert("Please fill in the required fields.");
+      return;
+    }
+
+    if (requiresCurriculum && !form.curriculum_topic) {
+      alert("Select a curriculum topic before saving this lesson.");
       return;
     }
 
@@ -83,6 +102,7 @@ export default function NewLessonPage() {
         description_en: form.description_en.trim() || null,
         grade_level: form.grade_level,
         subject_id: form.subject_id,
+        curriculum_topic: serializeCurriculumSelection(form.curriculum_topic),
         is_published: form.is_published,
         thumbnail_url: form.thumbnail_url.trim() || null,
         video_url_360p: form.video_url_360p.trim() || null,
@@ -123,6 +143,24 @@ export default function NewLessonPage() {
             ← Back to Lessons
           </Link>
           <h1 className="text-2xl font-bold text-gray-900">Create Lesson</h1>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Presentation Slides</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Save the lesson first, then generate the presentation deck from the lesson list or editor.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled
+            className="px-4 py-2 bg-[#007229] text-white rounded-xl text-sm font-medium opacity-50 cursor-not-allowed"
+          >
+            Generate Presentation Slides
+          </button>
         </div>
       </div>
 
@@ -175,6 +213,24 @@ export default function NewLessonPage() {
             </select>
           </div>
         </div>
+
+        {form.subject_id && (
+          <CurriculumTopicSelector
+            subject={selectedSubject}
+            gradeLevel={form.grade_level}
+            value={form.curriculum_topic}
+            onChange={(selection) =>
+              setForm((prev) => ({
+                ...prev,
+                curriculum_topic: selection,
+                title_ar: selection?.substrand || prev.title_ar,
+                title_en: selection?.substrand || prev.title_en,
+                description_ar: selection?.summary || prev.description_ar,
+                description_en: selection?.summary || prev.description_en,
+              }))
+            }
+          />
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Description (Arabic)</label>

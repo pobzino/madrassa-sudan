@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
@@ -56,13 +56,7 @@ export default function GradeHomeworkPage({ params }: { params: Promise<{ id: st
   // Grading state
   const [grades, setGrades] = useState<Record<string, { points: number; comment: string }>>({});
 
-  useEffect(() => {
-    if (!authLoading) {
-      loadData();
-    }
-  }, [id, authLoading]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const supabase = createClient();
 
     // Get assignment with cohort name
@@ -139,7 +133,17 @@ export default function GradeHomeworkPage({ params }: { params: Promise<{ id: st
 
     setSubmissions(formattedSubmissions);
     setLoading(false);
-  }
+  }, [id]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      const timeout = setTimeout(() => {
+        void loadData();
+      }, 0);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [authLoading, loadData]);
 
   function selectSubmission(submission: Submission) {
     setSelectedSubmission(submission);
@@ -205,7 +209,7 @@ export default function GradeHomeworkPage({ params }: { params: Promise<{ id: st
       .eq("id", selectedSubmission.id);
 
     setSaving(false);
-    loadData();
+    void loadData();
     setSelectedSubmission(null);
   }
 
@@ -220,7 +224,7 @@ export default function GradeHomeworkPage({ params }: { params: Promise<{ id: st
       });
 
       if (response.ok) {
-        loadData();
+        void loadData();
       }
     } catch (error) {
       console.error("Auto-grade error:", error);

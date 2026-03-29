@@ -6,6 +6,11 @@
 // Full color, playful, with motion cues
 // ============================================
 
+function deterministicRandom(seed: number) {
+  const value = Math.sin(seed * 12.9898) * 43758.5453;
+  return value - Math.floor(value);
+}
+
 export const FloatingBook = ({ className = "" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 64 64" fill="none">
     {/* Book body */}
@@ -2161,10 +2166,10 @@ export const Confetti = ({
   const pieces = Array.from({ length: 50 }, (_, i) => ({
     id: i,
     color: colors[i % colors.length],
-    left: Math.random() * 100,
-    delay: Math.random() * 0.5,
-    rotation: Math.random() * 360,
-    size: 8 + Math.random() * 8,
+    left: deterministicRandom(i + 1) * 100,
+    delay: deterministicRandom(i + 101) * 0.5,
+    rotation: deterministicRandom(i + 201) * 360,
+    size: 8 + deterministicRandom(i + 301) * 8,
     shape: i % 3, // 0 = circle, 1 = square, 2 = rectangle
   }));
 

@@ -97,26 +97,26 @@ export default function DiagnosticPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+      <div className="min-h-screen bg-[#FCFCFC] p-6">
         <div className="max-w-4xl mx-auto">
-          <p className="text-center text-gray-600 dark:text-gray-400">Loading...</p>
+          <p className="text-center text-gray-600 text-gray-500">Loading...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+    <div className="min-h-screen bg-[#FCFCFC] p-6">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 text-blue-600 dark:text-blue-400">
+            <div className="w-8 h-8 text-[#007229]">
               <ClipboardListIcon />
             </div>
             <h1 className="text-3xl font-bold">Diagnostic Assessments</h1>
           </div>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-gray-600 text-gray-500">
             Take assessments to find the right starting level for each subject.
             This helps us recommend lessons that match your current knowledge.
           </p>
@@ -124,12 +124,12 @@ export default function DiagnosticPage() {
 
         {/* Progress Overview */}
         {completedCount > 0 && (
-          <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-4 mb-8 flex items-center gap-3">
-            <div className="w-5 h-5 text-blue-600 dark:text-blue-400">
+          <div className="bg-[#007229]/5 border border-[#007229]/20 rounded-xl p-4 mb-8 flex items-center gap-3">
+            <div className="w-5 h-5 text-[#007229]">
               <SparklesIcon />
             </div>
-            <p className="text-blue-800 dark:text-blue-200">
-              You've completed {completedCount} of {totalSubjects} assessments.
+            <p className="text-[#007229]">
+              You&apos;ve completed {completedCount} of {totalSubjects} assessments.
               {completedCount === totalSubjects && " Great job!"}
             </p>
           </div>
@@ -152,7 +152,7 @@ export default function DiagnosticPage() {
 
         {subjects.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-400">No subjects available for assessment.</p>
+            <p className="text-gray-600 text-gray-500">No subjects available for assessment.</p>
           </div>
         )}
       </div>

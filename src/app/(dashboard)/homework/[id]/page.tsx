@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
@@ -8,6 +8,13 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { OwlTutorIcon, OwlCelebrating, Confetti } from "@/components/illustrations";
 import type { HomeworkAssignment, HomeworkQuestion, HomeworkSubmission, HomeworkResponse, Subject } from "@/lib/database.types";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
+import {
+  getHomeworkFileName,
+  HOMEWORK_BUCKET,
+  isImageFile,
+  isRemoteFileUrl,
+  normalizeHomeworkFileRefs,
+} from "@/lib/homework-files";
 
 const translations = {
   ar: {
@@ -44,6 +51,14 @@ const translations = {
     confirmSubmitDesc: "لن تتمكن من تعديل إجاباتك بعد الإرسال",
     cancel: "إلغاء",
     yes: "نعم، أرسل",
+    trueLabel: "صح",
+    falseLabel: "خطأ",
+    uploadFiles: "رفع ملفات",
+    uploadedFiles: "الملفات المرفوعة",
+    uploadHelp: "ارفع صورًا أو ملفات PDF أو مستندات",
+    uploading: "جاري رفع الملف...",
+    removeFile: "حذف الملف",
+    uploadFailed: "فشل رفع الملف",
   },
   en: {
     loading: "Loading...",
@@ -79,6 +94,14 @@ const translations = {
     confirmSubmitDesc: "You won't be able to edit your answers after submission",
     cancel: "Cancel",
     yes: "Yes, Submit",
+    trueLabel: "True",
+    falseLabel: "False",
+    uploadFiles: "Upload Files",
+    uploadedFiles: "Uploaded Files",
+    uploadHelp: "Upload images, PDFs, or documents",
+    uploading: "Uploading file...",
+    removeFile: "Remove file",
+    uploadFailed: "File upload failed",
   },
 };
 
@@ -121,6 +144,8 @@ const Icons = {
 };
 
 type ResponseMap = { [questionId: string]: string };
+type FileAnswerMap = Record<string, string[]>;
+type FileDisplayMap = Record<string, { ref: string; url: string; name: string }[]>;
 
 export default function HomeworkAssignmentPage() {
   const params = useParams();
@@ -141,10 +166,56 @@ export default function HomeworkAssignmentPage() {
 
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<ResponseMap>({});
+  const [fileAnswers, setFileAnswers] = useState<FileAnswerMap>({});
+  const [fileDisplays, setFileDisplays] = useState<FileDisplayMap>({});
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [uploadingQuestionId, setUploadingQuestionId] = useState<string | null>(null);
+  const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const answersRef = useRef<ResponseMap>({});
+  const fileAnswersRef = useRef<FileAnswerMap>({});
+
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  useEffect(() => {
+    fileAnswersRef.current = fileAnswers;
+  }, [fileAnswers]);
+
+  const buildFileDisplays = useCallback(async (fileRefs: string[]) => {
+    const entries = await Promise.all(
+      fileRefs.map(async (fileRef) => {
+        if (isRemoteFileUrl(fileRef)) {
+          return {
+            ref: fileRef,
+            url: fileRef,
+            name: getHomeworkFileName(fileRef),
+          };
+        }
+
+        const { data, error } = await supabase.storage
+          .from(HOMEWORK_BUCKET)
+          .createSignedUrl(fileRef, 60 * 60);
+
+        if (error || !data?.signedUrl) {
+          return null;
+        }
+
+        return {
+          ref: fileRef,
+          url: data.signedUrl,
+          name: getHomeworkFileName(fileRef),
+        };
+      })
+    );
+
+    return entries.filter(
+      (entry): entry is { ref: string; url: string; name: string } => entry !== null
+    );
+  }, [supabase]);
 
   useEffect(() => {
     async function loadData() {
@@ -207,94 +278,194 @@ export default function HomeworkAssignmentPage() {
           setResponses(responsesData);
           // Populate answers from existing responses
           const answerMap: ResponseMap = {};
+          const nextFileAnswers: FileAnswerMap = {};
           responsesData.forEach((r) => {
             answerMap[r.question_id] = r.response_text || "";
+            const fileRefs = normalizeHomeworkFileRefs(r.response_file_urls, r.response_file_url);
+            if (fileRefs.length > 0) {
+              nextFileAnswers[r.question_id] = fileRefs;
+            }
           });
           setAnswers(answerMap);
+          setFileAnswers(nextFileAnswers);
+
+          const displayEntries = await Promise.all(
+            Object.entries(nextFileAnswers).map(async ([questionId, fileRefs]) => [
+              questionId,
+              await buildFileDisplays(fileRefs),
+            ] as const)
+          );
+          setFileDisplays(Object.fromEntries(displayEntries));
         }
       }
 
       setLoading(false);
     }
     loadData();
-  }, [assignmentId, router, supabase]);
+  }, [assignmentId, buildFileDisplays, router, supabase]);
 
-  // Auto-save answer
-  const saveAnswer = useCallback(async (questionId: string, answer: string) => {
-    if (!userId || !assignmentId) return;
+  const saveDraftAnswer = useCallback(async (questionId: string) => {
+    if (!assignmentId) return;
 
     setSaving(true);
 
-    // Create or get submission
-    let submissionId = submission?.id;
-    if (!submissionId) {
-      const { data: newSubmission } = await supabase
-        .from("homework_submissions")
-        .insert({
-          assignment_id: assignmentId,
-          student_id: userId,
-          status: "in_progress",
-        })
-        .select()
-        .single();
+    try {
+      await fetch(`/api/homework/${assignmentId}/submit`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          answers: [{
+            question_id: questionId,
+            response_text: answersRef.current[questionId] || null,
+            response_file_urls: fileAnswersRef.current[questionId] || null,
+          }],
+        }),
+      });
+    } finally {
+      setSaving(false);
+    }
+  }, [assignmentId]);
 
-      if (newSubmission) {
-        setSubmission(newSubmission);
-        submissionId = newSubmission.id;
+  const scheduleDraftSave = useCallback((questionId: string) => {
+    const existingTimer = saveTimersRef.current[questionId];
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    saveTimersRef.current[questionId] = setTimeout(() => {
+      void saveDraftAnswer(questionId);
+    }, 800);
+  }, [saveDraftAnswer]);
+
+  const handleAnswerChange = (questionId: string, value: string) => {
+    setAnswers((prev) => ({ ...prev, [questionId]: value }));
+    answersRef.current = { ...answersRef.current, [questionId]: value };
+    scheduleDraftSave(questionId);
+  };
+
+  useEffect(() => {
+    const timers = saveTimersRef.current;
+    return () => {
+      Object.values(timers).forEach((timer) => clearTimeout(timer));
+    };
+  }, []);
+
+  const handleFileUpload = useCallback(async (questionId: string, files: FileList | null) => {
+    if (!files || files.length === 0 || !userId) {
+      return;
+    }
+
+    setUploadingQuestionId(questionId);
+
+    try {
+      const uploadedRefs: string[] = [];
+
+      for (const file of Array.from(files)) {
+        const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+        const filePath = `${userId}/${assignmentId}/${questionId}/${Date.now()}-${crypto.randomUUID()}-${sanitizedName}`;
+
+        const { error } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, file, {
+          cacheControl: "3600",
+          contentType: file.type || undefined,
+          upsert: false,
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        uploadedRefs.push(filePath);
+      }
+
+      const nextRefs = [...(fileAnswersRef.current[questionId] || []), ...uploadedRefs];
+      const nextFileAnswers = { ...fileAnswersRef.current, [questionId]: nextRefs };
+      fileAnswersRef.current = nextFileAnswers;
+      setFileAnswers(nextFileAnswers);
+      const nextDisplays = await buildFileDisplays(nextRefs);
+      setFileDisplays((prev) => ({ ...prev, [questionId]: nextDisplays }));
+
+      await saveDraftAnswer(questionId);
+    } catch (error) {
+      console.error("Homework file upload failed:", error);
+      alert(t.uploadFailed);
+    } finally {
+      setUploadingQuestionId(null);
+    }
+  }, [assignmentId, buildFileDisplays, saveDraftAnswer, supabase.storage, t.uploadFailed, userId]);
+
+  const handleRemoveFile = useCallback(async (questionId: string, fileRef: string) => {
+    if (!isRemoteFileUrl(fileRef)) {
+      const { error } = await supabase.storage.from(HOMEWORK_BUCKET).remove([fileRef]);
+      if (error) {
+        console.error("Failed to remove homework file:", error);
       }
     }
 
-    if (submissionId) {
-      // Upsert response
-      await supabase
-        .from("homework_responses")
-        .upsert({
-          submission_id: submissionId,
-          question_id: questionId,
-          response_text: answer,
-        }, {
-          onConflict: "submission_id,question_id",
-        });
-    }
+    const nextRefs = (fileAnswersRef.current[questionId] || []).filter((value) => value !== fileRef);
+    const nextFileAnswers = { ...fileAnswersRef.current, [questionId]: nextRefs };
+    fileAnswersRef.current = nextFileAnswers;
+    setFileAnswers(nextFileAnswers);
+    setFileDisplays((prev) => ({
+      ...prev,
+      [questionId]: (prev[questionId] || []).filter((entry) => entry.ref !== fileRef),
+    }));
 
-    setSaving(false);
-  }, [userId, assignmentId, submission, supabase]);
-
-  // Handle answer change
-  const handleAnswerChange = (questionId: string, value: string) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: value }));
-    // Debounced save
-    const timer = setTimeout(() => saveAnswer(questionId, value), 1000);
-    return () => clearTimeout(timer);
-  };
+    await saveDraftAnswer(questionId);
+  }, [saveDraftAnswer, supabase.storage]);
 
   // Submit homework
   const handleSubmit = async () => {
-    if (!submission) return;
-
     setSubmitting(true);
     setShowConfirm(false);
 
-    // Save all answers first
-    for (const [qId, answer] of Object.entries(answers)) {
-      await saveAnswer(qId, answer);
+    try {
+      const payload = questions.map((question) => ({
+        question_id: question.id,
+        response_text: answersRef.current[question.id] || null,
+        response_file_urls: fileAnswersRef.current[question.id] || null,
+      }));
+
+      const response = await fetch(`/api/homework/${assignmentId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: payload }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to submit homework");
+      }
+
+      await response.json();
+
+      if (userId) {
+        const { data: submissionData } = await supabase
+          .from("homework_submissions")
+          .select("*")
+          .eq("assignment_id", assignmentId)
+          .eq("student_id", userId)
+          .single();
+
+        if (submissionData) {
+          setSubmission(submissionData);
+
+          const { data: responsesData } = await supabase
+            .from("homework_responses")
+            .select("*")
+            .eq("submission_id", submissionData.id);
+
+          if (responsesData) {
+            setResponses(responsesData);
+          }
+        }
+      }
+
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 3000);
+    } catch (error) {
+      console.error("Homework submission failed:", error);
+    } finally {
+      setSubmitting(false);
     }
-
-    // Update submission status
-    await supabase
-      .from("homework_submissions")
-      .update({
-        status: "submitted",
-        submitted_at: new Date().toISOString(),
-      })
-      .eq("id", submission.id);
-
-    setSubmission((prev) => prev ? { ...prev, status: "submitted", submitted_at: new Date().toISOString() } : null);
-    setSubmitting(false);
-
-    // Celebrate homework submission!
-    setShowConfetti(true);
-    setTimeout(() => setShowConfetti(false), 3000);
   };
 
   // Format date
@@ -319,6 +490,8 @@ export default function HomeworkAssignmentPage() {
   const isSubmitted = submission?.status === "submitted" || submission?.status === "graded" || submission?.status === "returned";
   const isGraded = submission?.status === "graded" || submission?.status === "returned";
   const currentQ = questions[currentQuestion];
+  const currentResponse = currentQ ? getResponse(currentQ.id) : undefined;
+  const currentFileDisplays = currentQ ? fileDisplays[currentQ.id] || [] : [];
 
   if (loading) {
     return (
@@ -418,7 +591,7 @@ export default function HomeworkAssignmentPage() {
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {questions.map((q, idx) => {
             const response = getResponse(q.id);
-            const hasAnswer = answers[q.id]?.trim();
+            const hasAnswer = Boolean(answers[q.id]?.trim() || fileAnswers[q.id]?.length);
             const isCorrect = response?.points_earned !== null && response?.points_earned !== undefined && response.points_earned > 0;
 
             return (
@@ -468,7 +641,6 @@ export default function HomeworkAssignmentPage() {
               {currentQ.question_type === "multiple_choice" && currentQ.options && (
                 <div className="space-y-3">
                   {(currentQ.options as string[]).map((option, idx) => {
-                    const response = getResponse(currentQ.id);
                     const isSelected = answers[currentQ.id] === option;
                     const isCorrectOption = isGraded && option === currentQ.correct_answer;
                     const isWrongSelection = isGraded && isSelected && option !== currentQ.correct_answer;
@@ -513,6 +685,40 @@ export default function HomeworkAssignmentPage() {
                 </div>
               )}
 
+              {currentQ.question_type === "true_false" && (
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { value: "true", label: t.trueLabel },
+                    { value: "false", label: t.falseLabel },
+                  ].map((option) => {
+                    const isSelected = answers[currentQ.id] === option.value;
+                    const isCorrectOption = isGraded && option.value === currentQ.correct_answer;
+                    const isWrongSelection = isGraded && isSelected && option.value !== currentQ.correct_answer;
+
+                    return (
+                      <button
+                        key={option.value}
+                        onClick={() => !isSubmitted && handleAnswerChange(currentQ.id, option.value)}
+                        disabled={isSubmitted}
+                        className={`w-full p-4 rounded-xl border text-center transition-all ${
+                          isGraded
+                            ? isCorrectOption
+                              ? "bg-emerald-100 border-emerald-500 text-emerald-800"
+                              : isWrongSelection
+                                ? "bg-red-100 border-red-500 text-red-800"
+                                : "bg-gray-50 border-gray-200 text-gray-600"
+                            : isSelected
+                              ? "bg-[#007229]/10 border-emerald-500"
+                              : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                        } ${isSubmitted ? "cursor-default" : "cursor-pointer"}`}
+                      >
+                        <span className="font-medium">{option.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               {currentQ.question_type === "short_answer" && (
                 <div>
                   <input
@@ -546,11 +752,80 @@ export default function HomeworkAssignmentPage() {
                 </div>
               )}
 
+              {currentQ.question_type === "file_upload" && (
+                <div className="space-y-4">
+                  {currentQ.instructions && (
+                    <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-xl">
+                      {currentQ.instructions}
+                    </p>
+                  )}
+
+                  {!isSubmitted && (
+                    <label className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-center hover:border-emerald-400 hover:bg-emerald-50 transition-colors cursor-pointer">
+                      <input
+                        type="file"
+                        multiple
+                        className="hidden"
+                        accept="image/*,.pdf,.doc,.docx"
+                        onChange={(event) => void handleFileUpload(currentQ.id, event.target.files)}
+                      />
+                      <span className="font-medium text-gray-800">{t.uploadFiles}</span>
+                      <span className="text-sm text-gray-500">{t.uploadHelp}</span>
+                    </label>
+                  )}
+
+                  {uploadingQuestionId === currentQ.id && (
+                    <p className="text-sm text-gray-500">{t.uploading}</p>
+                  )}
+
+                  {currentFileDisplays.length > 0 && (
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium text-gray-700">{t.uploadedFiles}</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {currentFileDisplays.map((file) => (
+                          <div
+                            key={file.ref}
+                            className="rounded-xl border border-gray-200 bg-white p-3"
+                          >
+                            {isImageFile(file.url) ? (
+                              <img
+                                src={file.url}
+                                alt={file.name}
+                                className="mb-3 h-40 w-full rounded-lg object-cover"
+                              />
+                            ) : null}
+                            <div className="flex items-center justify-between gap-3">
+                              <a
+                                href={file.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="min-w-0 truncate text-sm font-medium text-cyan-700 hover:text-cyan-800"
+                              >
+                                {file.name}
+                              </a>
+                              {!isSubmitted && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleRemoveFile(currentQ.id, file.ref)}
+                                  className="text-sm text-red-600 hover:text-red-700"
+                                >
+                                  {t.removeFile}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Teacher comment on this question */}
-              {isGraded && getResponse(currentQ.id)?.teacher_comment && (
+              {isGraded && currentResponse?.teacher_comment && (
                 <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
                   <p className="text-sm font-medium text-amber-800 mb-1">{t.teacherComment}</p>
-                  <p className="text-amber-700">{getResponse(currentQ.id)?.teacher_comment}</p>
+                  <p className="text-amber-700">{currentResponse.teacher_comment}</p>
                 </div>
               )}
             </div>

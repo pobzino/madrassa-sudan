@@ -57,17 +57,17 @@ export function QuestionDisplay({
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8">
+    <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
       {/* Progress and Language Toggle */}
       <div className="flex items-center justify-between mb-6">
         {progress && (
-          <div className="text-sm text-gray-600 dark:text-gray-400">
+          <div className="text-sm text-gray-600 text-gray-500">
             Question {progress.answered + 1}
           </div>
         )}
         <button
           onClick={() => setShowEnglish(!showEnglish)}
-          className="text-sm text-blue-500 hover:text-blue-600 transition-colors"
+          className="text-sm text-[#007229] hover:text-[#005C22] transition-colors"
         >
           {showEnglish ? 'العربية' : 'English'}
         </button>
@@ -79,7 +79,7 @@ export function QuestionDisplay({
           {question.question_text_ar}
         </p>
         {showEnglish && question.question_text_en && (
-          <p className="text-lg text-gray-600 dark:text-gray-400">
+          <p className="text-lg text-gray-600 text-gray-500">
             {question.question_text_en}
           </p>
         )}
@@ -94,15 +94,15 @@ export function QuestionDisplay({
             disabled={showFeedback}
             className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
               selectedAnswer === option.id
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
-                : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                ? 'border-[#007229] bg-[#007229]/5'
+                : 'border-gray-200 hover:border-[#007229]/40'
             }`}
           >
             <div className="flex items-center gap-3">
               <div
                 className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
                   selectedAnswer === option.id
-                    ? 'border-blue-500 bg-blue-500'
+                    ? 'border-[#007229] bg-[#007229]'
                     : 'border-gray-300'
                 }`}
               >
@@ -113,7 +113,7 @@ export function QuestionDisplay({
               <div className="flex-1">
                 <p dir="rtl">{option.text_ar}</p>
                 {showEnglish && option.text_en && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm text-gray-600 text-gray-500">
                     {option.text_en}
                   </p>
                 )}
@@ -128,8 +128,8 @@ export function QuestionDisplay({
         <div
           className={`p-4 rounded-xl mb-6 flex items-center gap-3 ${
             isCorrect
-              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-              : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+              ? 'bg-green-50 text-green-700'
+              : 'bg-red-50 text-red-700'
           }`}
         >
           {isCorrect ? (
@@ -155,7 +155,7 @@ export function QuestionDisplay({
         <button
           onClick={handleSubmit}
           disabled={!selectedAnswer}
-          className="w-full py-4 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300
+          className="w-full py-4 bg-[#007229] hover:bg-[#005C22] disabled:bg-gray-300
                    disabled:cursor-not-allowed text-white font-semibold rounded-xl
                    transition-colors"
         >

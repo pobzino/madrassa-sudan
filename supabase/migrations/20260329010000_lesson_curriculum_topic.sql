@@ -1,0 +1,2 @@
+ALTER TABLE lessons
+ADD COLUMN IF NOT EXISTS curriculum_topic JSONB;

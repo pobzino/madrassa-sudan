@@ -8,11 +8,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import type { Profile } from "@/lib/database.types";
 import { clearAuthCache, getCachedProfile, getCachedUser } from "@/lib/supabase/auth-cache";
 import {
-  FloatingBook,
   FloatingRocket,
-  RobotIcon,
-  TrophyIcon,
-  BookOpenIcon,
   GraduationCapIcon,
   OwlTutorIcon,
   MadrassaLogo,
@@ -125,11 +121,9 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [authChecked, setAuthChecked] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const supabase = createClient();
   const { language, setLanguage } = useLanguage();
   const t = translations[language];
   const isRtl = language === "ar";
@@ -141,6 +135,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     authCheckRef.current = true;
 
     async function loadProfile() {
+      const supabase = createClient();
       const user = await getCachedUser(supabase);
       if (!user) {
         router.push("/auth/login");
@@ -149,18 +144,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
       // Some environments are missing the profiles table; skip profile lookup on tutor route.
       if (pathname.startsWith("/tutor")) {
-        setAuthChecked(true);
         return;
       }
 
       const profileData = await getCachedProfile(supabase, user.id);
       if (profileData) setProfile(profileData);
-      setAuthChecked(true);
     }
-    loadProfile();
-  }, [router, supabase]);
+    void loadProfile();
+  }, [router, pathname]);
 
   const handleLogout = async () => {
+    const supabase = createClient();
     await supabase.auth.signOut();
     clearAuthCache();
     router.push("/");
@@ -214,7 +208,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     return pathname.startsWith(href);
   };
 
-  const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
+  const renderSidebar = (mobile = false) => (
     <div className={`flex flex-col h-full bg-white ${mobile ? "" : "border-r border-gray-100"}`}>
       {/* Logo */}
       <div className="p-5 border-b border-gray-100">
@@ -335,14 +329,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             >
               {Icons.close}
             </button>
-            <Sidebar mobile />
+            {renderSidebar(true)}
           </div>
         </div>
       )}
 
       {/* Desktop Sidebar */}
       <div className={`hidden lg:block fixed top-0 ${isRtl ? "right-0" : "left-0"} w-64 h-screen`}>
-        <Sidebar />
+        {renderSidebar()}
       </div>
 
       {/* Main Content */}

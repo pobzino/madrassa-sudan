@@ -3,10 +3,9 @@
 import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { OwlThinking, OwlCelebrating } from "@/components/illustrations";
-import type { Subject, LessonProgress } from "@/lib/database.types";
+import type { Subject } from "@/lib/database.types";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 
 const translations = {
@@ -205,9 +204,17 @@ export default function ProgressPage() {
               .eq("student_id", user.id)
               .eq("completed", true);
 
-            const completed = completedLessons?.filter(
-              (lp: any) => lp.lessons?.subject_id === subject.id
-            ).length || 0;
+            const completedLessonRows = (completedLessons || []) as Array<{
+              lesson_id: string;
+              lessons: { subject_id: string | null } | { subject_id: string | null }[] | null;
+            }>;
+            const completed = completedLessonRows.filter((lessonProgress) => {
+              if (Array.isArray(lessonProgress.lessons)) {
+                return lessonProgress.lessons.some((lesson) => lesson.subject_id === subject.id);
+              }
+
+              return lessonProgress.lessons?.subject_id === subject.id;
+            }).length;
 
             return {
               subject,

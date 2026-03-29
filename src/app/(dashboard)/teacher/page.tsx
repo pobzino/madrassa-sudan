@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { OwlTutorIcon } from "@/components/illustrations";
@@ -19,6 +19,7 @@ interface RecentActivity {
   type: "submission" | "enrollment";
   description: string;
   time: string;
+  timestamp: string;
 }
 
 interface TeacherInsights {
@@ -41,13 +42,31 @@ export default function TeacherDashboard() {
   const [teacherName, setTeacherName] = useState("");
   const [insights, setInsights] = useState<TeacherInsights | null>(null);
 
-  useEffect(() => {
-    if (!authLoading) {
-      loadTeacherData();
-    }
-  }, [authLoading]);
+  function formatRelativeTime(timestamp: string) {
+    const diffMs = Date.now() - new Date(timestamp).getTime();
+    const diffMinutes = Math.max(1, Math.floor(diffMs / 60000));
 
-  async function loadTeacherData() {
+    if (diffMinutes < 60) {
+      return `${diffMinutes} min ago`;
+    }
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) {
+      return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+    }
+
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) {
+      return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+    }
+
+    return new Intl.DateTimeFormat("en-GB", {
+      month: "short",
+      day: "numeric",
+    }).format(new Date(timestamp));
+  }
+
+  const loadTeacherData = useCallback(async () => {
     const supabase = createClient();
     const user = await getCachedUser(supabase);
 
@@ -81,6 +100,7 @@ export default function TeacherDashboard() {
     let totalStudents = 0;
     let pendingGrading = 0;
     let assignmentsCreated = 0;
+    let teacherAssignmentIds: string[] = [];
 
     if (cohortIds.length > 0) {
       // Count students in teacher's cohorts
@@ -99,14 +119,14 @@ export default function TeacherDashboard() {
         .eq("created_by", user.id);
 
       assignmentsCreated = assignmentCount || 0;
-      const assignmentIds = assignments?.map((a) => a.id) || [];
+      teacherAssignmentIds = assignments?.map((a) => a.id) || [];
 
       // Count pending submissions
-      if (assignmentIds.length > 0) {
+      if (teacherAssignmentIds.length > 0) {
         const { count: pendingCount } = await supabase
           .from("homework_submissions")
           .select("*", { count: "exact", head: true })
-          .in("assignment_id", assignmentIds)
+          .in("assignment_id", teacherAssignmentIds)
           .eq("status", "submitted");
 
         pendingGrading = pendingCount || 0;
@@ -253,15 +273,136 @@ export default function TeacherDashboard() {
 
     setInsights(insightPayload);
 
-    // Get recent activity (mock for now - would need more complex queries)
-    setRecentActivity([
-      { id: "1", type: "submission", description: "أحمد submitted Math homework", time: "10 min ago" },
-      { id: "2", type: "enrollment", description: "New student joined Grade 5 Science", time: "1 hour ago" },
-      { id: "3", type: "submission", description: "فاطمة submitted English assignment", time: "2 hours ago" },
-    ]);
+    let recentActivityPayload: RecentActivity[] = [];
+
+    if (cohortIds.length > 0) {
+      const [recentSubmissionsResult, recentEnrollmentsResult] = await Promise.all([
+        teacherAssignmentIds.length > 0
+          ? supabase
+              .from("homework_submissions")
+              .select(`
+                id,
+                student_id,
+                submitted_at,
+                assignment:homework_assignments (
+                  title_ar,
+                  title_en,
+                  subject:subjects (
+                    name_ar,
+                    name_en
+                  )
+                )
+              `)
+              .in("assignment_id", teacherAssignmentIds)
+              .not("submitted_at", "is", null)
+              .order("submitted_at", { ascending: false })
+              .limit(6)
+          : Promise.resolve({ data: [] as unknown[] }),
+        supabase
+          .from("cohort_students")
+          .select(`
+            id,
+            student_id,
+            enrolled_at,
+            cohort:cohorts (
+              name
+            )
+          `)
+          .in("cohort_id", cohortIds)
+          .eq("is_active", true)
+          .order("enrolled_at", { ascending: false })
+          .limit(6),
+      ]);
+
+      const submissionRows = (recentSubmissionsResult.data || []) as Array<{
+        id: string;
+        student_id: string;
+        submitted_at: string | null;
+        assignment: {
+          title_ar?: string | null;
+          title_en?: string | null;
+          subject?: { name_ar?: string | null; name_en?: string | null } | null;
+        } | null;
+      }>;
+      const enrollmentRows = (recentEnrollmentsResult.data || []) as Array<{
+        id: string;
+        student_id: string;
+        enrolled_at: string;
+        cohort: { name?: string | null } | null;
+      }>;
+
+      const studentIds = Array.from(
+        new Set([
+          ...submissionRows.map((row) => row.student_id),
+          ...enrollmentRows.map((row) => row.student_id),
+        ])
+      );
+
+      const { data: profiles } = studentIds.length > 0
+        ? await supabase
+            .from("profiles")
+            .select("id, full_name")
+            .in("id", studentIds)
+        : { data: [] as Array<{ id: string; full_name: string | null }> };
+
+      const profileMap = new Map(
+        (profiles || []).map((profile) => [profile.id, profile.full_name || "Student"])
+      );
+
+      const submissionActivities: RecentActivity[] = submissionRows
+        .filter((row) => row.submitted_at)
+        .map((row) => {
+          const assignmentTitle =
+            row.assignment?.title_en ||
+            row.assignment?.title_ar ||
+            row.assignment?.subject?.name_en ||
+            row.assignment?.subject?.name_ar ||
+            "homework";
+          const studentName = profileMap.get(row.student_id) || "Student";
+          const timestamp = row.submitted_at as string;
+
+          return {
+            id: `submission-${row.id}`,
+            type: "submission",
+            description: `${studentName} submitted ${assignmentTitle}`,
+            time: formatRelativeTime(timestamp),
+            timestamp,
+          };
+        });
+
+      const enrollmentActivities: RecentActivity[] = enrollmentRows.map((row) => {
+        const studentName = profileMap.get(row.student_id) || "Student";
+        const cohortName = row.cohort?.name || "a class";
+        const timestamp = row.enrolled_at;
+
+        return {
+          id: `enrollment-${row.id}`,
+          type: "enrollment",
+          description: `${studentName} joined ${cohortName}`,
+          time: formatRelativeTime(timestamp),
+          timestamp,
+        };
+      });
+
+      recentActivityPayload = [...submissionActivities, ...enrollmentActivities]
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 6);
+    }
+
+    setRecentActivity(recentActivityPayload);
 
     setLoading(false);
-  }
+  }, [teacherDevBypass]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      const timeout = setTimeout(() => {
+        void loadTeacherData();
+      }, 0);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [authLoading, loadTeacherData]);
 
   if (authLoading || loading) {
     return (

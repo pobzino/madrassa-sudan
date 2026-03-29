@@ -23,13 +23,27 @@ interface GeneratedContentBlock {
   sequence: number;
 }
 
+interface GeneratedTask {
+  task_type: string;
+  title_ar: string;
+  title_en: string;
+  instruction_ar: string;
+  instruction_en: string;
+  timestamp_seconds: number;
+  task_data: Record<string, unknown>;
+  is_skippable: boolean;
+  points: number;
+}
+
 interface AIContentGeneratorProps {
   lessonId: string;
   hasVideo: boolean;
   hasExistingContent: boolean;
+  disabledReason?: string | null;
   onGenerated: (data: {
     questions: GeneratedQuestion[];
     contentBlocks: GeneratedContentBlock[];
+    tasks?: GeneratedTask[];
     transcript: string;
   }) => void;
 }
@@ -38,6 +52,7 @@ export default function AIContentGenerator({
   lessonId,
   hasVideo,
   hasExistingContent,
+  disabledReason = null,
   onGenerated,
 }: AIContentGeneratorProps) {
   const [generating, setGenerating] = useState(false);
@@ -47,7 +62,7 @@ export default function AIContentGenerator({
   const [showTranscript, setShowTranscript] = useState(false);
 
   async function handleGenerate() {
-    if (!hasVideo) return;
+    if (!hasVideo || disabledReason) return;
 
     if (hasExistingContent) {
       const confirmed = window.confirm(
@@ -80,6 +95,7 @@ export default function AIContentGenerator({
       onGenerated({
         questions: data.questions || [],
         contentBlocks: data.contentBlocks || [],
+        tasks: data.tasks || [],
         transcript: data.transcript?.text || '',
       });
 
@@ -101,7 +117,7 @@ export default function AIContentGenerator({
         <button
           type="button"
           onClick={handleGenerate}
-          disabled={generating || !hasVideo}
+          disabled={generating || !hasVideo || Boolean(disabledReason)}
           className="px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-medium
                      hover:bg-purple-700 transition-colors disabled:opacity-50
                      disabled:cursor-not-allowed flex items-center gap-2"
@@ -126,6 +142,9 @@ export default function AIContentGenerator({
 
         {!hasVideo && (
           <span className="text-xs text-gray-500">Upload a video first</span>
+        )}
+        {disabledReason && (
+          <span className="text-xs text-amber-700">{disabledReason}</span>
         )}
       </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
@@ -31,13 +31,7 @@ export default function TeacherCohortsPage() {
   });
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    if (!authLoading) {
-      loadCohorts();
-    }
-  }, [authLoading]);
-
-  async function loadCohorts() {
+  const loadCohorts = useCallback(async () => {
     const supabase = createClient();
     const user = await getCachedUser(supabase);
 
@@ -80,7 +74,17 @@ export default function TeacherCohortsPage() {
 
     setCohorts(cohortsData);
     setLoading(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading) {
+      const timeout = setTimeout(() => {
+        void loadCohorts();
+      }, 0);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [authLoading, loadCohorts]);
 
   async function createCohort() {
     if (!newCohort.name.trim()) return;
@@ -119,7 +123,7 @@ export default function TeacherCohortsPage() {
     setNewCohort({ name: "", description: "", grade_level: 1 });
     setShowCreateModal(false);
     setCreating(false);
-    loadCohorts();
+    void loadCohorts();
   }
 
   function copyJoinCode(code: string) {

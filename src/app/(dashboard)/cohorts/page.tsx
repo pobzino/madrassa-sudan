@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { OwlThinking, OwlSad } from "@/components/illustrations";
 import type { Cohort, Profile } from "@/lib/database.types";
@@ -109,13 +108,8 @@ export default function CohortsPage() {
   const supabase = createClient();
   const { language } = useLanguage();
   const t = translations[language];
-  const isRtl = language === "ar";
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const user = await getCachedUser(supabase);
     if (!user) {
       router.push("/auth/login");
@@ -183,7 +177,15 @@ export default function CohortsPage() {
     }
 
     setLoading(false);
-  }
+  }, [router, supabase]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      void loadData();
+    }, 0);
+
+    return () => clearTimeout(timeout);
+  }, [loadData]);
 
   // Join class
   const handleJoin = async () => {
@@ -237,7 +239,7 @@ export default function CohortsPage() {
     setMessage({ type: "success", text: t.joinedSuccess });
     setJoinCode("");
     setJoining(false);
-    loadData(); // Refresh list
+    void loadData(); // Refresh list
   };
 
   // Leave class
@@ -251,7 +253,7 @@ export default function CohortsPage() {
       .eq("student_id", userId);
 
     setShowLeaveModal(null);
-    loadData(); // Refresh list
+    void loadData(); // Refresh list
   };
 
   // Cohort card colors

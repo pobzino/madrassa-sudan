@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import { SubmissionQueue } from "@/components/homework/HomeworkList";
 import { GradingInterface } from "@/components/homework/GradingInterface";
@@ -12,7 +12,6 @@ import type { SubmissionQueueItem, RubricCriterion } from "@/lib/homework.types"
 
 export default function HomeworkSubmissionsPage() {
   const params = useParams();
-  const router = useRouter();
   const assignmentId = params.id as string;
   const { loading: authLoading } = useTeacherGuard();
   const supabase = createClient();
@@ -63,13 +62,7 @@ export default function HomeworkSubmissionsPage() {
   const [filter, setFilter] = useState<"all" | "pending" | "graded">("all");
   const [overallFeedback, setOverallFeedback] = useState("");
 
-  useEffect(() => {
-    if (!authLoading && assignmentId) {
-      loadData();
-    }
-  }, [authLoading, assignmentId, filter]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
 
     try {
@@ -99,7 +92,17 @@ export default function HomeworkSubmissionsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [assignmentId, filter, supabase]);
+
+  useEffect(() => {
+    if (!authLoading && assignmentId) {
+      const timeout = setTimeout(() => {
+        void loadData();
+      }, 0);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [authLoading, assignmentId, loadData]);
 
   async function loadSubmissionDetail(submissionId: string) {
     try {
@@ -283,10 +286,12 @@ export default function HomeworkSubmissionsPage() {
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   {selectedSubmission.student_avatar ? (
-                    <img
+                    <Image
                       src={selectedSubmission.student_avatar}
                       alt={selectedSubmission.student_name}
-                      className="w-12 h-12 rounded-full object-cover"
+                      width={48}
+                      height={48}
+                      className="rounded-full object-cover"
                     />
                   ) : (
                     <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-medium text-lg">

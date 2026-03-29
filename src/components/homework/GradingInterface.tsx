@@ -1,11 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import type {
-  HomeworkQuestion,
-  HomeworkResponse,
-  RubricCriterion,
-} from "@/lib/homework.types";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import type { RubricCriterion } from "@/lib/homework.types";
 
 interface GradingQuestion {
   response_id: string | null;
@@ -55,8 +51,7 @@ export function GradingInterface({
     >
   >({});
 
-  // Initialize grades from questions
-  useEffect(() => {
+  const initialGrades = useMemo(() => {
     const initialGrades: Record<string, { points: number; comment: string }> = {};
     questions.forEach((q) => {
       if (q.response_id) {
@@ -66,32 +61,44 @@ export function GradingInterface({
         };
       }
     });
-    setGrades(initialGrades);
+    return initialGrades;
   }, [questions]);
+
+  // Reset local grading state when a different submission/question set loads.
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setGrades(initialGrades);
+    }, 0);
+
+    return () => clearTimeout(timeout);
+  }, [initialGrades]);
 
   const currentQuestion = questions[currentIndex];
   const currentGrade = currentQuestion?.response_id
     ? grades[currentQuestion.response_id]
     : { points: 0, comment: "" };
 
-  const updateGrade = (responseId: string, updates: { points?: number; comment?: string }) => {
-    setGrades((prev) => ({
-      ...prev,
-      [responseId]: {
-        ...prev[responseId],
-        ...updates,
-      },
-    }));
+  const updateGrade = useCallback(
+    (responseId: string, updates: { points?: number; comment?: string }) => {
+      setGrades((prev) => {
+        const nextGrade = {
+          ...prev[responseId],
+          ...updates,
+        };
+        const nextGrades = {
+          ...prev,
+          [responseId]: nextGrade,
+        };
 
-    // Auto-save draft
-    if (onSaveDraft) {
-      onSaveDraft(
-        responseId,
-        updates.points ?? grades[responseId]?.points ?? 0,
-        updates.comment ?? grades[responseId]?.comment ?? ""
-      );
-    }
-  };
+        if (onSaveDraft) {
+          onSaveDraft(responseId, nextGrade.points ?? 0, nextGrade.comment ?? "");
+        }
+
+        return nextGrades;
+      });
+    },
+    [onSaveDraft]
+  );
 
   const handleSubmitGrades = () => {
     const gradesToSubmit = Object.entries(grades).map(([responseId, grade]) => ({
@@ -107,8 +114,8 @@ export function GradingInterface({
   const progress = ((currentIndex + 1) / questions.length) * 100;
 
   // Keyboard shortcuts
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger shortcuts when typing in inputs
       if (
         document.activeElement?.tagName === "INPUT" ||
@@ -164,14 +171,11 @@ export function GradingInterface({
           }
           break;
       }
-    },
-    [currentIndex, questions.length, currentQuestion, onNavigate]
-  );
+    };
 
-  useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
+  }, [currentIndex, questions.length, currentQuestion, onNavigate, updateGrade]);
 
   if (!currentQuestion) {
     return <div className="text-center py-8 text-gray-500">No questions to grade</div>;
