@@ -415,7 +415,7 @@ export default function TeacherLessonsPage() {
           onClick={closeQuickCreateModal}
         >
           <div
-            className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-gray-100 p-6 space-y-5"
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl border border-gray-100 p-6 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">

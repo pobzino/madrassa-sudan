@@ -69,8 +69,19 @@ export default function SlideGenerateButton({
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Generation failed');
+        const text = await res.text();
+        let errorMessage = 'Generation failed';
+        try {
+          const data = JSON.parse(text);
+          errorMessage = data.error || errorMessage;
+        } catch {
+          if (res.status === 502 || res.status === 504) {
+            errorMessage = 'Generation timed out — the AI call took too long. Please try again.';
+          } else {
+            errorMessage = `Server error (${res.status})`;
+          }
+        }
+        throw new Error(errorMessage);
       }
 
       setProgress('Processing...');
