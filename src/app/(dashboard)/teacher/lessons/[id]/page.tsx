@@ -64,16 +64,16 @@ type ContentBlock = {
   sequence: number;
 };
 
+type Tab = "details" | "questions" | "content" | "results";
+
 export default function LessonEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { loading: authLoading } = useTeacherGuard();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
-  const [savingLesson, setSavingLesson] = useState(false);
-  const [savingQuestions, setSavingQuestions] = useState(false);
-  const [savingTasks, setSavingTasks] = useState(false);
-  const [savingBlocks, setSavingBlocks] = useState(false);
-  const [embeddingStatus, setEmbeddingStatus] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("details");
   const [videoInputMode, setVideoInputMode] = useState<"upload" | "manual">("upload");
 
   const [form, setForm] = useState<LessonForm>({
@@ -161,7 +161,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     }));
     setQuestions(questionForms);
 
-    // Load tasks
     const { data: taskRows } = await supabase
       .from("lesson_tasks")
       .select("*")
@@ -207,7 +206,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       const timeout = setTimeout(() => {
         void loadLesson();
       }, 0);
-
       return () => clearTimeout(timeout);
     }
   }, [authLoading, loadLesson]);
@@ -258,112 +256,114 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     ]);
   }
 
-  async function saveLesson() {
+  async function saveAll() {
     if (!form.title_ar.trim() || !form.subject_id) {
-      alert("Title and subject are required.");
+      setSaveMessage({ type: "error", text: "Title and subject are required." });
       return;
     }
     if (requiresCurriculum && !form.curriculum_topic) {
-      alert("Select a curriculum topic before saving this lesson.");
+      setSaveMessage({ type: "error", text: "Select a curriculum topic before saving." });
       return;
     }
-    setSavingLesson(true);
+
+    setSaving(true);
+    setSaveMessage(null);
     const supabase = createClient();
-    const { error } = await supabase
-      .from("lessons")
-      .update({
-        title_ar: form.title_ar.trim(),
-        title_en: form.title_en.trim(),
-        description_ar: form.description_ar.trim() || null,
-        description_en: form.description_en.trim() || null,
-        subject_id: form.subject_id,
-        grade_level: form.grade_level,
-        curriculum_topic: serializeCurriculumSelection(form.curriculum_topic),
-        is_published: form.is_published,
-        thumbnail_url: form.thumbnail_url.trim() || null,
-        video_url_360p: form.video_url_360p.trim() || null,
-        video_url_480p: form.video_url_480p.trim() || null,
-        video_url_720p: form.video_url_720p.trim() || null,
-        captions_ar_url: form.captions_ar_url.trim() || null,
-        captions_en_url: form.captions_en_url.trim() || null,
-        video_duration_seconds: form.video_duration_seconds ? Number(form.video_duration_seconds) : null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-    setSavingLesson(false);
-    if (error) {
-      alert("Save failed: " + error.message);
-      console.error("Save lesson error:", error);
+
+    try {
+      // Save lesson details
+      const { error: lessonError } = await supabase
+        .from("lessons")
+        .update({
+          title_ar: form.title_ar.trim(),
+          title_en: form.title_en.trim(),
+          description_ar: form.description_ar.trim() || null,
+          description_en: form.description_en.trim() || null,
+          subject_id: form.subject_id,
+          grade_level: form.grade_level,
+          curriculum_topic: serializeCurriculumSelection(form.curriculum_topic),
+          is_published: form.is_published,
+          thumbnail_url: form.thumbnail_url.trim() || null,
+          video_url_360p: form.video_url_360p.trim() || null,
+          video_url_480p: form.video_url_480p.trim() || null,
+          video_url_720p: form.video_url_720p.trim() || null,
+          captions_ar_url: form.captions_ar_url.trim() || null,
+          captions_en_url: form.captions_en_url.trim() || null,
+          video_duration_seconds: form.video_duration_seconds ? Number(form.video_duration_seconds) : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+
+      if (lessonError) throw new Error("Lesson: " + lessonError.message);
+
+      // Save questions
+      await supabase.from("lesson_questions").delete().eq("lesson_id", id);
+      if (questions.length > 0) {
+        const questionRows = questions.map((q, index) => ({
+          lesson_id: id,
+          question_type: q.question_type,
+          question_text_ar: q.question_text_ar,
+          question_text_en: q.question_text_en || null,
+          options: q.question_type === "fill_in_blank" ? null : q.options.filter((opt) => opt.trim()),
+          correct_answer: q.correct_answer,
+          explanation_ar: null,
+          explanation_en: null,
+          is_required: q.is_required,
+          allow_retry: q.allow_retry,
+          display_order: index + 1,
+          timestamp_seconds: q.timestamp_seconds || 0,
+        }));
+        const { error: qError } = await supabase.from("lesson_questions").insert(questionRows);
+        if (qError) throw new Error("Questions: " + qError.message);
+      }
+
+      // Save tasks
+      await supabase.from("lesson_tasks").delete().eq("lesson_id", id);
+      if (lessonTasks.length > 0) {
+        const taskRows: Database["public"]["Tables"]["lesson_tasks"]["Insert"][] = lessonTasks.map((t, index) => ({
+          lesson_id: id,
+          task_type: t.task_type as "matching_pairs" | "sorting_order" | "fill_in_blank_enhanced" | "drag_drop_label" | "drawing_tracing" | "audio_recording",
+          title_ar: t.title_ar,
+          title_en: t.title_en || null,
+          instruction_ar: t.instruction_ar,
+          instruction_en: t.instruction_en || null,
+          timestamp_seconds: t.timestamp_seconds || 0,
+          task_data: t.task_data as Database["public"]["Tables"]["lesson_tasks"]["Insert"]["task_data"],
+          timeout_seconds: t.timeout_seconds,
+          is_skippable: t.is_skippable,
+          points: t.points,
+          display_order: index,
+        }));
+        const { error: tError } = await supabase.from("lesson_tasks").insert(taskRows);
+        if (tError) throw new Error("Tasks: " + tError.message);
+      }
+
+      // Save content blocks
+      await fetch("/api/teacher/lessons/content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lesson_id: id,
+          blocks: contentBlocks.map((block, index) => ({
+            language: block.language,
+            content: block.content,
+            source_type: block.source_type,
+            sequence: index,
+          })),
+        }),
+      });
+
+      setSaveMessage({ type: "success", text: "Saved" });
+      setTimeout(() => setSaveMessage(null), 2000);
+    } catch (err) {
+      setSaveMessage({ type: "error", text: err instanceof Error ? err.message : "Save failed" });
+    } finally {
+      setSaving(false);
     }
-  }
-
-  async function saveQuestions() {
-    if (questions.length === 0) return;
-    setSavingQuestions(true);
-    const supabase = createClient();
-    await supabase.from("lesson_questions").delete().eq("lesson_id", id);
-    const rows = questions.map((q, index) => ({
-      lesson_id: id,
-      question_type: q.question_type,
-      question_text_ar: q.question_text_ar,
-      question_text_en: q.question_text_en || null,
-      options: q.question_type === "fill_in_blank" ? null : q.options.filter((opt) => opt.trim()),
-      correct_answer: q.correct_answer,
-      explanation_ar: null,
-      explanation_en: null,
-      is_required: q.is_required,
-      allow_retry: q.allow_retry,
-      display_order: index + 1,
-      timestamp_seconds: q.timestamp_seconds || 0,
-    }));
-    await supabase.from("lesson_questions").insert(rows);
-    setSavingQuestions(false);
-  }
-
-  async function saveTasks() {
-    setSavingTasks(true);
-    const supabase = createClient();
-    await supabase.from("lesson_tasks").delete().eq("lesson_id", id);
-    if (lessonTasks.length > 0) {
-      const rows: Database["public"]["Tables"]["lesson_tasks"]["Insert"][] = lessonTasks.map((t, index) => ({
-        lesson_id: id,
-        task_type: t.task_type as "matching_pairs" | "sorting_order" | "fill_in_blank_enhanced" | "drag_drop_label" | "drawing_tracing" | "audio_recording",
-        title_ar: t.title_ar,
-        title_en: t.title_en || null,
-        instruction_ar: t.instruction_ar,
-        instruction_en: t.instruction_en || null,
-        timestamp_seconds: t.timestamp_seconds || 0,
-        task_data: t.task_data as Database["public"]["Tables"]["lesson_tasks"]["Insert"]["task_data"],
-        timeout_seconds: t.timeout_seconds,
-        is_skippable: t.is_skippable,
-        points: t.points,
-        display_order: index,
-      }));
-      await supabase.from("lesson_tasks").insert(rows);
-    }
-    setSavingTasks(false);
-  }
-
-  async function saveContentBlocks() {
-    setSavingBlocks(true);
-    await fetch("/api/teacher/lessons/content", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        lesson_id: id,
-        blocks: contentBlocks.map((block, index) => ({
-          language: block.language,
-          content: block.content,
-          source_type: block.source_type,
-          sequence: index,
-        })),
-      }),
-    });
-    setSavingBlocks(false);
   }
 
   async function rebuildEmbeddings() {
-    setEmbeddingStatus("Embedding...");
+    setSaveMessage({ type: "success", text: "Embedding..." });
     const response = await fetch("/api/teacher/lessons/embed", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -371,10 +371,11 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     });
     const data = await response.json();
     if (!response.ok) {
-      setEmbeddingStatus(data.error || "Failed to embed");
+      setSaveMessage({ type: "error", text: data.error || "Failed to embed" });
       return;
     }
-    setEmbeddingStatus(`Embedded ${data.count || 0} chunks.`);
+    setSaveMessage({ type: "success", text: `Embedded ${data.count || 0} chunks` });
+    setTimeout(() => setSaveMessage(null), 3000);
   }
 
   if (authLoading || loading) {
@@ -385,26 +386,168 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     );
   }
 
+  const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: "details", label: "Details" },
+    { key: "questions", label: "Questions & Tasks", count: questions.length + lessonTasks.length },
+    { key: "content", label: "Content", count: contentBlocks.length },
+    { key: "results", label: "Results" },
+  ];
+
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link href="/teacher/lessons" className="text-gray-500 hover:text-gray-700 text-sm mb-2 inline-block">
-            ← Back to Lessons
-          </Link>
-          <h1 className="text-2xl font-bold text-gray-900">Edit Lesson</h1>
+    <div className="min-h-screen bg-gray-50/50">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-30 bg-white border-b border-gray-100 shadow-sm">
+        <div className="max-w-5xl mx-auto px-6 py-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <Link href="/teacher/lessons" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                Lessons
+              </Link>
+              <div className="flex items-center gap-2.5 mt-0.5">
+                <h1 className="text-lg font-bold text-gray-900 truncate">
+                  {form.title_en || form.title_ar || "Untitled Lesson"}
+                </h1>
+                <button
+                  onClick={() => setForm({ ...form, is_published: !form.is_published })}
+                  className={`flex-shrink-0 px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors ${
+                    form.is_published
+                      ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  }`}
+                >
+                  {form.is_published ? "Published" : "Draft"}
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {saveMessage && (
+                <span className={`text-xs font-medium ${saveMessage.type === "success" ? "text-emerald-600" : "text-red-600"}`}>
+                  {saveMessage.text}
+                </span>
+              )}
+              <Link
+                href={`/teacher/lessons/${id}/slides`}
+                className="px-3 py-1.5 border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors hidden sm:flex items-center gap-1.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
+                </svg>
+                Slides
+              </Link>
+              <button
+                onClick={saveAll}
+                disabled={saving}
+                className="px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60"
+              >
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 mt-3 -mb-px">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors relative ${
+                  activeTab === tab.key
+                    ? "text-emerald-700 bg-gray-50/80"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {tab.label}
+                {tab.count != null && tab.count > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-[10px] font-semibold text-gray-600">
+                    {tab.count}
+                  </span>
+                )}
+                {activeTab === tab.key && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-600 rounded-full" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
-        <button
-          onClick={saveLesson}
-          disabled={savingLesson}
-          className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-60"
-        >
-          {savingLesson ? "Saving..." : "Save Lesson"}
-        </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Lesson Basics</h2>
+      {/* Tab content */}
+      <div className="max-w-5xl mx-auto px-6 py-6">
+        {activeTab === "details" && (
+          <DetailsTab
+            form={form}
+            setForm={setForm}
+            subjects={subjects}
+            selectedSubject={selectedSubject}
+            requiresCurriculum={requiresCurriculum}
+            videoInputMode={videoInputMode}
+            setVideoInputMode={setVideoInputMode}
+            lessonId={id}
+          />
+        )}
+
+        {activeTab === "questions" && (
+          <QuestionsTasksTab
+            questions={questions}
+            lessonTasks={lessonTasks}
+            updateQuestion={updateQuestion}
+            addQuestion={addQuestion}
+            removeQuestion={removeQuestion}
+            setLessonTasks={setLessonTasks}
+          />
+        )}
+
+        {activeTab === "content" && (
+          <ContentTab
+            lessonId={id}
+            form={form}
+            questions={questions}
+            contentBlocks={contentBlocks}
+            setContentBlocks={setContentBlocks}
+            setQuestions={setQuestions}
+            setLessonTasks={setLessonTasks}
+            addContentBlock={addContentBlock}
+            contentGenerationBlockedReason={contentGenerationBlockedReason}
+            rebuildEmbeddings={rebuildEmbeddings}
+          />
+        )}
+
+        {activeTab === "results" && (
+          <div className="space-y-4">
+            <InteractionResultsPanel lessonId={id} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Details Tab ─── */
+
+function DetailsTab({
+  form,
+  setForm,
+  subjects,
+  selectedSubject,
+  requiresCurriculum,
+  videoInputMode,
+  setVideoInputMode,
+  lessonId,
+}: {
+  form: LessonForm;
+  setForm: (f: LessonForm | ((prev: LessonForm) => LessonForm)) => void;
+  subjects: Subject[];
+  selectedSubject: Subject | null;
+  requiresCurriculum: boolean;
+  videoInputMode: "upload" | "manual";
+  setVideoInputMode: (mode: "upload" | "manual") => void;
+  lessonId: string;
+}) {
+  return (
+    <div className="space-y-6">
+      {/* Titles */}
+      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Lesson Info</h2>
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Title (Arabic)</label>
@@ -468,260 +611,187 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           />
         )}
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description (Arabic)</label>
-          <textarea
-            value={form.description_ar}
-            onChange={(e) => setForm({ ...form, description_ar: e.target.value })}
-            rows={3}
-            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-          />
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description (Arabic)</label>
+            <textarea
+              value={form.description_ar}
+              onChange={(e) => setForm({ ...form, description_ar: e.target.value })}
+              rows={3}
+              className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description (English)</label>
+            <textarea
+              value={form.description_en}
+              onChange={(e) => setForm({ ...form, description_en: e.target.value })}
+              rows={3}
+              className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+            />
+          </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description (English)</label>
-          <textarea
-            value={form.description_en}
-            onChange={(e) => setForm({ ...form, description_en: e.target.value })}
-            rows={3}
-            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-          />
+      </section>
+
+      {/* Video & Media */}
+      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Video & Media</h2>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => setVideoInputMode("upload")}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                videoInputMode === "upload"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Upload
+            </button>
+            <button
+              type="button"
+              onClick={() => setVideoInputMode("manual")}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                videoInputMode === "manual"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Manual URLs
+            </button>
+          </div>
         </div>
+
+        {videoInputMode === "upload" ? (
+          <div className="space-y-3">
+            <BunnyVideoUploader
+              lessonId={lessonId}
+              lessonTitle={form.title_ar || form.title_en || "Untitled"}
+              onVideosReady={(urls) => {
+                setForm((prev) => ({
+                  ...prev,
+                  video_url_360p: urls.video_url_360p,
+                  video_url_480p: urls.video_url_480p,
+                  video_url_720p: urls.video_url_720p,
+                  ...(urls.duration_seconds ? { video_duration_seconds: String(urls.duration_seconds) } : {}),
+                }));
+              }}
+              currentVideoUrl={form.video_url_720p || undefined}
+            />
+            {form.video_url_720p && (
+              <p className="text-xs text-gray-400">720p: {form.video_url_720p}</p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Video 360p</label>
+                <input
+                  value={form.video_url_360p}
+                  onChange={(e) => setForm({ ...form, video_url_360p: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Video 480p</label>
+                <input
+                  value={form.video_url_480p}
+                  onChange={(e) => setForm({ ...form, video_url_480p: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Video 720p</label>
+                <input
+                  value={form.video_url_720p}
+                  onChange={(e) => setForm({ ...form, video_url_720p: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Captions (Arabic)</label>
+                <input
+                  value={form.captions_ar_url}
+                  onChange={(e) => setForm({ ...form, captions_ar_url: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Captions (English)</label>
+                <input
+                  value={form.captions_en_url}
+                  onChange={(e) => setForm({ ...form, captions_en_url: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Thumbnail URL</label>
           <input
             value={form.thumbnail_url}
             onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-200 rounded-xl"
+            placeholder="https://..."
+            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
           />
         </div>
+      </section>
+    </div>
+  );
+}
 
-        {/* Video Upload / Manual URLs */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-700">Video</span>
-            <div className="flex gap-1 ml-2">
-              <button
-                type="button"
-                onClick={() => setVideoInputMode("upload")}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  videoInputMode === "upload"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                Upload
-              </button>
-              <button
-                type="button"
-                onClick={() => setVideoInputMode("manual")}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  videoInputMode === "manual"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                Manual URLs
-              </button>
-            </div>
-          </div>
+/* ─── Questions & Tasks Tab ─── */
 
-          {videoInputMode === "upload" ? (
-            <div className="space-y-3">
-              <BunnyVideoUploader
-                lessonId={id}
-                lessonTitle={form.title_ar || form.title_en || "Untitled"}
-                onVideosReady={(urls) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    video_url_360p: urls.video_url_360p,
-                    video_url_480p: urls.video_url_480p,
-                    video_url_720p: urls.video_url_720p,
-                    ...(urls.duration_seconds ? { video_duration_seconds: String(urls.duration_seconds) } : {}),
-                  }));
-                }}
-                currentVideoUrl={form.video_url_720p || undefined}
-              />
-              {form.video_url_720p && (
-                <div className="text-xs text-gray-400 space-y-0.5">
-                  <p>360p: {form.video_url_360p}</p>
-                  <p>480p: {form.video_url_480p}</p>
-                  <p>720p: {form.video_url_720p}</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="grid md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Video URL 360p</label>
-                <input
-                  value={form.video_url_360p}
-                  onChange={(e) => setForm({ ...form, video_url_360p: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Video URL 480p</label>
-                <input
-                  value={form.video_url_480p}
-                  onChange={(e) => setForm({ ...form, video_url_480p: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Video URL 720p</label>
-                <input
-                  value={form.video_url_720p}
-                  onChange={(e) => setForm({ ...form, video_url_720p: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Captions (Arabic)</label>
-            <input
-              value={form.captions_ar_url}
-              onChange={(e) => setForm({ ...form, captions_ar_url: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Captions (English)</label>
-            <input
-              value={form.captions_en_url}
-              onChange={(e) => setForm({ ...form, captions_en_url: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl"
-            />
-          </div>
-        </div>
-
+function QuestionsTasksTab({
+  questions,
+  lessonTasks,
+  updateQuestion,
+  addQuestion,
+  removeQuestion,
+  setLessonTasks,
+}: {
+  questions: QuestionForm[];
+  lessonTasks: TaskForm[];
+  updateQuestion: (id: string, updates: Partial<QuestionForm>) => void;
+  addQuestion: () => void;
+  removeQuestion: (id: string) => void;
+  setLessonTasks: (tasks: TaskForm[] | ((prev: TaskForm[]) => TaskForm[])) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      {/* Questions */}
+      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">Published</span>
-          <button
-            onClick={() => setForm({ ...form, is_published: !form.is_published })}
-            className={`w-12 h-6 rounded-full flex items-center px-1 transition-colors ${
-              form.is_published ? "bg-emerald-500 justify-end" : "bg-gray-200 justify-start"
-            }`}
-          >
-            <span className="w-4 h-4 bg-white rounded-full shadow" />
-          </button>
-        </div>
-      </div>
-
-      {/* AI Content Generator */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">AI Content Generator</h2>
-        <AIContentGenerator
-          lessonId={id}
-          hasVideo={!!(form.video_url_360p || form.video_url_480p || form.video_url_720p)}
-          hasExistingContent={questions.length > 0 || contentBlocks.length > 0}
-          disabledReason={contentGenerationBlockedReason}
-          onGenerated={(data) => {
-            const newQuestions: QuestionForm[] = data.questions.map((q) => ({
-              id: crypto.randomUUID(),
-              question_type: q.question_type,
-              question_text_ar: q.question_text_ar,
-              question_text_en: q.question_text_en,
-              options: q.options || (q.question_type === "true_false" ? ["صحيح", "خطأ"] : []),
-              correct_answer: q.correct_answer,
-              points: 10,
-              timestamp_seconds: q.timestamp_seconds,
-              is_required: q.is_required,
-              allow_retry: q.allow_retry,
-            }));
-            setQuestions(newQuestions);
-
-            const newBlocks: ContentBlock[] = data.contentBlocks.map((b) => ({
-              language: b.language,
-              content: b.content,
-              source_type: b.source_type,
-              sequence: b.sequence,
-            }));
-            setContentBlocks(newBlocks);
-
-            if (data.tasks && data.tasks.length > 0) {
-              const newTasks: TaskForm[] = data.tasks.map((t) => ({
-                id: crypto.randomUUID(),
-                task_type: t.task_type as TaskForm["task_type"],
-                title_ar: t.title_ar,
-                title_en: t.title_en,
-                instruction_ar: t.instruction_ar,
-                instruction_en: t.instruction_en,
-                timestamp_seconds: t.timestamp_seconds,
-                task_data: t.task_data,
-                timeout_seconds: null,
-                is_skippable: t.is_skippable,
-                points: t.points,
-              }));
-              setLessonTasks(newTasks);
-            }
-          }}
-        />
-      </div>
-
-      {/* Presentation Slides */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
-              <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Presentation Slides</h2>
-              <p className="text-sm text-gray-500">Create the AI-generated presentation deck used for lesson recording.</p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Link
-              href={`/teacher/lessons/${id}/slides`}
-              className="px-4 py-2 bg-[#007229] text-white rounded-xl text-sm font-medium hover:bg-[#005C22] transition-colors flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-              </svg>
-              Generate Presentation Slides
-            </Link>
-            <Link
-              href={`/teacher/lessons/${id}/slides`}
-              className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-              </svg>
-              Open Slide Editor
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Lesson Questions</h2>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+            Questions {questions.length > 0 && <span className="text-gray-400">({questions.length})</span>}
+          </h2>
           <button
             onClick={addQuestion}
-            className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors"
+            className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors"
           >
-            Add Question
+            + Add Question
           </button>
         </div>
 
         {questions.length === 0 ? (
-          <p className="text-sm text-gray-500">No questions yet.</p>
+          <div className="text-center py-8 border border-dashed border-gray-200 rounded-xl">
+            <p className="text-sm text-gray-400">No questions yet. Add one manually or use the AI generator in the Content tab.</p>
+          </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {questions.map((question, index) => (
               <div key={question.id} className="border border-gray-100 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-gray-800">Question {index + 1}</h3>
+                  <span className="text-sm font-semibold text-gray-700">Q{index + 1}</span>
                   <button
                     onClick={() => removeQuestion(question.id)}
-                    className="text-sm text-red-600 hover:text-red-700"
+                    className="text-xs text-red-500 hover:text-red-700"
                   >
                     Remove
                   </button>
@@ -746,7 +816,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                   </div>
                 </div>
 
-                <div className="grid md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
                     <select
@@ -811,19 +881,21 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                 )}
 
                 <div className="flex items-center gap-4 text-sm">
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-gray-600">
                     <input
                       type="checkbox"
                       checked={question.is_required}
                       onChange={(e) => updateQuestion(question.id, { is_required: e.target.checked })}
+                      className="rounded"
                     />
                     Required
                   </label>
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-gray-600">
                     <input
                       type="checkbox"
                       checked={question.allow_retry}
                       onChange={(e) => updateQuestion(question.id, { allow_retry: e.target.checked })}
+                      className="rounded"
                     />
                     Allow retry
                   </label>
@@ -832,51 +904,128 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             ))}
           </div>
         )}
+      </section>
 
-        <div className="flex justify-end">
-          <button
-            onClick={saveQuestions}
-            disabled={savingQuestions}
-            className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60"
-          >
-            {savingQuestions ? "Saving..." : "Save Questions"}
-          </button>
-        </div>
-      </div>
-
-      {/* Interactive Tasks */}
-      <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-6">
+      {/* Tasks */}
+      <section className="bg-white rounded-xl border border-gray-100 p-5">
         <TaskEditor
           tasks={lessonTasks}
           onChange={setLessonTasks}
-          onSave={saveTasks}
-          saving={savingTasks}
+          onSave={() => {}}
+          saving={false}
+          hideSaveButton
         />
-      </div>
+      </section>
+    </div>
+  );
+}
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+/* ─── Content Tab ─── */
+
+function ContentTab({
+  lessonId,
+  form,
+  questions,
+  contentBlocks,
+  setContentBlocks,
+  setQuestions,
+  setLessonTasks,
+  addContentBlock,
+  contentGenerationBlockedReason,
+  rebuildEmbeddings,
+}: {
+  lessonId: string;
+  form: LessonForm;
+  questions: QuestionForm[];
+  contentBlocks: ContentBlock[];
+  setContentBlocks: (blocks: ContentBlock[] | ((prev: ContentBlock[]) => ContentBlock[])) => void;
+  setQuestions: (questions: QuestionForm[]) => void;
+  setLessonTasks: (tasks: TaskForm[] | ((prev: TaskForm[]) => TaskForm[])) => void;
+  addContentBlock: (language: "ar" | "en") => void;
+  contentGenerationBlockedReason: string | null;
+  rebuildEmbeddings: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      {/* AI Generator */}
+      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">AI Content Generator</h2>
+        <AIContentGenerator
+          lessonId={lessonId}
+          hasVideo={!!(form.video_url_360p || form.video_url_480p || form.video_url_720p)}
+          hasExistingContent={questions.length > 0 || contentBlocks.length > 0}
+          disabledReason={contentGenerationBlockedReason}
+          onGenerated={(data) => {
+            const newQuestions: QuestionForm[] = data.questions.map((q) => ({
+              id: crypto.randomUUID(),
+              question_type: q.question_type,
+              question_text_ar: q.question_text_ar,
+              question_text_en: q.question_text_en,
+              options: q.options || (q.question_type === "true_false" ? ["صحيح", "خطأ"] : []),
+              correct_answer: q.correct_answer,
+              points: 10,
+              timestamp_seconds: q.timestamp_seconds,
+              is_required: q.is_required,
+              allow_retry: q.allow_retry,
+            }));
+            setQuestions(newQuestions);
+
+            const newBlocks: ContentBlock[] = data.contentBlocks.map((b) => ({
+              language: b.language,
+              content: b.content,
+              source_type: b.source_type,
+              sequence: b.sequence,
+            }));
+            setContentBlocks(newBlocks);
+
+            if (data.tasks && data.tasks.length > 0) {
+              const newTasks: TaskForm[] = data.tasks.map((t) => ({
+                id: crypto.randomUUID(),
+                task_type: t.task_type as TaskForm["task_type"],
+                title_ar: t.title_ar,
+                title_en: t.title_en,
+                instruction_ar: t.instruction_ar,
+                instruction_en: t.instruction_en,
+                timestamp_seconds: t.timestamp_seconds,
+                task_data: t.task_data,
+                timeout_seconds: null,
+                is_skippable: t.is_skippable,
+                points: t.points,
+              }));
+              setLessonTasks(newTasks);
+            }
+          }}
+        />
+      </section>
+
+      {/* Content Blocks */}
+      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Lesson Content Blocks</h2>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+            Content Blocks {contentBlocks.length > 0 && <span className="text-gray-400">({contentBlocks.length})</span>}
+          </h2>
           <div className="flex gap-2">
             <button
               onClick={() => addContentBlock("ar")}
-              className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors"
+              className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors"
             >
-              Add Arabic
+              + Arabic
             </button>
             <button
               onClick={() => addContentBlock("en")}
-              className="px-3 py-2 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors"
+              className="px-3 py-1.5 bg-gray-700 text-white rounded-lg text-xs font-medium hover:bg-gray-800 transition-colors"
             >
-              Add English
+              + English
             </button>
           </div>
         </div>
 
         {contentBlocks.length === 0 ? (
-          <p className="text-sm text-gray-500">No content blocks yet.</p>
+          <div className="text-center py-8 border border-dashed border-gray-200 rounded-xl">
+            <p className="text-sm text-gray-400">No content blocks yet. Use the AI generator or add manually.</p>
+          </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {contentBlocks.map((block, index) => (
               <div key={`${block.language}-${index}`} className="border border-gray-100 rounded-xl p-4 space-y-2">
                 <div className="flex items-center gap-3">
@@ -887,7 +1036,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                       next[index] = { ...block, language: e.target.value as "ar" | "en" };
                       setContentBlocks(next);
                     }}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
                   >
                     <option value="ar">Arabic</option>
                     <option value="en">English</option>
@@ -900,11 +1049,11 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                       setContentBlocks(next);
                     }}
                     placeholder="Source type"
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
                   />
                   <button
                     onClick={() => setContentBlocks(contentBlocks.filter((_, idx) => idx !== index))}
-                    className="text-sm text-red-600 hover:text-red-700"
+                    className="text-xs text-red-500 hover:text-red-700"
                   >
                     Remove
                   </button>
@@ -924,29 +1073,15 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           </div>
         )}
 
-        <div className="flex items-center justify-between">
-          <button
-            onClick={saveContentBlocks}
-            disabled={savingBlocks}
-            className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60"
-          >
-            {savingBlocks ? "Saving..." : "Save Content Blocks"}
-          </button>
+        <div className="flex justify-end">
           <button
             onClick={rebuildEmbeddings}
-            className="px-4 py-2 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors"
+            className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200 transition-colors"
           >
             Rebuild Embeddings
           </button>
         </div>
-        {embeddingStatus && <p className="text-sm text-gray-500">{embeddingStatus}</p>}
-      </div>
-
-      {/* Interaction Results */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Interaction Results</h2>
-        <InteractionResultsPanel lessonId={id} />
-      </div>
+      </section>
     </div>
   );
 }

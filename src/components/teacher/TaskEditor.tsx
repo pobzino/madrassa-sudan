@@ -57,9 +57,10 @@ interface Props {
   onChange: (tasks: TaskForm[]) => void
   onSave: () => void
   saving: boolean
+  hideSaveButton?: boolean
 }
 
-export default function TaskEditor({ tasks, onChange, onSave, saving }: Props) {
+export default function TaskEditor({ tasks, onChange, onSave, saving, hideSaveButton }: Props) {
   const updateTask = (taskId: string, updates: Partial<TaskForm>) => {
     onChange(tasks.map(t => t.id === taskId ? { ...t, ...updates } : t))
   }
@@ -246,7 +247,7 @@ export default function TaskEditor({ tasks, onChange, onSave, saving }: Props) {
         </div>
       )}
 
-      {tasks.length > 0 && (
+      {tasks.length > 0 && !hideSaveButton && (
         <div className="flex justify-end">
           <button
             onClick={onSave}
