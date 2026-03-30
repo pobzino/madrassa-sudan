@@ -31,6 +31,159 @@ interface InteractivePlaceholders {
   solution_map: number[] | null;
 }
 
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+const CHOOSE_CORRECT_VARIANTS: Omit<InteractivePlaceholders, 'true_false_answer' | 'count_target' | 'visual_emoji' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
+  {
+    title_ar: 'ما عاصمة السودان؟', title_en: 'What is the capital of Sudan?',
+    body_ar: 'اختر الإجابة الصحيحة من الخيارات التالية', body_en: 'Choose the correct answer from the options below',
+    prompt_ar: 'ما هي عاصمة السودان؟', prompt_en: 'What is the capital of Sudan?',
+    options_ar: ['الخرطوم', 'القاهرة', 'جوبا', 'أديس أبابا'],
+    options_en: ['Khartoum', 'Cairo', 'Juba', 'Addis Ababa'],
+    correct_index: 0,
+  },
+  {
+    title_ar: 'كم عدد أيام الأسبوع؟', title_en: 'How many days in a week?',
+    body_ar: 'اختر العدد الصحيح', body_en: 'Pick the correct number',
+    prompt_ar: 'كم يوماً في الأسبوع؟', prompt_en: 'How many days are in a week?',
+    options_ar: ['خمسة', 'ستة', 'سبعة', 'ثمانية'],
+    options_en: ['Five', 'Six', 'Seven', 'Eight'],
+    correct_index: 2,
+  },
+  {
+    title_ar: 'ما أكبر كوكب؟', title_en: 'What is the biggest planet?',
+    body_ar: 'اختر الكوكب الأكبر في مجموعتنا الشمسية', body_en: 'Select the largest planet in our solar system',
+    prompt_ar: 'أي كوكب هو الأكبر؟', prompt_en: 'Which planet is the largest?',
+    options_ar: ['المريخ', 'الأرض', 'المشتري'],
+    options_en: ['Mars', 'Earth', 'Jupiter'],
+    correct_index: 2,
+  },
+];
+
+const TRUE_FALSE_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_en' | 'correct_index' | 'count_target' | 'visual_emoji' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
+  {
+    title_ar: 'صح أم خطأ؟', title_en: 'True or False?',
+    body_ar: 'الشمس تدور حول الأرض', body_en: 'The Sun revolves around the Earth',
+    prompt_ar: 'هل الشمس تدور حول الأرض؟', prompt_en: 'Does the Sun revolve around the Earth?',
+    true_false_answer: false,
+  },
+  {
+    title_ar: 'صح أم خطأ؟', title_en: 'True or False?',
+    body_ar: 'الماء يتكون من الهيدروجين والأكسجين', body_en: 'Water is made of hydrogen and oxygen',
+    prompt_ar: 'هل الماء يتكون من الهيدروجين والأكسجين؟', prompt_en: 'Is water made of hydrogen and oxygen?',
+    true_false_answer: true,
+  },
+  {
+    title_ar: 'صح أم خطأ؟', title_en: 'True or False?',
+    body_ar: 'العنكبوت من الحشرات', body_en: 'A spider is an insect',
+    prompt_ar: 'هل العنكبوت حشرة؟', prompt_en: 'Is a spider an insect?',
+    true_false_answer: false,
+  },
+];
+
+const FILL_BLANK_VARIANTS: Omit<InteractivePlaceholders, 'true_false_answer' | 'count_target' | 'visual_emoji' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
+  {
+    title_ar: 'أكمل الجملة', title_en: 'Complete the sentence',
+    body_ar: 'اختر الكلمة المناسبة لملء الفراغ', body_en: 'Pick the right word to fill the gap',
+    prompt_ar: 'الأرض تدور حول ___', prompt_en: 'The Earth revolves around the ___',
+    options_ar: ['القمر', 'الشمس', 'المريخ'],
+    options_en: ['Moon', 'Sun', 'Mars'],
+    correct_index: 1,
+  },
+  {
+    title_ar: 'أكمل الجملة', title_en: 'Complete the sentence',
+    body_ar: 'أكمل الجملة بالكلمة الصحيحة', body_en: 'Complete the sentence with the correct word',
+    prompt_ar: 'النبات يحتاج ___ لينمو', prompt_en: 'Plants need ___ to grow',
+    options_ar: ['الظلام', 'الضوء', 'الثلج'],
+    options_en: ['Darkness', 'Light', 'Ice'],
+    correct_index: 1,
+  },
+];
+
+const TAP_COUNT_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
+  {
+    title_ar: 'عدّ التفاح!', title_en: 'Count the apples!',
+    body_ar: 'اضغط على كل تفاحة تراها', body_en: 'Tap each apple you see',
+    prompt_ar: 'كم تفاحة ترى؟', prompt_en: 'How many apples do you see?',
+    count_target: 5, visual_emoji: '🍎',
+  },
+  {
+    title_ar: 'عدّ النجوم!', title_en: 'Count the stars!',
+    body_ar: 'اضغط على كل نجمة تراها', body_en: 'Tap each star you see',
+    prompt_ar: 'كم نجمة ترى؟', prompt_en: 'How many stars do you see?',
+    count_target: 7, visual_emoji: '⭐',
+  },
+  {
+    title_ar: 'عدّ الأشجار!', title_en: 'Count the trees!',
+    body_ar: 'اضغط على كل شجرة تراها', body_en: 'Tap each tree you see',
+    prompt_ar: 'كم شجرة ترى؟', prompt_en: 'How many trees do you see?',
+    count_target: 4, visual_emoji: '🌳',
+  },
+];
+
+const MATCH_PAIRS_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'count_target' | 'visual_emoji' | 'solution_map'>[] = [
+  {
+    title_ar: 'طابق الحيوان بصوته', title_en: 'Match the animal to its sound',
+    body_ar: 'صل كل حيوان بالصوت الذي يصدره', body_en: 'Connect each animal to the sound it makes',
+    prompt_ar: 'صل الحيوان بصوته', prompt_en: 'Match each animal to its sound',
+    items_ar: ['قطة', 'كلب', 'بقرة'],
+    items_en: ['Cat', 'Dog', 'Cow'],
+    targets_ar: ['مياو', 'هاو هاو', 'مووو'],
+    targets_en: ['Meow', 'Woof', 'Moo'],
+  },
+  {
+    title_ar: 'طابق البلد بعاصمته', title_en: 'Match the country to its capital',
+    body_ar: 'صل كل بلد بعاصمته', body_en: 'Connect each country to its capital city',
+    prompt_ar: 'صل البلد بعاصمته', prompt_en: 'Match each country to its capital',
+    items_ar: ['السودان', 'مصر', 'الأردن'],
+    items_en: ['Sudan', 'Egypt', 'Jordan'],
+    targets_ar: ['الخرطوم', 'القاهرة', 'عمّان'],
+    targets_en: ['Khartoum', 'Cairo', 'Amman'],
+  },
+];
+
+const SEQUENCE_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'count_target' | 'visual_emoji' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
+  {
+    title_ar: 'رتب دورة حياة الفراشة', title_en: 'Order the butterfly life cycle',
+    body_ar: 'رتب المراحل من الأولى إلى الأخيرة', body_en: 'Arrange the stages from first to last',
+    prompt_ar: 'رتب مراحل حياة الفراشة', prompt_en: 'Order the butterfly life cycle stages',
+    items_ar: ['بيضة', 'يرقة', 'شرنقة', 'فراشة'],
+    items_en: ['Egg', 'Caterpillar', 'Chrysalis', 'Butterfly'],
+  },
+  {
+    title_ar: 'رتب خطوات الوضوء', title_en: 'Order the steps of Wudu',
+    body_ar: 'رتب الخطوات بالترتيب الصحيح', body_en: 'Put the steps in the correct order',
+    prompt_ar: 'رتب خطوات الوضوء', prompt_en: 'Order the Wudu steps',
+    items_ar: ['غسل اليدين', 'المضمضة', 'غسل الوجه', 'مسح الرأس'],
+    items_en: ['Wash hands', 'Rinse mouth', 'Wash face', 'Wipe head'],
+  },
+];
+
+const SORT_GROUPS_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'count_target' | 'visual_emoji'>[] = [
+  {
+    title_ar: 'صنّف: فواكه أم خضروات؟', title_en: 'Sort: Fruits or Vegetables?',
+    body_ar: 'ضع كل عنصر في المجموعة المناسبة', body_en: 'Place each item in the correct group',
+    prompt_ar: 'صنف إلى فواكه وخضروات', prompt_en: 'Sort into fruits and vegetables',
+    items_ar: ['تفاح', 'جزر', 'موز', 'بروكلي'],
+    items_en: ['Apple', 'Carrot', 'Banana', 'Broccoli'],
+    targets_ar: ['فواكه', 'خضروات'],
+    targets_en: ['Fruits', 'Vegetables'],
+    solution_map: [0, 1, 0, 1],
+  },
+  {
+    title_ar: 'صنّف: حار أم بارد؟', title_en: 'Sort: Hot or Cold?',
+    body_ar: 'ضع كل عنصر في المجموعة المناسبة', body_en: 'Place each item in the correct group',
+    prompt_ar: 'صنف إلى حار وبارد', prompt_en: 'Sort into hot and cold',
+    items_ar: ['نار', 'ثلج', 'شمس', 'جليد'],
+    items_en: ['Fire', 'Ice', 'Sun', 'Glacier'],
+    targets_ar: ['حار', 'بارد'],
+    targets_en: ['Hot', 'Cold'],
+    solution_map: [0, 1, 0, 1],
+  },
+];
+
 function getInteractiveSlidePlaceholders(type: string): InteractivePlaceholders {
   const base: InteractivePlaceholders = {
     title_ar: '', title_en: '', body_ar: '', body_en: '',
@@ -42,80 +195,34 @@ function getInteractiveSlidePlaceholders(type: string): InteractivePlaceholders 
   };
 
   switch (type) {
-    case 'choose_correct':
-      return {
-        ...base,
-        title_ar: 'اختر الإجابة الصحيحة', title_en: 'Choose the correct answer',
-        body_ar: 'اقرأ السؤال واختر الإجابة المناسبة', body_en: 'Read the question and pick the right answer',
-        prompt_ar: 'ما هي الإجابة الصحيحة؟', prompt_en: 'What is the correct answer?',
-        options_ar: ['الإجابة أ', 'الإجابة ب', 'الإجابة ج'],
-        options_en: ['Answer A', 'Answer B', 'Answer C'],
-        correct_index: 0,
-      };
-    case 'true_false':
-      return {
-        ...base,
-        title_ar: 'صح أم خطأ؟', title_en: 'True or False?',
-        body_ar: 'اقرأ العبارة التالية وحدد إذا كانت صحيحة أم خاطئة',
-        body_en: 'Read the statement and decide if it is true or false',
-        prompt_ar: 'هل هذه العبارة صحيحة؟', prompt_en: 'Is this statement true?',
-        true_false_answer: true,
-      };
-    case 'fill_missing_word':
-      return {
-        ...base,
-        title_ar: 'أكمل الفراغ', title_en: 'Fill in the blank',
-        body_ar: 'اختر الكلمة المناسبة لإكمال الجملة',
-        body_en: 'Choose the right word to complete the sentence',
-        prompt_ar: 'الكلمة ___ في الجملة', prompt_en: 'The word ___ in the sentence',
-        options_ar: ['الكلمة أ', 'الكلمة ب', 'الكلمة ج'],
-        options_en: ['Word A', 'Word B', 'Word C'],
-        correct_index: 0,
-      };
-    case 'tap_to_count':
-      return {
-        ...base,
-        title_ar: 'عدّ الأشياء!', title_en: 'Count the objects!',
-        body_ar: 'اضغط على كل شيء تراه حتى تصل للعدد الصحيح',
-        body_en: 'Tap each object you see until you reach the right number',
-        prompt_ar: 'كم تفاحة ترى؟', prompt_en: 'How many apples do you see?',
-        count_target: 5, visual_emoji: '🍎',
-      };
-    case 'match_pairs':
-      return {
-        ...base,
-        title_ar: 'طابق الأزواج', title_en: 'Match the pairs',
-        body_ar: 'صل كل عنصر في العمود الأيسر بما يناسبه في العمود الأيمن',
-        body_en: 'Connect each item on the left with its match on the right',
-        prompt_ar: 'صل كل عنصر بما يناسبه', prompt_en: 'Match each item to its pair',
-        items_ar: ['العنصر ١', 'العنصر ٢', 'العنصر ٣'],
-        items_en: ['Item 1', 'Item 2', 'Item 3'],
-        targets_ar: ['المطابق ١', 'المطابق ٢', 'المطابق ٣'],
-        targets_en: ['Match 1', 'Match 2', 'Match 3'],
-      };
-    case 'sequence_order':
-      return {
-        ...base,
-        title_ar: 'رتب الخطوات', title_en: 'Put in the correct order',
-        body_ar: 'اسحب العناصر لترتيبها بالتسلسل الصحيح',
-        body_en: 'Drag the items to arrange them in the correct sequence',
-        prompt_ar: 'رتب الخطوات التالية', prompt_en: 'Order the following steps',
-        items_ar: ['الخطوة ١', 'الخطوة ٢', 'الخطوة ٣'],
-        items_en: ['Step 1', 'Step 2', 'Step 3'],
-      };
-    case 'sort_groups':
-      return {
-        ...base,
-        title_ar: 'صنّف في مجموعات', title_en: 'Sort into groups',
-        body_ar: 'اسحب كل عنصر إلى المجموعة المناسبة',
-        body_en: 'Drag each item into the correct group',
-        prompt_ar: 'صنف العناصر التالية', prompt_en: 'Sort the following items',
-        items_ar: ['العنصر ١', 'العنصر ٢', 'العنصر ٣', 'العنصر ٤'],
-        items_en: ['Item 1', 'Item 2', 'Item 3', 'Item 4'],
-        targets_ar: ['المجموعة أ', 'المجموعة ب'],
-        targets_en: ['Group A', 'Group B'],
-        solution_map: [0, 0, 1, 1],
-      };
+    case 'choose_correct': {
+      const v = pickRandom(CHOOSE_CORRECT_VARIANTS);
+      return { ...base, ...v };
+    }
+    case 'true_false': {
+      const v = pickRandom(TRUE_FALSE_VARIANTS);
+      return { ...base, ...v };
+    }
+    case 'fill_missing_word': {
+      const v = pickRandom(FILL_BLANK_VARIANTS);
+      return { ...base, ...v };
+    }
+    case 'tap_to_count': {
+      const v = pickRandom(TAP_COUNT_VARIANTS);
+      return { ...base, ...v };
+    }
+    case 'match_pairs': {
+      const v = pickRandom(MATCH_PAIRS_VARIANTS);
+      return { ...base, ...v };
+    }
+    case 'sequence_order': {
+      const v = pickRandom(SEQUENCE_VARIANTS);
+      return { ...base, ...v };
+    }
+    case 'sort_groups': {
+      const v = pickRandom(SORT_GROUPS_VARIANTS);
+      return { ...base, ...v };
+    }
     default:
       return base;
   }
