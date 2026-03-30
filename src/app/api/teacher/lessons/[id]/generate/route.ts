@@ -70,7 +70,7 @@ export async function POST(
 
     // Get video URL (prefer smallest for faster download)
     const videoUrl =
-      lesson.video_url_360p || lesson.video_url_480p || lesson.video_url_720p;
+      lesson.video_url_360p || lesson.video_url_480p || lesson.video_url_720p || lesson.video_url_1080p;
 
     if (!videoUrl) {
       return NextResponse.json(

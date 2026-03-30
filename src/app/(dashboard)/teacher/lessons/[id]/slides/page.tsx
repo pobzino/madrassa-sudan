@@ -22,6 +22,7 @@ import {
 } from '@/lib/slides-generation';
 
 type VideoUrls = {
+  video_url_1080p: string;
   video_url_360p: string;
   video_url_480p: string;
   video_url_720p: string;
@@ -63,10 +64,11 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
     const { error } = await supabase
       .from('lessons')
       .update({
+        video_url_1080p: urls.video_url_1080p,
         video_url_360p: urls.video_url_360p,
         video_url_480p: urls.video_url_480p,
         video_url_720p: urls.video_url_720p,
-        ...(urls.duration_seconds != null ? { duration_seconds: urls.duration_seconds } : {}),
+        ...(urls.duration_seconds != null ? { video_duration_seconds: urls.duration_seconds } : {}),
       })
       .eq('id', id);
     if (error) {

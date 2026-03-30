@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
 
     if (statusCode === 4) {
       response.urls = {
+        video_url_1080p: `https://${cdnHostname}/${videoId}/play_1080p.mp4`,
         video_url_360p: `https://${cdnHostname}/${videoId}/play_360p.mp4`,
         video_url_480p: `https://${cdnHostname}/${videoId}/play_480p.mp4`,
         video_url_720p: `https://${cdnHostname}/${videoId}/play_720p.mp4`,

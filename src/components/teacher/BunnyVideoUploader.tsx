@@ -10,6 +10,7 @@ interface BunnyVideoUploaderProps {
   lessonId: string;
   lessonTitle: string;
   onVideosReady: (urls: {
+    video_url_1080p: string;
     video_url_360p: string;
     video_url_480p: string;
     video_url_720p: string;
@@ -74,6 +75,7 @@ export default function BunnyVideoUploader({
           if (pollingRef.current) clearInterval(pollingRef.current);
           setState('ready');
           onVideosReady({
+            video_url_1080p: data.urls.video_url_1080p,
             video_url_360p: data.urls.video_url_360p,
             video_url_480p: data.urls.video_url_480p,
             video_url_720p: data.urls.video_url_720p,

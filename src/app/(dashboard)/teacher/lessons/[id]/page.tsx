@@ -25,6 +25,13 @@ type Subject = {
   name_en: string;
 };
 
+type CohortOption = {
+  id: string;
+  name: string;
+  grade_level: number;
+  is_active: boolean;
+};
+
 type LessonForm = {
   title_ar: string;
   title_en: string;
@@ -35,6 +42,7 @@ type LessonForm = {
   curriculum_topic: CurriculumSelection | null;
   is_published: boolean;
   thumbnail_url: string;
+  video_url_1080p: string;
   video_url_360p: string;
   video_url_480p: string;
   video_url_720p: string;
@@ -70,6 +78,8 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const { loading: authLoading } = useTeacherGuard();
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [availableCohorts, setAvailableCohorts] = useState<CohortOption[]>([]);
+  const [assignedCohortIds, setAssignedCohortIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -86,6 +96,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     curriculum_topic: null,
     is_published: false,
     thumbnail_url: "",
+    video_url_1080p: "",
     video_url_360p: "",
     video_url_480p: "",
     video_url_720p: "",
@@ -103,17 +114,68 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     const user = await getCachedUser(supabase);
     if (!user) return;
 
-    const { data: subjectRows } = await supabase
-      .from("subjects")
-      .select("id, name_ar, name_en")
-      .order("display_order");
+    const [{ data: subjectRows }, { data: profile }] = await Promise.all([
+      supabase
+        .from("subjects")
+        .select("id, name_ar, name_en")
+        .order("display_order"),
+      supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single(),
+    ]);
     setSubjects(subjectRows || []);
 
-    const { data: lesson } = await supabase
-      .from("lessons")
-      .select("*")
-      .eq("id", id)
-      .single();
+    const cohortQuery =
+      profile?.role === "admin"
+        ? supabase
+            .from("cohorts")
+            .select("id, name, grade_level, is_active")
+            .order("name")
+        : supabase
+            .from("cohort_teachers")
+            .select(`
+              cohort_id,
+              cohorts (
+                id,
+                name,
+                grade_level,
+                is_active
+              )
+            `)
+            .eq("teacher_id", user.id);
+
+    const [{ data: lesson }, cohortResult, { data: existingAssignments }] = await Promise.all([
+      supabase
+        .from("lessons")
+        .select("*")
+        .eq("id", id)
+        .single(),
+      cohortQuery,
+      supabase
+        .from("cohort_lessons")
+        .select("cohort_id")
+        .eq("lesson_id", id)
+        .eq("is_active", true),
+    ]);
+
+    const cohortRows =
+      profile?.role === "admin"
+        ? ((cohortResult as { data?: CohortOption[] | null })?.data || [])
+        : (((cohortResult as {
+            data?: Array<{
+              cohort_id: string;
+              cohorts: CohortOption | CohortOption[] | null;
+            }> | null;
+          })?.data || [])
+            .map((row) =>
+              Array.isArray(row.cohorts) ? row.cohorts[0] : row.cohorts
+            )
+            .filter((cohort): cohort is CohortOption => Boolean(cohort)));
+
+    setAvailableCohorts(cohortRows);
+    setAssignedCohortIds((existingAssignments || []).map((assignment) => assignment.cohort_id));
 
     if (lesson) {
       const lessonSubject =
@@ -132,6 +194,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         ),
         is_published: lesson.is_published,
         thumbnail_url: lesson.thumbnail_url || "",
+        video_url_1080p: lesson.video_url_1080p || "",
         video_url_360p: lesson.video_url_360p || "",
         video_url_480p: lesson.video_url_480p || "",
         video_url_720p: lesson.video_url_720p || "",
@@ -269,6 +332,13 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     setSaving(true);
     setSaveMessage(null);
     const supabase = createClient();
+    const user = await getCachedUser(supabase);
+
+    if (!user) {
+      setSaving(false);
+      setSaveMessage({ type: "error", text: "You must be signed in to save." });
+      return;
+    }
 
     try {
       // Save lesson details
@@ -284,6 +354,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           curriculum_topic: serializeCurriculumSelection(form.curriculum_topic),
           is_published: form.is_published,
           thumbnail_url: form.thumbnail_url.trim() || null,
+          video_url_1080p: form.video_url_1080p.trim() || null,
           video_url_360p: form.video_url_360p.trim() || null,
           video_url_480p: form.video_url_480p.trim() || null,
           video_url_720p: form.video_url_720p.trim() || null,
@@ -295,6 +366,33 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         .eq("id", id);
 
       if (lessonError) throw new Error("Lesson: " + lessonError.message);
+
+      const uniqueAssignedCohortIds = Array.from(new Set(assignedCohortIds));
+      const { error: deleteAssignmentsError } = await supabase
+        .from("cohort_lessons")
+        .delete()
+        .eq("lesson_id", id);
+
+      if (deleteAssignmentsError) {
+        throw new Error("Class access: " + deleteAssignmentsError.message);
+      }
+
+      if (uniqueAssignedCohortIds.length > 0) {
+        const { error: insertAssignmentsError } = await supabase
+          .from("cohort_lessons")
+          .insert(
+            uniqueAssignedCohortIds.map((cohortId) => ({
+              cohort_id: cohortId,
+              lesson_id: id,
+              assigned_by: user.id,
+              is_active: true,
+            }))
+          );
+
+        if (insertAssignmentsError) {
+          throw new Error("Class access: " + insertAssignmentsError.message);
+        }
+      }
 
       // Save questions
       await supabase.from("lesson_questions").delete().eq("lesson_id", id);
@@ -479,7 +577,9 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             setForm={setForm}
             subjects={subjects}
             selectedSubject={selectedSubject}
-            requiresCurriculum={requiresCurriculum}
+            availableCohorts={availableCohorts}
+            assignedCohortIds={assignedCohortIds}
+            setAssignedCohortIds={setAssignedCohortIds}
             videoInputMode={videoInputMode}
             setVideoInputMode={setVideoInputMode}
             lessonId={id}
@@ -529,7 +629,9 @@ function DetailsTab({
   setForm,
   subjects,
   selectedSubject,
-  requiresCurriculum,
+  availableCohorts,
+  assignedCohortIds,
+  setAssignedCohortIds,
   videoInputMode,
   setVideoInputMode,
   lessonId,
@@ -538,7 +640,9 @@ function DetailsTab({
   setForm: (f: LessonForm | ((prev: LessonForm) => LessonForm)) => void;
   subjects: Subject[];
   selectedSubject: Subject | null;
-  requiresCurriculum: boolean;
+  availableCohorts: CohortOption[];
+  assignedCohortIds: string[];
+  setAssignedCohortIds: (value: string[] | ((prev: string[]) => string[])) => void;
   videoInputMode: "upload" | "manual";
   setVideoInputMode: (mode: "upload" | "manual") => void;
   lessonId: string;
@@ -633,6 +737,72 @@ function DetailsTab({
         </div>
       </section>
 
+      {/* Class Access */}
+      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Class Access</h2>
+            <p className="mt-2 text-sm text-gray-500">
+              If no classes are selected, this lesson stays available to all students when published. Selecting one or
+              more classes restricts the lesson to those class members.
+            </p>
+          </div>
+          {assignedCohortIds.length > 0 && (
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              {assignedCohortIds.length} class{assignedCohortIds.length === 1 ? "" : "es"} assigned
+            </span>
+          )}
+        </div>
+
+        {availableCohorts.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+            No classes available yet. Create a class first if this lesson should only be visible to specific students.
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {availableCohorts.map((cohort) => {
+              const checked = assignedCohortIds.includes(cohort.id);
+
+              return (
+                <label
+                  key={cohort.id}
+                  className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                    checked
+                      ? "border-emerald-200 bg-emerald-50/70"
+                      : "border-gray-200 bg-white hover:border-gray-300"
+                  } ${cohort.is_active ? "" : "opacity-60"}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(event) => {
+                      const nextChecked = event.target.checked;
+                      setAssignedCohortIds((prev) =>
+                        nextChecked
+                          ? [...prev, cohort.id]
+                          : prev.filter((cohortId) => cohortId !== cohort.id)
+                      );
+                    }}
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900">{cohort.name}</span>
+                      {!cohort.is_active && (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                          Archived
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-sm text-gray-500">Grade {cohort.grade_level}</p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       {/* Video & Media */}
       <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
         <div className="flex items-center justify-between">
@@ -671,21 +841,35 @@ function DetailsTab({
               onVideosReady={(urls) => {
                 setForm((prev) => ({
                   ...prev,
+                  video_url_1080p: urls.video_url_1080p,
                   video_url_360p: urls.video_url_360p,
                   video_url_480p: urls.video_url_480p,
                   video_url_720p: urls.video_url_720p,
                   ...(urls.duration_seconds ? { video_duration_seconds: String(urls.duration_seconds) } : {}),
                 }));
               }}
-              currentVideoUrl={form.video_url_720p || undefined}
+              currentVideoUrl={form.video_url_1080p || form.video_url_720p || undefined}
             />
-            {form.video_url_720p && (
-              <p className="text-xs text-gray-400">720p: {form.video_url_720p}</p>
+            {(form.video_url_1080p || form.video_url_720p || form.video_url_480p || form.video_url_360p) && (
+              <div className="space-y-0.5 text-xs text-gray-400">
+                {form.video_url_1080p && <p>1080p: {form.video_url_1080p}</p>}
+                {form.video_url_720p && <p>720p: {form.video_url_720p}</p>}
+                {form.video_url_480p && <p>480p: {form.video_url_480p}</p>}
+                {form.video_url_360p && <p>360p: {form.video_url_360p}</p>}
+              </div>
             )}
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Video 1080p</label>
+                <input
+                  value={form.video_url_1080p}
+                  onChange={(e) => setForm({ ...form, video_url_1080p: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Video 360p</label>
                 <input
@@ -952,7 +1136,7 @@ function ContentTab({
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">AI Content Generator</h2>
         <AIContentGenerator
           lessonId={lessonId}
-          hasVideo={!!(form.video_url_360p || form.video_url_480p || form.video_url_720p)}
+          hasVideo={!!(form.video_url_1080p || form.video_url_360p || form.video_url_480p || form.video_url_720p)}
           hasExistingContent={questions.length > 0 || contentBlocks.length > 0}
           disabledReason={contentGenerationBlockedReason}
           onGenerated={(data) => {

@@ -24,6 +24,15 @@ interface Assignment {
   graded_count: number;
 }
 
+interface AssignedLesson {
+  id: string;
+  title_ar: string;
+  title_en: string | null;
+  grade_level: number;
+  is_published: boolean;
+  updated_at: string;
+}
+
 interface Cohort {
   id: string;
   name: string;
@@ -39,8 +48,9 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
   const [cohort, setCohort] = useState<Cohort | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [assignedLessons, setAssignedLessons] = useState<AssignedLesson[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"students" | "assignments">("students");
+  const [activeTab, setActiveTab] = useState<"students" | "assignments" | "lessons">("students");
   const [copiedCode, setCopiedCode] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [savingCohort, setSavingCohort] = useState(false);
@@ -109,6 +119,32 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
       is_active: cohortData.is_active,
     });
 
+    const { data: lessonLinks } = await supabase
+      .from("cohort_lessons")
+      .select(`
+        lesson_id,
+        lessons (
+          id,
+          title_ar,
+          title_en,
+          grade_level,
+          is_published,
+          updated_at
+        )
+      `)
+      .eq("cohort_id", id)
+      .eq("is_active", true);
+
+    const lessonRows = (lessonLinks || [])
+      .map((row) => {
+        const lesson = row.lessons as AssignedLesson | AssignedLesson[] | null;
+        return Array.isArray(lesson) ? lesson[0] : lesson;
+      })
+      .filter((lesson): lesson is AssignedLesson => Boolean(lesson));
+
+    const assignedLessonIds = lessonRows.map((lesson) => lesson.id);
+    setAssignedLessons(lessonRows);
+
     // Get students in cohort
     const { data: cohortStudents } = await supabase
       .from("cohort_students")
@@ -128,11 +164,17 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
       const profile = cs.profiles as unknown as { id: string; full_name: string; avatar_url: string | null };
       if (profile) {
         // Get lesson progress count
-        const { count: lessonsCount } = await supabase
+        let lessonProgressQuery = supabase
           .from("lesson_progress")
           .select("*", { count: "exact", head: true })
           .eq("student_id", profile.id)
           .eq("completed", true);
+
+        if (assignedLessonIds.length > 0) {
+          lessonProgressQuery = lessonProgressQuery.in("lesson_id", assignedLessonIds);
+        }
+
+        const { count: lessonsCount } = await lessonProgressQuery;
 
         // Get homework submissions count
         const { count: homeworkCount } = await supabase
@@ -400,6 +442,16 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
           >
             Assignments ({assignments.length})
           </button>
+          <button
+            onClick={() => setActiveTab("lessons")}
+            className={`px-4 py-2 rounded-xl font-medium transition-colors ${
+              activeTab === "lessons"
+                ? "bg-emerald-600 text-white"
+                : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            Lessons ({assignedLessons.length})
+          </button>
         </div>
 
         {/* Students Tab */}
@@ -480,6 +532,60 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
                   ))}
                 </tbody>
               </table>
+            )}
+          </div>
+        )}
+
+        {activeTab === "lessons" && (
+          <div>
+            <div className="flex justify-end mb-4">
+              <Link
+                href="/teacher/lessons"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors flex items-center gap-2"
+              >
+                <span>➕</span>
+                Assign Lessons
+              </Link>
+            </div>
+
+            {assignedLessons.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+                <span className="text-5xl mb-4 block">📚</span>
+                <h2 className="text-lg font-semibold text-gray-900 mb-2">No lessons assigned yet</h2>
+                <p className="text-gray-500 mb-4">
+                  Open a lesson and select this class in the Class Access section to make it visible to students.
+                </p>
+                <Link
+                  href="/teacher/lessons"
+                  className="inline-block px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
+                >
+                  Manage Lessons
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {assignedLessons.map((lesson) => (
+                  <div
+                    key={lesson.id}
+                    className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center justify-between"
+                  >
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{lesson.title_en || lesson.title_ar}</h3>
+                      <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
+                        <span>Grade {lesson.grade_level}</span>
+                        <span>{lesson.is_published ? "Published" : "Draft"}</span>
+                        <span>Updated {new Date(lesson.updated_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                    <Link
+                      href={`/teacher/lessons/${lesson.id}`}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
+                    >
+                      Open Lesson
+                    </Link>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

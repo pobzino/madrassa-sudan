@@ -36,6 +36,7 @@ type LessonRow = {
   is_published: boolean;
   subject: Subject | null;
   updated_at: string;
+  slide_count: number;
 };
 
 export default function TeacherLessonsPage() {
@@ -47,7 +48,6 @@ export default function TeacherLessonsPage() {
   const [search, setSearch] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("");
   const [gradeFilter, setGradeFilter] = useState("all");
-  const [slidesLessonId, setSlidesLessonId] = useState("");
   const [showQuickCreateModal, setShowQuickCreateModal] = useState(false);
   const [creatingSlidesDraft, setCreatingSlidesDraft] = useState(false);
   const [quickCreateError, setQuickCreateError] = useState("");
@@ -90,12 +90,35 @@ export default function TeacherLessonsPage() {
           id,
           name_ar,
           name_en
+        ),
+        lesson_slides (
+          slides
         )
       `
       )
       .order("updated_at", { ascending: false });
 
-    setLessons((lessonRows || []) as LessonRow[]);
+    const mapped = (lessonRows || []).map((row) => {
+      const slidesData = row.lesson_slides as unknown as
+        | { slides: unknown[] | null }[]
+        | null;
+      const slideCount =
+        slidesData && slidesData.length > 0 && Array.isArray(slidesData[0]?.slides)
+          ? slidesData[0].slides.length
+          : 0;
+      return {
+        id: row.id,
+        title_ar: row.title_ar,
+        title_en: row.title_en,
+        grade_level: row.grade_level,
+        is_published: row.is_published,
+        subject: row.subject as Subject | null,
+        updated_at: row.updated_at,
+        slide_count: slideCount,
+      } as LessonRow;
+    });
+
+    setLessons(mapped);
     setLoading(false);
   }, []);
 
@@ -118,7 +141,7 @@ export default function TeacherLessonsPage() {
     const matchesGrade = gradeFilter === "all" || lesson.grade_level === Number(gradeFilter);
     return matchesSearch && matchesSubject && matchesGrade;
   });
-  const selectedSlidesLesson = filtered.find((lesson) => lesson.id === slidesLessonId) ?? filtered[0] ?? null;
+
   const quickCreateSubjectId = quickCreateForm.subject_id || subjects[0]?.id || "";
   const quickCreateSelectedSubject =
     subjects.find((subject) => subject.id === quickCreateSubjectId) ?? null;
@@ -240,42 +263,62 @@ export default function TeacherLessonsPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Lesson Manager</h1>
-          <p className="text-gray-500">Create and update lessons, questions, and content</p>
+          <h1 className="text-2xl font-bold text-gray-900">Lessons</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{lessons.length} lesson{lessons.length !== 1 ? "s" : ""}</p>
         </div>
-        <Link
-          href="/teacher/lessons/new"
-          className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
-        >
-          New Lesson
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={openQuickCreateModal}
+            disabled={!canQuickCreateSlides}
+            className="px-4 py-2 bg-[#007229] text-white rounded-xl text-sm font-medium hover:bg-[#005C22] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+            </svg>
+            Generate Slides
+          </button>
+          <Link
+            href="/teacher/lessons/new"
+            className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            New Lesson
+          </Link>
+        </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-6 grid gap-3 md:grid-cols-3">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search lessons..."
-          className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-        />
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-2 mb-5">
+        <div className="relative flex-1">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search lessons..."
+            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          />
+        </div>
         <select
           value={subjectFilter}
           onChange={(e) => setSubjectFilter(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
         >
           <option value="">All subjects</option>
           {subjects.map((subject) => (
             <option key={subject.id} value={subject.id}>
-              {subject.name_en} / {subject.name_ar}
+              {subject.name_en}
             </option>
           ))}
         </select>
         <select
           value={gradeFilter}
           onChange={(e) => setGradeFilter(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
         >
           <option value="all">All grades</option>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((grade) => (
@@ -286,129 +329,73 @@ export default function TeacherLessonsPage() {
         </select>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-6">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div className="space-y-3">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Presentation Slides</h2>
-              <p className="text-sm text-gray-500">
-                Start with slides first. This creates a draft lesson automatically, then opens the AI slide generator.
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <button
-                type="button"
-                onClick={openQuickCreateModal}
-                disabled={!canQuickCreateSlides}
-                className="px-4 py-2 bg-[#007229] text-white rounded-xl text-sm font-medium hover:bg-[#005C22] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Generate Presentation Slides
-              </button>
-              <p className="text-xs text-gray-500">
-                Add the objective, key ideas, notes, slide count, duration, and slide mix before generating.
-              </p>
-            </div>
-            {!canQuickCreateSlides && (
-              <p className="text-sm text-amber-700">
-                Create a subject first before generating slides from a draft lesson.
-              </p>
-            )}
-          </div>
-
-          <div className="w-full xl:max-w-md rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
-            <div className="mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">Continue Existing Lesson Slides</h3>
-              <p className="text-xs text-gray-500">
-                Open the slide deck for a lesson that already exists.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <select
-                value={selectedSlidesLesson?.id || ""}
-                onChange={(e) => setSlidesLessonId(e.target.value)}
-                disabled={filtered.length === 0}
-                className="min-w-[260px] flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50 disabled:text-gray-400"
-              >
-                {filtered.length === 0 ? (
-                  <option value="">No lessons match the current filters</option>
-                ) : (
-                  filtered.map((lesson) => (
-                    <option key={lesson.id} value={lesson.id}>
-                      {lesson.title_en || lesson.title_ar} · Grade {lesson.grade_level}
-                    </option>
-                  ))
-                )}
-              </select>
-              {selectedSlidesLesson ? (
-                <Link
-                  href={`/teacher/lessons/${selectedSlidesLesson.id}/slides`}
-                  className="px-4 py-2 border border-gray-200 bg-white text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-100 transition-colors text-center"
-                >
-                  Open Slides
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="px-4 py-2 border border-gray-200 bg-white text-gray-400 rounded-xl text-sm font-medium cursor-not-allowed"
-                >
-                  Open Slides
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
+      {/* Lesson list */}
       {filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-          <span className="text-6xl mb-4 block">📚</span>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">No lessons found</h2>
-          <p className="text-gray-500 mb-4">Create a new lesson to get started.</p>
-          <Link
-            href="/teacher/lessons/new"
-            className="inline-block px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
-          >
-            Create Lesson
-          </Link>
+        <div className="rounded-2xl border border-dashed border-gray-200 p-12 text-center">
+          <p className="text-gray-400 text-sm">No lessons match your filters.</p>
+          {lessons.length === 0 && (
+            <button
+              type="button"
+              onClick={openQuickCreateModal}
+              className="mt-3 text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+            >
+              Generate your first slides
+            </button>
+          )}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-2">
           {filtered.map((lesson) => (
-            <div
+            <Link
               key={lesson.id}
-              className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+              href={`/teacher/lessons/${lesson.id}`}
+              className="block bg-white rounded-xl border border-gray-100 hover:border-emerald-200 hover:shadow-sm transition-all px-4 py-3.5 group"
             >
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  {lesson.title_en || lesson.title_ar}
-                </h3>
-                <div className="text-sm text-gray-500 flex flex-wrap gap-3 mt-1">
-                  <span>{lesson.subject?.name_en || lesson.subject?.name_ar || "Subject"}</span>
-                  <span>Grade {lesson.grade_level}</span>
-                  <span>{lesson.is_published ? "Published" : "Draft"}</span>
-                  <span>Updated {new Date(lesson.updated_at).toLocaleDateString()}</span>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <h3 className="text-[15px] font-semibold text-gray-900 truncate group-hover:text-emerald-700 transition-colors">
+                      {lesson.title_en || lesson.title_ar}
+                    </h3>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {lesson.subject && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 text-blue-700">
+                        {lesson.subject.name_en || lesson.subject.name_ar}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-100 text-gray-600">
+                      Grade {lesson.grade_level}
+                    </span>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium ${
+                        lesson.is_published
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-amber-50 text-amber-700"
+                      }`}
+                    >
+                      {lesson.is_published ? "Published" : "Draft"}
+                    </span>
+                    {lesson.slide_count > 0 && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-violet-50 text-violet-700">
+                        {lesson.slide_count} slide{lesson.slide_count !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-gray-400 ml-1">
+                      Updated {new Date(lesson.updated_at).toLocaleDateString()}
+                    </span>
+                  </div>
                 </div>
+                <svg className="w-4 h-4 text-gray-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  href={`/teacher/lessons/${lesson.id}`}
-                  className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
-                >
-                  Edit
-                </Link>
-                <Link
-                  href={`/lessons/${lesson.id}`}
-                  className="px-3 py-2 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors"
-                >
-                  View
-                </Link>
-              </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}
 
+      {/* Quick-create modal */}
       {showQuickCreateModal && (
         <div
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
@@ -441,23 +428,6 @@ export default function TeacherLessonsPage() {
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Learning Objective</label>
-                  <input
-                    value={quickCreateForm.learning_objective}
-                    onChange={(e) =>
-                      setQuickCreateForm({
-                        ...quickCreateForm,
-                        learning_objective: e.target.value,
-                      })
-                    }
-                    placeholder="What should students understand by the end?"
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
                   <select
                     value={quickCreateSubjectId}
@@ -465,6 +435,10 @@ export default function TeacherLessonsPage() {
                       setQuickCreateForm({
                         ...quickCreateForm,
                         subject_id: e.target.value,
+                        curriculum_topic: null,
+                        title: "",
+                        learning_objective: "",
+                        key_ideas: "",
                       })
                     }
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
@@ -485,6 +459,10 @@ export default function TeacherLessonsPage() {
                       setQuickCreateForm({
                         ...quickCreateForm,
                         grade_level: Number(e.target.value),
+                        curriculum_topic: null,
+                        title: "",
+                        learning_objective: "",
+                        key_ideas: "",
                       })
                     }
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
@@ -494,61 +472,6 @@ export default function TeacherLessonsPage() {
                         Grade {grade}
                       </option>
                     ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Lesson Duration</label>
-                  <select
-                    value={quickCreateForm.lesson_duration_minutes}
-                    onChange={(e) =>
-                      setQuickCreateForm({
-                        ...quickCreateForm,
-                        lesson_duration_minutes: Number(e.target.value),
-                      })
-                    }
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  >
-                    {[10, 15, 20, 30, 45].map((minutes) => (
-                      <option key={minutes} value={minutes}>
-                        {minutes} minutes
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Slides</label>
-                  <input
-                    type="number"
-                    min={10}
-                    max={20}
-                    value={quickCreateForm.slide_count}
-                    onChange={(e) =>
-                      setQuickCreateForm({
-                        ...quickCreateForm,
-                        slide_count: clampSlideCount(Number(e.target.value)),
-                      })
-                    }
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Language Focus</label>
-                  <select
-                    value={quickCreateForm.language_mode}
-                    onChange={(e) =>
-                      setQuickCreateForm({
-                        ...quickCreateForm,
-                        language_mode: e.target.value as SlideLanguageMode,
-                      })
-                    }
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  >
-                    <option value="ar">Arabic First</option>
-                    <option value="en">English First</option>
-                    <option value="both">Balanced Bilingual</option>
                   </select>
                 </div>
               </div>
@@ -587,6 +510,21 @@ export default function TeacherLessonsPage() {
               )}
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Learning Objective</label>
+                <input
+                  value={quickCreateForm.learning_objective}
+                  onChange={(e) =>
+                    setQuickCreateForm({
+                      ...quickCreateForm,
+                      learning_objective: e.target.value,
+                    })
+                  }
+                  placeholder="What should students understand by the end?"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Key Ideas to Cover</label>
                 <textarea
                   value={quickCreateForm.key_ideas}
@@ -602,25 +540,64 @@ export default function TeacherLessonsPage() {
                 />
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Source Notes</label>
-                  <textarea
-                    value={quickCreateForm.source_notes}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
+                  <select
+                    value={quickCreateForm.lesson_duration_minutes}
                     onChange={(e) =>
                       setQuickCreateForm({
                         ...quickCreateForm,
-                        source_notes: e.target.value,
+                        lesson_duration_minutes: Number(e.target.value),
                       })
                     }
-                    rows={5}
-                    placeholder="Paste a short outline, textbook notes, examples, or any must-cover content."
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  >
+                    {[10, 15, 20, 30, 45].map((minutes) => (
+                      <option key={minutes} value={minutes}>
+                        {minutes} min
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Slides</label>
+                  <input
+                    type="number"
+                    min={10}
+                    max={20}
+                    value={quickCreateForm.slide_count}
+                    onChange={(e) =>
+                      setQuickCreateForm({
+                        ...quickCreateForm,
+                        slide_count: clampSlideCount(Number(e.target.value)),
+                      })
+                    }
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Slide Goal Mix</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Language</label>
+                  <select
+                    value={quickCreateForm.language_mode}
+                    onChange={(e) =>
+                      setQuickCreateForm({
+                        ...quickCreateForm,
+                        language_mode: e.target.value as SlideLanguageMode,
+                      })
+                    }
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  >
+                    <option value="ar">Arabic First</option>
+                    <option value="en">English First</option>
+                    <option value="both">Balanced</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Slide Mix</label>
                   <select
                     value={quickCreateForm.slide_goal_mix}
                     onChange={(e) =>
@@ -637,13 +614,29 @@ export default function TeacherLessonsPage() {
                       </option>
                     ))}
                   </select>
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-gray-500">
                     {
                       SLIDE_GOAL_MIX_OPTIONS.find((option) => option.value === quickCreateForm.slide_goal_mix)
                         ?.description
                     }
                   </p>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Source Notes <span className="text-gray-400 font-normal">(optional)</span></label>
+                <textarea
+                  value={quickCreateForm.source_notes}
+                  onChange={(e) =>
+                    setQuickCreateForm({
+                      ...quickCreateForm,
+                      source_notes: e.target.value,
+                    })
+                  }
+                  rows={3}
+                  placeholder="Paste a short outline, textbook notes, examples, or any must-cover content."
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
               </div>
             </div>
 

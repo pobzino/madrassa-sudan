@@ -6,6 +6,7 @@ import * as tus from 'tus-js-client';
 export type BlobUploadState = 'idle' | 'uploading' | 'uploaded' | 'transcoding' | 'ready' | 'error';
 
 interface VideoUrls {
+  video_url_1080p: string;
   video_url_360p: string;
   video_url_480p: string;
   video_url_720p: string;
@@ -73,6 +74,7 @@ export function useBunnyBlobUpload({
           if (pollingRef.current) clearInterval(pollingRef.current);
           setState('ready');
           setVideoUrls({
+            video_url_1080p: data.urls.video_url_1080p,
             video_url_360p: data.urls.video_url_360p,
             video_url_480p: data.urls.video_url_480p,
             video_url_720p: data.urls.video_url_720p,

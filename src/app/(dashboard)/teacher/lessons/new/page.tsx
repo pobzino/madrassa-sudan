@@ -37,6 +37,7 @@ export default function NewLessonPage() {
     curriculum_topic: null as CurriculumSelection | null,
     is_published: false,
     thumbnail_url: "",
+    video_url_1080p: "",
     video_url_360p: "",
     video_url_480p: "",
     video_url_720p: "",
@@ -77,6 +78,7 @@ export default function NewLessonPage() {
     }
 
     const blockedVideoFields = getDisallowedLessonVideoFields({
+      "Video URL 1080p": form.video_url_1080p,
       "Video URL 360p": form.video_url_360p,
       "Video URL 480p": form.video_url_480p,
       "Video URL 720p": form.video_url_720p,
@@ -105,6 +107,7 @@ export default function NewLessonPage() {
         curriculum_topic: serializeCurriculumSelection(form.curriculum_topic),
         is_published: form.is_published,
         thumbnail_url: form.thumbnail_url.trim() || null,
+        video_url_1080p: form.video_url_1080p.trim() || null,
         video_url_360p: form.video_url_360p.trim() || null,
         video_url_480p: form.video_url_480p.trim() || null,
         video_url_720p: form.video_url_720p.trim() || null,

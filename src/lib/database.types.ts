@@ -195,6 +195,58 @@ export type Database = {
           },
         ]
       }
+      cohort_lessons: {
+        Row: {
+          assigned_by: string | null
+          cohort_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          lesson_id: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          cohort_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          lesson_id: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_by?: string | null
+          cohort_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          lesson_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cohort_lessons_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cohort_lessons_cohort_id_fkey"
+            columns: ["cohort_id"]
+            isOneToOne: false
+            referencedRelation: "cohorts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cohort_lessons_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cohorts: {
         Row: {
           created_at: string
@@ -997,6 +1049,7 @@ export type Database = {
           title_en: string
           updated_at: string
           video_duration_seconds: number | null
+          video_url_1080p: string | null
           video_url_360p: string | null
           video_url_480p: string | null
           video_url_720p: string | null
@@ -1022,6 +1075,7 @@ export type Database = {
           title_en: string
           updated_at?: string
           video_duration_seconds?: number | null
+          video_url_1080p?: string | null
           video_url_360p?: string | null
           video_url_480p?: string | null
           video_url_720p?: string | null
@@ -1047,6 +1101,7 @@ export type Database = {
           title_en?: string
           updated_at?: string
           video_duration_seconds?: number | null
+          video_url_1080p?: string | null
           video_url_360p?: string | null
           video_url_480p?: string | null
           video_url_720p?: string | null
@@ -1632,6 +1687,7 @@ export type LessonProgress = Tables<"lesson_progress">
 export type LessonContentBlock = Tables<"lesson_content_blocks">
 export type LessonChunkEmbedding = Tables<"lesson_chunk_embeddings">
 export type Cohort = Tables<"cohorts">
+export type CohortLesson = Tables<"cohort_lessons">
 export type HomeworkAssignment = Tables<"homework_assignments">
 export type HomeworkQuestion = Tables<"homework_questions">
 export type HomeworkSubmission = Tables<"homework_submissions">

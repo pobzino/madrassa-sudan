@@ -19,6 +19,7 @@ interface SlideEditorProps {
   lessonId?: string;
   lessonTitle?: string;
   onVideoReady?: (urls: {
+    video_url_1080p: string;
     video_url_360p: string;
     video_url_480p: string;
     video_url_720p: string;

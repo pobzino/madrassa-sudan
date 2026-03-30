@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
@@ -139,7 +139,46 @@ const Icons = {
   ),
 };
 
-type VideoQuality = "360p" | "480p" | "720p";
+type VideoQuality = "360p" | "480p" | "720p" | "1080p";
+
+const VIDEO_QUALITIES: VideoQuality[] = ["1080p", "720p", "480p", "360p"];
+
+const VIDEO_QUALITY_FALLBACKS: Record<VideoQuality, VideoQuality[]> = {
+  "1080p": ["1080p", "720p", "480p", "360p"],
+  "720p": ["720p", "1080p", "480p", "360p"],
+  "480p": ["480p", "720p", "1080p", "360p"],
+  "360p": ["360p", "480p", "720p", "1080p"],
+};
+
+function getLessonVideoSources(lesson: Lesson | null) {
+  return {
+    "1080p": lesson?.video_url_1080p || "",
+    "360p": lesson?.video_url_360p || "",
+    "480p": lesson?.video_url_480p || "",
+    "720p": lesson?.video_url_720p || "",
+  } satisfies Record<VideoQuality, string>;
+}
+
+function resolveVideoSource(
+  lesson: Lesson | null,
+  preferredQuality: VideoQuality,
+  blockedQualities: VideoQuality[] = []
+) {
+  const sources = getLessonVideoSources(lesson);
+
+  for (const quality of VIDEO_QUALITY_FALLBACKS[preferredQuality]) {
+    if (blockedQualities.includes(quality)) {
+      continue;
+    }
+
+    const url = sources[quality];
+    if (url) {
+      return { quality, url };
+    }
+  }
+
+  return null;
+}
 
 const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
   require_pass_to_continue: false,
@@ -219,11 +258,13 @@ export default function LessonPlayerPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [quality, setQuality] = useState<VideoQuality>("480p");
+  const [quality, setQuality] = useState<VideoQuality>("1080p");
+  const [failedQualities, setFailedQualities] = useState<VideoQuality[]>([]);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [captionLang, setCaptionLang] = useState<"ar" | "en" | "off">("off");
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [videoErrorMessage, setVideoErrorMessage] = useState<string | null>(null);
 
   // Question overlay state
   const [activeQuestion, setActiveQuestion] = useState<LessonQuestion | null>(null);
@@ -273,6 +314,9 @@ export default function LessonPlayerPage() {
         setLoading(false);
         return;
       }
+      setQuality("1080p");
+      setFailedQualities([]);
+      setVideoErrorMessage(null);
       setLesson(lessonData);
       setQuizSettings(resolveQuizSettings(lessonData.quiz_settings));
 
@@ -451,19 +495,41 @@ export default function LessonPlayerPage() {
     [duration, lesson?.video_duration_seconds, slideDeck, slideInteractionResponses]
   );
 
-  // Get video URL based on quality
-  const getVideoUrl = useCallback(() => {
-    if (!lesson) return "";
-    switch (quality) {
-      case "720p":
-        return lesson.video_url_720p || lesson.video_url_480p || lesson.video_url_360p || "";
-      case "480p":
-        return lesson.video_url_480p || lesson.video_url_360p || "";
-      case "360p":
-      default:
-        return lesson.video_url_360p || "";
+  const availableVideoSources = useMemo(() => getLessonVideoSources(lesson), [lesson]);
+
+  const availableQualities = useMemo(
+    () => VIDEO_QUALITIES.filter((candidate) => Boolean(availableVideoSources[candidate])),
+    [availableVideoSources]
+  );
+
+  const resolvedVideoSource = useMemo(
+    () => resolveVideoSource(lesson, quality, failedQualities),
+    [lesson, quality, failedQualities]
+  );
+
+  const handleVideoError = useCallback(() => {
+    if (!lesson || !resolvedVideoSource) {
+      setVideoErrorMessage("This lesson does not have a playable video source.");
+      setIsPlaying(false);
+      return;
     }
-  }, [lesson, quality]);
+
+    const nextFailedQualities = Array.from(
+      new Set<VideoQuality>([...failedQualities, resolvedVideoSource.quality])
+    );
+    const fallbackSource = resolveVideoSource(lesson, quality, nextFailedQualities);
+
+    setFailedQualities(nextFailedQualities);
+
+    if (fallbackSource) {
+      setQuality(fallbackSource.quality);
+      setVideoErrorMessage(`Could not load ${resolvedVideoSource.quality}. Switched to ${fallbackSource.quality}.`);
+      return;
+    }
+
+    setVideoErrorMessage("This video could not be loaded. Ask a teacher to check the lesson video source.");
+    setIsPlaying(false);
+  }, [failedQualities, lesson, quality, resolvedVideoSource]);
 
   // Save progress periodically
   const saveProgress = useCallback(async () => {
@@ -548,6 +614,7 @@ export default function LessonPlayerPage() {
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
       setDuration(videoRef.current.duration);
+      setVideoErrorMessage(null);
       // Resume from last position
       if (progress?.last_position_seconds) {
         videoRef.current.currentTime = progress.last_position_seconds;
@@ -707,7 +774,7 @@ export default function LessonPlayerPage() {
     );
   }
 
-  const videoUrl = getVideoUrl();
+  const videoUrl = resolvedVideoSource?.url || "";
   const timedInteractiveSlides = getInteractiveSlides(
     slideDeck,
     duration || lesson.video_duration_seconds || null
@@ -768,11 +835,16 @@ export default function LessonPlayerPage() {
               ref={videoRef}
               src={videoUrl}
               className="w-full h-full"
+              playsInline
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
               onEnded={handleVideoEnded}
-              onPlay={() => setIsPlaying(true)}
+              onPlay={() => {
+                setIsPlaying(true);
+                setVideoErrorMessage(null);
+              }}
               onPause={() => setIsPlaying(false)}
+              onError={handleVideoError}
               onClick={togglePlay}
             >
               {captionLang === "ar" && lesson.captions_ar_url && (
@@ -792,6 +864,12 @@ export default function LessonPlayerPage() {
                 <div className="w-20 h-20 rounded-full bg-white/90 flex items-center justify-center text-[#007229] shadow-xl">
                   {Icons.play}
                 </div>
+              </div>
+            )}
+
+            {videoErrorMessage && (
+              <div className="absolute top-4 left-1/2 z-20 -translate-x-1/2 rounded-xl bg-amber-500/90 px-4 py-2 text-sm font-medium text-white shadow-lg">
+                {videoErrorMessage}
               </div>
             )}
 
@@ -901,19 +979,26 @@ export default function LessonPlayerPage() {
                       onClick={() => setShowQualityMenu(!showQualityMenu)}
                       className="p-2 text-white hover:bg-white/20 rounded-lg transition-colors text-sm font-medium"
                     >
-                      {quality}
+                      {resolvedVideoSource?.quality || quality}
                     </button>
                     {showQualityMenu && (
                       <div className="absolute bottom-full right-0 mb-2 bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-                        {(["720p", "480p", "360p"] as VideoQuality[]).map((q) => (
+                        {VIDEO_QUALITIES.map((q) => (
                           <button
                             key={q}
                             onClick={() => {
+                              setFailedQualities([]);
+                              setVideoErrorMessage(null);
                               setQuality(q);
                               setShowQualityMenu(false);
                             }}
-                            className={`block w-full px-4 py-2 text-sm text-left hover:bg-gray-700 ${
-                              quality === q ? "text-emerald-400" : "text-white"
+                            disabled={!availableQualities.includes(q)}
+                            className={`block w-full px-4 py-2 text-sm text-left ${
+                              availableQualities.includes(q)
+                                ? "hover:bg-gray-700"
+                                : "cursor-not-allowed text-gray-500"
+                            } ${
+                              (resolvedVideoSource?.quality || quality) === q ? "text-emerald-400" : "text-white"
                             }`}
                           >
                             {q}

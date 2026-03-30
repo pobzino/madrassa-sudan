@@ -1,0 +1,4 @@
+[functions]
+  # Increase timeout for AI generation routes (requires Netlify Pro for >10s)
+  external_node_modules = ["openai"]
+  node_bundler = "esbuild"

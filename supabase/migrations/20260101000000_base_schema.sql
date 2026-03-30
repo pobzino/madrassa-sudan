@@ -170,6 +170,7 @@ CREATE TABLE lessons (
   display_order INTEGER NOT NULL DEFAULT 0,
   is_published BOOLEAN NOT NULL DEFAULT false,
   thumbnail_url TEXT,
+  video_url_1080p TEXT,
   video_url_360p TEXT,
   video_url_480p TEXT,
   video_url_720p TEXT,
