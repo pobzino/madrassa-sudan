@@ -2,7 +2,11 @@ import type { Slide } from '@/lib/slides.types';
 import { OwlExcited } from '@/components/illustrations';
 import SlideImage, { SlideBackgroundImage } from './SlideImage';
 import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
-import { getSlideInteractionOptions } from '@/lib/slide-interactions';
+import {
+  getSlideInteractionItems,
+  getSlideInteractionOptions,
+  getSlideInteractionTargets,
+} from '@/lib/slide-interactions';
 
 interface Props {
   slide: Slide;
@@ -17,6 +21,8 @@ function InteractionPreview({ slide, language }: Props) {
   const prompt = isAr
     ? slide.interaction_prompt_ar || slide.interaction_prompt_en
     : slide.interaction_prompt_en || slide.interaction_prompt_ar;
+  const items = getSlideInteractionItems(slide, language);
+  const targets = getSlideInteractionTargets(slide, language);
 
   return (
     <div className="relative z-10 w-full max-w-[85%] mt-3 border-2 border-dashed border-amber-300/60 rounded-2xl p-3 sm:p-4 bg-amber-50/50">
@@ -27,9 +33,17 @@ function InteractionPreview({ slide, language }: Props) {
         <span className="text-[10px] sm:text-xs text-gray-400">
           {type === 'choose_correct'
             ? isAr ? 'اختيار من متعدد' : 'Multiple Choice'
+            : type === 'fill_missing_word'
+              ? isAr ? 'أكمل الكلمة' : 'Fill Missing Word'
             : type === 'true_false'
               ? isAr ? 'صح أو خطأ' : 'True or False'
-              : isAr ? 'اضغط للعد' : 'Tap to Count'}
+              : type === 'tap_to_count'
+                ? isAr ? 'اضغط للعد' : 'Tap to Count'
+                : type === 'match_pairs'
+                  ? isAr ? 'طابق الأزواج' : 'Match Pairs'
+                  : type === 'sequence_order'
+                    ? isAr ? 'رتب التسلسل' : 'Sequence Order'
+                    : isAr ? 'صنف في مجموعات' : 'Sort Into Groups'}
         </span>
       </div>
 
@@ -39,7 +53,7 @@ function InteractionPreview({ slide, language }: Props) {
         </p>
       )}
 
-      {type === 'choose_correct' && (
+      {(type === 'choose_correct' || type === 'fill_missing_word') && (
         <div className="flex flex-wrap gap-1.5">
           {getSlideInteractionOptions(slide, language).map((option, i) => (
             <span
@@ -53,6 +67,63 @@ function InteractionPreview({ slide, language }: Props) {
               {option}
             </span>
           ))}
+        </div>
+      )}
+
+      {type === 'match_pairs' && (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            {items.map((item, index) => (
+              <div key={`item-${index}`} className={`rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs ${isAr ? 'font-cairo' : 'font-inter'}`}>
+                {item}
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1.5">
+            {targets.map((target, index) => (
+              <div key={`target-${index}`} className={`rounded-xl border border-dashed border-[#007229]/30 bg-[#007229]/5 px-3 py-1.5 text-xs text-[#007229] ${isAr ? 'font-cairo' : 'font-inter'}`}>
+                {target}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {type === 'sequence_order' && (
+        <div className="flex flex-wrap gap-1.5">
+          {items.map((item, index) => (
+            <span
+              key={index}
+              className={`inline-block rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs ${isAr ? 'font-cairo' : 'font-inter'}`}
+            >
+              {index + 1}. {item}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {type === 'sort_groups' && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            {targets.map((target, index) => (
+              <span
+                key={index}
+                className={`inline-block rounded-xl border border-[#007229]/20 bg-[#007229]/5 px-3 py-1 text-[10px] font-semibold text-[#007229] ${isAr ? 'font-cairo' : 'font-inter'}`}
+              >
+                {target}
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {items.map((item, index) => (
+              <span
+                key={index}
+                className={`inline-block rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs ${isAr ? 'font-cairo' : 'font-inter'}`}
+              >
+                {item}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
