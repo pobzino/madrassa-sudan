@@ -85,15 +85,15 @@ export default function DiagramSlide({ slide, language }: Props) {
             {hasImage ? (
               <SlideImage src={slide.image_url!} className="w-full h-full max-h-full shadow-md" />
             ) : (
-              <div className="w-full h-full min-h-[120px] border-3 border-dashed border-cyan-300 rounded-3xl flex flex-col items-center justify-center p-4 sm:p-6 bg-white/60">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-cyan-100 flex items-center justify-center mb-3">
-                  <svg className="w-7 h-7 sm:w-8 sm:h-8 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
-                  </svg>
+              <div className="w-full h-full min-h-[120px] flex flex-col items-center justify-center p-4 sm:p-6">
+                <div className="w-24 h-24 sm:w-32 sm:h-32 mb-3">
+                  <OwlThinking />
                 </div>
-                <p className="text-xs sm:text-sm text-cyan-600 text-center font-medium">
-                  {slide.visual_hint}
-                </p>
+                {slide.visual_hint && (
+                  <p className="text-xs sm:text-sm text-cyan-600 text-center font-medium max-w-[200px]">
+                    {slide.visual_hint}
+                  </p>
+                )}
               </div>
             )}
           </div>

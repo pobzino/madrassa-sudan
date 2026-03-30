@@ -1,4 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
+import { isOwlImage } from '@/lib/owl-illustrations';
+import OwlImage from '../OwlImage';
 
 interface SlideImageProps {
   src: string;
@@ -7,6 +9,9 @@ interface SlideImageProps {
 }
 
 export default function SlideImage({ src, className = '', objectFit = 'cover' }: SlideImageProps) {
+  if (isOwlImage(src)) {
+    return <OwlImage url={src} className={className} />;
+  }
   return (
     <img
       src={src}
@@ -18,6 +23,13 @@ export default function SlideImage({ src, className = '', objectFit = 'cover' }:
 }
 
 export function SlideBackgroundImage({ src }: { src: string }) {
+  if (isOwlImage(src)) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-emerald-100 to-green-50">
+        <OwlImage url={src} className="w-40 h-40 opacity-30" />
+      </div>
+    );
+  }
   return (
     <>
       <img

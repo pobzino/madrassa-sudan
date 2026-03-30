@@ -18,6 +18,16 @@ import {
 } from "@/lib/curriculum";
 import type { Database } from "@/lib/database.types";
 import InteractionResultsPanel from "@/components/teacher/InteractionResultsPanel";
+import SlideEditor from "@/components/slides/SlideEditor";
+import SlideGenerateButton from "@/components/slides/SlideGenerateButton";
+import type { Slide } from "@/lib/slides.types";
+import {
+  clampSlideCount,
+  getSlideGenerationContextStorageKey,
+  parseSlideGenerationContext,
+  type SlideGenerationContext,
+  type SlideLanguageMode,
+} from "@/lib/slides-generation";
 
 type Subject = {
   id: string;
@@ -72,7 +82,7 @@ type ContentBlock = {
   sequence: number;
 };
 
-type Tab = "details" | "questions" | "content" | "results";
+type Tab = "details" | "questions" | "slides" | "content" | "results";
 
 export default function LessonEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -85,6 +95,14 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("details");
   const [videoInputMode, setVideoInputMode] = useState<"upload" | "manual">("upload");
+  const [slides, setSlides] = useState<Slide[]>([]);
+  const [slideSaving, setSlideSaving] = useState(false);
+  const [slideLastSaved, setSlideLastSaved] = useState<string | null>(null);
+  const [slideGenContext, setSlideGenContext] = useState<SlideGenerationContext | null>(null);
+  const [slideCount, setSlideCount] = useState(10);
+  const [slideLanguageMode, setSlideLanguageMode] = useState<SlideLanguageMode>("ar");
+  const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
+  const [slideGenProgress, setSlideGenProgress] = useState("");
 
   const [form, setForm] = useState<LessonForm>({
     title_ar: "",
@@ -146,7 +164,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             `)
             .eq("teacher_id", user.id);
 
-    const [{ data: lesson }, cohortResult, { data: existingAssignments }] = await Promise.all([
+    const [{ data: lesson }, cohortResult, { data: existingAssignments }, slidesRes] = await Promise.all([
       supabase
         .from("lessons")
         .select("*")
@@ -158,7 +176,19 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         .select("cohort_id")
         .eq("lesson_id", id)
         .eq("is_active", true),
+      fetch(`/api/teacher/lessons/${id}/slides`).then((r) => r.json()).catch(() => null),
     ]);
+
+    if (slidesRes?.slideDeck?.slides) {
+      setSlides(slidesRes.slideDeck.slides);
+    }
+    if (
+      slidesRes?.slideDeck?.language_mode === "ar" ||
+      slidesRes?.slideDeck?.language_mode === "en" ||
+      slidesRes?.slideDeck?.language_mode === "both"
+    ) {
+      setSlideLanguageMode(slidesRes.slideDeck.language_mode);
+    }
 
     const cohortRows =
       profile?.role === "admin"
@@ -272,6 +302,55 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       return () => clearTimeout(timeout);
     }
   }, [authLoading, loadLesson]);
+
+  // Load slide generation context from sessionStorage
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem(getSlideGenerationContextStorageKey(id));
+      if (!raw) { setSlideGenContext(null); return; }
+      const parsed = parseSlideGenerationContext(JSON.parse(raw));
+      setSlideGenContext(parsed);
+      if (parsed?.requestedSlideCount) setSlideCount(clampSlideCount(parsed.requestedSlideCount));
+    } catch { setSlideGenContext(null); }
+    finally {
+      window.sessionStorage.removeItem(getSlideGenerationContextStorageKey(id));
+    }
+  }, [id]);
+
+  const handleSaveSlides = useCallback(async () => {
+    setSlideSaving(true);
+    try {
+      const res = await fetch(`/api/teacher/lessons/${id}/slides`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slides }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert("Save failed: " + (data.error || "Unknown error"));
+      } else {
+        setSlideLastSaved(new Date().toLocaleTimeString());
+      }
+    } catch { alert("Save failed"); }
+    finally { setSlideSaving(false); }
+  }, [id, slides]);
+
+  const handleSlideVideoReady = useCallback(async (urls: { video_url_1080p: string; video_url_360p: string; video_url_480p: string; video_url_720p: string; duration_seconds?: number }) => {
+    const supabase = createClient();
+    await supabase.from("lessons").update({
+      video_url_1080p: urls.video_url_1080p,
+      video_url_360p: urls.video_url_360p,
+      video_url_480p: urls.video_url_480p,
+      video_url_720p: urls.video_url_720p,
+      ...(urls.duration_seconds != null ? { video_duration_seconds: urls.duration_seconds } : {}),
+    }).eq("id", id);
+  }, [id]);
+
+  const slideGenerationBlockedReason = getCurriculumRequirementMessage(
+    subjects.find((s) => s.id === form.subject_id) ?? null,
+    form.grade_level,
+    form.curriculum_topic
+  );
 
   const selectedSubject = subjects.find((subject) => subject.id === form.subject_id) ?? null;
   const requiresCurriculum = hasMappedCurriculum(selectedSubject, form.grade_level);
@@ -486,6 +565,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "details", label: "Details" },
+    { key: "slides", label: "Slides", count: slides.length },
     { key: "questions", label: "Questions & Tasks", count: questions.length + lessonTasks.length },
     { key: "content", label: "Content", count: contentBlocks.length },
     { key: "results", label: "Results" },
@@ -523,15 +603,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                   {saveMessage.text}
                 </span>
               )}
-              <Link
-                href={`/teacher/lessons/${id}/slides`}
-                className="px-3 py-1.5 border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors hidden sm:flex items-center gap-1.5"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
-                </svg>
-                Slides
-              </Link>
               <button
                 onClick={saveAll}
                 disabled={saving}
@@ -570,7 +641,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       </div>
 
       {/* Tab content */}
-      <div className="max-w-5xl mx-auto px-6 py-6">
+      <div className={activeTab === "slides" ? "py-4" : "max-w-5xl mx-auto px-6 py-6"}>
         {activeTab === "details" && (
           <DetailsTab
             form={form}
@@ -584,6 +655,98 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             setVideoInputMode={setVideoInputMode}
             lessonId={id}
           />
+        )}
+
+        {activeTab === "slides" && (
+          <div className="max-w-[1600px] mx-auto px-4 space-y-4">
+            {/* Slide toolbar */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-500">
+                  {slides.length > 0 ? `${slides.length} slides` : "No slides yet"}
+                </span>
+                {slideLastSaved && (
+                  <span className="text-xs text-gray-400">Last saved: {slideLastSaved}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {!isGeneratingSlides && (
+                  <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
+                    <label className="text-xs font-medium text-gray-500">
+                      {slides.length > 0 ? "Slides" : "Generate"}
+                    </label>
+                    <input
+                      type="number"
+                      min={10}
+                      max={20}
+                      value={slideCount}
+                      onChange={(e) => setSlideCount(clampSlideCount(Number(e.target.value)))}
+                      className="w-16 border-0 bg-transparent p-0 text-sm font-semibold text-gray-900 focus:ring-0"
+                    />
+                  </div>
+                )}
+                <SlideGenerateButton
+                  lessonId={id}
+                  hasExistingSlides={slides.length > 0}
+                  languageMode={slideLanguageMode}
+                  generationContext={slideGenContext}
+                  slideCount={slideCount}
+                  disabledReason={slideGenerationBlockedReason}
+                  onGenerated={(newSlides) => setSlides(newSlides)}
+                  onGeneratingChange={(generating, progress) => {
+                    setIsGeneratingSlides(generating);
+                    setSlideGenProgress(progress);
+                  }}
+                  compact
+                />
+              </div>
+            </div>
+
+            {/* Slide content */}
+            {slides.length === 0 ? (
+              isGeneratingSlides ? (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center space-y-6">
+                  <div className="w-16 h-16 mx-auto bg-emerald-50 rounded-2xl flex items-center justify-center">
+                    <svg className="animate-spin h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{slideGenProgress || "Generating slides..."}</h3>
+                    <p className="text-sm text-gray-500 mt-1">This usually takes 15-30 seconds.</p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-w-2xl mx-auto">
+                    {Array.from({ length: Math.min(slideCount, 8) }).map((_, i) => (
+                      <div key={i} className="aspect-[16/10] rounded-lg bg-gray-100 animate-pulse" style={{ animationDelay: `${i * 100}ms` }} />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center space-y-4">
+                  <div className="w-16 h-16 mx-auto bg-violet-50 rounded-2xl flex items-center justify-center">
+                    <svg className="w-8 h-8 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">No Slides Yet</h3>
+                  <p className="text-sm text-gray-500">
+                    Use the Generate button above to create slides with AI, or they can be manually created.
+                  </p>
+                </div>
+              )
+            ) : (
+              <SlideEditor
+                slides={slides}
+                onChange={setSlides}
+                onSave={handleSaveSlides}
+                saving={slideSaving}
+                lessonId={id}
+                lessonTitle={form.title_ar || form.title_en || ""}
+                onVideoReady={handleSlideVideoReady}
+              />
+            )}
+          </div>
         )}
 
         {activeTab === "questions" && (
@@ -926,6 +1089,7 @@ function DetailsTab({
           />
         </div>
       </section>
+
     </div>
   );
 }

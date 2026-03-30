@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import type { Slide, SlideType, SlideLayout, SlideTextSize, SlideInteractionType } from '@/lib/slides.types';
+import type { Slide, SlideType, SlideLayout, SlideTextSize } from '@/lib/slides.types';
+import SlideInteractionFields from './SlideInteractionFields';
+import { OWL_OPTIONS, OWL_PREFIX, isOwlImage, getOwlKey } from '@/lib/owl-illustrations';
+import OwlImage from './OwlImage';
 
 interface SlideEditPanelProps {
   slide: Slide;
@@ -35,12 +38,6 @@ const TEXT_SIZES: { value: SlideTextSize; label: string }[] = [
   { value: 'xl', label: 'XL' },
 ];
 
-const INTERACTION_TYPES: Array<{ value: SlideInteractionType; label: string }> = [
-  { value: 'choose_correct', label: 'Choose Correct' },
-  { value: 'true_false', label: 'True / False' },
-  { value: 'tap_to_count', label: 'Tap to Count' },
-];
-
 const hasBullets = (type: SlideType) => type === 'key_points' || type === 'summary';
 const hasRevealItems = (type: SlideType) => type === 'question_answer';
 const hasLayout = (type: SlideType) => type === 'content' || type === 'diagram_description' || type === 'key_points';
@@ -53,7 +50,6 @@ const labelClass = 'block text-xs font-medium text-gray-600 mb-1';
 export default function SlideEditPanel({ slide, onUpdate, onDelete }: SlideEditPanelProps) {
   const [bulletLang, setBulletLang] = useState<'ar' | 'en'>('ar');
   const [revealLang, setRevealLang] = useState<'ar' | 'en'>('ar');
-  const [interactionOptionLang, setInteractionOptionLang] = useState<'ar' | 'en'>('ar');
 
   function handleTypeChange(newType: SlideType) {
     const updates: Partial<Slide> = { type: newType };
@@ -130,90 +126,6 @@ export default function SlideEditPanel({ slide, onUpdate, onDelete }: SlideEditP
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     onUpdate({ [revealKey]: next });
-  }
-
-  const interactionOptions =
-    interactionOptionLang === 'ar'
-      ? (slide.interaction_options_ar || [])
-      : (slide.interaction_options_en || []);
-  const interactionOptionsKey =
-    interactionOptionLang === 'ar' ? 'interaction_options_ar' : 'interaction_options_en';
-
-  function handleInteractionTypeChange(nextType: SlideInteractionType | '') {
-    if (!nextType) {
-      onUpdate({
-        interaction_type: null,
-        interaction_prompt_ar: null,
-        interaction_prompt_en: null,
-        interaction_options_ar: null,
-        interaction_options_en: null,
-        interaction_correct_index: null,
-        interaction_true_false_answer: null,
-        interaction_count_target: null,
-        interaction_visual_emoji: null,
-      });
-      return;
-    }
-
-    const updates: Partial<Slide> = {
-      interaction_type: nextType,
-      interaction_prompt_ar: slide.interaction_prompt_ar ?? slide.body_ar ?? '',
-      interaction_prompt_en: slide.interaction_prompt_en ?? slide.body_en ?? '',
-    };
-
-    if (nextType === 'choose_correct') {
-      updates.interaction_options_ar = slide.interaction_options_ar?.length
-        ? slide.interaction_options_ar
-        : ['', '', ''];
-      updates.interaction_options_en = slide.interaction_options_en?.length
-        ? slide.interaction_options_en
-        : ['', '', ''];
-      updates.interaction_correct_index = slide.interaction_correct_index ?? 0;
-      updates.interaction_true_false_answer = null;
-      updates.interaction_count_target = null;
-      updates.interaction_visual_emoji = null;
-    }
-
-    if (nextType === 'true_false') {
-      updates.interaction_options_ar = null;
-      updates.interaction_options_en = null;
-      updates.interaction_correct_index = null;
-      updates.interaction_true_false_answer = slide.interaction_true_false_answer ?? true;
-      updates.interaction_count_target = null;
-      updates.interaction_visual_emoji = null;
-    }
-
-    if (nextType === 'tap_to_count') {
-      updates.interaction_options_ar = null;
-      updates.interaction_options_en = null;
-      updates.interaction_correct_index = null;
-      updates.interaction_true_false_answer = null;
-      updates.interaction_count_target = slide.interaction_count_target ?? 5;
-      updates.interaction_visual_emoji = slide.interaction_visual_emoji ?? '🍎';
-    }
-
-    onUpdate(updates);
-  }
-
-  function updateInteractionOption(index: number, value: string) {
-    const next = [...interactionOptions];
-    next[index] = value;
-    onUpdate({ [interactionOptionsKey]: next } as Partial<Slide>);
-  }
-
-  function addInteractionOption() {
-    onUpdate({ [interactionOptionsKey]: [...interactionOptions, ''] } as Partial<Slide>);
-  }
-
-  function removeInteractionOption(index: number) {
-    if (interactionOptions.length <= 2) return;
-    onUpdate({
-      [interactionOptionsKey]: interactionOptions.filter((_, itemIndex) => itemIndex !== index),
-    } as Partial<Slide>);
-
-    if (slide.interaction_correct_index != null && slide.interaction_correct_index >= interactionOptions.length - 1) {
-      onUpdate({ interaction_correct_index: Math.max(0, interactionOptions.length - 2) });
-    }
   }
 
   return (
@@ -298,16 +210,18 @@ export default function SlideEditPanel({ slide, onUpdate, onDelete }: SlideEditP
         </div>
       </div>
 
-      {/* Image URL */}
+      {/* Image / Owl Illustration */}
       <div>
-        <label className={labelClass}>Image URL</label>
+        <label className={labelClass}>Image</label>
         <div className="space-y-2">
+          {/* URL input */}
           <div className="flex gap-1">
             <input
-              value={slide.image_url || ''}
+              value={isOwlImage(slide.image_url) ? '' : (slide.image_url || '')}
               onChange={(e) => onUpdate({ image_url: e.target.value || null })}
               placeholder="https://example.com/image.jpg"
               className={inputClass}
+              disabled={isOwlImage(slide.image_url)}
             />
             {slide.image_url && (
               <button
@@ -319,7 +233,9 @@ export default function SlideEditPanel({ slide, onUpdate, onDelete }: SlideEditP
               </button>
             )}
           </div>
-          {slide.image_url && (
+
+          {/* Image preview */}
+          {slide.image_url && !isOwlImage(slide.image_url) && (
             <div className="relative w-full h-20 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -330,187 +246,55 @@ export default function SlideEditPanel({ slide, onUpdate, onDelete }: SlideEditP
               />
             </div>
           )}
+
+          {/* Owl preview */}
+          {isOwlImage(slide.image_url) && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50">
+              <div className="w-10 h-10 flex-shrink-0">
+                <OwlImage url={slide.image_url!} className="w-full h-full" />
+              </div>
+              <span className="text-xs font-medium text-emerald-700">
+                {OWL_OPTIONS.find(o => o.key === getOwlKey(slide.image_url!))?.label || 'Owl'} illustration
+              </span>
+            </div>
+          )}
+
+          {/* Owl picker grid */}
+          <div>
+            <p className="text-[10px] text-gray-400 mb-1.5">Or pick an illustration:</p>
+            <div className="grid grid-cols-6 gap-1">
+              {OWL_OPTIONS.map((owl) => {
+                const isSelected = slide.image_url === `${OWL_PREFIX}${owl.key}`;
+                return (
+                  <button
+                    key={owl.key}
+                    type="button"
+                    onClick={() => onUpdate({ image_url: isSelected ? null : `${OWL_PREFIX}${owl.key}` })}
+                    className={`relative w-full aspect-square rounded-lg border-2 transition-all flex items-center justify-center ${
+                      isSelected
+                        ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-300'
+                        : 'border-gray-100 bg-white hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                    title={owl.label}
+                  >
+                    <OwlImage url={`${OWL_PREFIX}${owl.key}`} className="w-full h-full p-0.5" />
+                    {isSelected && (
+                      <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full flex items-center justify-center">
+                        <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
       {supportsStudentInteraction(slide.type) && (
-        <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
-          <div>
-            <label className={labelClass}>Lesson Interaction</label>
-            <select
-              value={slide.interaction_type || ''}
-              onChange={(e) => handleInteractionTypeChange(e.target.value as SlideInteractionType | '')}
-              className={inputClass}
-            >
-              <option value="">None</option>
-              {INTERACTION_TYPES.map((interactionType) => (
-                <option key={interactionType.value} value={interactionType.value}>
-                  {interactionType.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className={labelClass}>Trigger Time (seconds)</label>
-            <input
-              type="number"
-              min={0}
-              value={slide.timestamp_seconds ?? ''}
-              onChange={(e) => onUpdate({
-                timestamp_seconds: e.target.value === '' ? null : Number(e.target.value),
-              })}
-              placeholder="Auto-place if blank"
-              className={inputClass}
-            />
-          </div>
-
-          {slide.interaction_type && (
-            <>
-              <div>
-                <label className={labelClass}>Prompt (Arabic)</label>
-                <textarea
-                  dir="rtl"
-                  value={slide.interaction_prompt_ar || ''}
-                  onChange={(e) => onUpdate({ interaction_prompt_ar: e.target.value })}
-                  rows={2}
-                  className={`${inputClass} font-cairo`}
-                  placeholder="Defaults to slide body if left blank"
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Prompt (English)</label>
-                <textarea
-                  value={slide.interaction_prompt_en || ''}
-                  onChange={(e) => onUpdate({ interaction_prompt_en: e.target.value })}
-                  rows={2}
-                  className={inputClass}
-                  placeholder="Defaults to slide body if left blank"
-                />
-              </div>
-            </>
-          )}
-
-          {slide.interaction_type === 'choose_correct' && (
-            <>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className={labelClass}>Answer Choices</label>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => setInteractionOptionLang('ar')}
-                      className={`px-2 py-0.5 text-[10px] font-medium rounded ${
-                        interactionOptionLang === 'ar' ? 'bg-[#007229] text-white' : 'bg-white text-gray-600 border border-gray-200'
-                      }`}
-                    >
-                      عربي
-                    </button>
-                    <button
-                      onClick={() => setInteractionOptionLang('en')}
-                      className={`px-2 py-0.5 text-[10px] font-medium rounded ${
-                        interactionOptionLang === 'en' ? 'bg-[#007229] text-white' : 'bg-white text-gray-600 border border-gray-200'
-                      }`}
-                    >
-                      EN
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  {interactionOptions.map((option, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <button
-                        onClick={() => onUpdate({ interaction_correct_index: index })}
-                        className={`flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold ${
-                          slide.interaction_correct_index === index
-                            ? 'border-[#007229] bg-[#007229] text-white'
-                            : 'border-gray-300 text-gray-500 bg-white'
-                        }`}
-                        title="Mark correct choice"
-                      >
-                        {index + 1}
-                      </button>
-                      <input
-                        dir={interactionOptionLang === 'ar' ? 'rtl' : 'ltr'}
-                        value={option}
-                        onChange={(e) => updateInteractionOption(index, e.target.value)}
-                        className={`${inputClass} ${interactionOptionLang === 'ar' ? 'font-cairo' : ''}`}
-                        placeholder={`Choice ${index + 1}`}
-                      />
-                      <button
-                        onClick={() => removeInteractionOption(index)}
-                        disabled={interactionOptions.length <= 2}
-                        className="flex-shrink-0 w-6 h-6 text-xs text-red-400 hover:text-red-600 disabled:opacity-30 rounded hover:bg-red-50"
-                        title="Remove choice"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={addInteractionOption}
-                  className="mt-1.5 w-full py-1.5 text-xs font-medium text-[#007229] border border-dashed border-[#007229]/30 rounded-lg hover:bg-green-50 transition-colors"
-                >
-                  + Add Choice
-                </button>
-              </div>
-            </>
-          )}
-
-          {slide.interaction_type === 'true_false' && (
-            <div>
-              <label className={labelClass}>Correct Answer</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => onUpdate({ interaction_true_false_answer: true })}
-                  className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-                    slide.interaction_true_false_answer === true
-                      ? 'border-[#007229] bg-green-50 text-[#007229]'
-                      : 'border-gray-200 bg-white text-gray-600'
-                  }`}
-                >
-                  True
-                </button>
-                <button
-                  onClick={() => onUpdate({ interaction_true_false_answer: false })}
-                  className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-                    slide.interaction_true_false_answer === false
-                      ? 'border-[#D21034] bg-red-50 text-[#D21034]'
-                      : 'border-gray-200 bg-white text-gray-600'
-                  }`}
-                >
-                  False
-                </button>
-              </div>
-            </div>
-          )}
-
-          {slide.interaction_type === 'tap_to_count' && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelClass}>Target Count</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={slide.interaction_count_target ?? 5}
-                  onChange={(e) => onUpdate({ interaction_count_target: Number(e.target.value) || 1 })}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Visual Token</label>
-                <input
-                  value={slide.interaction_visual_emoji || '🍎'}
-                  onChange={(e) => onUpdate({ interaction_visual_emoji: e.target.value })}
-                  className={inputClass}
-                  placeholder="🍎"
-                />
-              </div>
-            </div>
-          )}
-        </div>
+        <SlideInteractionFields slide={slide} onUpdate={onUpdate} />
       )}
 
       {/* Title AR */}
