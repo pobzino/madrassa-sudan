@@ -184,7 +184,20 @@ const SORT_GROUPS_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'option
   },
 ];
 
-function getInteractiveSlidePlaceholders(type: string): InteractivePlaceholders {
+function getVariantPool(type: string): Partial<InteractivePlaceholders>[] {
+  switch (type) {
+    case 'choose_correct': return CHOOSE_CORRECT_VARIANTS;
+    case 'true_false': return TRUE_FALSE_VARIANTS;
+    case 'fill_missing_word': return FILL_BLANK_VARIANTS;
+    case 'tap_to_count': return TAP_COUNT_VARIANTS;
+    case 'match_pairs': return MATCH_PAIRS_VARIANTS;
+    case 'sequence_order': return SEQUENCE_VARIANTS;
+    case 'sort_groups': return SORT_GROUPS_VARIANTS;
+    default: return [];
+  }
+}
+
+function getInteractiveSlidePlaceholders(type: string, existingSlides: Slide[]): InteractivePlaceholders {
   const base: InteractivePlaceholders = {
     title_ar: '', title_en: '', body_ar: '', body_en: '',
     prompt_ar: '', prompt_en: '',
@@ -194,38 +207,21 @@ function getInteractiveSlidePlaceholders(type: string): InteractivePlaceholders 
     solution_map: null,
   };
 
-  switch (type) {
-    case 'choose_correct': {
-      const v = pickRandom(CHOOSE_CORRECT_VARIANTS);
-      return { ...base, ...v };
-    }
-    case 'true_false': {
-      const v = pickRandom(TRUE_FALSE_VARIANTS);
-      return { ...base, ...v };
-    }
-    case 'fill_missing_word': {
-      const v = pickRandom(FILL_BLANK_VARIANTS);
-      return { ...base, ...v };
-    }
-    case 'tap_to_count': {
-      const v = pickRandom(TAP_COUNT_VARIANTS);
-      return { ...base, ...v };
-    }
-    case 'match_pairs': {
-      const v = pickRandom(MATCH_PAIRS_VARIANTS);
-      return { ...base, ...v };
-    }
-    case 'sequence_order': {
-      const v = pickRandom(SEQUENCE_VARIANTS);
-      return { ...base, ...v };
-    }
-    case 'sort_groups': {
-      const v = pickRandom(SORT_GROUPS_VARIANTS);
-      return { ...base, ...v };
-    }
-    default:
-      return base;
-  }
+  const pool = getVariantPool(type);
+  if (pool.length === 0) return base;
+
+  // Collect titles already used by slides of the same interaction type
+  const usedTitles = new Set(
+    existingSlides
+      .filter((s) => s.interaction_type === type)
+      .map((s) => s.title_en)
+  );
+
+  // Pick an unused variant first; fall back to random if all are used
+  const unused = pool.filter((v) => !usedTitles.has(v.title_en ?? ''));
+  const v = unused.length > 0 ? pickRandom(unused) : pickRandom(pool);
+
+  return { ...base, ...v };
 }
 
 interface SlideEditorProps {
@@ -425,8 +421,8 @@ export default function SlideEditor({
     (request: InteractiveSlideRequest) => {
       const { interactionType, slideType } = request;
 
-      // Placeholder content per interaction type so the slide is never blank
-      const placeholders = getInteractiveSlidePlaceholders(interactionType);
+      // Placeholder content per interaction type — picks an unused variant
+      const placeholders = getInteractiveSlidePlaceholders(interactionType, slides);
 
       const newSlide: Slide = {
         id: crypto.randomUUID(),
