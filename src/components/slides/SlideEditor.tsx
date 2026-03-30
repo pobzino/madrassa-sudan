@@ -5,7 +5,7 @@ import type { Slide, SlideType } from '@/lib/slides.types';
 import SlideCard from './SlideCard';
 import SlideThumbnail from './SlideThumbnail';
 import SlideEditPanel from './SlideEditPanel';
-import SlideToolbar from './SlideToolbar';
+import SlideToolbar, { type InteractiveSlideRequest } from './SlideToolbar';
 import RecordingOverlay from './RecordingOverlay';
 import RecordingReviewModal from './RecordingReviewModal';
 import { useSlideRecorder } from '@/hooks/useSlideRecorder';
@@ -192,6 +192,63 @@ export default function SlideEditor({
         interaction_true_false_answer: null,
         interaction_count_target: null,
         interaction_visual_emoji: null,
+        interaction_items_ar: null,
+        interaction_items_en: null,
+        interaction_targets_ar: null,
+        interaction_targets_en: null,
+        interaction_solution_map: null,
+      };
+      onChange([...slides, newSlide]);
+      setSelectedIndex(slides.length);
+    },
+    [slides, onChange]
+  );
+
+  const addInteractiveSlide = useCallback(
+    (request: InteractiveSlideRequest) => {
+      const { interactionType, slideType } = request;
+      const newSlide: Slide = {
+        id: crypto.randomUUID(),
+        type: slideType,
+        sequence: slides.length,
+        timestamp_seconds: null,
+        title_ar: '',
+        title_en: '',
+        body_ar: '',
+        body_en: '',
+        speaker_notes_ar: '',
+        speaker_notes_en: '',
+        visual_hint: '',
+        bullets_ar: null,
+        bullets_en: null,
+        reveal_items_ar: null,
+        reveal_items_en: null,
+        image_url: null,
+        layout: null,
+        title_size: 'md',
+        body_size: 'md',
+        lesson_phase: 'practice',
+        idea_focus_en: '',
+        idea_focus_ar: '',
+        vocabulary_word_en: null,
+        vocabulary_word_ar: null,
+        say_it_twice_prompt: null,
+        practice_question_count: 1,
+        representation_stage: 'not_applicable',
+        interaction_type: interactionType,
+        interaction_prompt_ar: null,
+        interaction_prompt_en: null,
+        interaction_options_ar: (interactionType === 'choose_correct' || interactionType === 'fill_missing_word') ? ['', '', ''] : null,
+        interaction_options_en: (interactionType === 'choose_correct' || interactionType === 'fill_missing_word') ? ['', '', ''] : null,
+        interaction_correct_index: (interactionType === 'choose_correct' || interactionType === 'fill_missing_word') ? 0 : null,
+        interaction_true_false_answer: interactionType === 'true_false' ? true : null,
+        interaction_count_target: interactionType === 'tap_to_count' ? 5 : null,
+        interaction_visual_emoji: interactionType === 'tap_to_count' ? '🍎' : null,
+        interaction_items_ar: (interactionType === 'match_pairs' || interactionType === 'sequence_order' || interactionType === 'sort_groups') ? ['', ''] : null,
+        interaction_items_en: (interactionType === 'match_pairs' || interactionType === 'sequence_order' || interactionType === 'sort_groups') ? ['', ''] : null,
+        interaction_targets_ar: (interactionType === 'match_pairs' || interactionType === 'sort_groups') ? ['', ''] : null,
+        interaction_targets_en: (interactionType === 'match_pairs' || interactionType === 'sort_groups') ? ['', ''] : null,
+        interaction_solution_map: interactionType === 'sort_groups' ? [0, 1] : null,
       };
       onChange([...slides, newSlide]);
       setSelectedIndex(slides.length);
@@ -359,6 +416,7 @@ export default function SlideEditor({
           language={language}
           onLanguageChange={setLanguage}
           onAddSlide={addSlide}
+          onAddInteractiveSlide={addInteractiveSlide}
           onSave={onSave}
           onPresent={startPresent}
           onRecord={lessonId ? startRecord : undefined}
