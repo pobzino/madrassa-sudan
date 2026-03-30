@@ -69,6 +69,56 @@ export function getSlideInteractionOptions(slide: Slide, language: 'ar' | 'en'):
   return (primary && primary.length > 0 ? primary : fallback) || [];
 }
 
+export function getSlideInteractionItems(slide: Slide, language: 'ar' | 'en'): string[] {
+  const primary = language === 'ar' ? slide.interaction_items_ar : slide.interaction_items_en;
+  const fallback = language === 'ar' ? slide.interaction_items_en : slide.interaction_items_ar;
+
+  return (primary && primary.length > 0 ? primary : fallback) || [];
+}
+
+export function getSlideInteractionTargets(slide: Slide, language: 'ar' | 'en'): string[] {
+  const primary = language === 'ar' ? slide.interaction_targets_ar : slide.interaction_targets_en;
+  const fallback = language === 'ar' ? slide.interaction_targets_en : slide.interaction_targets_ar;
+
+  return (primary && primary.length > 0 ? primary : fallback) || [];
+}
+
+export function getStableInteractionOrder<T>(items: T[], seed: string): T[] {
+  return [...items]
+    .map((item, index) => ({
+      item,
+      sortKey: hashSeed(`${seed}:${index}`),
+    }))
+    .sort((a, b) => a.sortKey - b.sortKey)
+    .map((entry) => entry.item);
+}
+
+function hashSeed(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % 2147483647;
+  }
+  return hash;
+}
+
+function parseMappedAnswer(answer: boolean | number | string | string[] | null) {
+  if (!Array.isArray(answer)) {
+    return new Map<number, number>();
+  }
+
+  return answer.reduce((mapping, entry) => {
+    const [itemIndexRaw, targetIndexRaw] = entry.split(':');
+    const itemIndex = Number(itemIndexRaw);
+    const targetIndex = Number(targetIndexRaw);
+
+    if (Number.isInteger(itemIndex) && Number.isInteger(targetIndex)) {
+      mapping.set(itemIndex, targetIndex);
+    }
+
+    return mapping;
+  }, new Map<number, number>());
+}
+
 export function computeSlideInteractionCorrectness(
   slide: Slide,
   answer: boolean | number | string | string[] | null
@@ -77,7 +127,7 @@ export function computeSlideInteractionCorrectness(
     return false;
   }
 
-  if (slide.interaction_type === 'choose_correct') {
+  if (slide.interaction_type === 'choose_correct' || slide.interaction_type === 'fill_missing_word') {
     if (typeof answer === 'number') {
       return answer === slide.interaction_correct_index;
     }
@@ -100,6 +150,52 @@ export function computeSlideInteractionCorrectness(
 
   if (slide.interaction_type === 'tap_to_count') {
     return Number(answer) === Number(slide.interaction_count_target ?? 0);
+  }
+
+  if (slide.interaction_type === 'match_pairs') {
+    const itemsLength = Math.max(
+      slide.interaction_items_ar?.length ?? 0,
+      slide.interaction_items_en?.length ?? 0
+    );
+    const targetsLength = Math.max(
+      slide.interaction_targets_ar?.length ?? 0,
+      slide.interaction_targets_en?.length ?? 0
+    );
+    const mapping = parseMappedAnswer(answer);
+
+    if (itemsLength === 0 || itemsLength !== targetsLength || mapping.size !== itemsLength) {
+      return false;
+    }
+
+    return Array.from({ length: itemsLength }).every((_, itemIndex) => mapping.get(itemIndex) === itemIndex);
+  }
+
+  if (slide.interaction_type === 'sequence_order') {
+    const itemsLength = Math.max(
+      slide.interaction_items_ar?.length ?? 0,
+      slide.interaction_items_en?.length ?? 0
+    );
+
+    if (!Array.isArray(answer) || answer.length !== itemsLength) {
+      return false;
+    }
+
+    return answer.every((value, index) => value === String(index));
+  }
+
+  if (slide.interaction_type === 'sort_groups') {
+    const itemsLength = Math.max(
+      slide.interaction_items_ar?.length ?? 0,
+      slide.interaction_items_en?.length ?? 0
+    );
+    const solutionMap = slide.interaction_solution_map || [];
+    const mapping = parseMappedAnswer(answer);
+
+    if (itemsLength === 0 || solutionMap.length !== itemsLength || mapping.size !== itemsLength) {
+      return false;
+    }
+
+    return solutionMap.every((targetIndex, itemIndex) => mapping.get(itemIndex) === targetIndex);
   }
 
   return false;

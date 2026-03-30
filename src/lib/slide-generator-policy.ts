@@ -149,11 +149,16 @@ export function getSlideGeneratorPolicyPrompt({
 
   const interactionRules = [
     "## Interaction Rules",
-    "- Activity and practice slides may include a student interaction via `interaction_type`.",
+    "- Every practice slide must include a student interaction via `interaction_type`.",
+    "- Activity slides may include a student interaction via `interaction_type` when it improves participation.",
     "- When `interaction_type` is set, all companion fields for that type must be filled.",
     "- `choose_correct`: requires `interaction_options_ar` and `interaction_options_en` (2-4 items each), `interaction_correct_index` within range, and `interaction_prompt_ar`/`interaction_prompt_en`.",
+    "- `fill_missing_word`: requires `interaction_options_ar` and `interaction_options_en` (2-4 items each), `interaction_correct_index`, and `interaction_prompt_ar`/`interaction_prompt_en`.",
     "- `true_false`: requires `interaction_true_false_answer` (boolean) and `interaction_prompt_ar`/`interaction_prompt_en`.",
     "- `tap_to_count`: requires `interaction_count_target` (1-12), `interaction_visual_emoji`, and `interaction_prompt_ar`/`interaction_prompt_en`.",
+    "- `match_pairs`: requires `interaction_items_ar/en` and `interaction_targets_ar/en` with 2-4 entries each; matching is by aligned index.",
+    "- `sequence_order`: requires `interaction_items_ar/en` with 3-5 entries in the correct order.",
+    "- `sort_groups`: requires `interaction_items_ar/en`, `interaction_targets_ar/en`, and `interaction_solution_map` where each item maps to a target index.",
     "- Non-activity/non-practice slides must set all interaction fields to null.",
     "- Keep interaction prompts short and grade-appropriate.",
   ];
@@ -168,9 +173,10 @@ export function getSlideGeneratorValidationSchemaNotes(subjectKey: SupportedSubj
     "lesson_phase must be present on every slide",
     "idea_focus_en and idea_focus_ar must be present on every slide",
     "practice_question_count must be 1 on every practice slide",
+    "every practice slide must set interaction_type",
   ];
 
-  notes.push("Activity and practice slides with interaction_type must include all companion fields for that type");
+  notes.push("Slides with interaction_type must include all companion fields for that type");
 
   if (subjectKey === "english") {
     notes.push("English core teaching slides must set vocabulary_word_en, vocabulary_word_ar, and say_it_twice_prompt=true");
@@ -274,6 +280,10 @@ export function validateGeneratedSlides(
         issues.push(`Slide ${index + 1} practice_question_count must be 1.`);
       }
 
+      if (!slide.interaction_type) {
+        issues.push(`Slide ${index + 1} is a practice slide and must include an interaction_type.`);
+      }
+
       const combinedPracticeText = [slide.title_en, slide.title_ar, slide.body_en, slide.body_ar].join(" ");
       if (countQuestionMarks(combinedPracticeText) > 2) {
         issues.push(`Slide ${index + 1} appears to contain multiple questions; practice slides must show one question only.`);
@@ -291,14 +301,14 @@ export function validateGeneratedSlides(
         issues.push(`Slide ${index + 1} has interaction_type but missing interaction prompt.`);
       }
 
-      if (slide.interaction_type === "choose_correct") {
+      if (slide.interaction_type === "choose_correct" || slide.interaction_type === "fill_missing_word") {
         const arLen = slide.interaction_options_ar?.length ?? 0;
         const enLen = slide.interaction_options_en?.length ?? 0;
         if (arLen < 2 || arLen > 4 || enLen < 2 || enLen > 4) {
-          issues.push(`Slide ${index + 1} choose_correct must have 2-4 options in both languages.`);
+          issues.push(`Slide ${index + 1} ${slide.interaction_type} must have 2-4 options in both languages.`);
         }
         if (typeof slide.interaction_correct_index !== "number" || slide.interaction_correct_index < 0 || slide.interaction_correct_index >= Math.max(arLen, enLen)) {
-          issues.push(`Slide ${index + 1} choose_correct must have a valid interaction_correct_index.`);
+          issues.push(`Slide ${index + 1} ${slide.interaction_type} must have a valid interaction_correct_index.`);
         }
       }
 
@@ -315,6 +325,69 @@ export function validateGeneratedSlides(
         }
         if (!slide.interaction_visual_emoji?.trim()) {
           issues.push(`Slide ${index + 1} tap_to_count must set interaction_visual_emoji.`);
+        }
+      }
+
+      if (slide.interaction_type === "match_pairs") {
+        const itemArLen = slide.interaction_items_ar?.length ?? 0;
+        const itemEnLen = slide.interaction_items_en?.length ?? 0;
+        const targetArLen = slide.interaction_targets_ar?.length ?? 0;
+        const targetEnLen = slide.interaction_targets_en?.length ?? 0;
+
+        if (
+          itemArLen < 2 ||
+          itemArLen > 4 ||
+          itemEnLen < 2 ||
+          itemEnLen > 4 ||
+          targetArLen !== itemArLen ||
+          targetEnLen !== itemEnLen
+        ) {
+          issues.push(`Slide ${index + 1} match_pairs must have aligned item/target lists with 2-4 pairs in both languages.`);
+        }
+      }
+
+      if (slide.interaction_type === "sequence_order") {
+        const itemArLen = slide.interaction_items_ar?.length ?? 0;
+        const itemEnLen = slide.interaction_items_en?.length ?? 0;
+        if (
+          itemArLen < 3 ||
+          itemArLen > 5 ||
+          itemEnLen < 3 ||
+          itemEnLen > 5 ||
+          itemArLen !== itemEnLen
+        ) {
+          issues.push(`Slide ${index + 1} sequence_order must have 3-5 ordered items in both languages.`);
+        }
+      }
+
+      if (slide.interaction_type === "sort_groups") {
+        const itemArLen = slide.interaction_items_ar?.length ?? 0;
+        const itemEnLen = slide.interaction_items_en?.length ?? 0;
+        const targetArLen = slide.interaction_targets_ar?.length ?? 0;
+        const targetEnLen = slide.interaction_targets_en?.length ?? 0;
+        const solutionMap = slide.interaction_solution_map ?? [];
+        const withinRange = solutionMap.every(
+          (targetIndex) =>
+            Number.isInteger(targetIndex) &&
+            targetIndex >= 0 &&
+            targetIndex < Math.max(targetArLen, targetEnLen)
+        );
+
+        if (
+          itemArLen < 2 ||
+          itemArLen > 6 ||
+          itemEnLen < 2 ||
+          itemEnLen > 6 ||
+          itemArLen !== itemEnLen ||
+          targetArLen < 2 ||
+          targetArLen > 4 ||
+          targetEnLen < 2 ||
+          targetEnLen > 4 ||
+          targetArLen !== targetEnLen ||
+          solutionMap.length !== itemArLen ||
+          !withinRange
+        ) {
+          issues.push(`Slide ${index + 1} sort_groups must include 2-6 items, 2-4 group labels, and a valid interaction_solution_map.`);
         }
       }
     }

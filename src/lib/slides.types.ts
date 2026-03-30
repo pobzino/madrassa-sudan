@@ -12,7 +12,14 @@ export type SlideLayout = 'default' | 'image_left' | 'image_right' | 'image_top'
 export type SlideTextSize = 'sm' | 'md' | 'lg' | 'xl';
 export type SlideLessonPhase = 'title' | 'objectives' | 'core_teaching' | 'practice' | 'summary_goodbye';
 export type MathRepresentationStage = 'concrete_visual' | 'abstract' | 'not_applicable';
-export type SlideInteractionType = 'choose_correct' | 'true_false' | 'tap_to_count';
+export type SlideInteractionType =
+  | 'choose_correct'
+  | 'true_false'
+  | 'tap_to_count'
+  | 'match_pairs'
+  | 'sequence_order'
+  | 'sort_groups'
+  | 'fill_missing_word';
 
 export interface Slide {
   id: string;
@@ -51,6 +58,11 @@ export interface Slide {
   interaction_true_false_answer?: boolean | null;
   interaction_count_target?: number | null;
   interaction_visual_emoji?: string | null;
+  interaction_items_ar?: string[] | null;
+  interaction_items_en?: string[] | null;
+  interaction_targets_ar?: string[] | null;
+  interaction_targets_en?: string[] | null;
+  interaction_solution_map?: number[] | null;
 }
 
 export interface SlideDeck {

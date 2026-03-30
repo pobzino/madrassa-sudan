@@ -910,6 +910,7 @@ export default function LessonPlayerPage() {
             {/* Slide Interaction Overlay */}
             {activeSlideInteraction && (
               <SlideInteractionOverlay
+                key={activeSlideInteraction.id}
                 slide={activeSlideInteraction}
                 language={language}
                 onComplete={(result) => {

@@ -214,13 +214,19 @@ ${validationSchemaNotes}
 - Distribute content logically: introduce, explain concepts, provide examples, activities, then summarize
 
 ## Student Interactions
-- Activity and practice slides (type "activity", "quiz_preview", or "question_answer") SHOULD include a student interaction
-- Set interaction_type to one of: "choose_correct", "true_false", or "tap_to_count"
+- Every practice slide (type "quiz_preview" or "question_answer") MUST include a student interaction
+- Activity slides (type "activity") MAY include a student interaction when it helps participation
+- Set interaction_type to one of: "choose_correct", "true_false", "tap_to_count", "match_pairs", "sequence_order", "sort_groups", or "fill_missing_word"
+- Every practice slide must set interaction_type to one of those values; it cannot be null
 - For choose_correct: provide 3-4 options in interaction_options_ar/interaction_options_en, set interaction_correct_index to the 0-based index of the correct answer
+- For fill_missing_word: provide 2-4 options in interaction_options_ar/interaction_options_en, set interaction_correct_index to the 0-based index of the correct word, and make the visible slide text clearly contain a blank to fill
 - For true_false: set interaction_true_false_answer to true or false
 - For tap_to_count: set interaction_count_target (1-12) and interaction_visual_emoji (a single emoji)
+- For match_pairs: provide 2-4 aligned pairs using interaction_items_ar/en and interaction_targets_ar/en. The correct match is item 0 to target 0, item 1 to target 1, and so on
+- For sequence_order: provide 3-5 ordered entries in interaction_items_ar/en. The listed order is the correct answer
+- For sort_groups: provide 2-6 items in interaction_items_ar/en, 2-4 group labels in interaction_targets_ar/en, and interaction_solution_map as the 0-based target index for each item
 - Set interaction_prompt_ar/interaction_prompt_en: a short question or instruction for the student
-- Non-interactive slides (title, content, key_points, diagram_description, summary): set ALL interaction fields to null
+- Non-interactive slides (title, content, key_points, diagram_description, summary): set ALL interaction fields to null, including interaction_items_ar/en, interaction_targets_ar/en, and interaction_solution_map
 - Keep interaction prompts short and grade-appropriate for Grade ${lesson.grade_level || 1}`;
 
     const slideSchema = {
@@ -292,7 +298,18 @@ ${validationSchemaNotes}
               },
               interaction_type: {
                 anyOf: [
-                  { type: "string", enum: ["choose_correct", "true_false", "tap_to_count"] },
+                  {
+                    type: "string",
+                    enum: [
+                      "choose_correct",
+                      "true_false",
+                      "tap_to_count",
+                      "match_pairs",
+                      "sequence_order",
+                      "sort_groups",
+                      "fill_missing_word",
+                    ],
+                  },
                   { type: "null" },
                 ],
               },
@@ -319,6 +336,21 @@ ${validationSchemaNotes}
               },
               interaction_visual_emoji: {
                 anyOf: [{ type: "string" }, { type: "null" }],
+              },
+              interaction_items_ar: {
+                anyOf: [{ type: "array", items: { type: "string" } }, { type: "null" }],
+              },
+              interaction_items_en: {
+                anyOf: [{ type: "array", items: { type: "string" } }, { type: "null" }],
+              },
+              interaction_targets_ar: {
+                anyOf: [{ type: "array", items: { type: "string" } }, { type: "null" }],
+              },
+              interaction_targets_en: {
+                anyOf: [{ type: "array", items: { type: "string" } }, { type: "null" }],
+              },
+              interaction_solution_map: {
+                anyOf: [{ type: "array", items: { type: "integer" } }, { type: "null" }],
               },
             },
             required: [
@@ -353,6 +385,11 @@ ${validationSchemaNotes}
               "interaction_true_false_answer",
               "interaction_count_target",
               "interaction_visual_emoji",
+              "interaction_items_ar",
+              "interaction_items_en",
+              "interaction_targets_ar",
+              "interaction_targets_en",
+              "interaction_solution_map",
             ],
             additionalProperties: false,
           },
