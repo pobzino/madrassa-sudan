@@ -359,12 +359,34 @@ export default function SlideEditor({
     [slides, selectedIndex, onChange]
   );
 
+  const isSkeletonSlide = useCallback((index: number): boolean => {
+    if (slides.length === 0) return false;
+    const slide = slides[index];
+    if (!slide) return false;
+    // Title slide (first)
+    if (index === 0 && slide.lesson_phase === 'title') return true;
+    // Objectives slide (second)
+    if (index === 1 && slide.lesson_phase === 'objectives') return true;
+    // Summary slide (last)
+    if (index === slides.length - 1 && slide.lesson_phase === 'summary_goodbye') return true;
+    // Keep at least one practice slide
+    const practiceSlides = slides.filter((s) => s.lesson_phase === 'practice');
+    if (slide.lesson_phase === 'practice' && practiceSlides.length <= 1) return true;
+    // Keep at least one activity slide
+    if (slide.type === 'activity') {
+      const activitySlides = slides.filter((s) => s.type === 'activity');
+      if (activitySlides.length <= 1) return true;
+    }
+    return false;
+  }, [slides]);
+
   const deleteSlide = useCallback(() => {
     if (slides.length <= 1) return;
+    if (isSkeletonSlide(selectedIndex)) return;
     const next = slides.filter((_, i) => i !== selectedIndex).map((s, i) => ({ ...s, sequence: i }));
     onChange(next);
     setSelectedIndex(Math.min(selectedIndex, next.length - 1));
-  }, [slides, selectedIndex, onChange]);
+  }, [slides, selectedIndex, onChange, isSkeletonSlide]);
 
   const addSlide = useCallback(
     (type: SlideType) => {
@@ -685,6 +707,7 @@ export default function SlideEditor({
                 slide={selectedSlide}
                 onUpdate={updateSlide}
                 onDelete={deleteSlide}
+                canDelete={!isSkeletonSlide(selectedIndex)}
               />
             </div>
           )}

@@ -10,6 +10,7 @@ interface SlideEditPanelProps {
   slide: Slide;
   onUpdate: (updates: Partial<Slide>) => void;
   onDelete: () => void;
+  canDelete?: boolean;
 }
 
 const SLIDE_TYPES: { value: SlideType; label: string }[] = [
@@ -47,7 +48,7 @@ const supportsStudentInteraction = (type: SlideType) =>
 const inputClass = 'w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#007229] focus:border-[#007229]';
 const labelClass = 'block text-xs font-medium text-gray-600 mb-1';
 
-export default function SlideEditPanel({ slide, onUpdate, onDelete }: SlideEditPanelProps) {
+export default function SlideEditPanel({ slide, onUpdate, onDelete, canDelete = true }: SlideEditPanelProps) {
   const [bulletLang, setBulletLang] = useState<'ar' | 'en'>('ar');
   const [revealLang, setRevealLang] = useState<'ar' | 'en'>('ar');
 
@@ -530,12 +531,18 @@ export default function SlideEditPanel({ slide, onUpdate, onDelete }: SlideEditP
       </div>
 
       {/* Delete */}
-      <button
-        onClick={onDelete}
-        className="w-full py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
-      >
-        Delete Slide
-      </button>
+      {canDelete ? (
+        <button
+          onClick={onDelete}
+          className="w-full py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+        >
+          Delete Slide
+        </button>
+      ) : (
+        <p className="w-full py-2 text-center text-xs font-medium text-gray-400">
+          Required slide — cannot be deleted
+        </p>
+      )}
     </div>
   );
 }

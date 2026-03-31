@@ -58,15 +58,28 @@ export default function SlideGenerateButton({
     onGeneratingChange?.(true, progressMsg);
 
     try {
-      const res = await fetch(`/api/teacher/lessons/${lessonId}/slides/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slide_count: normalizedSlideCount,
-          language_mode: languageMode,
-          generation_context: generationContext,
-        }),
-      });
+      async function attemptGenerate(attempt: number): Promise<Response> {
+        const res = await fetch(`/api/teacher/lessons/${lessonId}/slides/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slide_count: normalizedSlideCount,
+            language_mode: languageMode,
+            generation_context: generationContext,
+          }),
+        });
+
+        if (!res.ok && (res.status === 502 || res.status === 504) && attempt < 2) {
+          const retryMsg = `AI call timed out — retrying automatically (attempt ${attempt + 1}/2)...`;
+          setProgress(retryMsg);
+          onGeneratingChange?.(true, retryMsg);
+          return attemptGenerate(attempt + 1);
+        }
+
+        return res;
+      }
+
+      const res = await attemptGenerate(1);
 
       if (!res.ok) {
         const text = await res.text();
@@ -76,7 +89,7 @@ export default function SlideGenerateButton({
           errorMessage = data.error || errorMessage;
         } catch {
           if (res.status === 502 || res.status === 504) {
-            errorMessage = 'Generation timed out — the AI call took too long. Please try again.';
+            errorMessage = 'Generation timed out after retrying. Please try again.';
           } else {
             errorMessage = `Server error (${res.status})`;
           }

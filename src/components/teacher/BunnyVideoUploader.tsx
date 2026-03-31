@@ -112,8 +112,8 @@ export default function BunnyVideoUploader({
       });
 
       if (!credRes.ok) {
-        const err = await credRes.json();
-        throw new Error(err.error || 'Failed to create video');
+        const err = await credRes.json().catch(() => ({ error: null }));
+        throw new Error(err.error || `Video service returned ${credRes.status}. Please try again or contact support.`);
       }
 
       const { videoId, libraryId, tusEndpoint, authSignature, authExpire } =
@@ -169,10 +169,10 @@ export default function BunnyVideoUploader({
         body: JSON.stringify({ url, title: lessonTitle || 'Video', lessonId }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({ error: null }));
 
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to import video');
+        throw new Error(data.error || `Video import failed (${res.status}). Please try again or contact support.`);
       }
 
       setUrlLoading(false);

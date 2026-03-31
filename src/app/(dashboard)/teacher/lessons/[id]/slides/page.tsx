@@ -199,20 +199,10 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
           {lessonTitle && <p className="text-sm text-gray-500">{lessonTitle}</p>}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-          {!isGenerating && (
-            <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
-              <label className="text-xs font-medium text-gray-500">
-                {slides.length > 0 ? 'Slides' : 'Generate'}
-              </label>
-              <input
-                type="number"
-                min={10}
-                max={20}
-                value={slideCount}
-                onChange={(e) => setSlideCount(clampSlideCount(Number(e.target.value)))}
-                className="w-16 border-0 bg-transparent p-0 text-sm font-semibold text-gray-900 focus:ring-0"
-              />
-            </div>
+          {!isGenerating && slides.length > 0 && (
+            <span className="text-xs font-medium text-gray-500 px-3 py-2">
+              {slides.length} slides
+            </span>
           )}
           <SlideGenerateButton
             lessonId={id}

@@ -109,6 +109,8 @@ export function getSlideGeneratorPolicyPrompt({
     '- Practice slides must contain exactly one question only.',
     '- Use `practice_question_count` to declare the number of questions shown on each practice slide.',
     '- Every slide must keep Arabic and English visible and readable; do not bury one language in speaker notes.',
+    '- On content slides, show key terms and concepts in BOTH English and Arabic side by side so students see both languages clearly.',
+    '- For English lessons: vocabulary words must be displayed prominently (large, bold, or highlighted) — not buried in a sentence. Use a clear format like "Word: apple — التفاحة" so the student can see and read the word at a glance.',
   ];
 
   const englishRules =
@@ -117,12 +119,14 @@ export function getSlideGeneratorPolicyPrompt({
           "## Mandatory English Rules",
           "- Every `core_teaching` slide must introduce one beginner-friendly English vocabulary item or short usable phrase.",
           "- On every `core_teaching` slide, fill `vocabulary_word_en` and `vocabulary_word_ar`.",
-          '- The English vocabulary item must appear clearly in the visible English slide content.',
-          '- The Arabic translation must appear clearly in the visible Arabic slide content.',
+          '- The English vocabulary item must appear PROMINENTLY in the visible English slide content — use a clear format like "Word: apple" or place it as the main heading so students can read it at a glance.',
+          '- The Arabic translation must appear PROMINENTLY in the visible Arabic slide content — placed next to or directly below the English word so both are visible together.',
+          '- On every core teaching slide, the title or body must clearly show the vocabulary in BOTH languages side by side (e.g. "apple — تفاحة") so bilingual learners see the connection immediately.',
           '- Set `say_it_twice_prompt` to true on every `core_teaching` slide.',
           '- The visible English content on each vocabulary slide must include the literal cue `Say it twice`.',
-          '- Vocabulary slides must include an explicit visual cue through `visual_hint`.',
+          '- Vocabulary slides must include an explicit visual cue through `visual_hint` describing a simple picture of the word.',
           '- Practice slides must stay simple enough for a complete English beginner.',
+          '- Choose vocabulary that is practical and everyday: greetings, classroom objects, body parts, family, food, colours, numbers — not abstract or advanced words.',
         ].join("\n")
       : "";
 

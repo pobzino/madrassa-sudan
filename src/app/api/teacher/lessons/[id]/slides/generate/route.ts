@@ -187,6 +187,8 @@ ${policyPrompt}
 - Last slide MUST be type "summary" (lesson recap with key takeaways)
 - Use slide types intentionally: title for title, key_points for objectives, content/diagram_description/activity for core teaching, quiz_preview/question_answer for practice, summary for goodbye
 - Each slide MUST have bilingual content in Arabic and English
+- IMPORTANT: On every content slide, key terms and concepts must appear in BOTH English and Arabic so students always see both languages side by side
+- For English lessons, vocabulary words must be displayed LARGE AND CLEAR — not hidden in sentences. Use a clear, prominent format (e.g. "apple — تفاحة") as the slide heading or focal point
 ${languageInstruction}
 ${goalMixInstruction}
 - title_ar/title_en: Short slide heading

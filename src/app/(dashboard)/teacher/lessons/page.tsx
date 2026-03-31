@@ -18,6 +18,7 @@ import {
   getSlideGenerationContextStorageKey,
   normalizeKeyIdeasInput,
   SLIDE_GOAL_MIX_OPTIONS,
+  suggestSlideCount,
   type SlideGoalMix,
   type SlideLanguageMode,
 } from "@/lib/slides-generation";
@@ -27,6 +28,19 @@ type Subject = {
   name_ar: string;
   name_en: string;
 };
+
+function isAllowedSubject(subject: Subject): boolean {
+  const text = `${subject.name_en} ${subject.name_ar}`.toLowerCase();
+  return (
+    text.includes("math") ||
+    text.includes("رياض") ||
+    text.includes("english") ||
+    text.includes("esl") ||
+    text.includes("إنج") ||
+    text.includes("الانجليزية") ||
+    text.includes("الإنجليزية")
+  );
+}
 
 type LessonRow = {
   id: string;
@@ -60,9 +74,9 @@ export default function TeacherLessonsPage() {
     learning_objective: "",
     key_ideas: "",
     source_notes: "",
-    lesson_duration_minutes: 20,
+    lesson_duration_minutes: 25,
     slide_goal_mix: DEFAULT_SLIDE_GOAL_MIX as SlideGoalMix,
-    slide_count: 12,
+    slide_count: 10,
   });
 
   const loadData = useCallback(async () => {
@@ -74,7 +88,7 @@ export default function TeacherLessonsPage() {
       .from("subjects")
       .select("id, name_ar, name_en")
       .order("display_order");
-    setSubjects(subjectRows || []);
+    setSubjects((subjectRows || []).filter(isAllowedSubject));
 
     const { data: lessonRows } = await supabase
       .from("lessons")
@@ -162,7 +176,7 @@ export default function TeacherLessonsPage() {
       learning_objective: "",
       key_ideas: "",
       source_notes: "",
-      lesson_duration_minutes: 20,
+      lesson_duration_minutes: 25,
       slide_goal_mix: DEFAULT_SLIDE_GOAL_MIX,
       slide_count: 12,
     });
@@ -238,7 +252,7 @@ export default function TeacherLessonsPage() {
       sourceNotes: quickCreateForm.source_notes.trim(),
       lessonDurationMinutes: quickCreateForm.lesson_duration_minutes,
       slideGoalMix: quickCreateForm.slide_goal_mix,
-      requestedSlideCount: clampSlideCount(quickCreateForm.slide_count),
+      requestedSlideCount: suggestSlideCount(quickCreateForm.lesson_duration_minutes),
     };
 
     window.sessionStorage.setItem(
@@ -321,7 +335,7 @@ export default function TeacherLessonsPage() {
           className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
         >
           <option value="all">All grades</option>
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((grade) => (
+          {[1, 2].map((grade) => (
             <option key={grade} value={grade}>
               Grade {grade}
             </option>
@@ -467,7 +481,7 @@ export default function TeacherLessonsPage() {
                     }
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((grade) => (
+                    {[1, 2].map((grade) => (
                       <option key={grade} value={grade}>
                         Grade {grade}
                       </option>
@@ -540,7 +554,7 @@ export default function TeacherLessonsPage() {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
                   <select
@@ -553,29 +567,10 @@ export default function TeacherLessonsPage() {
                     }
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   >
-                    {[10, 15, 20, 30, 45].map((minutes) => (
-                      <option key={minutes} value={minutes}>
-                        {minutes} min
-                      </option>
-                    ))}
+                    <option value={15}>Short (~15 min)</option>
+                    <option value={25}>Medium (~25 min)</option>
+                    <option value={40}>Long (~40 min)</option>
                   </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Slides</label>
-                  <input
-                    type="number"
-                    min={10}
-                    max={20}
-                    value={quickCreateForm.slide_count}
-                    onChange={(e) =>
-                      setQuickCreateForm({
-                        ...quickCreateForm,
-                        slide_count: clampSlideCount(Number(e.target.value)),
-                      })
-                    }
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  />
                 </div>
 
                 <div>

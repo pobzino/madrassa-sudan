@@ -22,6 +22,19 @@ type Subject = {
   name_en: string;
 };
 
+function isAllowedSubject(subject: Subject): boolean {
+  const text = `${subject.name_en} ${subject.name_ar}`.toLowerCase();
+  return (
+    text.includes("math") ||
+    text.includes("رياض") ||
+    text.includes("english") ||
+    text.includes("esl") ||
+    text.includes("إنج") ||
+    text.includes("الانجليزية") ||
+    text.includes("الإنجليزية")
+  );
+}
+
 type LessonForm = {
   title_ar: string;
   title_en: string;
@@ -187,7 +200,7 @@ export default function NewLessonPage() {
       draftPromise,
     ]);
 
-    setSubjects(subjectRows || []);
+    setSubjects((subjectRows || []).filter(isAllowedSubject));
 
     if (draftLesson) {
       const draftSubject =
@@ -504,7 +517,7 @@ export default function NewLessonPage() {
               }
               className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((grade) => (
+              {[1, 2].map((grade) => (
                 <option key={grade} value={grade}>
                   Grade {grade}
                 </option>

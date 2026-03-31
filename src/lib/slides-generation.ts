@@ -64,10 +64,10 @@ export function normalizeKeyIdeasInput(value: string): string[] {
 
 export function clampSlideCount(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    return 10;
+    return 8;
   }
 
-  return Math.min(Math.max(Math.round(value), 10), 20);
+  return Math.min(Math.max(Math.round(value), 8), 12);
 }
 
 export function parseSlideGenerationContext(value: unknown): SlideGenerationContext | null {
@@ -126,21 +126,13 @@ export function suggestSlideCount(durationMinutes: number | null): number {
     return 10;
   }
 
-  if (durationMinutes <= 10) {
-    return 10;
-  }
-
   if (durationMinutes <= 15) {
+    return 8;
+  }
+
+  if (durationMinutes <= 25) {
     return 10;
   }
 
-  if (durationMinutes <= 20) {
-    return 12;
-  }
-
-  if (durationMinutes <= 30) {
-    return 14;
-  }
-
-  return 16;
+  return 12;
 }
