@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Cairo, Fredoka } from "next/font/google";
 import "./globals.css";
 import { LanguageWrapper } from "@/components/LanguageWrapper";
+import { getSiteUrl } from "@/lib/site-url";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -23,7 +24,7 @@ const fredoka = Fredoka({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://amalmadrassa.netlify.app"),
+  metadataBase: new URL(getSiteUrl()),
   title: "أمل مدرسة | Amal Madrassa",
   description: "AI-powered online learning platform providing educational continuity for Sudanese children affected by conflict. Access quality education anywhere, anytime.",
   keywords: ["Sudan", "education", "online learning", "AI tutor", "refugee education", "Arabic", "children"],

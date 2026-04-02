@@ -15,9 +15,14 @@ import SlideGenerateButton from '@/components/slides/SlideGenerateButton';
 import type { Slide } from '@/lib/slides.types';
 import {
   clampSlideCount,
+  DEFAULT_SLIDE_LENGTH_PRESET,
   getSlideGenerationContextStorageKey,
+  getSlideLengthPresetConfig,
+  getSlideLengthPresetFromCount,
   parseSlideGenerationContext,
+  SLIDE_LENGTH_PRESET_OPTIONS,
   type SlideGenerationContext,
+  type SlideLengthPreset,
   type SlideLanguageMode,
 } from '@/lib/slides-generation';
 
@@ -45,7 +50,12 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [generationContext, setGenerationContext] = useState<SlideGenerationContext | null>(null);
   const [generationContextReady, setGenerationContextReady] = useState(false);
-  const [slideCount, setSlideCount] = useState(10);
+  const [slideCount, setSlideCount] = useState(
+    getSlideLengthPresetConfig(DEFAULT_SLIDE_LENGTH_PRESET).slideCount
+  );
+  const [slideLengthPreset, setSlideLengthPreset] = useState<SlideLengthPreset>(
+    DEFAULT_SLIDE_LENGTH_PRESET
+  );
   const [lessonSubject, setLessonSubject] = useState<Subject | null>(null);
   const [lessonGradeLevel, setLessonGradeLevel] = useState<number>(1);
   const [curriculumTopic, setCurriculumTopic] = useState<CurriculumSelection | null>(null);
@@ -145,7 +155,9 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
       const parsed = parseSlideGenerationContext(JSON.parse(raw));
       setGenerationContext(parsed);
       if (parsed?.requestedSlideCount) {
-        setSlideCount(clampSlideCount(parsed.requestedSlideCount));
+        const normalizedCount = clampSlideCount(parsed.requestedSlideCount);
+        setSlideCount(normalizedCount);
+        setSlideLengthPreset(getSlideLengthPresetFromCount(normalizedCount));
       }
     } catch {
       setGenerationContext(null);
@@ -176,6 +188,20 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
     }
   }, [id, slides]);
 
+  const handleSlideLengthPresetChange = useCallback((preset: SlideLengthPreset) => {
+    const config = getSlideLengthPresetConfig(preset);
+    setSlideLengthPreset(preset);
+    setSlideCount(config.slideCount);
+    setGenerationContext((prev) => ({
+      learningObjective: prev?.learningObjective || '',
+      keyIdeas: prev?.keyIdeas || [],
+      sourceNotes: prev?.sourceNotes || '',
+      lessonDurationMinutes: config.lessonDurationMinutes,
+      slideGoalMix: prev?.slideGoalMix || 'balanced',
+      requestedSlideCount: config.slideCount,
+    }));
+  }, []);
+
   if (authLoading || loading || !generationContextReady) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -200,18 +226,23 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
           {!isGenerating && (
-            <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
-              <label className="text-xs font-medium text-gray-500">
-                {slides.length > 0 ? 'Slides' : 'Generate'}
+            <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
+              <label className="mb-1 block text-xs font-medium text-gray-500">
+                Lesson Length
               </label>
-              <input
-                type="number"
-                min={10}
-                max={20}
-                value={slideCount}
-                onChange={(e) => setSlideCount(clampSlideCount(Number(e.target.value)))}
-                className="w-16 border-0 bg-transparent p-0 text-sm font-semibold text-gray-900 focus:ring-0"
-              />
+              <select
+                value={slideLengthPreset}
+                onChange={(e) =>
+                  handleSlideLengthPresetChange(e.target.value as SlideLengthPreset)
+                }
+                className="border-0 bg-transparent p-0 pr-6 text-sm font-semibold text-gray-900 focus:ring-0"
+              >
+                {SLIDE_LENGTH_PRESET_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
           <SlideGenerateButton
@@ -249,7 +280,7 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
             </div>
             {/* Skeleton slide placeholders */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-w-2xl mx-auto">
-              {Array.from({ length: Math.min(slideCount, 8) }).map((_, i) => (
+              {Array.from({ length: slideCount }).map((_, i) => (
                 <div
                   key={i}
                   className="aspect-[16/10] rounded-lg bg-gray-100 animate-pulse"

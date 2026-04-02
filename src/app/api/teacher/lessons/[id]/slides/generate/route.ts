@@ -22,6 +22,23 @@ import {
 
 export const maxDuration = 120;
 
+const MAX_TRANSCRIPT_CONTEXT_CHARS = 4000;
+const MAX_CONTENT_BLOCKS = 4;
+const MAX_CONTENT_BLOCK_CHARS = 800;
+
+function truncateContext(value: string | null | undefined, maxChars: number): string {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxChars).trim()}\n...[truncated for speed]`;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -142,12 +159,18 @@ export async function POST(
     // Build context from transcript and content blocks
     let contentContext = "";
     if (lesson.ai_transcript) {
-      contentContext += `\n## Existing Transcript\n${lesson.ai_transcript}\n`;
+      contentContext += `\n## Existing Transcript Excerpt\n${truncateContext(
+        lesson.ai_transcript,
+        MAX_TRANSCRIPT_CONTEXT_CHARS
+      )}\n`;
     }
     if (contentBlocks && contentBlocks.length > 0) {
       contentContext += `\n## Content Block Summaries\n`;
-      for (const block of contentBlocks) {
-        contentContext += `[${block.language}] ${block.content}\n\n`;
+      for (const block of contentBlocks.slice(0, MAX_CONTENT_BLOCKS)) {
+        contentContext += `[${block.language}] ${truncateContext(
+          block.content,
+          MAX_CONTENT_BLOCK_CHARS
+        )}\n\n`;
       }
     }
 
@@ -431,6 +454,7 @@ ${validationSchemaNotes}
             ...slide,
             id: crypto.randomUUID(),
             sequence: index,
+            is_required: true,
             title_size: "md",
             body_size: "md",
           }) as PolicySlide

@@ -1,3 +1,5 @@
+import type { Json } from "@/lib/database.types";
+
 export type SupportedSubjectKey = "math" | "english";
 
 export type CurriculumFrameworkKey =
@@ -797,4 +799,3 @@ export function serializeCurriculumSelection(selection: CurriculumSelection | nu
     suggestedKeyIdeas: selection.suggestedKeyIdeas,
   };
 }
-import type { Json } from "@/lib/database.types";

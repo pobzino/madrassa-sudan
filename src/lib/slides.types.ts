@@ -25,6 +25,7 @@ export interface Slide {
   id: string;
   type: SlideType;
   sequence: number;
+  is_required?: boolean | null;
   timestamp_seconds?: number | null;
   title_ar: string;
   title_en: string;

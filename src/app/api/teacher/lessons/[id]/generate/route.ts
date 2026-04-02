@@ -4,6 +4,7 @@ import {
   getCurriculumRequirementMessage,
   getCurriculumSelectionForLesson,
 } from "@/lib/curriculum";
+import { getSiteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import { getOpenAIClient, AI_MODEL } from "@/lib/ai/openai-client";
 
@@ -82,7 +83,7 @@ export async function POST(
     // --- Step 1: Download video from Bunny CDN ---
     const videoResponse = await fetch(videoUrl, {
       signal: AbortSignal.timeout(60000),
-      headers: { Referer: process.env.NEXT_PUBLIC_SITE_URL || "https://amalmadrassa.netlify.app" },
+      headers: { Referer: getSiteUrl() },
     });
 
     if (!videoResponse.ok) {

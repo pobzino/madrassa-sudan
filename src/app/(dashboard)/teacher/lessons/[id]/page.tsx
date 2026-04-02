@@ -12,6 +12,7 @@ import TaskEditor, { type TaskForm } from "@/components/teacher/TaskEditor";
 import {
   getCurriculumRequirementMessage,
   getCurriculumSelectionForLesson,
+  getSupportedSubjectKey,
   hasMappedCurriculum,
   serializeCurriculumSelection,
   type CurriculumSelection,
@@ -23,9 +24,15 @@ import SlideGenerateButton from "@/components/slides/SlideGenerateButton";
 import type { Slide } from "@/lib/slides.types";
 import {
   clampSlideCount,
+  DEFAULT_SLIDE_LENGTH_PRESET,
   getSlideGenerationContextStorageKey,
+  getSlideLengthPresetConfig,
+  getSlideLengthPresetFromCount,
   parseSlideGenerationContext,
+  SLIDE_LENGTH_PRESET_OPTIONS,
+  TEACHER_GRADE_OPTIONS,
   type SlideGenerationContext,
+  type SlideLengthPreset,
   type SlideLanguageMode,
 } from "@/lib/slides-generation";
 
@@ -99,7 +106,12 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [slideSaving, setSlideSaving] = useState(false);
   const [slideLastSaved, setSlideLastSaved] = useState<string | null>(null);
   const [slideGenContext, setSlideGenContext] = useState<SlideGenerationContext | null>(null);
-  const [slideCount, setSlideCount] = useState(10);
+  const [slideCount, setSlideCount] = useState(
+    getSlideLengthPresetConfig(DEFAULT_SLIDE_LENGTH_PRESET).slideCount
+  );
+  const [slideLengthPreset, setSlideLengthPreset] = useState<SlideLengthPreset>(
+    DEFAULT_SLIDE_LENGTH_PRESET
+  );
   const [slideLanguageMode, setSlideLanguageMode] = useState<SlideLanguageMode>("ar");
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
   const [slideGenProgress, setSlideGenProgress] = useState("");
@@ -143,7 +155,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         .eq("id", user.id)
         .single(),
     ]);
-    setSubjects(subjectRows || []);
+    const supportedSubjects = (subjectRows || []).filter((subject) =>
+      Boolean(getSupportedSubjectKey(subject))
+    );
+    setSubjects(supportedSubjects);
 
     const cohortQuery =
       profile?.role === "admin"
@@ -209,17 +224,22 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
     if (lesson) {
       const lessonSubject =
-        (subjectRows || []).find((subject) => subject.id === lesson.subject_id) ?? null;
+        supportedSubjects.find((subject) => subject.id === lesson.subject_id) ?? null;
+      const gradeLevel = TEACHER_GRADE_OPTIONS.includes(
+        lesson.grade_level as (typeof TEACHER_GRADE_OPTIONS)[number]
+      )
+        ? lesson.grade_level
+        : TEACHER_GRADE_OPTIONS[0];
       setForm({
         title_ar: lesson.title_ar || "",
         title_en: lesson.title_en || "",
         description_ar: lesson.description_ar || "",
         description_en: lesson.description_en || "",
-        subject_id: lesson.subject_id || "",
-        grade_level: lesson.grade_level || 1,
+        subject_id: lessonSubject ? lesson.subject_id || "" : "",
+        grade_level: gradeLevel,
         curriculum_topic: getCurriculumSelectionForLesson(
           lessonSubject,
-          lesson.grade_level,
+          gradeLevel,
           lesson.curriculum_topic
         ),
         is_published: lesson.is_published,
@@ -310,12 +330,30 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       if (!raw) { setSlideGenContext(null); return; }
       const parsed = parseSlideGenerationContext(JSON.parse(raw));
       setSlideGenContext(parsed);
-      if (parsed?.requestedSlideCount) setSlideCount(clampSlideCount(parsed.requestedSlideCount));
+      if (parsed?.requestedSlideCount) {
+        const normalizedCount = clampSlideCount(parsed.requestedSlideCount);
+        setSlideCount(normalizedCount);
+        setSlideLengthPreset(getSlideLengthPresetFromCount(normalizedCount));
+      }
     } catch { setSlideGenContext(null); }
     finally {
       window.sessionStorage.removeItem(getSlideGenerationContextStorageKey(id));
     }
   }, [id]);
+
+  const handleSlideLengthPresetChange = useCallback((preset: SlideLengthPreset) => {
+    const config = getSlideLengthPresetConfig(preset);
+    setSlideLengthPreset(preset);
+    setSlideCount(config.slideCount);
+    setSlideGenContext((prev) => ({
+      learningObjective: prev?.learningObjective || "",
+      keyIdeas: prev?.keyIdeas || [],
+      sourceNotes: prev?.sourceNotes || "",
+      lessonDurationMinutes: config.lessonDurationMinutes,
+      slideGoalMix: prev?.slideGoalMix || "balanced",
+      requestedSlideCount: config.slideCount,
+    }));
+  }, []);
 
   const handleSaveSlides = useCallback(async () => {
     setSlideSaving(true);
@@ -671,18 +709,23 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
               </div>
               <div className="flex items-center gap-2">
                 {!isGeneratingSlides && (
-                  <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
-                    <label className="text-xs font-medium text-gray-500">
-                      {slides.length > 0 ? "Slides" : "Generate"}
+                  <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
+                    <label className="mb-1 block text-xs font-medium text-gray-500">
+                      Lesson Length
                     </label>
-                    <input
-                      type="number"
-                      min={10}
-                      max={20}
-                      value={slideCount}
-                      onChange={(e) => setSlideCount(clampSlideCount(Number(e.target.value)))}
-                      className="w-16 border-0 bg-transparent p-0 text-sm font-semibold text-gray-900 focus:ring-0"
-                    />
+                    <select
+                      value={slideLengthPreset}
+                      onChange={(e) =>
+                        handleSlideLengthPresetChange(e.target.value as SlideLengthPreset)
+                      }
+                      className="border-0 bg-transparent p-0 pr-6 text-sm font-semibold text-gray-900 focus:ring-0"
+                    >
+                      {SLIDE_LENGTH_PRESET_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
                 <SlideGenerateButton
@@ -717,7 +760,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                     <p className="text-sm text-gray-500 mt-1">This usually takes 15-30 seconds.</p>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-w-2xl mx-auto">
-                    {Array.from({ length: Math.min(slideCount, 8) }).map((_, i) => (
+                    {Array.from({ length: slideCount }).map((_, i) => (
                       <div key={i} className="aspect-[16/10] rounded-lg bg-gray-100 animate-pulse" style={{ animationDelay: `${i * 100}ms` }} />
                     ))}
                   </div>
@@ -839,7 +882,13 @@ function DetailsTab({
             <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
             <select
               value={form.subject_id}
-              onChange={(e) => setForm({ ...form, subject_id: e.target.value })}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  subject_id: e.target.value,
+                  curriculum_topic: null,
+                })
+              }
               className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             >
               <option value="">Select subject</option>
@@ -854,10 +903,16 @@ function DetailsTab({
             <label className="block text-sm font-medium text-gray-700 mb-1">Grade Level</label>
             <select
               value={form.grade_level}
-              onChange={(e) => setForm({ ...form, grade_level: Number(e.target.value) })}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  grade_level: Number(e.target.value),
+                  curriculum_topic: null,
+                })
+              }
               className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((grade) => (
+              {TEACHER_GRADE_OPTIONS.map((grade) => (
                 <option key={grade} value={grade}>Grade {grade}</option>
               ))}
             </select>

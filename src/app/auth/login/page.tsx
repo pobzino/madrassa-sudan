@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { getAuthCallbackUrl } from "@/lib/site-url";
 
 const translations = {
   ar: {
@@ -56,9 +57,7 @@ export default function LoginPage() {
   const getRedirectUrl = () => (
     typeof window !== "undefined"
       ? `${window.location.origin}/auth/callback`
-      : process.env.NEXT_PUBLIC_SITE_URL
-        ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
-        : "https://amalmadrassa.netlify.app/auth/callback"
+      : getAuthCallbackUrl()
   );
 
   const handleLogin = async (e: React.FormEvent) => {

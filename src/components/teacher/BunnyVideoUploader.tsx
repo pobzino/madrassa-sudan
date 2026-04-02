@@ -56,6 +56,7 @@ export default function BunnyVideoUploader({
   const pollTranscodeStatus = useCallback((videoId: string) => {
     setState('transcoding');
     pollingStartRef.current = Date.now();
+    let consecutiveStatusFailures = 0;
 
     pollingRef.current = setInterval(async () => {
       if (Date.now() - pollingStartRef.current > POLL_TIMEOUT) {
@@ -67,9 +68,29 @@ export default function BunnyVideoUploader({
 
       try {
         const res = await fetch(`/api/bunny/status?videoId=${videoId}`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          consecutiveStatusFailures += 1;
+
+          let message = `Could not check video status (${res.status}).`;
+          try {
+            const data = await res.json();
+            if (typeof data.error === 'string' && data.error.trim()) {
+              message = data.error;
+            }
+          } catch {
+            // Fall back to the status code message above.
+          }
+
+          if (consecutiveStatusFailures >= 3 || res.status < 500) {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+            setState('error');
+            setErrorMessage(message);
+          }
+          return;
+        }
 
         const data = await res.json();
+        consecutiveStatusFailures = 0;
 
         if (data.status === 'finished' && data.urls) {
           if (pollingRef.current) clearInterval(pollingRef.current);
@@ -84,10 +105,15 @@ export default function BunnyVideoUploader({
         } else if (data.status === 'error') {
           if (pollingRef.current) clearInterval(pollingRef.current);
           setState('error');
-          setErrorMessage('Video transcoding failed. Please try again.');
+          setErrorMessage(data.error || 'Video transcoding failed. Please try again.');
         }
       } catch {
-        // Network error, will retry on next tick
+        consecutiveStatusFailures += 1;
+        if (consecutiveStatusFailures >= 3) {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          setState('error');
+          setErrorMessage('Video status checks keep failing. Please try again.');
+        }
       }
     }, POLL_INTERVAL);
   }, [onVideosReady]);

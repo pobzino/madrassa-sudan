@@ -33,6 +33,15 @@ interface ValidateOptions {
   subjectKey: SupportedSubjectKey | null;
 }
 
+type RequiredSlideShape = {
+  expectedType: PolicySlide["type"];
+  expectedPhase: SlideLessonPhase;
+  label: string;
+};
+
+const PRACTICE_SLIDE_COUNT = 2;
+const FIXED_STRUCTURE_SLIDE_COUNT = 6;
+
 function words(value: string | null | undefined): string[] {
   return (value || "")
     .trim()
@@ -84,27 +93,61 @@ function isPracticeType(slide: PolicySlide): boolean {
   return slide.type === "quiz_preview" || slide.type === "question_answer";
 }
 
+function getExplanationSlideCount(slideCount: number): number {
+  return Math.max(slideCount - FIXED_STRUCTURE_SLIDE_COUNT, 0);
+}
+
+function getRequiredSlideShapes(slideCount: number): RequiredSlideShape[] {
+  const explanationSlideCount = getExplanationSlideCount(slideCount);
+
+  return [
+    { expectedType: "title", expectedPhase: "title", label: "title slide" },
+    { expectedType: "key_points", expectedPhase: "objectives", label: "learning objectives slide" },
+    ...Array.from({ length: explanationSlideCount }, (_, index) => ({
+      expectedType: "content" as const,
+      expectedPhase: "core_teaching" as const,
+      label: `explanation slide ${index + 1}`,
+    })),
+    { expectedType: "activity", expectedPhase: "core_teaching", label: "activity slide" },
+    { expectedType: "quiz_preview", expectedPhase: "practice", label: "training slide 1" },
+    { expectedType: "question_answer", expectedPhase: "practice", label: "training slide 2" },
+    { expectedType: "summary", expectedPhase: "summary_goodbye", label: "summary slide" },
+  ];
+}
+
 export function getSlideGeneratorPolicyPrompt({
   slideCount,
   subjectKey,
 }: BuildPromptOptions): string {
+  const explanationSlideCount = getExplanationSlideCount(slideCount);
+  const activitySlideNumber = explanationSlideCount + 3;
+  const trainingSlideOneNumber = activitySlideNumber + 1;
+  const trainingSlideTwoNumber = activitySlideNumber + 2;
   const globalRules = [
     "## Mandatory Slide Policy",
     "- These rules are mandatory and cannot be skipped or relaxed.",
     `- Generate exactly ${slideCount} slides.`,
-    '- Use this fixed lesson flow:',
-    '  1. Slide 1 = title slide',
-    '  2. Slide 2 = learning objectives slide',
-    '  3. Middle slides = core teaching slides',
-    '  4. Final teaching section before the last slide = practice slide(s)',
-    '  5. Final slide = practice summary / goodbye slide',
-    '- Core teaching slides must be the majority of the deck.',
+    '- Use this exact fixed lesson flow and do not add, remove, merge, or reorder parts:',
+    "  1. Slide 1 = title slide",
+    "  2. Slide 2 = learning objectives slide",
+    `  3. Slides 3-${activitySlideNumber - 1} = ${explanationSlideCount} explanation slides using only one teaching idea per slide`,
+    `  4. Slide ${activitySlideNumber} = one activity slide`,
+    `  5. Slide ${trainingSlideOneNumber} = training slide 1`,
+    `  6. Slide ${trainingSlideTwoNumber} = training slide 2`,
+    `  7. Slide ${slideCount} = summary / goodbye slide`,
+    "- The explanation slides must use type `content` or `diagram_description` only.",
+    "- The activity slide must use type `activity`.",
+    "- Training slide 1 must use type `quiz_preview`.",
+    "- Training slide 2 must use type `question_answer`.",
     '- Return `lesson_phase` on every slide using one of: `title`, `objectives`, `core_teaching`, `practice`, `summary_goodbye`.',
     '- Return `idea_focus_en` and `idea_focus_ar` on every slide. Each slide must focus on exactly one idea only.',
     '- Never combine two teaching concepts on one slide.',
     '- Keep slide text large and clear: short titles, short bodies, minimal clutter.',
     '- The title slide must show the lesson title in both English and Arabic.',
     '- The objectives slide must come immediately after the title slide.',
+    '- Every explanation slide must teach a single clear idea and visibly show both English and Arabic on screen.',
+    '- The activity slide must reinforce the lesson without introducing a new concept.',
+    '- The two training slides must be simple guided checks that stay tightly aligned to the explanation slides.',
     '- The final slide must be a summary / goodbye slide.',
     '- Practice slides must contain exactly one question only.',
     '- Use `practice_question_count` to declare the number of questions shown on each practice slide.',
@@ -172,6 +215,7 @@ export function getSlideGeneratorValidationSchemaNotes(subjectKey: SupportedSubj
   const notes = [
     "lesson_phase must be present on every slide",
     "idea_focus_en and idea_focus_ar must be present on every slide",
+    "the deck must follow the fixed title -> objectives -> explanation -> activity -> training -> summary structure",
     "practice_question_count must be 1 on every practice slide",
     "every practice slide must set interaction_type",
   ];
@@ -194,58 +238,51 @@ export function validateGeneratedSlides(
   { slideCount, subjectKey }: ValidateOptions
 ): string[] {
   const issues: string[] = [];
+  const requiredSlides = getRequiredSlideShapes(slideCount);
+  const explanationSlideCount = getExplanationSlideCount(slideCount);
+  const activitySlideIndex = explanationSlideCount + 2;
+  const firstTrainingSlideIndex = activitySlideIndex + 1;
+  const secondTrainingSlideIndex = activitySlideIndex + 2;
 
   if (slides.length !== slideCount) {
     issues.push(`Deck must contain exactly ${slideCount} slides; received ${slides.length}.`);
   }
 
-  if (slides.length < 4) {
-    issues.push("Deck is too short to satisfy the required title, objectives, practice, and summary structure.");
+  if (slides.length < requiredSlides.length) {
+    issues.push("Deck is too short to satisfy the required Amal lesson skeleton.");
     return issues;
   }
 
+  requiredSlides.forEach((requiredSlide, index) => {
+    const slide = slides[index];
+    if (!slide) {
+      return;
+    }
+
+    const validExplanationType =
+      requiredSlide.label.startsWith("explanation") &&
+      (slide.type === "content" || slide.type === "diagram_description");
+
+    if (
+      !validExplanationType &&
+      slide.type !== requiredSlide.expectedType
+    ) {
+      issues.push(
+        `Slide ${index + 1} must be the ${requiredSlide.label} and use type \`${requiredSlide.expectedType}\`.`
+      );
+    }
+
+    if (slide.lesson_phase !== requiredSlide.expectedPhase) {
+      issues.push(
+        `Slide ${index + 1} must use lesson_phase=\`${requiredSlide.expectedPhase}\` for the ${requiredSlide.label}.`
+      );
+    }
+  });
+
   const first = slides[0];
-  const second = slides[1];
-  const last = slides[slides.length - 1];
-
-  if (first.type !== "title" || first.lesson_phase !== "title") {
-    issues.push("Slide 1 must be a title slide with lesson_phase=`title`.");
-  }
-
-  if (second.type !== "key_points" || second.lesson_phase !== "objectives") {
-    issues.push("Slide 2 must be the learning objectives slide and use lesson_phase=`objectives`.");
-  }
-
-  if (last.type !== "summary" || last.lesson_phase !== "summary_goodbye") {
-    issues.push("The final slide must be a summary/goodbye slide with lesson_phase=`summary_goodbye`.");
-  }
 
   if (!first.title_en?.trim() || !first.title_ar?.trim()) {
     issues.push("The title slide must include the lesson title in both English and Arabic.");
-  }
-
-  const practiceStartIndex = slides.findIndex((slide, index) => index > 1 && slide.lesson_phase === "practice");
-  if (practiceStartIndex === -1 || practiceStartIndex >= slides.length - 1) {
-    issues.push("The deck must include at least one practice slide before the final summary/goodbye slide.");
-  } else {
-    const prePracticeSlides = slides.slice(2, practiceStartIndex);
-    const practiceSlides = slides.slice(practiceStartIndex, slides.length - 1);
-
-    if (prePracticeSlides.length === 0) {
-      issues.push("The deck needs a core teaching section before practice begins.");
-    }
-
-    if (!prePracticeSlides.every((slide) => slide.lesson_phase === "core_teaching")) {
-      issues.push("All slides between the objectives slide and the practice section must use lesson_phase=`core_teaching`.");
-    }
-
-    if (!practiceSlides.every((slide) => slide.lesson_phase === "practice")) {
-      issues.push("Once the practice section starts, every slide before the final summary must use lesson_phase=`practice`.");
-    }
-
-    if (prePracticeSlides.length <= practiceSlides.length) {
-      issues.push("Core teaching slides must be the majority of the deck.");
-    }
   }
 
   slides.forEach((slide, index) => {
@@ -288,6 +325,18 @@ export function validateGeneratedSlides(
       if (countQuestionMarks(combinedPracticeText) > 2) {
         issues.push(`Slide ${index + 1} appears to contain multiple questions; practice slides must show one question only.`);
       }
+    }
+
+    if (slide.type === "activity" && index !== activitySlideIndex) {
+      issues.push("There must be exactly one activity slide in the fixed activity slot.");
+    }
+
+    if (slide.type === "quiz_preview" && index !== firstTrainingSlideIndex) {
+      issues.push("quiz_preview is reserved for the first fixed training slide.");
+    }
+
+    if (slide.type === "question_answer" && index !== secondTrainingSlideIndex) {
+      issues.push("question_answer is reserved for the second fixed training slide.");
     }
 
     // Interaction validation

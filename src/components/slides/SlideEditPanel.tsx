@@ -10,6 +10,8 @@ interface SlideEditPanelProps {
   slide: Slide;
   onUpdate: (updates: Partial<Slide>) => void;
   onDelete: () => void;
+  canDelete?: boolean;
+  canEditType?: boolean;
 }
 
 const SLIDE_TYPES: { value: SlideType; label: string }[] = [
@@ -47,7 +49,13 @@ const supportsStudentInteraction = (type: SlideType) =>
 const inputClass = 'w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#007229] focus:border-[#007229]';
 const labelClass = 'block text-xs font-medium text-gray-600 mb-1';
 
-export default function SlideEditPanel({ slide, onUpdate, onDelete }: SlideEditPanelProps) {
+export default function SlideEditPanel({
+  slide,
+  onUpdate,
+  onDelete,
+  canDelete = true,
+  canEditType = true,
+}: SlideEditPanelProps) {
   const [bulletLang, setBulletLang] = useState<'ar' | 'en'>('ar');
   const [revealLang, setRevealLang] = useState<'ar' | 'en'>('ar');
 
@@ -132,12 +140,19 @@ export default function SlideEditPanel({ slide, onUpdate, onDelete }: SlideEditP
     <div className="space-y-4 p-4 overflow-y-auto h-full">
       <h3 className="text-sm font-semibold text-gray-900">Edit Slide</h3>
 
+      {slide.is_required && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          This slide is part of the required lesson skeleton and cannot be deleted or changed into another type.
+        </div>
+      )}
+
       {/* Type */}
       <div>
         <label className={labelClass}>Slide Type</label>
         <select
           value={slide.type}
           onChange={(e) => handleTypeChange(e.target.value as SlideType)}
+          disabled={!canEditType}
           className={inputClass}
         >
           {SLIDE_TYPES.map((t) => (
@@ -532,9 +547,10 @@ export default function SlideEditPanel({ slide, onUpdate, onDelete }: SlideEditP
       {/* Delete */}
       <button
         onClick={onDelete}
-        className="w-full py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+        disabled={!canDelete}
+        className="w-full py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
       >
-        Delete Slide
+        {canDelete ? 'Delete Slide' : 'Required Slide'}
       </button>
     </div>
   );

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
-import { createServiceClient } from '@/lib/supabase/service';
+import { createServiceClient, hasServiceRoleConfig } from '@/lib/supabase/service';
 import type { Database, Json } from '@/lib/database.types';
 import type { Slide } from '@/lib/slides.types';
 import { computeSlideInteractionCorrectness, hasStudentInteraction } from '@/lib/slide-interactions';
@@ -26,10 +26,7 @@ async function loadLessonAndDeck(
     return { lesson: null, slides: null, error: 'Lesson not found', status: 404 as const };
   }
 
-  const deckClient =
-    process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.NEXT_PUBLIC_SUPABASE_URL
-      ? createServiceClient()
-      : supabase;
+  const deckClient = hasServiceRoleConfig() ? createServiceClient() : supabase;
 
   const { data: deck, error: deckError } = await deckClient
     .from('lesson_slides')

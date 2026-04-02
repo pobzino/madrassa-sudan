@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { createServiceClient } from '@/lib/supabase/service';
+import { createServiceClient, hasServiceRoleConfig } from '@/lib/supabase/service';
 
 export async function GET(
   _request: NextRequest,
@@ -32,10 +32,7 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const deckClient =
-      process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.NEXT_PUBLIC_SUPABASE_URL
-        ? createServiceClient()
-        : supabase;
+    const deckClient = hasServiceRoleConfig() ? createServiceClient() : supabase;
 
     const { data: deck, error: deckError } = await deckClient
       .from('lesson_slides')

@@ -7,6 +7,7 @@ import Link from "next/link";
 import type { UserRole } from "@/lib/database.types";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { GraduationCapIcon, TeacherIcon } from "@/components/illustrations";
+import { getAuthCallbackUrl } from "@/lib/site-url";
 
 // Icons for role selection
 const RoleIcons = {
@@ -106,9 +107,7 @@ export default function SignupPage() {
   const getRedirectUrl = () => (
     typeof window !== "undefined"
       ? `${window.location.origin}/auth/callback`
-      : process.env.NEXT_PUBLIC_SITE_URL
-        ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
-        : "https://amalmadrassa.netlify.app/auth/callback"
+      : getAuthCallbackUrl()
   );
 
   const handleSignup = async (e: React.FormEvent) => {

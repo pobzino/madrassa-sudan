@@ -5,6 +5,7 @@ interface SlideThumbnailProps {
   slide: Slide;
   language: 'ar' | 'en';
   index: number;
+  draggable?: boolean;
   isSelected: boolean;
   onSelect: () => void;
   onDragStart: (e: React.DragEvent) => void;
@@ -16,6 +17,7 @@ export default function SlideThumbnail({
   slide,
   language,
   index,
+  draggable = true,
   isSelected,
   onSelect,
   onDragStart,
@@ -24,7 +26,7 @@ export default function SlideThumbnail({
 }: SlideThumbnailProps) {
   return (
     <div
-      draggable
+      draggable={draggable}
       onDragStart={onDragStart}
       onDragOver={(e) => { e.preventDefault(); onDragOver(e); }}
       onDrop={onDrop}
@@ -42,6 +44,11 @@ export default function SlideThumbnail({
         <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-black/50 text-white text-[10px] font-bold flex items-center justify-center">
           {index + 1}
         </div>
+        {slide.is_required && (
+          <div className="absolute top-1 right-1 rounded-full bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-semibold text-white">
+            Locked
+          </div>
+        )}
       </div>
     </div>
   );

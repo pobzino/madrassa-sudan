@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import CurriculumTopicSelector from "@/components/teacher/CurriculumTopicSelector";
 import {
+  getSupportedSubjectKey,
   getCurriculumSelectionForLesson,
   hasMappedCurriculum,
   serializeCurriculumSelection,
@@ -15,6 +16,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import { getDisallowedLessonVideoFields } from "@/lib/lessons/video-url-guards";
+import { TEACHER_GRADE_OPTIONS } from "@/lib/slides-generation";
 
 type Subject = {
   id: string;
@@ -71,6 +73,12 @@ function buildLessonFormFromRow(
   row: Database["public"]["Tables"]["lessons"]["Row"],
   lessonSubject: Subject | null
 ): LessonForm {
+  const gradeLevel = TEACHER_GRADE_OPTIONS.includes(
+    row.grade_level as (typeof TEACHER_GRADE_OPTIONS)[number]
+  )
+    ? row.grade_level
+    : TEACHER_GRADE_OPTIONS[0];
+
   return {
     title_ar:
       row.title_ar && row.title_ar !== UNTITLED_DRAFT_TITLE ? row.title_ar : "",
@@ -78,11 +86,11 @@ function buildLessonFormFromRow(
       row.title_en && row.title_en !== UNTITLED_DRAFT_TITLE ? row.title_en : "",
     description_ar: row.description_ar || "",
     description_en: row.description_en || "",
-    grade_level: row.grade_level || 1,
-    subject_id: row.subject_id || "",
+    grade_level: gradeLevel,
+    subject_id: lessonSubject ? row.subject_id || "" : "",
     curriculum_topic: getCurriculumSelectionForLesson(
       lessonSubject,
-      row.grade_level,
+      gradeLevel,
       row.curriculum_topic
     ),
     is_published: row.is_published ?? false,
@@ -187,18 +195,21 @@ export default function NewLessonPage() {
       draftPromise,
     ]);
 
-    setSubjects(subjectRows || []);
+    const supportedSubjects = (subjectRows || []).filter((subject) =>
+      Boolean(getSupportedSubjectKey(subject))
+    );
+    setSubjects(supportedSubjects);
 
     if (draftLesson) {
       const draftSubject =
-        (subjectRows || []).find((subject) => subject.id === draftLesson.subject_id) ??
+        supportedSubjects.find((subject) => subject.id === draftLesson.subject_id) ??
         null;
       const hydratedDraftForm = buildLessonFormFromRow(draftLesson, draftSubject);
       setForm(hydratedDraftForm);
       const existingDraftKey = JSON.stringify(
         getDraftPayload(
           hydratedDraftForm,
-          draftLesson.subject_id || subjectRows?.[0]?.id || ""
+          draftLesson.subject_id || supportedSubjects?.[0]?.id || ""
         )
       );
       lastSavedDraftKeyRef.current = existingDraftKey;
@@ -481,7 +492,11 @@ export default function NewLessonPage() {
             <select
               value={form.subject_id}
               onChange={(e) =>
-                setForm({ ...form, subject_id: e.target.value })
+                setForm({
+                  ...form,
+                  subject_id: e.target.value,
+                  curriculum_topic: null,
+                })
               }
               className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             >
@@ -500,11 +515,15 @@ export default function NewLessonPage() {
             <select
               value={form.grade_level}
               onChange={(e) =>
-                setForm({ ...form, grade_level: Number(e.target.value) })
+                setForm({
+                  ...form,
+                  grade_level: Number(e.target.value),
+                  curriculum_topic: null,
+                })
               }
               className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((grade) => (
+              {TEACHER_GRADE_OPTIONS.map((grade) => (
                 <option key={grade} value={grade}>
                   Grade {grade}
                 </option>

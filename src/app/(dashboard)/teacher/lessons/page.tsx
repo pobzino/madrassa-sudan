@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import CurriculumTopicSelector from "@/components/teacher/CurriculumTopicSelector";
 import {
+  getSupportedSubjectKey,
   hasMappedCurriculum,
   serializeCurriculumSelection,
   type CurriculumSelection,
@@ -13,12 +14,16 @@ import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import {
-  clampSlideCount,
+  DEFAULT_SLIDE_LENGTH_PRESET,
   DEFAULT_SLIDE_GOAL_MIX,
   getSlideGenerationContextStorageKey,
+  getSlideLengthPresetConfig,
   normalizeKeyIdeasInput,
   SLIDE_GOAL_MIX_OPTIONS,
+  SLIDE_LENGTH_PRESET_OPTIONS,
+  TEACHER_GRADE_OPTIONS,
   type SlideGoalMix,
+  type SlideLengthPreset,
   type SlideLanguageMode,
 } from "@/lib/slides-generation";
 
@@ -60,9 +65,8 @@ export default function TeacherLessonsPage() {
     learning_objective: "",
     key_ideas: "",
     source_notes: "",
-    lesson_duration_minutes: 20,
+    length_preset: DEFAULT_SLIDE_LENGTH_PRESET as SlideLengthPreset,
     slide_goal_mix: DEFAULT_SLIDE_GOAL_MIX as SlideGoalMix,
-    slide_count: 12,
   });
 
   const loadData = useCallback(async () => {
@@ -74,7 +78,7 @@ export default function TeacherLessonsPage() {
       .from("subjects")
       .select("id, name_ar, name_en")
       .order("display_order");
-    setSubjects(subjectRows || []);
+    setSubjects((subjectRows || []).filter((subject) => Boolean(getSupportedSubjectKey(subject))));
 
     const { data: lessonRows } = await supabase
       .from("lessons")
@@ -156,15 +160,14 @@ export default function TeacherLessonsPage() {
     setQuickCreateForm({
       title: "",
       subject_id: subjects[0]?.id || "",
-      grade_level: 1,
+      grade_level: TEACHER_GRADE_OPTIONS[0],
       curriculum_topic: null,
       language_mode: "ar",
       learning_objective: "",
       key_ideas: "",
       source_notes: "",
-      lesson_duration_minutes: 20,
+      length_preset: DEFAULT_SLIDE_LENGTH_PRESET,
       slide_goal_mix: DEFAULT_SLIDE_GOAL_MIX,
-      slide_count: 12,
     });
     setShowQuickCreateModal(true);
   }
@@ -232,13 +235,15 @@ export default function TeacherLessonsPage() {
       return;
     }
 
+    const lengthConfig = getSlideLengthPresetConfig(quickCreateForm.length_preset);
+
     const generationContext = {
       learningObjective: quickCreateForm.learning_objective.trim(),
       keyIdeas: normalizeKeyIdeasInput(quickCreateForm.key_ideas),
       sourceNotes: quickCreateForm.source_notes.trim(),
-      lessonDurationMinutes: quickCreateForm.lesson_duration_minutes,
+      lessonDurationMinutes: lengthConfig.lessonDurationMinutes,
       slideGoalMix: quickCreateForm.slide_goal_mix,
-      requestedSlideCount: clampSlideCount(quickCreateForm.slide_count),
+      requestedSlideCount: lengthConfig.slideCount,
     };
 
     window.sessionStorage.setItem(
@@ -321,7 +326,7 @@ export default function TeacherLessonsPage() {
           className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
         >
           <option value="all">All grades</option>
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((grade) => (
+          {TEACHER_GRADE_OPTIONS.map((grade) => (
             <option key={grade} value={grade}>
               Grade {grade}
             </option>
@@ -467,7 +472,7 @@ export default function TeacherLessonsPage() {
                     }
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((grade) => (
+                    {TEACHER_GRADE_OPTIONS.map((grade) => (
                       <option key={grade} value={grade}>
                         Grade {grade}
                       </option>
@@ -540,42 +545,28 @@ export default function TeacherLessonsPage() {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Lesson Length</label>
                   <select
-                    value={quickCreateForm.lesson_duration_minutes}
+                    value={quickCreateForm.length_preset}
                     onChange={(e) =>
                       setQuickCreateForm({
                         ...quickCreateForm,
-                        lesson_duration_minutes: Number(e.target.value),
+                        length_preset: e.target.value as SlideLengthPreset,
                       })
                     }
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   >
-                    {[10, 15, 20, 30, 45].map((minutes) => (
-                      <option key={minutes} value={minutes}>
-                        {minutes} min
+                    {SLIDE_LENGTH_PRESET_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
                       </option>
                     ))}
                   </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Slides</label>
-                  <input
-                    type="number"
-                    min={10}
-                    max={20}
-                    value={quickCreateForm.slide_count}
-                    onChange={(e) =>
-                      setQuickCreateForm({
-                        ...quickCreateForm,
-                        slide_count: clampSlideCount(Number(e.target.value)),
-                      })
-                    }
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    {getSlideLengthPresetConfig(quickCreateForm.length_preset).description}
+                  </p>
                 </div>
 
                 <div>

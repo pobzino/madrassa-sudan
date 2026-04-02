@@ -10,6 +10,7 @@ import RecordingOverlay from './RecordingOverlay';
 import RecordingReviewModal from './RecordingReviewModal';
 import { useSlideRecorder } from '@/hooks/useSlideRecorder';
 import { useBunnyBlobUpload } from '@/hooks/useBunnyBlobUpload';
+import { MAX_GENERATED_SLIDE_COUNT } from '@/lib/slides-generation';
 
 interface InteractivePlaceholders {
   title_ar: string;
@@ -280,6 +281,8 @@ export default function SlideEditor({
   });
 
   const selectedSlide = slides[selectedIndex] || null;
+  const deckHasRequiredSlides = slides.some((slide) => slide.is_required);
+  const allowReorder = !deckHasRequiredSlides;
 
   // Get reveal item count for current presentation slide
   const presentSlide = slides[presentIndex];
@@ -360,18 +363,24 @@ export default function SlideEditor({
   );
 
   const deleteSlide = useCallback(() => {
-    if (slides.length <= 1) return;
+    if (slides.length <= 1 || selectedSlide?.is_required) return;
     const next = slides.filter((_, i) => i !== selectedIndex).map((s, i) => ({ ...s, sequence: i }));
     onChange(next);
     setSelectedIndex(Math.min(selectedIndex, next.length - 1));
-  }, [slides, selectedIndex, onChange]);
+  }, [slides, selectedIndex, onChange, selectedSlide]);
 
   const addSlide = useCallback(
     (type: SlideType) => {
+      if (slides.length >= MAX_GENERATED_SLIDE_COUNT) {
+        window.alert(`Decks are capped at ${MAX_GENERATED_SLIDE_COUNT} slides.`);
+        return;
+      }
+
       const newSlide: Slide = {
         id: crypto.randomUUID(),
         type,
         sequence: slides.length,
+        is_required: false,
         timestamp_seconds: null,
         title_ar: '',
         title_en: '',
@@ -419,6 +428,11 @@ export default function SlideEditor({
 
   const addInteractiveSlide = useCallback(
     (request: InteractiveSlideRequest) => {
+      if (slides.length >= MAX_GENERATED_SLIDE_COUNT) {
+        window.alert(`Decks are capped at ${MAX_GENERATED_SLIDE_COUNT} slides.`);
+        return;
+      }
+
       const { interactionType, slideType } = request;
 
       // Placeholder content per interaction type — picks an unused variant
@@ -428,6 +442,7 @@ export default function SlideEditor({
         id: crypto.randomUUID(),
         type: slideType,
         sequence: slides.length,
+        is_required: false,
         timestamp_seconds: null,
         title_ar: placeholders.title_ar,
         title_en: placeholders.title_en,
@@ -475,10 +490,16 @@ export default function SlideEditor({
 
   // Drag and drop reorder
   const handleDragStart = useCallback((index: number) => {
+    if (!allowReorder) {
+      return;
+    }
     setDragIndex(index);
-  }, []);
+  }, [allowReorder]);
 
   const handleDragOver = useCallback((index: number) => {
+    if (!allowReorder) {
+      return;
+    }
     if (dragIndex === null || dragIndex === index) return;
     const next = [...slides];
     const [moved] = next.splice(dragIndex, 1);
@@ -486,7 +507,7 @@ export default function SlideEditor({
     onChange(next.map((s, i) => ({ ...s, sequence: i })));
     setDragIndex(index);
     if (selectedIndex === dragIndex) setSelectedIndex(index);
-  }, [dragIndex, slides, selectedIndex, onChange]);
+  }, [allowReorder, dragIndex, slides, selectedIndex, onChange]);
 
   const handleDrop = useCallback(() => {
     setDragIndex(null);
@@ -649,6 +670,7 @@ export default function SlideEditor({
                 slide={slide}
                 language={language}
                 index={index}
+                draggable={allowReorder}
                 isSelected={index === selectedIndex}
                 onSelect={() => setSelectedIndex(index)}
                 onDragStart={() => handleDragStart(index)}
@@ -685,6 +707,8 @@ export default function SlideEditor({
                 slide={selectedSlide}
                 onUpdate={updateSlide}
                 onDelete={deleteSlide}
+                canDelete={!selectedSlide.is_required}
+                canEditType={!selectedSlide.is_required}
               />
             </div>
           )}
