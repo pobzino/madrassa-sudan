@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { buildBunnyPlaybackUrls } from "@/lib/bunny-playback";
 import { createClient } from "@/lib/supabase/server";
 import { getTeacherRole } from "@/lib/server/teacher-lesson-access";
 
@@ -79,12 +80,11 @@ export async function GET(request: NextRequest) {
     };
 
     if (statusCode === 4) {
-      response.urls = {
-        video_url_1080p: `https://${cdnHostname}/${videoId}/play_1080p.mp4`,
-        video_url_360p: `https://${cdnHostname}/${videoId}/play_360p.mp4`,
-        video_url_480p: `https://${cdnHostname}/${videoId}/play_480p.mp4`,
-        video_url_720p: `https://${cdnHostname}/${videoId}/play_720p.mp4`,
-      };
+      response.urls = buildBunnyPlaybackUrls(
+        videoId,
+        cdnHostname,
+        data.availableResolutions as string | null | undefined
+      );
       response.hlsUrl = `https://${cdnHostname}/${videoId}/playlist.m3u8`;
       if (data.length) {
         response.durationSeconds = data.length;

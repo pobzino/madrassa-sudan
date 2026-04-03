@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import fixWebmDuration from 'fix-webm-duration';
 import { toPng } from 'html-to-image';
 
 export type RecorderState = 'idle' | 'preparing' | 'countdown' | 'recording' | 'paused' | 'stopped';
@@ -44,10 +45,13 @@ export function useSlideRecorder({
   const combinedStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number>(0);
   const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const snapshotIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const finalizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const slideImageRef = useRef<HTMLImageElement | null>(null);
   const isRecordingRef = useRef(false);
+  const isSnappingRef = useRef(false);
   const stopRequestedRef = useRef(false);
+  const recordingStartedAtRef = useRef<number | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -59,6 +63,10 @@ export function useSlideRecorder({
   function cleanup() {
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+    if (snapshotIntervalRef.current) {
+      clearInterval(snapshotIntervalRef.current);
+      snapshotIntervalRef.current = null;
+    }
     if (finalizeTimeoutRef.current) {
       clearTimeout(finalizeTimeoutRef.current);
       finalizeTimeoutRef.current = null;
@@ -75,13 +83,19 @@ export function useSlideRecorder({
       try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
     }
     isRecordingRef.current = false;
+    isSnappingRef.current = false;
     stopRequestedRef.current = false;
+    recordingStartedAtRef.current = null;
   }
 
   function stopCompositingLoop() {
     isRecordingRef.current = false;
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+    if (snapshotIntervalRef.current) {
+      clearInterval(snapshotIntervalRef.current);
+      snapshotIntervalRef.current = null;
+    }
   }
 
   function stopInputStreams() {
@@ -264,6 +278,7 @@ export function useSlideRecorder({
         stopCompositingLoop();
         mediaRecorderRef.current = null;
         stopRequestedRef.current = false;
+        recordingStartedAtRef.current = null;
         setRecorderState('idle');
         setRecordedBlob(null);
         setErrorMessage('Recording failed in the browser. Please try again.');
@@ -276,27 +291,43 @@ export function useSlideRecorder({
 
           // Some browsers dispatch the final dataavailable event slightly after stop.
           finalizeTimeoutRef.current = setTimeout(() => {
-            finalizeTimeoutRef.current = null;
-            const typedBlob = new Blob(chunksRef.current, { type: outputMimeType });
-            const blob = typedBlob.size > 0 ? typedBlob : new Blob(chunksRef.current);
+            void (async () => {
+              finalizeTimeoutRef.current = null;
+              const typedBlob = new Blob(chunksRef.current, { type: outputMimeType });
+              let blob = typedBlob.size > 0 ? typedBlob : new Blob(chunksRef.current);
 
-            if (blob.size === 0) {
-              if (allowRetry) {
-                finalizeBlob(false);
-                return;
+              if (blob.size === 0) {
+                if (allowRetry) {
+                  finalizeBlob(false);
+                  return;
+                }
+                setRecordedBlob(null);
+                setRecorderState('idle');
+                setErrorMessage('Recording failed to save video data. Please record again.');
+              } else {
+                const recordingDurationMs = Math.max(
+                  1000,
+                  recordingStartedAtRef.current ? Date.now() - recordingStartedAtRef.current : 1000
+                );
+
+                if ((blob.type || outputMimeType).includes('webm')) {
+                  try {
+                    blob = await fixWebmDuration(blob, recordingDurationMs, { logger: false });
+                  } catch (error) {
+                    console.warn('Failed to patch WebM duration metadata before upload.', error);
+                  }
+                }
+
+                setRecordedBlob(blob);
+                setRecorderState('stopped');
               }
-              setRecordedBlob(null);
-              setRecorderState('idle');
-              setErrorMessage('Recording failed to save video data. Please record again.');
-            } else {
-              setRecordedBlob(blob);
-              setRecorderState('stopped');
-            }
 
-            stopInputStreams();
-            stopCompositingLoop();
-            mediaRecorderRef.current = null;
-            stopRequestedRef.current = false;
+              stopInputStreams();
+              stopCompositingLoop();
+              mediaRecorderRef.current = null;
+              stopRequestedRef.current = false;
+              recordingStartedAtRef.current = null;
+            })();
           }, allowRetry ? 350 : 1000);
         };
 
@@ -304,6 +335,7 @@ export function useSlideRecorder({
       };
 
       mediaRecorderRef.current = recorder;
+      recordingStartedAtRef.current = Date.now();
       recorder.start(250);
 
       // Duration timer

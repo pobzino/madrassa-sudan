@@ -16,6 +16,7 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.93.3",
     "ai": "^6.0.68",
+    "fix-webm-duration": "^1.0.6",
     "html-to-image": "^1.11.13",
     "next": "16.1.6",
     "openai": "^6.17.0",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { toPlayableVideoUrl } from "@/lib/bunny-playback";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
@@ -152,10 +153,10 @@ const VIDEO_QUALITY_FALLBACKS: Record<VideoQuality, VideoQuality[]> = {
 
 function getLessonVideoSources(lesson: Lesson | null) {
   return {
-    "1080p": lesson?.video_url_1080p || "",
-    "360p": lesson?.video_url_360p || "",
-    "480p": lesson?.video_url_480p || "",
-    "720p": lesson?.video_url_720p || "",
+    "1080p": toPlayableVideoUrl(lesson?.video_url_1080p || ""),
+    "360p": toPlayableVideoUrl(lesson?.video_url_360p || ""),
+    "480p": toPlayableVideoUrl(lesson?.video_url_480p || ""),
+    "720p": toPlayableVideoUrl(lesson?.video_url_720p || ""),
   } satisfies Record<VideoQuality, string>;
 }
 
