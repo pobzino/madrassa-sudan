@@ -273,7 +273,58 @@ Requirements:
                     instruction_ar: { type: "string" },
                     instruction_en: { type: "string" },
                     timestamp_seconds: { type: "number" },
-                    task_data: { type: "object" },
+                    task_data: {
+                      anyOf: [
+                        {
+                          type: "object",
+                          properties: {
+                            pairs: {
+                              type: "array",
+                              items: {
+                                type: "object",
+                                properties: {
+                                  id: { type: "string" },
+                                  left_ar: { type: "string" },
+                                  left_en: { type: "string" },
+                                  right_ar: { type: "string" },
+                                  right_en: { type: "string" },
+                                },
+                                required: ["id", "left_ar", "left_en", "right_ar", "right_en"],
+                                additionalProperties: false,
+                              },
+                            },
+                            shuffle_right: { type: "boolean" },
+                          },
+                          required: ["pairs", "shuffle_right"],
+                          additionalProperties: false,
+                        },
+                        {
+                          type: "object",
+                          properties: {
+                            items: {
+                              type: "array",
+                              items: {
+                                type: "object",
+                                properties: {
+                                  id: { type: "string" },
+                                  text_ar: { type: "string" },
+                                  text_en: { type: "string" },
+                                  correct_position: { type: "number" },
+                                },
+                                required: ["id", "text_ar", "text_en", "correct_position"],
+                                additionalProperties: false,
+                              },
+                            },
+                            instruction_type: {
+                              type: "string",
+                              enum: ["ascending", "descending", "chronological", "custom"],
+                            },
+                          },
+                          required: ["items", "instruction_type"],
+                          additionalProperties: false,
+                        },
+                      ],
+                    },
                     is_skippable: { type: "boolean" },
                     points: { type: "number" },
                   },
