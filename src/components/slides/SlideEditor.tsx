@@ -558,7 +558,7 @@ export default function SlideEditor({
   if (presenting) {
     return (
       <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-        <div ref={slideContainerRef} className="w-full max-w-6xl mx-auto px-4">
+        <div ref={slideContainerRef} className="w-full max-w-6xl mx-auto">
           <SlideCard
             slide={slides[presentIndex]}
             language={language}
