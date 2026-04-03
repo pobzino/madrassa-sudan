@@ -875,12 +875,8 @@ export default function LessonPlayerPage() {
   };
 
   // Handle seeking
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    seekToTime(parseFloat(e.target.value));
-  };
-
   const seekToTime = useCallback(
-    (time: number) => {
+    (time: number, options?: { activateDueInteractions?: boolean }) => {
       if (!videoRef.current) return;
 
       const previousTime = currentTime;
@@ -888,11 +884,39 @@ export default function LessonPlayerPage() {
       lastPlaybackSecondRef.current = time;
       setCurrentTime(time);
 
-      if (!activeQuestion && !activeActivity && !activeSlideInteraction && time > previousTime) {
+      if (
+        options?.activateDueInteractions !== false &&
+        !activeQuestion &&
+        !activeActivity &&
+        !activeSlideInteraction &&
+        time > previousTime
+      ) {
         maybeActivateDueInteraction(previousTime, time);
       }
     },
     [activeActivity, activeQuestion, activeSlideInteraction, currentTime, maybeActivateDueInteraction]
+  );
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    seekToTime(parseFloat(e.target.value));
+  };
+
+  const handleActivityMarkerClick = useCallback(
+    (taskId: string, time: number) => {
+      const task = tasks.find((candidate) => candidate.id === taskId);
+      if (!task) {
+        seekToTime(time, { activateDueInteractions: false });
+        return;
+      }
+
+      videoRef.current?.pause();
+      setIsPlaying(false);
+      setActiveQuestion(null);
+      setActiveSlideInteraction(null);
+      seekToTime(time, { activateDueInteractions: false });
+      setActiveActivity(task);
+    },
+    [seekToTime, tasks]
   );
 
   // Format time
@@ -1271,7 +1295,7 @@ export default function LessonPlayerPage() {
                           <button
                             key={marker.id}
                             type="button"
-                            onClick={() => seekToTime(marker.time)}
+                            onClick={() => handleActivityMarkerClick(marker.id, marker.time)}
                             title={`${marker.label} · ${formatTime(marker.time)}`}
                             className={`pointer-events-auto absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 transition hover:scale-110 ${markerClassName}`}
                             style={{ left: `${marker.position * 100}%` }}
