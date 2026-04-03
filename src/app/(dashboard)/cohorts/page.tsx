@@ -198,7 +198,7 @@ export default function CohortsPage() {
     const { data: cohort } = await supabase
       .from("cohorts")
       .select("*")
-      .eq("join_code", joinCode.trim().toUpperCase())
+      .ilike("join_code", joinCode.trim())
       .eq("is_active", true)
       .maybeSingle();
 
