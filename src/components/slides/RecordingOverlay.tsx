@@ -6,8 +6,12 @@ interface RecordingOverlayProps {
   recorderState: RecorderState;
   countdownValue: number;
   recordingDuration: number;
+  canGoPrevious?: boolean;
+  canGoNext?: boolean;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   webcamVideoRef?: React.RefObject<HTMLVideoElement | null>;
+  onPrevious?: () => void;
+  onNext?: () => void;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
@@ -23,7 +27,11 @@ export default function RecordingOverlay({
   recorderState,
   countdownValue,
   recordingDuration,
+  canGoPrevious = false,
+  canGoNext = false,
   canvasRef,
+  onPrevious,
+  onNext,
   onPause,
   onResume,
   onStop,
@@ -64,6 +72,26 @@ export default function RecordingOverlay({
 
         {/* Recording controls — integrated into bottom bar */}
         <div className="fixed bottom-6 right-6 z-[60] flex items-center gap-2">
+          <button
+            onClick={onPrevious}
+            disabled={!canGoPrevious}
+            className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm text-white rounded-full px-4 py-2 text-sm font-medium hover:bg-white/30 transition-colors disabled:opacity-40 disabled:hover:bg-white/20"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+            Previous
+          </button>
+          <button
+            onClick={onNext}
+            disabled={!canGoNext}
+            className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm text-white rounded-full px-4 py-2 text-sm font-medium hover:bg-white/30 transition-colors disabled:opacity-40 disabled:hover:bg-white/20"
+          >
+            Next
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+          </button>
           {recorderState === 'recording' ? (
             <button
               onClick={onPause}

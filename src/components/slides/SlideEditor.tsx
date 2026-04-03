@@ -296,6 +296,8 @@ export default function SlideEditor({
     ? (language === 'ar' ? presentSlide.reveal_items_ar : presentSlide.reveal_items_en) || []
     : [];
   const totalRevealItems = presentRevealItems.length;
+  const canGoPreviousWhileRecording = presentIndex > 0;
+  const canGoNextWhileRecording = presentIndex < slides.length - 1 || revealedCount < totalRevealItems;
 
   // Reset reveal count when slide changes
   useEffect(() => {
@@ -556,6 +558,19 @@ export default function SlideEditor({
     bunnyUpload.cancel();
   }
 
+  const handlePreviousWhileRecording = useCallback(() => {
+    setPresentIndex((i) => Math.max(i - 1, 0));
+  }, []);
+
+  const handleNextWhileRecording = useCallback(() => {
+    if (totalRevealItems > 0 && revealedCount < totalRevealItems) {
+      setRevealedCount((c) => c + 1);
+      return;
+    }
+
+    setPresentIndex((i) => Math.min(i + 1, slides.length - 1));
+  }, [revealedCount, slides.length, totalRevealItems]);
+
   // Fullscreen present mode
   if (presenting) {
     return (
@@ -576,7 +591,11 @@ export default function SlideEditor({
             recorderState={recorderState}
             countdownValue={countdownValue}
             recordingDuration={recordingDuration}
+            canGoPrevious={canGoPreviousWhileRecording}
+            canGoNext={canGoNextWhileRecording}
             canvasRef={canvasRef}
+            onPrevious={handlePreviousWhileRecording}
+            onNext={handleNextWhileRecording}
             onPause={pauseRecording}
             onResume={resumeRecording}
             onStop={recorderStop}

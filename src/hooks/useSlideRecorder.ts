@@ -29,8 +29,8 @@ interface UseSlideRecorderReturn {
 
 export function useSlideRecorder({
   slideContainerRef,
-  canvasWidth = 1280,
-  canvasHeight = 720,
+  canvasWidth = 1920,
+  canvasHeight = 1080,
 }: UseSlideRecorderOptions): UseSlideRecorderReturn {
   const [recorderState, setRecorderState] = useState<RecorderState>('idle');
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -46,8 +46,11 @@ export function useSlideRecorder({
   const animFrameRef = useRef<number>(0);
   const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const snapshotIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const snapshotDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finalizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const slideImageRef = useRef<HTMLImageElement | null>(null);
+  const mutationObserverRef = useRef<MutationObserver | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const isRecordingRef = useRef(false);
   const isSnappingRef = useRef(false);
   const stopRequestedRef = useRef(false);
@@ -67,9 +70,21 @@ export function useSlideRecorder({
       clearInterval(snapshotIntervalRef.current);
       snapshotIntervalRef.current = null;
     }
+    if (snapshotDebounceRef.current) {
+      clearTimeout(snapshotDebounceRef.current);
+      snapshotDebounceRef.current = null;
+    }
     if (finalizeTimeoutRef.current) {
       clearTimeout(finalizeTimeoutRef.current);
       finalizeTimeoutRef.current = null;
+    }
+    if (mutationObserverRef.current) {
+      mutationObserverRef.current.disconnect();
+      mutationObserverRef.current = null;
+    }
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+      resizeObserverRef.current = null;
     }
     if (combinedStreamRef.current) {
       combinedStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -96,6 +111,18 @@ export function useSlideRecorder({
       clearInterval(snapshotIntervalRef.current);
       snapshotIntervalRef.current = null;
     }
+    if (snapshotDebounceRef.current) {
+      clearTimeout(snapshotDebounceRef.current);
+      snapshotDebounceRef.current = null;
+    }
+    if (mutationObserverRef.current) {
+      mutationObserverRef.current.disconnect();
+      mutationObserverRef.current = null;
+    }
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+      resizeObserverRef.current = null;
+    }
   }
 
   function stopInputStreams() {
@@ -119,7 +146,7 @@ export function useSlideRecorder({
     // Capture at high enough resolution so the canvas doesn't upscale
     const elW = el.offsetWidth || canvasWidth;
     const elH = el.offsetHeight || canvasHeight;
-    const pixelRatio = Math.max(canvasWidth / elW, canvasHeight / elH, 1);
+    const pixelRatio = Math.max(window.devicePixelRatio || 1, canvasWidth / elW, canvasHeight / elH, 1);
 
     const opts = {
       width: elW,
@@ -168,6 +195,17 @@ export function useSlideRecorder({
         }, 200);
       });
   }, [slideContainerRef, canvasWidth, canvasHeight]);
+
+  const scheduleSnapshot = useCallback((delay = 90) => {
+    if (!slideContainerRef.current) return;
+    if (snapshotDebounceRef.current) {
+      clearTimeout(snapshotDebounceRef.current);
+    }
+    snapshotDebounceRef.current = setTimeout(() => {
+      snapshotDebounceRef.current = null;
+      snapshotSlide();
+    }, delay);
+  }, [slideContainerRef, snapshotSlide]);
 
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
@@ -276,6 +314,28 @@ export function useSlideRecorder({
       combinedStreamRef.current = combinedStream;
       animFrameRef.current = requestAnimationFrame(drawFrame);
 
+      const observedSlide = slideContainerRef.current;
+      if (observedSlide) {
+        mutationObserverRef.current = new MutationObserver(() => {
+          if (isRecordingRef.current) {
+            scheduleSnapshot(90);
+          }
+        });
+        mutationObserverRef.current.observe(observedSlide, {
+          subtree: true,
+          childList: true,
+          characterData: true,
+          attributes: true,
+        });
+
+        resizeObserverRef.current = new ResizeObserver(() => {
+          if (isRecordingRef.current) {
+            scheduleSnapshot(90);
+          }
+        });
+        resizeObserverRef.current.observe(observedSlide);
+      }
+
       // Create MediaRecorder
       const preferredMimeType = getSupportedMimeType();
       let recorder: MediaRecorder;
@@ -283,10 +343,10 @@ export function useSlideRecorder({
         recorder = preferredMimeType
           ? new MediaRecorder(combinedStream, {
               mimeType: preferredMimeType,
-              videoBitsPerSecond: 5_000_000,
+              videoBitsPerSecond: 8_000_000,
             })
           : new MediaRecorder(combinedStream, {
-              videoBitsPerSecond: 5_000_000,
+              videoBitsPerSecond: 8_000_000,
             });
       } catch {
         recorder = new MediaRecorder(combinedStream);
@@ -369,7 +429,7 @@ export function useSlideRecorder({
       // Periodic re-snapshot: safety net so slide changes are always captured
       snapshotIntervalRef.current = setInterval(() => {
         if (isRecordingRef.current) snapshotSlide();
-      }, 400);
+      }, 250);
 
       // Duration timer
       const startTime = Date.now();
@@ -387,7 +447,7 @@ export function useSlideRecorder({
         setErrorMessage(err instanceof Error ? err.message : 'Failed to start recording');
       }
     }
-  }, [snapshotSlide, canvasWidth, canvasHeight, drawFrame, renderFrame]);
+  }, [snapshotSlide, canvasWidth, canvasHeight, drawFrame, renderFrame, scheduleSnapshot, slideContainerRef]);
 
   const stopRecording = useCallback(() => {
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive' || stopRequestedRef.current) {
