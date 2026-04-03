@@ -44,6 +44,7 @@ export default function SlideInteractionOverlay({
     ar: {
       activity: 'نشاط تفاعلي',
       submit: 'إرسال',
+      retry: 'حاول مرة أخرى',
       continue: 'متابعة',
       correct: 'إجابة صحيحة! 🎉',
       incorrect: 'ليست صحيحة بعد',
@@ -65,6 +66,7 @@ export default function SlideInteractionOverlay({
     en: {
       activity: 'Interactive Activity',
       submit: 'Submit',
+      retry: 'Retry',
       continue: 'Continue',
       correct: 'Correct! 🎉',
       incorrect: 'Not quite yet',
@@ -126,6 +128,16 @@ export default function SlideInteractionOverlay({
       ...nextResult,
       timeSpentSeconds: elapsedSeconds,
     });
+  }
+
+  function retryInteraction() {
+    setResult(null);
+    setSelectedChoiceIndex(null);
+    setSelectedTrueFalse(null);
+    setTappedIndexes([]);
+    setMatchSelections({});
+    setSequenceSelection([]);
+    setSortSelections({});
   }
 
   function submitChoice(eventTimeStamp?: number) {
@@ -577,12 +589,21 @@ export default function SlideInteractionOverlay({
                   <p className={`text-sm font-semibold ${result.isCorrect ? 'text-green-700' : 'text-amber-700'}`}>
                     {result.isCorrect ? getCorrectFeedback(language) : getIncorrectFeedback(language)}
                   </p>
-                  <button
-                    onClick={() => onComplete(result)}
-                    className="mt-3 w-full rounded-2xl bg-[#007229] px-4 py-3 text-sm font-semibold text-white"
-                  >
-                    {text.continue}
-                  </button>
+                  {result.isCorrect ? (
+                    <button
+                      onClick={() => onComplete(result)}
+                      className="mt-3 w-full rounded-2xl bg-[#007229] px-4 py-3 text-sm font-semibold text-white"
+                    >
+                      {text.continue}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={retryInteraction}
+                      className="mt-3 w-full rounded-2xl bg-[#007229] px-4 py-3 text-sm font-semibold text-white"
+                    >
+                      {text.retry}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
