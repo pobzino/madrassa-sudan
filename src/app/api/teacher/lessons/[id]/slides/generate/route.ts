@@ -51,6 +51,7 @@ async function queueBackgroundGeneration({
       slideCount,
       languageMode,
       generationContext,
+      internalSecret,
     }),
   });
 
