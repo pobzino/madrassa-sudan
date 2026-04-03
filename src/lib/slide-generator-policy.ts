@@ -39,7 +39,6 @@ type RequiredSlideShape = {
   label: string;
 };
 
-const PRACTICE_SLIDE_COUNT = 2;
 const FIXED_STRUCTURE_SLIDE_COUNT = 6;
 
 function words(value: string | null | undefined): string[] {
@@ -91,6 +90,13 @@ function countQuestionMarks(text: string): number {
 
 function isPracticeType(slide: PolicySlide): boolean {
   return slide.type === "quiz_preview" || slide.type === "question_answer";
+}
+
+function isEnglishVocabularySlide(slide: PolicySlide): boolean {
+  return (
+    slide.lesson_phase === "core_teaching" &&
+    (slide.type === "content" || slide.type === "diagram_description")
+  );
 }
 
 function getExplanationSlideCount(slideCount: number): number {
@@ -161,13 +167,14 @@ export function getSlideGeneratorPolicyPrompt({
     subjectKey === "english"
       ? [
           "## Mandatory English Rules",
-          "- Every `core_teaching` slide must introduce one beginner-friendly English vocabulary item or short usable phrase.",
-          "- On every `core_teaching` slide, fill `vocabulary_word_en` and `vocabulary_word_ar`.",
+          "- Every explanation slide (`content` or `diagram_description`) must introduce one beginner-friendly English vocabulary item or short usable phrase.",
+          "- On every explanation slide, fill `vocabulary_word_en` and `vocabulary_word_ar`.",
           '- The English vocabulary item must appear clearly in the English slide fields.',
           '- The Arabic translation must appear clearly in the Arabic slide fields.',
-          '- Set `say_it_twice_prompt` to true on every `core_teaching` slide.',
-          '- The English slide content on each vocabulary slide must include the literal cue `Say it twice`.',
+          '- Set `say_it_twice_prompt` to true on every explanation slide.',
+          '- The English slide content on each explanation slide must include the literal cue `Say it twice`.',
           '- Vocabulary slides must include an explicit visual cue through `visual_hint`.',
+          '- The activity slide should reinforce the same vocabulary without needing extra vocabulary metadata.',
           '- Practice slides must stay simple enough for a complete English beginner.',
         ].join("\n")
       : "";
@@ -187,8 +194,8 @@ export function getSlideGeneratorPolicyPrompt({
     "## Metadata Rules",
     "- `lesson_phase`: required for every slide.",
     "- `idea_focus_en` and `idea_focus_ar`: required for every slide, one idea only.",
-    "- `vocabulary_word_en` and `vocabulary_word_ar`: required for English core teaching slides, null otherwise.",
-    "- `say_it_twice_prompt`: true for English core teaching slides, null otherwise.",
+    "- `vocabulary_word_en` and `vocabulary_word_ar`: required for English explanation slides (`content` / `diagram_description`), null otherwise.",
+    "- `say_it_twice_prompt`: true for English explanation slides, null otherwise.",
     "- `practice_question_count`: 1 for practice slides, null otherwise.",
     "- `representation_stage`: required for maths slides (`concrete_visual`, `abstract`, or `not_applicable`), `not_applicable` for non-maths.",
   ];
@@ -226,7 +233,7 @@ export function getSlideGeneratorValidationSchemaNotes(subjectKey: SupportedSubj
   notes.push("Slides with interaction_type must include all companion fields for that type");
 
   if (subjectKey === "english") {
-    notes.push("English core teaching slides must set vocabulary_word_en, vocabulary_word_ar, and say_it_twice_prompt=true");
+    notes.push("English explanation slides must set vocabulary_word_en, vocabulary_word_ar, and say_it_twice_prompt=true");
   }
 
   if (subjectKey === "math") {
@@ -447,28 +454,28 @@ export function validateGeneratedSlides(
 
   if (subjectKey === "english") {
     slides.forEach((slide, index) => {
-      if (slide.lesson_phase !== "core_teaching") {
+      if (!isEnglishVocabularySlide(slide)) {
         return;
       }
 
       if (!slide.vocabulary_word_en?.trim() || !slide.vocabulary_word_ar?.trim()) {
-        issues.push(`English core teaching slide ${index + 1} must include vocabulary_word_en and vocabulary_word_ar.`);
+        issues.push(`English explanation slide ${index + 1} must include vocabulary_word_en and vocabulary_word_ar.`);
       }
 
       if (slide.say_it_twice_prompt !== true) {
-        issues.push(`English core teaching slide ${index + 1} must set say_it_twice_prompt=true.`);
+        issues.push(`English explanation slide ${index + 1} must set say_it_twice_prompt=true.`);
       }
 
       if (!containsText(slideCombinedEnglish(slide), slide.vocabulary_word_en) || !containsText(slideCombinedArabic(slide), slide.vocabulary_word_ar)) {
-        issues.push(`English core teaching slide ${index + 1} must visibly show the English vocabulary and Arabic translation.`);
+        issues.push(`English explanation slide ${index + 1} must visibly show the English vocabulary and Arabic translation.`);
       }
 
       if (!containsText(slide.body_en, "say it twice")) {
-        issues.push(`English core teaching slide ${index + 1} must include the visible cue "Say it twice" in body_en.`);
+        issues.push(`English explanation slide ${index + 1} must include the visible cue "Say it twice" in body_en.`);
       }
 
       if (!slide.visual_hint?.trim()) {
-        issues.push(`English core teaching slide ${index + 1} must include a visual_hint.`);
+        issues.push(`English explanation slide ${index + 1} must include a visual_hint.`);
       }
     });
 
