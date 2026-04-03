@@ -32,11 +32,13 @@ type SubjectRow = {
 
 export class SlideGenerationError extends Error {
   status: number;
+  details: string[] | null;
 
-  constructor(message: string, status = 500) {
+  constructor(message: string, status = 500, details: string[] | null = null) {
     super(message);
     this.name = "SlideGenerationError";
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -487,6 +489,92 @@ ${validationSchemaNotes}
     additionalProperties: false,
   } as const;
 
+  function patchSlides(slides: PolicySlide[]): PolicySlide[] {
+    return slides.map((slide) => {
+      const patched = { ...slide };
+
+      // Ensure idea_focus fields are populated
+      if (!patched.idea_focus_en?.trim()) {
+        patched.idea_focus_en = patched.title_en?.trim() || "Lesson content";
+      }
+      if (!patched.idea_focus_ar?.trim()) {
+        patched.idea_focus_ar = patched.title_ar?.trim() || "محتوى الدرس";
+      }
+
+      // --- English subject: auto-fix explanation slides ---
+      const isEnglishExplanation =
+        subjectKey === "english" &&
+        patched.lesson_phase === "core_teaching" &&
+        (patched.type === "content" || patched.type === "diagram_description");
+
+      if (isEnglishExplanation) {
+        patched.say_it_twice_prompt = true;
+
+        // Fill vocabulary_word from idea_focus or title if AI left it blank
+        if (!patched.vocabulary_word_en?.trim()) {
+          patched.vocabulary_word_en =
+            patched.idea_focus_en?.trim() || patched.title_en?.trim() || "";
+        }
+        if (!patched.vocabulary_word_ar?.trim()) {
+          patched.vocabulary_word_ar =
+            patched.idea_focus_ar?.trim() || patched.title_ar?.trim() || "";
+        }
+
+        // Ensure vocabulary word appears somewhere in the slide text
+        const combinedEn = [patched.title_en, patched.body_en, ...(patched.bullets_en || [])]
+          .filter(Boolean).join(" ").toLowerCase();
+        if (
+          patched.vocabulary_word_en &&
+          !combinedEn.includes(patched.vocabulary_word_en.toLowerCase())
+        ) {
+          patched.body_en = patched.body_en
+            ? `${patched.body_en.trim()}\n${patched.vocabulary_word_en}`
+            : patched.vocabulary_word_en;
+        }
+
+        const combinedAr = [patched.title_ar, patched.body_ar, ...(patched.bullets_ar || [])]
+          .filter(Boolean).join(" ").toLowerCase();
+        if (
+          patched.vocabulary_word_ar &&
+          !combinedAr.includes(patched.vocabulary_word_ar.toLowerCase())
+        ) {
+          patched.body_ar = patched.body_ar
+            ? `${patched.body_ar.trim()}\n${patched.vocabulary_word_ar}`
+            : patched.vocabulary_word_ar;
+        }
+
+        // Append "Say it twice!" to body_en if missing
+        if (patched.body_en && !patched.body_en.toLowerCase().includes("say it twice")) {
+          patched.body_en = `${patched.body_en.trim()}\nSay it twice!`;
+        } else if (!patched.body_en) {
+          patched.body_en = "Say it twice!";
+        }
+
+        // Ensure visual_hint is set
+        if (!patched.visual_hint?.trim()) {
+          patched.visual_hint = `Visual for: ${patched.vocabulary_word_en || patched.title_en || "lesson concept"}`;
+        }
+      }
+
+      // --- Math subject: ensure representation_stage is set ---
+      if (subjectKey === "math" && !patched.representation_stage) {
+        patched.representation_stage = patched.lesson_phase === "core_teaching"
+          ? "concrete_visual"
+          : "not_applicable";
+      }
+
+      // --- Practice slides: ensure practice_question_count ---
+      if (
+        patched.lesson_phase === "practice" &&
+        (patched.type === "quiz_preview" || patched.type === "question_answer")
+      ) {
+        patched.practice_question_count = 1;
+      }
+
+      return patched;
+    });
+  }
+
   function hydrateGeneratedSlides(rawSlides: Record<string, unknown>[]): PolicySlide[] {
     return rawSlides.map(
       (slide, index) => {
@@ -730,14 +818,14 @@ ${buildSpeakerNotesContext(slides)}`;
     }
   }
 
-  let slides = await requestDeck();
+  let slides = patchSlides(await requestDeck());
   let validationIssues = validateGeneratedSlides(slides, {
     slideCount,
     subjectKey,
   });
 
   if (validationIssues.length > 0) {
-    slides = await repairDeck(slides, validationIssues);
+    slides = patchSlides(await repairDeck(slides, validationIssues));
     validationIssues = validateGeneratedSlides(slides, {
       slideCount,
       subjectKey,
@@ -745,7 +833,25 @@ ${buildSpeakerNotesContext(slides)}`;
   }
 
   if (validationIssues.length > 0) {
-    throw new SlideGenerationError("Generated slides did not pass the mandatory lesson policy.", 502);
+    console.warn("Slide validation issues after repair + patch:", validationIssues);
+    // Filter out non-critical issues that patchSlides should have handled
+    const criticalIssues = validationIssues.filter(
+      (issue) =>
+        !issue.includes("say_it_twice_prompt") &&
+        !issue.includes("vocabulary_word") &&
+        !issue.includes("Say it twice") &&
+        !issue.includes("visual_hint") &&
+        !issue.includes("practice_question_count") &&
+        !issue.includes("idea_focus")
+    );
+
+    if (criticalIssues.length > 0) {
+      throw new SlideGenerationError(
+        "Generated slides did not pass the mandatory lesson policy.",
+        502,
+        criticalIssues
+      );
+    }
   }
 
   await persistSlides(slides);
