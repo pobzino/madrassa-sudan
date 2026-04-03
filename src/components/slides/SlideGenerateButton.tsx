@@ -40,13 +40,13 @@ export default function SlideGenerateButton({
 
   const tryRecoverSavedSlides = useCallback(
     async (generationStartedAtMs: number): Promise<Slide[] | null> => {
-      const maxAttempts = 5;
+      const maxAttempts = 40;
 
       setProgress('Checking for saved slides...');
       onGeneratingChange?.(true, 'Checking for saved slides...');
 
       for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 1500 : 2500));
+        await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 2000 : 3000));
 
         try {
           const res = await fetch(`/api/teacher/lessons/${lessonId}/slides?ts=${Date.now()}`);
@@ -63,7 +63,22 @@ export default function SlideGenerateButton({
           if (freshEnough && Array.isArray(deck?.slides) && deck.slides.length > 0) {
             return deck.slides as Slide[];
           }
-        } catch {
+
+          if (
+            freshEnough &&
+            Array.isArray(deck?.slides) &&
+            deck.slides.length === 0 &&
+            deck?.generated_at
+          ) {
+            throw new Error('Background generation failed before slides were saved.');
+          }
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            error.message === 'Background generation failed before slides were saved.'
+          ) {
+            throw error;
+          }
           // Continue polling for a freshly-saved deck.
         }
       }
@@ -104,6 +119,23 @@ export default function SlideGenerateButton({
         }),
       });
 
+      if (res.status === 202) {
+        setProgress('Generation started. Waiting for slides...');
+        onGeneratingChange?.(true, 'Generation started. Waiting for slides...');
+
+        const recoveredSlides = await tryRecoverSavedSlides(generationStartedAtMs);
+        if (recoveredSlides) {
+          setError('');
+          setProgress('Slides loaded.');
+          onGenerated(recoveredSlides);
+          return;
+        }
+
+        throw new Error(
+          'Generation is still running in the background or failed before saving. Please refresh in a minute.'
+        );
+      }
+
       if (!res.ok) {
         const text = await res.text();
         let errorMessage = 'Generation failed';
@@ -129,7 +161,8 @@ export default function SlideGenerateButton({
         errorMessage.includes('timed out') ||
         errorMessage.startsWith('Server error') ||
         errorMessage === 'Generation failed' ||
-        errorMessage.includes('Failed to fetch');
+        errorMessage.includes('Failed to fetch') ||
+        errorMessage.includes('still running in the background');
 
       const recoveredSlides = shouldAttemptRecovery
         ? await tryRecoverSavedSlides(generationStartedAtMs)
