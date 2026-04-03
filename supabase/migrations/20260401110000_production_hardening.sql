@@ -250,5 +250,6 @@ ALTER FUNCTION public.update_lesson_quiz_progress(uuid, uuid, boolean, integer)
 ALTER FUNCTION public.update_updated_at_column()
   SET search_path = public;
 
-ALTER FUNCTION public.update_updated_at()
-  SET search_path = public;
+-- update_updated_at() does not exist; only update_updated_at_column() does
+-- ALTER FUNCTION public.update_updated_at()
+--   SET search_path = public;

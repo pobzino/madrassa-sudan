@@ -36,7 +36,7 @@ export default function TitleSlide({ slide, language }: Props) {
 
   if (isFullImage) {
     return (
-      <div className="relative w-full h-full flex flex-col items-center justify-center p-8 sm:p-12 overflow-hidden">
+      <div className="relative w-full h-full flex flex-col items-center p-8 sm:p-12 overflow-y-auto" style={{ justifyContent: 'safe center' }}>
         <SlideBackgroundImage src={slide.image_url!} />
         <h1
           dir={primary.dir}
@@ -54,7 +54,7 @@ export default function TitleSlide({ slide, language }: Props) {
   }
 
   return (
-    <div className="relative w-full h-full bg-gradient-to-br from-[#007229] via-[#00913D] to-[#005C22] flex flex-col items-center justify-center p-8 sm:p-12 overflow-hidden">
+    <div className="relative w-full h-full bg-gradient-to-br from-[#007229] via-[#00913D] to-[#005C22] flex flex-col items-center p-8 sm:p-12 overflow-y-auto" style={{ justifyContent: 'safe center' }}>
       <div className="absolute top-[-60px] right-[-60px] w-[200px] h-[200px] rounded-full bg-white/10" />
       <div className="absolute bottom-[-80px] left-[-80px] w-[250px] h-[250px] rounded-full bg-white/5" />
       <svg className="absolute top-[12%] left-[8%] w-6 h-6 text-[#F59E0B]/60" viewBox="0 0 24 24" fill="currentColor">

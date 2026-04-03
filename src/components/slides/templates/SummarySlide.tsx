@@ -14,7 +14,7 @@ export default function SummarySlide({ slide, language }: Props) {
   const hasImage = !!slide.image_url;
 
   return (
-    <div className="relative w-full h-full bg-gradient-to-br from-[#007229] via-[#00913D] to-[#004D1A] flex flex-col items-center justify-center p-8 sm:p-12 overflow-hidden">
+    <div className="relative w-full h-full bg-gradient-to-br from-[#007229] via-[#00913D] to-[#004D1A] flex flex-col items-center p-8 sm:p-12 overflow-y-auto" style={{ justifyContent: 'safe center' }}>
       <div className="absolute top-[-40px] left-[-40px] w-[160px] h-[160px] rounded-full bg-white/8" />
       <div className="absolute bottom-[-60px] right-[-60px] w-[200px] h-[200px] rounded-full bg-white/5" />
       <svg className="absolute top-[8%] right-[10%] w-6 h-6 text-[#F59E0B]/60" viewBox="0 0 24 24" fill="currentColor">

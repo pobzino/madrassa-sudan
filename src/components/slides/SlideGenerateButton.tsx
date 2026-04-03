@@ -40,7 +40,7 @@ export default function SlideGenerateButton({
 
   const tryRecoverSavedSlides = useCallback(
     async (generationStartedAtMs: number): Promise<Slide[] | null> => {
-      const maxAttempts = 80;
+      const maxAttempts = 40;
 
       setProgress('Checking for saved slides...');
       onGeneratingChange?.(true, 'Checking for saved slides...');
@@ -107,6 +107,7 @@ export default function SlideGenerateButton({
     const progressMsg = `Generating ${normalizedSlideCount} slides...`;
     setProgress(progressMsg);
     onGeneratingChange?.(true, progressMsg);
+    let hasPolledBackground = false;
 
     try {
       const res = await fetch(`/api/teacher/lessons/${lessonId}/slides/generate`, {
@@ -123,6 +124,7 @@ export default function SlideGenerateButton({
         setProgress('Generation started. Waiting for slides...');
         onGeneratingChange?.(true, 'Generation started. Waiting for slides...');
 
+        hasPolledBackground = true;
         const recoveredSlides = await tryRecoverSavedSlides(generationStartedAtMs);
         if (recoveredSlides) {
           setError('');
@@ -132,7 +134,7 @@ export default function SlideGenerateButton({
         }
 
         throw new Error(
-          'Generation is still running in the background or failed before saving. Please refresh in a minute.'
+          'No new slides were saved within 2 minutes. Background generation likely failed. Please try again.'
         );
       }
 
@@ -158,10 +160,15 @@ export default function SlideGenerateButton({
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Generation failed';
       const shouldAttemptRecovery =
+        !hasPolledBackground &&
         errorMessage.includes('timed out') ||
+        !hasPolledBackground &&
         errorMessage.startsWith('Server error') ||
+        !hasPolledBackground &&
         errorMessage === 'Generation failed' ||
+        !hasPolledBackground &&
         errorMessage.includes('Failed to fetch') ||
+        !hasPolledBackground &&
         errorMessage.includes('still running in the background');
 
       const recoveredSlides = shouldAttemptRecovery

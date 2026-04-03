@@ -17,7 +17,8 @@ export default function QuizPreviewSlide({ slide, language }: Props) {
   return (
     <div
       dir={isAr ? 'rtl' : 'ltr'}
-      className="relative w-full h-full bg-gradient-to-br from-red-50 via-white to-pink-50 flex flex-col items-center justify-center p-8 sm:p-12 overflow-hidden"
+      className="relative w-full h-full bg-gradient-to-br from-red-50 via-white to-pink-50 flex flex-col items-center p-8 sm:p-12 overflow-y-auto"
+      style={{ justifyContent: 'safe center' }}
     >
       {/* Red accent top */}
       <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#D21034] via-pink-400 to-[#E8334F]" />

@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "ingest:lessons": "node scripts/ingest-lesson-embeddings.mjs"
+    "ingest:lessons": "node scripts/ingest-lesson-embeddings.mjs",
+    "inspect:slides": "node scripts/inspect-slides.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.25",

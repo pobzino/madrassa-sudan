@@ -18,7 +18,8 @@ export default function QuestionAnswerSlide({ slide, language, revealedCount, on
   return (
     <div
       dir={isAr ? 'rtl' : 'ltr'}
-      className="relative w-full h-full bg-gradient-to-br from-teal-50 via-white to-emerald-50 flex flex-col items-center justify-center p-8 sm:p-12 overflow-hidden"
+      className="relative w-full h-full bg-gradient-to-br from-teal-50 via-white to-emerald-50 flex flex-col items-center p-8 sm:p-12 overflow-y-auto"
+      style={{ justifyContent: 'safe center' }}
     >
       {/* Teal accent top */}
       <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-teal-500 via-emerald-400 to-teal-600" />

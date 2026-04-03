@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import BunnyVideoUploader from "@/components/teacher/BunnyVideoUploader";
+import VideoPreview from "@/components/teacher/VideoPreview";
 import AIContentGenerator from "@/components/teacher/AIContentGenerator";
 import TaskEditor, { type TaskForm } from "@/components/teacher/TaskEditor";
 import {
@@ -1125,25 +1126,22 @@ function DetailsTab({
           </div>
         </div>
 
+        <VideoPreview
+          video_url_1080p={form.video_url_1080p}
+          video_url_720p={form.video_url_720p}
+          video_url_480p={form.video_url_480p}
+          video_url_360p={form.video_url_360p}
+        />
+
         {videoInputMode === "upload" ? (
-          <div className="space-y-3">
-            <BunnyVideoUploader
-              lessonId={lessonId}
-              lessonTitle={form.title_ar || form.title_en || "Untitled"}
-              onVideosReady={(urls) => {
-                void onVideosReady(urls);
-              }}
-              currentVideoUrl={form.video_url_1080p || form.video_url_720p || undefined}
-            />
-            {(form.video_url_1080p || form.video_url_720p || form.video_url_480p || form.video_url_360p) && (
-              <div className="space-y-0.5 text-xs text-gray-400">
-                {form.video_url_1080p && <p>1080p: {form.video_url_1080p}</p>}
-                {form.video_url_720p && <p>720p: {form.video_url_720p}</p>}
-                {form.video_url_480p && <p>480p: {form.video_url_480p}</p>}
-                {form.video_url_360p && <p>360p: {form.video_url_360p}</p>}
-              </div>
-            )}
-          </div>
+          <BunnyVideoUploader
+            lessonId={lessonId}
+            lessonTitle={form.title_ar || form.title_en || "Untitled"}
+            onVideosReady={(urls) => {
+              void onVideosReady(urls);
+            }}
+            currentVideoUrl={form.video_url_1080p || form.video_url_720p || undefined}
+          />
         ) : (
           <div className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">

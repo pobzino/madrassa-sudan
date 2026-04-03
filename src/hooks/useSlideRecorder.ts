@@ -47,6 +47,7 @@ export function useSlideRecorder({
   const finalizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const slideImageRef = useRef<HTMLImageElement | null>(null);
   const isRecordingRef = useRef(false);
+  const stopRequestedRef = useRef(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -74,6 +75,24 @@ export function useSlideRecorder({
       try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
     }
     isRecordingRef.current = false;
+    stopRequestedRef.current = false;
+  }
+
+  function stopCompositingLoop() {
+    isRecordingRef.current = false;
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+  }
+
+  function stopInputStreams() {
+    if (combinedStreamRef.current) {
+      combinedStreamRef.current.getTracks().forEach((t) => t.stop());
+      combinedStreamRef.current = null;
+    }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
+    }
   }
 
   // Snapshot the slide DOM to a cached Image
@@ -108,19 +127,14 @@ export function useSlideRecorder({
       });
   }, [slideContainerRef]);
 
-  // Canvas compositing loop
-  function drawFrame() {
-    if (!isRecordingRef.current) return;
-
+  const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) {
-      animFrameRef.current = requestAnimationFrame(drawFrame);
       return;
     }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      animFrameRef.current = requestAnimationFrame(drawFrame);
       return;
     }
 
@@ -139,16 +153,22 @@ export function useSlideRecorder({
       const y = (canvasHeight - h) / 2;
       ctx.drawImage(img, x, y, w, h);
     }
+  }, [canvasHeight, canvasWidth]);
+
+  // Canvas compositing loop
+  const drawFrame = useCallback(() => {
+    if (!isRecordingRef.current) return;
+    renderFrame();
 
     animFrameRef.current = requestAnimationFrame(drawFrame);
-  }
+  }, [renderFrame]);
 
   // Find supported MIME type
   function getSupportedMimeType(): string | null {
     const types = [
-      'video/webm',
       'video/webm;codecs=vp8,opus',
       'video/webm;codecs=vp9,opus',
+      'video/webm',
     ];
     return types.find((mt) => MediaRecorder.isTypeSupported(mt)) || null;
   }
@@ -157,6 +177,7 @@ export function useSlideRecorder({
     setErrorMessage(null);
     setRecordedBlob(null);
     setRecordingDuration(0);
+    stopRequestedRef.current = false;
 
     // Check browser support
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -201,7 +222,7 @@ export function useSlideRecorder({
       canvas.height = canvasHeight;
 
       isRecordingRef.current = true;
-      animFrameRef.current = requestAnimationFrame(drawFrame);
+      renderFrame();
 
       // Combine canvas video stream + mic audio
       const canvasStream = canvas.captureStream(30);
@@ -211,6 +232,7 @@ export function useSlideRecorder({
         ...audioTracks,
       ]);
       combinedStreamRef.current = combinedStream;
+      animFrameRef.current = requestAnimationFrame(drawFrame);
 
       // Create MediaRecorder
       const preferredMimeType = getSupportedMimeType();
@@ -233,40 +255,56 @@ export function useSlideRecorder({
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
-      recorder.onstop = () => {
-        // Some browsers dispatch the final dataavailable event slightly after stop.
-        finalizeTimeoutRef.current = setTimeout(() => {
+      recorder.onerror = () => {
+        if (finalizeTimeoutRef.current) {
+          clearTimeout(finalizeTimeoutRef.current);
           finalizeTimeoutRef.current = null;
-          const typedBlob = new Blob(chunksRef.current, { type: outputMimeType });
-          const blob = typedBlob.size > 0 ? typedBlob : new Blob(chunksRef.current);
-
-          if (blob.size === 0) {
-            setRecordedBlob(null);
-            setRecorderState('idle');
-            setErrorMessage('Recording failed to save video data. Please record again.');
-          } else {
-            setRecordedBlob(blob);
-            setRecorderState('stopped');
+        }
+        stopInputStreams();
+        stopCompositingLoop();
+        mediaRecorderRef.current = null;
+        stopRequestedRef.current = false;
+        setRecorderState('idle');
+        setRecordedBlob(null);
+        setErrorMessage('Recording failed in the browser. Please try again.');
+      };
+      recorder.onstop = () => {
+        const finalizeBlob = (allowRetry: boolean) => {
+          if (finalizeTimeoutRef.current) {
+            clearTimeout(finalizeTimeoutRef.current);
           }
 
-          if (combinedStreamRef.current) {
-            combinedStreamRef.current.getTracks().forEach((t) => t.stop());
-            combinedStreamRef.current = null;
-          }
-          if (micStreamRef.current) {
-            micStreamRef.current.getTracks().forEach((t) => t.stop());
-            micStreamRef.current = null;
-          }
+          // Some browsers dispatch the final dataavailable event slightly after stop.
+          finalizeTimeoutRef.current = setTimeout(() => {
+            finalizeTimeoutRef.current = null;
+            const typedBlob = new Blob(chunksRef.current, { type: outputMimeType });
+            const blob = typedBlob.size > 0 ? typedBlob : new Blob(chunksRef.current);
 
-          // Stop compositing loop
-          isRecordingRef.current = false;
-          if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-          if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
-        }, 180);
+            if (blob.size === 0) {
+              if (allowRetry) {
+                finalizeBlob(false);
+                return;
+              }
+              setRecordedBlob(null);
+              setRecorderState('idle');
+              setErrorMessage('Recording failed to save video data. Please record again.');
+            } else {
+              setRecordedBlob(blob);
+              setRecorderState('stopped');
+            }
+
+            stopInputStreams();
+            stopCompositingLoop();
+            mediaRecorderRef.current = null;
+            stopRequestedRef.current = false;
+          }, allowRetry ? 350 : 1000);
+        };
+
+        finalizeBlob(true);
       };
 
       mediaRecorderRef.current = recorder;
-      recorder.start(400); // Slightly larger chunks are more reliable on slower devices.
+      recorder.start(250);
 
       // Duration timer
       const startTime = Date.now();
@@ -284,21 +322,25 @@ export function useSlideRecorder({
         setErrorMessage(err instanceof Error ? err.message : 'Failed to start recording');
       }
     }
-  }, [snapshotSlide, canvasWidth, canvasHeight]);
+  }, [snapshotSlide, canvasWidth, canvasHeight, drawFrame, renderFrame]);
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      const recorder = mediaRecorderRef.current;
-      // Flush pending data first to avoid zero-byte blobs in some browsers.
-      try { recorder.requestData(); } catch { /* ignore */ }
-      setTimeout(() => {
-        try {
-          if (recorder.state !== 'inactive') recorder.stop();
-        } catch {
-          // ignore
-        }
-      }, 120);
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive' || stopRequestedRef.current) {
+      return;
     }
+
+    const recorder = mediaRecorderRef.current;
+    stopRequestedRef.current = true;
+
+    try { recorder.requestData(); } catch { /* ignore */ }
+
+    setTimeout(() => {
+      try {
+        if (recorder.state !== 'inactive') recorder.stop();
+      } catch {
+        stopRequestedRef.current = false;
+      }
+    }, 160);
   }, []);
 
   const pauseRecording = useCallback(() => {

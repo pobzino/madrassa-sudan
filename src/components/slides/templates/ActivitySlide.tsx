@@ -172,7 +172,7 @@ export default function ActivitySlide({ slide, language }: Props) {
 
   if (slide.layout === 'full_image' && hasImage) {
     return (
-      <div dir={isAr ? 'rtl' : 'ltr'} className="relative w-full h-full flex flex-col items-center justify-center p-8 sm:p-12 overflow-hidden">
+      <div dir={isAr ? 'rtl' : 'ltr'} className="relative w-full h-full flex flex-col items-center p-8 sm:p-12 overflow-y-auto" style={{ justifyContent: 'safe center' }}>
         <SlideBackgroundImage src={slide.image_url!} />
         <span className="relative z-10 inline-block px-5 py-2 bg-gradient-to-r from-amber-400 to-[#F59E0B] text-white rounded-full text-xs sm:text-sm font-bold mb-3 shadow-md">
           {isAr ? '🎯 نشاط' : '🎯 Activity'}
@@ -193,7 +193,8 @@ export default function ActivitySlide({ slide, language }: Props) {
   return (
     <div
       dir={isAr ? 'rtl' : 'ltr'}
-      className="relative w-full h-full bg-gradient-to-br from-[#FFF7ED] via-[#FFFBEB] to-amber-100 flex flex-col items-center justify-center p-8 sm:p-12 overflow-hidden"
+      className="relative w-full h-full bg-gradient-to-br from-[#FFF7ED] via-[#FFFBEB] to-amber-100 flex flex-col items-center p-8 sm:p-12 overflow-y-auto"
+      style={{ justifyContent: 'safe center' }}
     >
       {/* Fun decorative elements */}
       <div className="absolute top-[-30px] right-[-30px] w-[120px] h-[120px] rounded-full bg-[#F59E0B]/10" />
