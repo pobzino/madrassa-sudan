@@ -876,17 +876,24 @@ export default function LessonPlayerPage() {
 
   // Handle seeking
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!videoRef.current) return;
-    const time = parseFloat(e.target.value);
-    const previousTime = currentTime;
-    videoRef.current.currentTime = time;
-    lastPlaybackSecondRef.current = time;
-    setCurrentTime(time);
-
-    if (!activeQuestion && !activeActivity && !activeSlideInteraction && time > previousTime) {
-      maybeActivateDueInteraction(previousTime, time);
-    }
+    seekToTime(parseFloat(e.target.value));
   };
+
+  const seekToTime = useCallback(
+    (time: number) => {
+      if (!videoRef.current) return;
+
+      const previousTime = currentTime;
+      videoRef.current.currentTime = time;
+      lastPlaybackSecondRef.current = time;
+      setCurrentTime(time);
+
+      if (!activeQuestion && !activeActivity && !activeSlideInteraction && time > previousTime) {
+        maybeActivateDueInteraction(previousTime, time);
+      }
+    },
+    [activeActivity, activeQuestion, activeSlideInteraction, currentTime, maybeActivateDueInteraction]
+  );
 
   // Format time
   const formatTime = (seconds: number) => {
@@ -1061,6 +1068,16 @@ export default function LessonPlayerPage() {
       task.required !== false &&
       taskResponses[task.id]?.status === "completed"
   ).length;
+  const activityMarkers = timedActivities.map((timing) => ({
+    id: timing.task.id,
+    position: timing.timelinePosition,
+    time: timing.effectiveTimestampSeconds,
+    label:
+      timing.task.title_en ||
+      timing.task.title_ar ||
+      `Activity ${timing.task.display_order + 1}`,
+    status: taskResponses[timing.task.id]?.status ?? "pending",
+  }));
 
   return (
     <div className="min-h-screen bg-[#FCFCFC]" dir={isRtl ? "rtl" : "ltr"}>
@@ -1231,16 +1248,61 @@ export default function LessonPlayerPage() {
               {/* Progress bar */}
               <div className="flex items-center gap-3 mb-3">
                 <span className="text-white text-sm font-mono">{formatTime(currentTime)}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  value={currentTime}
-                  onChange={handleSeek}
-                  className="flex-1 h-1 bg-gray-600 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#007229]/100"
-                />
+                <div className="relative flex-1">
+                  <input
+                    type="range"
+                    min={0}
+                    max={duration || 100}
+                    value={currentTime}
+                    onChange={handleSeek}
+                    className="relative z-10 w-full h-1 bg-gray-600 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#007229]/100"
+                  />
+                  {activityMarkers.length > 0 && (
+                    <div className="pointer-events-none absolute inset-x-0 top-1/2 z-20 -translate-y-1/2">
+                      {activityMarkers.map((marker) => {
+                        const markerClassName =
+                          marker.status === "completed"
+                            ? "bg-emerald-400 ring-emerald-100"
+                            : marker.status === "skipped"
+                              ? "bg-gray-300 ring-white/30"
+                              : "bg-amber-400 ring-white/60";
+
+                        return (
+                          <button
+                            key={marker.id}
+                            type="button"
+                            onClick={() => seekToTime(marker.time)}
+                            title={`${marker.label} · ${formatTime(marker.time)}`}
+                            className={`pointer-events-auto absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 transition hover:scale-110 ${markerClassName}`}
+                            style={{ left: `${marker.position * 100}%` }}
+                            aria-label={`${marker.label} at ${formatTime(marker.time)}`}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
                 <span className="text-white text-sm font-mono">{formatTime(duration)}</span>
               </div>
+              {activityMarkers.length > 0 && (
+                <div className="mb-3 flex flex-wrap items-center gap-3 text-[11px] text-white/75">
+                  <span className="font-semibold uppercase tracking-[0.16em] text-white/60">
+                    Activities
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                    Upcoming
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                    Completed
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-gray-300" />
+                    Skipped
+                  </span>
+                </div>
+              )}
 
               {/* Control buttons */}
               <div className="flex items-center justify-between">
@@ -1363,110 +1425,131 @@ export default function LessonPlayerPage() {
 
       {/* Bottom section */}
       <div className="bg-white border-t border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-5 space-y-5">
+        <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
 
-          {/* Progress bars */}
-          {(questions.length > 0 || canonicalActivityCount > 0 || timedInteractiveSlides.length > 0) && (
-            <div className="grid gap-3 sm:grid-cols-3">
-              {questions.length > 0 && (
-                <div className="bg-gray-50 rounded-xl p-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-medium text-gray-500">
-                      {language === "ar" ? "الأسئلة" : "Questions"}
-                    </span>
-                    <span className="text-xs font-bold text-gray-700">
-                      {answeredQuestions.size}/{questions.length}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-violet-500 rounded-full transition-all duration-500"
-                      style={{ width: `${(answeredQuestions.size / questions.length) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-              {canonicalActivityCount > 0 && (
-                <div className="bg-gray-50 rounded-xl p-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-medium text-gray-500">
-                      {language === "ar" ? "الأنشطة" : "Activities"}
-                    </span>
-                    <span className="text-xs font-bold text-gray-700">
-                      {completedActivityCount}/{canonicalActivityCount}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-amber-500 rounded-full transition-all duration-500"
-                      style={{ width: `${(completedActivityCount / canonicalActivityCount) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-              {timedInteractiveSlides.length > 0 && (
-                <div className="bg-gray-50 rounded-xl p-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-medium text-gray-500">
-                      {language === "ar" ? "شرائح تفاعلية" : "Interactive"}
-                    </span>
-                    <span className="text-xs font-bold text-gray-700">
-                      {completedInteractiveSlideCount}/{timedInteractiveSlides.length}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-cyan-500 rounded-full transition-all duration-500"
-                      style={{ width: `${(completedInteractiveSlideCount / timedInteractiveSlides.length) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          {/* Progress + Description row */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Progress pills */}
+            {(questions.length > 0 || canonicalActivityCount > 0 || timedInteractiveSlides.length > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {questions.length > 0 && (() => {
+                  const pct = Math.round((answeredQuestions.size / questions.length) * 100);
+                  const done = answeredQuestions.size === questions.length;
+                  return (
+                    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium ${done ? "bg-violet-100 text-violet-700" : "bg-violet-50 text-violet-600"}`}>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+                      </svg>
+                      <span>{language === "ar" ? "الأسئلة" : "Questions"}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${done ? "bg-violet-200" : "bg-violet-100"}`}>
+                        {answeredQuestions.size}/{questions.length}
+                      </span>
+                      {pct > 0 && pct < 100 && (
+                        <div className="w-12 h-1.5 bg-violet-200 rounded-full overflow-hidden">
+                          <div className="h-full bg-violet-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                        </div>
+                      )}
+                      {done && (
+                        <svg className="w-4 h-4 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </div>
+                  );
+                })()}
+                {canonicalActivityCount > 0 && (() => {
+                  const pct = Math.round((completedActivityCount / canonicalActivityCount) * 100);
+                  const done = completedActivityCount === canonicalActivityCount;
+                  return (
+                    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium ${done ? "bg-amber-100 text-amber-700" : "bg-amber-50 text-amber-600"}`}>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59" />
+                      </svg>
+                      <span>{language === "ar" ? "الأنشطة" : "Activities"}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${done ? "bg-amber-200" : "bg-amber-100"}`}>
+                        {completedActivityCount}/{canonicalActivityCount}
+                      </span>
+                      {pct > 0 && pct < 100 && (
+                        <div className="w-12 h-1.5 bg-amber-200 rounded-full overflow-hidden">
+                          <div className="h-full bg-amber-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                        </div>
+                      )}
+                      {done && (
+                        <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </div>
+                  );
+                })()}
+                {timedInteractiveSlides.length > 0 && (() => {
+                  const pct = Math.round((completedInteractiveSlideCount / timedInteractiveSlides.length) * 100);
+                  const done = completedInteractiveSlideCount === timedInteractiveSlides.length;
+                  return (
+                    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium ${done ? "bg-cyan-100 text-cyan-700" : "bg-cyan-50 text-cyan-600"}`}>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 20.25h12m-7.5-3v3m3-3v3m-10.125-3h17.25c.621 0 1.125-.504 1.125-1.125V4.875c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125z" />
+                      </svg>
+                      <span>{language === "ar" ? "تفاعلية" : "Interactive"}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${done ? "bg-cyan-200" : "bg-cyan-100"}`}>
+                        {completedInteractiveSlideCount}/{timedInteractiveSlides.length}
+                      </span>
+                      {pct > 0 && pct < 100 && (
+                        <div className="w-12 h-1.5 bg-cyan-200 rounded-full overflow-hidden">
+                          <div className="h-full bg-cyan-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                        </div>
+                      )}
+                      {done && (
+                        <svg className="w-4 h-4 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
 
-          {/* Lesson description */}
-          {(lesson.description_ar || lesson.description_en) && (
-            <div className="flex items-start gap-3 bg-gray-50 rounded-xl p-4">
-              <span className="text-lg mt-0.5">📖</span>
-              <p className="text-sm text-gray-600 leading-relaxed">
+            {/* Description - right-aligned on desktop */}
+            {(lesson.description_ar || lesson.description_en) && (
+              <p className="text-sm text-gray-500 sm:ml-auto sm:text-right max-w-md leading-relaxed">
                 {language === "ar" ? lesson.description_ar : lesson.description_en}
               </p>
-            </div>
-          )}
-
-          {/* Navigation */}
-          <div className="flex items-center justify-between gap-3">
-            {adjacentLessons.prev ? (
-              <Link
-                href={`/lessons/${adjacentLessons.prev.id}`}
-                className="flex items-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors min-w-0 flex-shrink"
-              >
-                <span className={`flex-shrink-0 ${isRtl ? "rotate-180" : ""}`}>{Icons.chevronLeft}</span>
-                <span className="truncate text-sm font-medium hidden sm:inline">
-                  {language === "ar" ? adjacentLessons.prev.title_ar : (adjacentLessons.prev.title_en || adjacentLessons.prev.title_ar)}
-                </span>
-                <span className="sm:hidden text-sm font-medium">{t.prevLesson}</span>
-              </Link>
-            ) : (
-              <div />
-            )}
-
-            {adjacentLessons.next ? (
-              <Link
-                href={`/lessons/${adjacentLessons.next.id}`}
-                className="flex items-center gap-2 px-4 py-3 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-lg shadow-[#007229]/20 min-w-0 flex-shrink"
-              >
-                <span className="truncate text-sm font-medium hidden sm:inline">
-                  {language === "ar" ? adjacentLessons.next.title_ar : (adjacentLessons.next.title_en || adjacentLessons.next.title_ar)}
-                </span>
-                <span className="sm:hidden text-sm font-medium">{t.nextLesson}</span>
-                <span className={`flex-shrink-0 ${isRtl ? "rotate-180" : ""}`}>{Icons.chevronRight}</span>
-              </Link>
-            ) : (
-              <div />
             )}
           </div>
+
+          {/* Navigation */}
+          {(adjacentLessons.prev || adjacentLessons.next) && (
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100">
+              {adjacentLessons.prev ? (
+                <Link
+                  href={`/lessons/${adjacentLessons.prev.id}`}
+                  className="group flex items-center gap-2 px-4 py-2.5 bg-gray-50 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors min-w-0 max-w-[45%]"
+                >
+                  <span className={`flex-shrink-0 text-gray-400 group-hover:text-gray-600 ${isRtl ? "rotate-180" : ""}`}>{Icons.chevronLeft}</span>
+                  <span className="truncate text-sm">
+                    {language === "ar" ? adjacentLessons.prev.title_ar : (adjacentLessons.prev.title_en || adjacentLessons.prev.title_ar)}
+                  </span>
+                </Link>
+              ) : (
+                <div />
+              )}
+
+              {adjacentLessons.next ? (
+                <Link
+                  href={`/lessons/${adjacentLessons.next.id}`}
+                  className="group flex items-center gap-2 px-4 py-2.5 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-sm min-w-0 max-w-[45%]"
+                >
+                  <span className="truncate text-sm">
+                    {language === "ar" ? adjacentLessons.next.title_ar : (adjacentLessons.next.title_en || adjacentLessons.next.title_ar)}
+                  </span>
+                  <span className={`flex-shrink-0 ${isRtl ? "rotate-180" : ""}`}>{Icons.chevronRight}</span>
+                </Link>
+              ) : (
+                <div />
+              )}
+            </div>
+          )}
         </div>
       </div>
 
