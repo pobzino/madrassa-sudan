@@ -53,6 +53,9 @@ export function useSlideRecorder({
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const snapshotPromiseRef = useRef<Promise<void> | null>(null);
   const pendingSnapshotRef = useRef(false);
+  const displayStreamRef = useRef<MediaStream | null>(null);
+  const displayVideoRef = useRef<HTMLVideoElement | null>(null);
+  const cropRectRef = useRef<{ sx: number; sy: number; sw: number; sh: number } | null>(null);
   const isRecordingRef = useRef(false);
   const isSnappingRef = useRef(false);
   const stopRequestedRef = useRef(false);
@@ -90,6 +93,16 @@ export function useSlideRecorder({
       resizeObserverRef.current.disconnect();
       resizeObserverRef.current = null;
     }
+    if (displayStreamRef.current) {
+      displayStreamRef.current.getTracks().forEach((t) => t.stop());
+      displayStreamRef.current = null;
+    }
+    if (displayVideoRef.current) {
+      displayVideoRef.current.pause();
+      displayVideoRef.current.srcObject = null;
+      displayVideoRef.current = null;
+    }
+    cropRectRef.current = null;
     if (combinedStreamRef.current) {
       combinedStreamRef.current.getTracks().forEach((t) => t.stop());
       combinedStreamRef.current = null;
@@ -132,6 +145,16 @@ export function useSlideRecorder({
   }
 
   function stopInputStreams() {
+    if (displayStreamRef.current) {
+      displayStreamRef.current.getTracks().forEach((t) => t.stop());
+      displayStreamRef.current = null;
+    }
+    if (displayVideoRef.current) {
+      displayVideoRef.current.pause();
+      displayVideoRef.current.srcObject = null;
+      displayVideoRef.current = null;
+    }
+    cropRectRef.current = null;
     if (combinedStreamRef.current) {
       combinedStreamRef.current.getTracks().forEach((t) => t.stop());
       combinedStreamRef.current = null;
@@ -142,8 +165,35 @@ export function useSlideRecorder({
     }
   }
 
+  const updateCropRect = useCallback(() => {
+    const el = slideContainerRef.current;
+    const displayVideo = displayVideoRef.current;
+
+    if (!el || !displayVideo || !displayVideo.videoWidth || !displayVideo.videoHeight) {
+      return;
+    }
+
+    const rect = el.getBoundingClientRect();
+    const viewportWidth = window.innerWidth || rect.width || 1;
+    const viewportHeight = window.innerHeight || rect.height || 1;
+    const scaleX = displayVideo.videoWidth / viewportWidth;
+    const scaleY = displayVideo.videoHeight / viewportHeight;
+
+    cropRectRef.current = {
+      sx: Math.max(0, rect.left * scaleX),
+      sy: Math.max(0, rect.top * scaleY),
+      sw: Math.max(1, rect.width * scaleX),
+      sh: Math.max(1, rect.height * scaleY),
+    };
+  }, [slideContainerRef]);
+
   // Snapshot the slide DOM to a cached Image
   const snapshotSlide = useCallback(async function captureSlide() {
+    if (displayVideoRef.current) {
+      updateCropRect();
+      return;
+    }
+
     const el = slideContainerRef.current;
     if (!el) return;
 
@@ -218,7 +268,7 @@ export function useSlideRecorder({
     })();
 
     return snapshotPromiseRef.current;
-  }, [slideContainerRef, canvasWidth, canvasHeight]);
+  }, [slideContainerRef, canvasWidth, canvasHeight, updateCropRect]);
 
   const scheduleSnapshot = useCallback((delay = 90) => {
     if (!slideContainerRef.current) return;
@@ -247,7 +297,11 @@ export function useSlideRecorder({
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
     // Draw cached slide image, scaled to fill canvas
-    if (slideImageRef.current) {
+    if (displayVideoRef.current && cropRectRef.current) {
+      const video = displayVideoRef.current;
+      const { sx, sy, sw, sh } = cropRectRef.current;
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvasWidth, canvasHeight);
+    } else if (slideImageRef.current) {
       const img = slideImageRef.current;
       // Scale to fill 1280x720 while maintaining aspect ratio
       const scale = Math.max(canvasWidth / img.width, canvasHeight / img.height);
@@ -296,6 +350,40 @@ export function useSlideRecorder({
     setRecorderState('preparing');
 
     try {
+      let displayStream: MediaStream | null = null;
+
+      if (navigator.mediaDevices.getDisplayMedia) {
+        displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            frameRate: 30,
+            width: { ideal: canvasWidth },
+            height: { ideal: canvasHeight },
+          },
+          audio: false,
+          preferCurrentTab: true,
+        } as DisplayMediaStreamOptions & { preferCurrentTab?: boolean });
+
+        const displayTrack = displayStream.getVideoTracks()[0];
+        const displaySurface = displayTrack?.getSettings().displaySurface;
+        if (displaySurface && displaySurface !== 'browser') {
+          displayStream.getTracks().forEach((track) => track.stop());
+          throw new Error('Please choose this browser tab when prompted to share your screen.');
+        }
+
+        displayStreamRef.current = displayStream;
+
+        const displayVideo = document.createElement('video');
+        displayVideo.muted = true;
+        displayVideo.playsInline = true;
+        displayVideo.srcObject = displayStream;
+        await new Promise<void>((resolve, reject) => {
+          displayVideo.onloadedmetadata = () => resolve();
+          displayVideo.onerror = () => reject(new Error('Failed to start tab capture.'));
+        });
+        await displayVideo.play();
+        displayVideoRef.current = displayVideo;
+      }
+
       // Request microphone only (no webcam)
       const stream = await navigator.mediaDevices.getUserMedia({
         video: false,
@@ -306,7 +394,7 @@ export function useSlideRecorder({
       // Wait for fonts to load
       await document.fonts.ready;
 
-      // Take initial slide snapshot
+      // Take initial slide snapshot or crop
       await snapshotSlide();
 
       // Countdown 3-2-1
