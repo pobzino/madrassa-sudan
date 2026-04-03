@@ -3,21 +3,49 @@ import type { Database } from "../database.types";
 
 export type TeacherRole = "teacher" | "admin";
 
+function normalizeTeacherRole(value: unknown): TeacherRole | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "teacher" || normalized === "admin") {
+    return normalized;
+  }
+  return null;
+}
+
 export async function getTeacherRole(
   supabase: SupabaseClient<Database>,
   userId: string
 ): Promise<TeacherRole | null> {
+  // Primary source of truth: public.profiles.role
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", userId)
-    .single();
+    .maybeSingle();
 
-  if (!profile || (profile.role !== "teacher" && profile.role !== "admin")) {
+  const profileRole = normalizeTeacherRole(profile?.role);
+  if (profileRole) {
+    return profileRole;
+  }
+
+  // Fallback: auth app_metadata.role (admin-managed, not user-editable)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user || user.id !== userId) {
     return null;
   }
 
-  return profile.role;
+  const metadataRole = normalizeTeacherRole(
+    (user.app_metadata as Record<string, unknown> | undefined)?.role
+  );
+
+  if (!metadataRole) {
+    return null;
+  }
+
+  return metadataRole;
 }
 
 export function canManageLesson({
