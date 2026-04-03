@@ -10,8 +10,12 @@ export async function handler(event: {
   headers: Record<string, string | undefined>;
   body: string | null;
 }) {
-  const expectedSecret =
+  const serviceRoleKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || "";
+  const publishableKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    "";
 
   let payload: Record<string, unknown> | null = null;
 
@@ -29,29 +33,80 @@ export async function handler(event: {
     event.headers["x-slide-job-secret"] ||
     event.headers["X-Slide-Job-Secret"] ||
     (typeof payload?.internalSecret === "string" ? payload.internalSecret : "");
+  const accessToken = typeof payload?.accessToken === "string" ? payload.accessToken : "";
 
   console.log("Background slide generation invoked", {
-    hasExpectedSecret: Boolean(expectedSecret),
+    hasServiceRoleKey: Boolean(serviceRoleKey),
+    hasPublishableKey: Boolean(publishableKey),
     hasRequestSecret: Boolean(requestSecret),
+    hasAccessToken: Boolean(accessToken),
     hasSupabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
   });
 
-  if (!requestSecret || !expectedSecret || requestSecret !== expectedSecret) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !serviceRoleKey) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "Missing Supabase configuration" }),
+    };
+  }
+
+  const usesInternalSecret =
+    Boolean(requestSecret) && Boolean(serviceRoleKey) && requestSecret === serviceRoleKey;
+
+  let authenticatedUserId: string | null = null;
+
+  if (usesInternalSecret) {
+    console.log("Background slide generation authenticated via internal secret");
+  } else {
+    if (!publishableKey || !accessToken) {
+      console.error("Background slide generation missing auth token", {
+        hasPublishableKey: Boolean(publishableKey),
+        hasAccessToken: Boolean(accessToken),
+        headerKeys: Object.keys(event.headers || {}),
+      });
+      return {
+        statusCode: 401,
+        body: JSON.stringify({ error: "Unauthorized" }),
+      };
+    }
+
+    const authClient = createClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      publishableKey,
+      {
+        auth: { persistSession: false, autoRefreshToken: false },
+      }
+    );
+
+    const {
+      data: { user },
+      error: authError,
+    } = await authClient.auth.getUser(accessToken);
+
+    if (authError || !user) {
+      console.error("Background slide generation access token verification failed", authError);
+      return {
+        statusCode: 401,
+        body: JSON.stringify({ error: "Unauthorized" }),
+      };
+    }
+
+    authenticatedUserId = user.id;
+    console.log("Background slide generation authenticated via access token", {
+      userId: authenticatedUserId,
+    });
+  }
+
+  if (!requestSecret && !accessToken) {
     console.error("Background slide generation unauthorized", {
-      hasExpectedSecret: Boolean(expectedSecret),
+      hasServiceRoleKey: Boolean(serviceRoleKey),
       hasRequestSecret: Boolean(requestSecret),
+      hasAccessToken: Boolean(accessToken),
       headerKeys: Object.keys(event.headers || {}),
     });
     return {
       statusCode: 401,
       body: JSON.stringify({ error: "Unauthorized" }),
-    };
-  }
-
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !expectedSecret) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Missing Supabase configuration" }),
     };
   }
 
@@ -85,9 +140,20 @@ export async function handler(event: {
     };
   }
 
+  if (authenticatedUserId && authenticatedUserId !== userId) {
+    console.error("Background slide generation user mismatch", {
+      authenticatedUserId,
+      userId,
+    });
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ error: "Forbidden" }),
+    };
+  }
+
   const supabase = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
-    expectedSecret,
+    serviceRoleKey,
     {
       auth: { persistSession: false, autoRefreshToken: false },
     }

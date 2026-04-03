@@ -22,6 +22,7 @@ async function queueBackgroundGeneration({
   request,
   lessonId,
   userId,
+  accessToken,
   slideCount,
   languageMode,
   generationContext,
@@ -29,13 +30,14 @@ async function queueBackgroundGeneration({
   request: NextRequest;
   lessonId: string;
   userId: string;
+  accessToken: string | null;
   slideCount: number;
   languageMode: "ar" | "en";
   generationContext: ReturnType<typeof parseSlideGenerationContext>;
 }) {
   const internalSecret = getServiceRoleKey();
-  if (!internalSecret) {
-    throw new SlideGenerationError("Missing internal generation secret", 500);
+  if (!internalSecret && !accessToken) {
+    throw new SlideGenerationError("Missing background generation credentials", 500);
   }
 
   const backgroundUrl = new URL("/.netlify/functions/generate-slides-background", request.url);
@@ -43,7 +45,7 @@ async function queueBackgroundGeneration({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-slide-job-secret": internalSecret,
+      ...(internalSecret ? { "x-slide-job-secret": internalSecret } : {}),
     },
     body: JSON.stringify({
       lessonId,
@@ -52,6 +54,7 @@ async function queueBackgroundGeneration({
       languageMode,
       generationContext,
       internalSecret,
+      accessToken,
     }),
   });
 
@@ -75,6 +78,9 @@ export async function POST(
       data: { user },
       error: authError,
     } = await supabase.auth.getUser();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -95,6 +101,7 @@ export async function POST(
         request,
         lessonId,
         userId: user.id,
+        accessToken: session?.access_token ?? null,
         slideCount,
         languageMode,
         generationContext,
