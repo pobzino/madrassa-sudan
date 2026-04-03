@@ -843,44 +843,26 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  const tabs: { key: Tab; label: string; description: string; count?: number }[] = [
-    { key: "details", label: "Details", description: "Lesson info, classes, and publishing" },
-    {
-      key: "questions",
-      label: "Questions",
-      description: "Quiz checkpoints inside the lesson",
-      count: questions.length,
-    },
+  const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: "details", label: "Details" },
+    { key: "questions", label: "Questions", count: questions.length },
     {
       key: "activities",
       label: "Activities",
-      description: "Interactive tasks linked to activity slides",
       count: lessonTasks.filter(
         (task) => task.linked_slide_id && isCanonicalActivityTask(task.task_type)
       ).length,
     },
-    {
-      key: "slides",
-      label: "Slides",
-      description: "Deck editing, generation, and recording",
-      count: slides.length,
-    },
-    {
-      key: "content",
-      label: "Content",
-      description: "AI lesson content and source material",
-      count: contentBlocks.length,
-    },
-    { key: "results", label: "Results", description: "Student progress and activity data" },
+    { key: "slides", label: "Slides", count: slides.length },
+    { key: "content", label: "Content", count: contentBlocks.length },
+    { key: "results", label: "Results" },
   ];
-
-  const activeTabMeta = tabs.find((tab) => tab.key === activeTab) ?? tabs[0];
 
   return (
     <div className="min-h-screen bg-gray-50/50">
       {/* Sticky header */}
       <div className="sticky top-0 z-30 bg-white border-b border-gray-100 shadow-sm">
-        <div className="mx-auto max-w-[1500px] px-4 py-3 sm:px-6 lg:px-8">
+        <div className="max-w-5xl mx-auto px-6 py-3">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0 flex-1">
               <Link href="/teacher/lessons" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
@@ -945,224 +927,194 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
               </button>
             </div>
           </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 mt-3 -mb-px">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors relative ${
+                  activeTab === tab.key
+                    ? "text-emerald-700 bg-gray-50/80"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {tab.label}
+                {tab.count != null && tab.count > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-[10px] font-semibold text-gray-600">
+                    {tab.count}
+                  </span>
+                )}
+                {activeTab === tab.key && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-600 rounded-full" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="mx-auto grid max-w-[1500px] gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:px-8">
-        <aside className="min-w-0">
-          <div className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm lg:sticky lg:top-24">
-            <div className="border-b border-gray-100 px-2 pb-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
-                Lesson Editor
-              </p>
-              <h2 className="mt-2 text-sm font-semibold text-gray-900">{activeTabMeta.label}</h2>
-              <p className="mt-1 text-sm text-gray-500">{activeTabMeta.description}</p>
-            </div>
-            <nav className="mt-3 flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
-              {tabs.map((tab) => {
-                const isActive = activeTab === tab.key;
+      {/* Tab content */}
+      <div className={activeTab === "slides" ? "py-4" : "max-w-5xl mx-auto px-6 py-6"}>
+        {activeTab === "details" && (
+        <DetailsTab
+          form={form}
+          setForm={setForm}
+          subjects={subjects}
+          selectedSubject={selectedSubject}
+          availableCohorts={availableCohorts}
+          assignedCohortIds={assignedCohortIds}
+          setAssignedCohortIds={setAssignedCohortIds}
+          canPublishLesson={canPublishLesson}
+        />
+        )}
 
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setActiveTab(tab.key)}
-                    className={`min-w-[170px] rounded-2xl border px-4 py-3 text-left transition-all lg:min-w-0 ${
-                      isActive
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-900 shadow-sm"
-                        : "border-transparent bg-gray-50 text-gray-700 hover:border-gray-200 hover:bg-white"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-semibold">{tab.label}</span>
-                      {tab.count != null && (
-                        <span
-                          className={`inline-flex min-w-6 items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                            isActive
-                              ? "bg-white text-emerald-700"
-                              : "bg-white text-gray-500"
-                          }`}
-                        >
-                          {tab.count}
-                        </span>
-                      )}
-                    </div>
-                    <p className={`mt-1 text-xs ${isActive ? "text-emerald-700/90" : "text-gray-500"}`}>
-                      {tab.description}
-                    </p>
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-        </aside>
-
-        <main className="min-w-0">
-          <div className={activeTab === "slides" ? "space-y-4" : "mx-auto max-w-5xl space-y-4"}>
-            {activeTab === "details" && (
-              <DetailsTab
-                form={form}
-                setForm={setForm}
-                subjects={subjects}
-                selectedSubject={selectedSubject}
-                availableCohorts={availableCohorts}
-                assignedCohortIds={assignedCohortIds}
-                setAssignedCohortIds={setAssignedCohortIds}
-                canPublishLesson={canPublishLesson}
-              />
-            )}
-
-            {activeTab === "slides" && (
-              <div className="max-w-[1600px] space-y-4">
-                {/* Slide toolbar */}
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-500">
-                      {slides.length > 0 ? `${slides.length} slides` : "No slides yet"}
-                    </span>
-                    {slideLastSaved && (
-                      <span className="text-xs text-gray-400">Last saved: {slideLastSaved}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!isGeneratingSlides && (
-                      <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
-                        <label className="mb-1 block text-xs font-medium text-gray-500">
-                          Lesson Length
-                        </label>
-                        <select
-                          value={slideLengthPreset}
-                          onChange={(e) =>
-                            handleSlideLengthPresetChange(e.target.value as SlideLengthPreset)
-                          }
-                          className="border-0 bg-transparent p-0 pr-6 text-sm font-semibold text-gray-900 focus:ring-0"
-                        >
-                          {SLIDE_LENGTH_PRESET_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <SlideGenerateButton
-                      lessonId={id}
-                      hasExistingSlides={slides.length > 0}
-                      languageMode={slideLanguageMode}
-                      generationContext={slideGenContext}
-                      slideCount={slideCount}
-                      disabledReason={slideGenerationBlockedReason}
-                      onGenerated={(newSlides) => setSlides(newSlides)}
-                      onGeneratingChange={(generating, progress) => {
-                        setIsGeneratingSlides(generating);
-                        setSlideGenProgress(progress);
-                      }}
-                      compact
-                    />
-                  </div>
-                </div>
-
-                {/* Slide content */}
-                {slides.length === 0 ? (
-                  isGeneratingSlides ? (
-                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center space-y-6">
-                      <div className="w-16 h-16 mx-auto bg-emerald-50 rounded-2xl flex items-center justify-center">
-                        <svg className="animate-spin h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">{slideGenProgress || "Generating slides..."}</h3>
-                        <p className="text-sm text-gray-500 mt-1">This usually takes 15-30 seconds.</p>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-w-2xl mx-auto">
-                        {Array.from({ length: slideCount }).map((_, i) => (
-                          <div
-                            key={i}
-                            className="aspect-[16/10] rounded-lg bg-gray-100 animate-pulse"
-                            style={{ animationDelay: `${i * 100}ms` }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center space-y-4">
-                      <div className="w-16 h-16 mx-auto bg-violet-50 rounded-2xl flex items-center justify-center">
-                        <svg className="w-8 h-8 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
-                        </svg>
-                      </div>
-                      <h3 className="text-lg font-semibold text-gray-900">No Slides Yet</h3>
-                      <p className="text-sm text-gray-500">
-                        Use the Generate button above to create slides with AI, or they can be manually created.
-                      </p>
-                    </div>
-                  )
-                ) : (
-                  <SlideEditor
-                    slides={slides}
-                    onChange={setSlides}
-                    onSave={handleSaveSlides}
-                    saving={slideSaving}
-                    preferredLanguage={slideLanguageMode === "en" ? "en" : "ar"}
-                    lessonId={id}
-                    lessonTitle={form.title_ar || form.title_en || ""}
-                    onVideoReady={handleSlideVideoReady}
-                    focusedSlideId={slideEditorFocusId}
-                  />
+        {activeTab === "slides" && (
+          <div className="max-w-[1600px] mx-auto px-4 space-y-4">
+            {/* Slide toolbar */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-500">
+                  {slides.length > 0 ? `${slides.length} slides` : "No slides yet"}
+                </span>
+                {slideLastSaved && (
+                  <span className="text-xs text-gray-400">Last saved: {slideLastSaved}</span>
                 )}
               </div>
-            )}
-
-            {activeTab === "questions" && (
-              <QuestionsTab
-                questions={questions}
-                updateQuestion={updateQuestion}
-                addQuestion={addQuestion}
-                removeQuestion={removeQuestion}
-              />
-            )}
-
-            {activeTab === "activities" && (
-              <ActivitiesTab
-                slides={slides}
-                lessonTasks={lessonTasks}
-                videoUrl={getTeacherPreviewVideoUrl(form)}
-                videoDurationSeconds={
-                  form.video_duration_seconds ? Number(form.video_duration_seconds) : null
-                }
-                setLessonTasks={setLessonTasks}
-                onAddActivity={handleAddActivity}
-                onRemoveActivity={handleRemoveActivity}
-                onEditSlide={handleEditActivitySlide}
-              />
-            )}
-
-            {activeTab === "content" && (
-              <ContentTab
-                lessonId={id}
-                form={form}
-                slides={slides}
-                questions={questions}
-                contentBlocks={contentBlocks}
-                setContentBlocks={setContentBlocks}
-                setQuestions={setQuestions}
-                setSlides={setSlides}
-                setLessonTasks={setLessonTasks}
-                addContentBlock={addContentBlock}
-                contentGenerationBlockedReason={contentGenerationBlockedReason}
-                rebuildEmbeddings={rebuildEmbeddings}
-              />
-            )}
-
-            {activeTab === "results" && (
-              <div className="space-y-4">
-                <InteractionResultsPanel lessonId={id} />
+              <div className="flex items-center gap-2">
+                {!isGeneratingSlides && (
+                  <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
+                    <label className="mb-1 block text-xs font-medium text-gray-500">
+                      Lesson Length
+                    </label>
+                    <select
+                      value={slideLengthPreset}
+                      onChange={(e) =>
+                        handleSlideLengthPresetChange(e.target.value as SlideLengthPreset)
+                      }
+                      className="border-0 bg-transparent p-0 pr-6 text-sm font-semibold text-gray-900 focus:ring-0"
+                    >
+                      {SLIDE_LENGTH_PRESET_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <SlideGenerateButton
+                  lessonId={id}
+                  hasExistingSlides={slides.length > 0}
+                  languageMode={slideLanguageMode}
+                  generationContext={slideGenContext}
+                  slideCount={slideCount}
+                  disabledReason={slideGenerationBlockedReason}
+                  onGenerated={(newSlides) => setSlides(newSlides)}
+                  onGeneratingChange={(generating, progress) => {
+                    setIsGeneratingSlides(generating);
+                    setSlideGenProgress(progress);
+                  }}
+                  compact
+                />
               </div>
+            </div>
+
+            {/* Slide content */}
+            {slides.length === 0 ? (
+              isGeneratingSlides ? (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center space-y-6">
+                  <div className="w-16 h-16 mx-auto bg-emerald-50 rounded-2xl flex items-center justify-center">
+                    <svg className="animate-spin h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{slideGenProgress || "Generating slides..."}</h3>
+                    <p className="text-sm text-gray-500 mt-1">This usually takes 15-30 seconds.</p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-w-2xl mx-auto">
+                    {Array.from({ length: slideCount }).map((_, i) => (
+                      <div key={i} className="aspect-[16/10] rounded-lg bg-gray-100 animate-pulse" style={{ animationDelay: `${i * 100}ms` }} />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center space-y-4">
+                  <div className="w-16 h-16 mx-auto bg-violet-50 rounded-2xl flex items-center justify-center">
+                    <svg className="w-8 h-8 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">No Slides Yet</h3>
+                  <p className="text-sm text-gray-500">
+                    Use the Generate button above to create slides with AI, or they can be manually created.
+                  </p>
+                </div>
+              )
+            ) : (
+              <SlideEditor
+                slides={slides}
+                onChange={setSlides}
+                onSave={handleSaveSlides}
+                saving={slideSaving}
+                preferredLanguage={slideLanguageMode === "en" ? "en" : "ar"}
+                lessonId={id}
+                lessonTitle={form.title_ar || form.title_en || ""}
+                onVideoReady={handleSlideVideoReady}
+                focusedSlideId={slideEditorFocusId}
+              />
             )}
           </div>
-        </main>
+        )}
+
+        {activeTab === "questions" && (
+          <QuestionsTab
+            questions={questions}
+            updateQuestion={updateQuestion}
+            addQuestion={addQuestion}
+            removeQuestion={removeQuestion}
+          />
+        )}
+
+        {activeTab === "activities" && (
+          <ActivitiesTab
+            slides={slides}
+            lessonTasks={lessonTasks}
+            videoUrl={getTeacherPreviewVideoUrl(form)}
+            videoDurationSeconds={
+              form.video_duration_seconds ? Number(form.video_duration_seconds) : null
+            }
+            setLessonTasks={setLessonTasks}
+            onAddActivity={handleAddActivity}
+            onRemoveActivity={handleRemoveActivity}
+            onEditSlide={handleEditActivitySlide}
+          />
+        )}
+
+        {activeTab === "content" && (
+          <ContentTab
+            lessonId={id}
+            form={form}
+            slides={slides}
+            questions={questions}
+            contentBlocks={contentBlocks}
+            setContentBlocks={setContentBlocks}
+            setQuestions={setQuestions}
+            setSlides={setSlides}
+            setLessonTasks={setLessonTasks}
+            addContentBlock={addContentBlock}
+            contentGenerationBlockedReason={contentGenerationBlockedReason}
+            rebuildEmbeddings={rebuildEmbeddings}
+          />
+        )}
+
+        {activeTab === "results" && (
+          <div className="space-y-4">
+            <InteractionResultsPanel lessonId={id} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1555,6 +1507,7 @@ function ActivitiesTab({
   const previewVideoRef = useRef<HTMLVideoElement>(null);
   const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
   const [loadedPreviewDuration, setLoadedPreviewDuration] = useState(0);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [showActivityPicker, setShowActivityPicker] = useState(false);
 
   const updateActivity = useCallback((activityId: string, updates: Partial<LessonTaskForm>) => {
@@ -1562,6 +1515,19 @@ function ActivitiesTab({
       current.map((task) => (task.id === activityId ? { ...task, ...updates } : task))
     );
   }, [setLessonTasks]);
+
+  useEffect(() => {
+    if (activities.length === 0) {
+      setSelectedActivityId(null);
+      return;
+    }
+
+    setSelectedActivityId((current) =>
+      current && activities.some((activity) => activity.id === current)
+        ? current
+        : activities[0].id
+    );
+  }, [activities]);
 
   const effectiveDuration = loadedPreviewDuration > 0 ? loadedPreviewDuration : videoDurationSeconds;
   const timedActivities = useMemo(
@@ -1590,43 +1556,148 @@ function ActivitiesTab({
     [previewCurrentTime, updateActivity]
   );
 
+  const focusActivity = useCallback(
+    (activityId: string, timeInSeconds?: number) => {
+      setSelectedActivityId(activityId);
+      if (typeof timeInSeconds === "number") {
+        seekPreviewVideo(timeInSeconds);
+      }
+    },
+    [seekPreviewVideo]
+  );
+
+  const selectedActivity =
+    activities.find((activity) => activity.id === selectedActivityId) ?? activities[0] ?? null;
+  const selectedTiming = selectedActivity ? activityTimingById.get(selectedActivity.id) : null;
+  const selectedLinkedSlide =
+    selectedTiming?.sourceSlide ??
+    (selectedActivity
+      ? slides.find((slide) => slide.id === selectedActivity.linked_slide_id)
+      : null);
+  const selectedActivityIndex = selectedActivity
+    ? activities.findIndex((activity) => activity.id === selectedActivity.id)
+    : -1;
+
   return (
     <div className="space-y-6">
       <section className="bg-white rounded-xl border border-gray-100 p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="max-w-2xl">
+        <div className="flex items-center justify-between gap-3">
+          <div>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
               Activities {activities.length > 0 && <span className="text-gray-400">({activities.length})</span>}
             </h2>
             <p className="mt-1 text-sm text-gray-500">
-              Build interactive checkpoints here. Adding one creates the linked activity slide and opens it right away.
+              Manage interactive checkpoints here. Use the activity rail to move between them quickly.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowActivityPicker(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            Add Activity
-          </button>
         </div>
 
-        {activities.length === 0 ? (
-          <div className="mt-4 rounded-xl border border-dashed border-amber-200 bg-amber-50/40 px-4 py-6 text-sm text-amber-700">
-            No activities yet. Use an add button above to create a linked activity slide and jump straight into editing it.
-          </div>
-        ) : (
-          <div className="mt-4 space-y-4">
+        <div className="mt-5 grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="space-y-4">
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                Activity Rail
+              </p>
+              <h3 className="mt-2 text-lg font-semibold text-gray-900">Add or jump to an activity</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Adding one creates the linked slide and opens it immediately in the slide editor.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowActivityPicker(true)}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Add Activity
+              </button>
+            </div>
+
+            {activities.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/40 px-4 py-6 text-sm text-amber-700">
+                No activities yet. Create one from the button above to set up a linked activity slide.
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+                <div className="flex items-center justify-between border-b border-gray-100 px-2 pb-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                      Activities
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-gray-900">
+                      {activities.length} checkpoint{activities.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {activities.map((activity, index) => {
+                    const timing = activityTimingById.get(activity.id);
+                    const linkedSlide =
+                      timing?.sourceSlide ??
+                      slides.find((slide) => slide.id === activity.linked_slide_id);
+                    const isSelected = selectedActivity?.id === activity.id;
+
+                    return (
+                      <button
+                        key={activity.id}
+                        type="button"
+                        onClick={() =>
+                          focusActivity(activity.id, timing?.effectiveTimestampSeconds)
+                        }
+                        className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
+                          isSelected
+                            ? "border-emerald-200 bg-emerald-50 shadow-sm"
+                            : "border-gray-200 bg-gray-50 hover:border-emerald-200 hover:bg-emerald-50/60"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                              Activity {index + 1}
+                            </p>
+                            <p className="mt-1 truncate text-sm font-semibold text-gray-900">
+                              {activity.title_en ||
+                                activity.title_ar ||
+                                linkedSlide?.title_en ||
+                                linkedSlide?.title_ar ||
+                                "Untitled activity"}
+                            </p>
+                            <p className="mt-1 truncate text-xs text-gray-500">
+                              {linkedSlide?.title_en ||
+                                linkedSlide?.title_ar ||
+                                activity.task_type}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-gray-700">
+                            {formatTimestampLabel(
+                              timing?.effectiveTimestampSeconds ?? activity.timestamp_seconds
+                            )}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {hiddenLegacyTasks.length > 0 && (
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                {hiddenLegacyTasks.length} legacy task{hiddenLegacyTasks.length === 1 ? "" : "s"} remain for compatibility.
+                They are preserved on save but not editable until their runtime UI is rebuilt.
+              </div>
+            )}
+          </aside>
+
+          <div className="space-y-4">
             <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900">Activity Timeline</h3>
                   <p className="mt-1 text-sm text-gray-500">
                     Leave the timestamp blank to place an activity automatically from its linked slide order.
-                    Use the preview video to stamp an exact trigger time when needed.
+                    Use the preview video or the activity rail to navigate to the right checkpoint.
                   </p>
                 </div>
                 <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600">
@@ -1688,8 +1759,12 @@ function ActivitiesTab({
                     <button
                       key={timing.task.id}
                       type="button"
-                      onClick={() => seekPreviewVideo(timing.effectiveTimestampSeconds)}
-                      className="absolute top-1/2 flex h-7 w-7 -translate-y-1/2 -translate-x-1/2 items-center justify-center rounded-full border-2 border-white bg-emerald-600 text-[11px] font-bold text-white shadow-md transition hover:scale-105 hover:bg-emerald-700"
+                      onClick={() => focusActivity(timing.task.id, timing.effectiveTimestampSeconds)}
+                      className={`absolute top-1/2 flex h-7 w-7 -translate-y-1/2 -translate-x-1/2 items-center justify-center rounded-full border-2 border-white text-[11px] font-bold text-white shadow-md transition hover:scale-105 ${
+                        selectedActivity?.id === timing.task.id
+                          ? "bg-emerald-700"
+                          : "bg-emerald-600 hover:bg-emerald-700"
+                      }`}
                       style={{ left: `${timing.timelinePosition * 100}%` }}
                       title={`${timing.task.title_en || timing.task.title_ar || `Activity ${index + 1}`} · ${formatTimestampLabel(
                         timing.effectiveTimestampSeconds
@@ -1704,8 +1779,12 @@ function ActivitiesTab({
                     <button
                       key={`summary-${timing.task.id}`}
                       type="button"
-                      onClick={() => seekPreviewVideo(timing.effectiveTimestampSeconds)}
-                      className="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 text-left hover:border-emerald-200 hover:bg-emerald-50/60"
+                      onClick={() => focusActivity(timing.task.id, timing.effectiveTimestampSeconds)}
+                      className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left transition ${
+                        selectedActivity?.id === timing.task.id
+                          ? "border-emerald-200 bg-emerald-50"
+                          : "border-gray-200 hover:border-emerald-200 hover:bg-emerald-50/60"
+                      }`}
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-gray-900">
@@ -1726,155 +1805,155 @@ function ActivitiesTab({
               </div>
             </div>
 
-            {activities.map((activity, index) => {
-              const timing = activityTimingById.get(activity.id);
-              const linkedSlide = timing?.sourceSlide ?? slides.find((slide) => slide.id === activity.linked_slide_id);
-              return (
-                <div key={activity.id} className="rounded-xl border border-amber-200 bg-amber-50/30 p-4 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-lg bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">
-                          Activity {index + 1}
-                        </span>
-                        <span className="rounded-lg bg-white px-2 py-1 text-xs font-medium text-gray-600">
-                          {activity.task_type}
-                        </span>
-                      </div>
-                      <h3 className="mt-2 text-sm font-semibold text-gray-900">
-                        {activity.title_en || activity.title_ar || linkedSlide?.title_en || linkedSlide?.title_ar || "Untitled activity"}
-                      </h3>
-                      <p className="mt-1 text-xs text-gray-500">
-                        Linked slide: {linkedSlide?.title_en || linkedSlide?.title_ar || activity.linked_slide_id}
-                      </p>
+            {selectedActivity ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/30 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-lg bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">
+                        Activity {selectedActivityIndex + 1}
+                      </span>
+                      <span className="rounded-lg bg-white px-2 py-1 text-xs font-medium text-gray-600">
+                        {selectedActivity.task_type}
+                      </span>
                     </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onEditSlide(activity.linked_slide_id)}
-                        className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                      >
-                        Edit slide
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (window.confirm("Remove this activity and its linked slide?")) {
-                            onRemoveActivity(activity.id);
-                          }
-                        }}
-                        className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
-                      >
-                        Remove activity
-                      </button>
-                    </div>
+                    <h3 className="mt-2 text-sm font-semibold text-gray-900">
+                      {selectedActivity.title_en ||
+                        selectedActivity.title_ar ||
+                        selectedLinkedSlide?.title_en ||
+                        selectedLinkedSlide?.title_ar ||
+                        "Untitled activity"}
+                    </h3>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Linked slide: {selectedLinkedSlide?.title_en || selectedLinkedSlide?.title_ar || selectedActivity.linked_slide_id}
+                    </p>
                   </div>
-
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="rounded-full bg-white px-2.5 py-1 font-semibold text-gray-600">
-                      Shows at {formatTimestampLabel(timing?.effectiveTimestampSeconds ?? activity.timestamp_seconds)}
-                    </span>
-                    <span
-                      className={`rounded-full px-2.5 py-1 font-semibold ${
-                        timing?.timingMode === "manual"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-sky-100 text-sky-700"
-                      }`}
+                  <div className="flex flex-col items-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onEditSlide(selectedActivity.linked_slide_id)}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                     >
-                      {timing?.timingMode === "manual"
-                        ? "Manual trigger"
-                        : `Auto from slide ${((linkedSlide?.sequence ?? 0) || 0) + 1}`}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Timestamp (sec)</label>
-                      <input
-                        type="number"
-                        value={activity.timestamp_seconds > 0 ? activity.timestamp_seconds : ""}
-                        onChange={(event) =>
-                          updateActivity(activity.id, {
-                            timestamp_seconds: event.target.value ? Number(event.target.value) : 0,
-                          })
+                      Edit slide
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm("Remove this activity and its linked slide?")) {
+                          onRemoveActivity(selectedActivity.id);
                         }
-                        placeholder={
-                          timing ? `Auto (${formatTimestampLabel(timing.effectiveTimestampSeconds)})` : "Auto"
-                        }
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                      />
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => stampCurrentVideoTime(activity.id)}
-                          disabled={!videoUrl}
-                          className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Use current video time
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => updateActivity(activity.id, { timestamp_seconds: 0 })}
-                          className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50"
-                        >
-                          Use slide order
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Points</label>
-                      <input
-                        type="number"
-                        value={activity.points}
-                        onChange={(event) => updateActivity(activity.id, { points: Number(event.target.value) })}
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Timeout (sec)</label>
-                      <input
-                        type="number"
-                        value={activity.timeout_seconds ?? ""}
-                        onChange={(event) =>
-                          updateActivity(activity.id, {
-                            timeout_seconds: event.target.value ? Number(event.target.value) : null,
-                          })
-                        }
-                        placeholder="No limit"
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                      />
-                    </div>
-                    <label className="flex items-end gap-2 pb-2 text-sm text-gray-600">
-                      <input
-                        type="checkbox"
-                        checked={activity.required}
-                        onChange={(event) => updateActivity(activity.id, { required: event.target.checked })}
-                        className="rounded"
-                      />
-                      Required
-                    </label>
-                    <label className="flex items-end gap-2 pb-2 text-sm text-gray-600">
-                      <input
-                        type="checkbox"
-                        checked={activity.is_skippable}
-                        onChange={(event) => updateActivity(activity.id, { is_skippable: event.target.checked })}
-                        className="rounded"
-                      />
-                      Skippable
-                    </label>
+                      }}
+                      className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                    >
+                      Remove activity
+                    </button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
 
-        {hiddenLegacyTasks.length > 0 && (
-          <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-            {hiddenLegacyTasks.length} legacy task{hiddenLegacyTasks.length === 1 ? "" : "s"} remain for compatibility.
-            They are preserved on save but not editable until their runtime UI is rebuilt.
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="rounded-full bg-white px-2.5 py-1 font-semibold text-gray-600">
+                    Shows at {formatTimestampLabel(selectedTiming?.effectiveTimestampSeconds ?? selectedActivity.timestamp_seconds)}
+                  </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 font-semibold ${
+                      selectedTiming?.timingMode === "manual"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-sky-100 text-sky-700"
+                    }`}
+                  >
+                    {selectedTiming?.timingMode === "manual"
+                      ? "Manual trigger"
+                      : `Auto from slide ${((selectedLinkedSlide?.sequence ?? 0) || 0) + 1}`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Timestamp (sec)</label>
+                    <input
+                      type="number"
+                      value={selectedActivity.timestamp_seconds > 0 ? selectedActivity.timestamp_seconds : ""}
+                      onChange={(event) =>
+                        updateActivity(selectedActivity.id, {
+                          timestamp_seconds: event.target.value ? Number(event.target.value) : 0,
+                        })
+                      }
+                      placeholder={
+                        selectedTiming ? `Auto (${formatTimestampLabel(selectedTiming.effectiveTimestampSeconds)})` : "Auto"
+                      }
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => stampCurrentVideoTime(selectedActivity.id)}
+                        disabled={!videoUrl}
+                        className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Use current video time
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateActivity(selectedActivity.id, { timestamp_seconds: 0 })}
+                        className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                      >
+                        Use slide order
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Points</label>
+                    <input
+                      type="number"
+                      value={selectedActivity.points}
+                      onChange={(event) => updateActivity(selectedActivity.id, { points: Number(event.target.value) })}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Timeout (sec)</label>
+                    <input
+                      type="number"
+                      value={selectedActivity.timeout_seconds ?? ""}
+                      onChange={(event) =>
+                        updateActivity(selectedActivity.id, {
+                          timeout_seconds: event.target.value ? Number(event.target.value) : null,
+                        })
+                      }
+                      placeholder="No limit"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <label className="flex items-end gap-2 pb-2 text-sm text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={selectedActivity.required}
+                      onChange={(event) => updateActivity(selectedActivity.id, { required: event.target.checked })}
+                      className="rounded"
+                    />
+                    Required
+                  </label>
+                  <label className="flex items-end gap-2 pb-2 text-sm text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={selectedActivity.is_skippable}
+                      onChange={(event) => updateActivity(selectedActivity.id, { is_skippable: event.target.checked })}
+                      className="rounded"
+                    />
+                    Skippable
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-10 text-center">
+                <h3 className="text-base font-semibold text-gray-900">No activity selected</h3>
+                <p className="mt-2 text-sm text-gray-500">
+                  Create an activity from the left rail to start editing its timing and rules.
+                </p>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </section>
 
       {showActivityPicker && (
