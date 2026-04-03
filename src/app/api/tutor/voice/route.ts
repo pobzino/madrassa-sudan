@@ -13,7 +13,7 @@ import { getAvailableLessons, getLessonDetails, getLessonContentChunk, getLesson
 import { getStudentHomework, getHomeworkDetails, getHomeworkQuestionContext, createHomeworkAssignment } from "@/lib/ai/tools/homework-tools";
 import { getMistakePatterns } from "@/lib/ai/tools/insights-tools";
 
-const AI_MODEL = process.env.OPENAI_MODEL || "gpt-5.2";
+const AI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4";
 
 let openaiClientSingleton: OpenAI | null = null;
 

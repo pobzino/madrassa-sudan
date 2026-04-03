@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-export const AI_MODEL = process.env.OPENAI_MODEL || "gpt-5.2";
+export const AI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4";
 
 let openaiClientSingleton: OpenAI | null = null;
 
