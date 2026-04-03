@@ -160,6 +160,21 @@ function getAutosaveMessage(status: AutosaveState, error: string) {
   return "Draft autosaves to the database while you work";
 }
 
+function getLessonVideoKey(form: Pick<
+  LessonForm,
+  "video_url_1080p" | "video_url_360p" | "video_url_480p" | "video_url_720p"
+>) {
+  return [
+    form.video_url_360p,
+    form.video_url_480p,
+    form.video_url_720p,
+    form.video_url_1080p,
+  ]
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join("|");
+}
+
 export default function NewLessonPage() {
   const { profile, loading: authLoading } = useTeacherGuard();
   const router = useRouter();
@@ -397,6 +412,24 @@ export default function NewLessonPage() {
     lastSavedDraftKeyRef.current = JSON.stringify(
       getDraftPayload(form, form.subject_id)
     );
+
+    if (payload.is_published && getLessonVideoKey(form)) {
+      const processResponse = await fetch(`/api/teacher/lessons/${lesson.id}/process-video`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ language_hint: "ar" }),
+      });
+
+      if (!processResponse.ok) {
+        const processData = await processResponse.json().catch(() => ({}));
+        alert(
+          `Lesson saved, but transcript processing failed: ${
+            processData.error || "Unknown error"
+          }`
+        );
+      }
+    }
+
     router.push(`/teacher/lessons/${lesson.id}`);
   }
 

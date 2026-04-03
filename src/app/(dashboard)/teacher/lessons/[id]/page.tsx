@@ -7,7 +7,6 @@ import CurriculumTopicSelector from "@/components/teacher/CurriculumTopicSelecto
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
-import AIContentGenerator from "@/components/teacher/AIContentGenerator";
 import {
   getCurriculumRequirementMessage,
   getCurriculumSelectionForLesson,
@@ -78,28 +77,7 @@ type LessonForm = {
   video_duration_seconds: string;
 };
 
-type QuestionForm = {
-  id: string;
-  question_type: "multiple_choice" | "true_false" | "fill_in_blank";
-  question_text_ar: string;
-  question_text_en: string;
-  options: string[];
-  correct_answer: string;
-  points: number;
-  timestamp_seconds: number;
-  is_required: boolean;
-  allow_retry: boolean;
-};
-
-type ContentBlock = {
-  id?: string;
-  language: "ar" | "en";
-  content: string;
-  source_type: string;
-  sequence: number;
-};
-
-type Tab = "details" | "questions" | "activities" | "slides" | "content" | "results";
+type Tab = "details" | "activities" | "slides" | "results";
 
 type LessonVideoUrls = {
   video_url_1080p: string;
@@ -137,66 +115,6 @@ function getTeacherPreviewVideoUrl(form: LessonForm) {
       form.video_url_1080p ||
       ""
   );
-}
-
-async function syncLessonQuestions(
-  supabase: ReturnType<typeof createClient>,
-  lessonId: string,
-  questions: QuestionForm[]
-) {
-  const { data: existingRows, error: existingError } = await supabase
-    .from("lesson_questions")
-    .select("id")
-    .eq("lesson_id", lessonId);
-
-  if (existingError) {
-    throw new Error("Questions: " + existingError.message);
-  }
-
-  const nextRows = questions.map((question, index) => ({
-    id: question.id,
-    lesson_id: lessonId,
-    question_type: question.question_type,
-    question_text_ar: question.question_text_ar,
-    question_text_en: question.question_text_en || null,
-    options:
-      question.question_type === "fill_in_blank"
-        ? null
-        : question.options.filter((option) => option.trim()),
-    correct_answer: question.correct_answer,
-    explanation_ar: null,
-    explanation_en: null,
-    is_required: question.is_required,
-    allow_retry: question.allow_retry,
-    display_order: index + 1,
-    timestamp_seconds: question.timestamp_seconds || 0,
-  }));
-
-  if (nextRows.length > 0) {
-    const { error: upsertError } = await supabase
-      .from("lesson_questions")
-      .upsert(nextRows, { onConflict: "id" });
-
-    if (upsertError) {
-      throw new Error("Questions: " + upsertError.message);
-    }
-  }
-
-  const nextIds = new Set(nextRows.map((row) => row.id));
-  const removedIds = (existingRows || [])
-    .map((row) => row.id)
-    .filter((rowId) => !nextIds.has(rowId));
-
-  if (removedIds.length > 0) {
-    const { error: deleteError } = await supabase
-      .from("lesson_questions")
-      .delete()
-      .in("id", removedIds);
-
-    if (deleteError) {
-      throw new Error("Questions: " + deleteError.message);
-    }
-  }
 }
 
 async function syncLessonTasks(
@@ -259,6 +177,25 @@ async function syncLessonTasks(
   }
 }
 
+function getLessonVideoKey(
+  video: Pick<
+    LessonForm,
+    "video_url_1080p" | "video_url_360p" | "video_url_480p" | "video_url_720p"
+  > &
+    Partial<Pick<LessonForm, "video_duration_seconds">>
+) {
+  return [
+    video.video_url_360p,
+    video.video_url_480p,
+    video.video_url_720p,
+    video.video_url_1080p,
+    video.video_duration_seconds ?? "",
+  ]
+    .map((value) => value?.trim() || "")
+    .filter(Boolean)
+    .join("|");
+}
+
 export default function LessonEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -286,6 +223,8 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
   const [slideGenProgress, setSlideGenProgress] = useState("");
   const canPublishLesson = profile?.role === "admin";
+  const lastPersistedVideoKeyRef = useRef("");
+  const lastPersistedPublishedRef = useRef(false);
 
   const [form, setForm] = useState<LessonForm>({
     title_ar: "",
@@ -306,12 +245,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     video_duration_seconds: "",
   });
 
-  const [questions, setQuestions] = useState<QuestionForm[]>([]);
   const [lessonTasks, setLessonTasks] = useState<LessonTaskForm[]>([]);
-  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
 
   const persistLessonVideoUrls = useCallback(
-    async (urls: LessonVideoUrls, successText = "Video saved") => {
+    async (urls: LessonVideoUrls) => {
       const supabase = createClient();
       const { error } = await supabase
         .from("lessons")
@@ -330,9 +267,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       if (error) {
         throw new Error(error.message);
       }
-
-      setSaveMessage({ type: "success", text: successText });
-      setTimeout(() => setSaveMessage(null), 2000);
     },
     [id]
   );
@@ -429,7 +363,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       )
         ? lesson.grade_level
         : TEACHER_GRADE_OPTIONS[0];
-      setForm({
+      const initialForm: LessonForm = {
         title_ar: lesson.title_ar || "",
         title_en: lesson.title_en || "",
         description_ar: lesson.description_ar || "",
@@ -450,28 +384,11 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         captions_ar_url: lesson.captions_ar_url || "",
         captions_en_url: lesson.captions_en_url || "",
         video_duration_seconds: lesson.video_duration_seconds ? String(lesson.video_duration_seconds) : "",
-      });
+      };
+      setForm(initialForm);
+      lastPersistedPublishedRef.current = lesson.is_published;
+      lastPersistedVideoKeyRef.current = getLessonVideoKey(initialForm);
     }
-
-    const { data: questionRows } = await supabase
-      .from("lesson_questions")
-      .select("*")
-      .eq("lesson_id", id)
-      .order("display_order");
-
-    const questionForms = (questionRows || []).map((q) => ({
-      id: q.id,
-      question_type: q.question_type,
-      question_text_ar: q.question_text_ar,
-      question_text_en: q.question_text_en || "",
-      options: (q.options as string[] | null) || (q.question_type === "true_false" ? ["True", "False"] : ["", "", "", ""]),
-      correct_answer: q.correct_answer || "",
-      points: 10,
-      timestamp_seconds: q.timestamp_seconds || 0,
-      is_required: q.is_required ?? true,
-      allow_retry: q.allow_retry ?? true,
-    }));
-    setQuestions(questionForms);
 
     const { data: taskRows } = await supabase
       .from("lesson_tasks")
@@ -490,22 +407,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, taskForms);
     setSlides(slidesWithActivities);
     setLessonTasks(syncedTasks);
-
-    const { data: blocks } = await supabase
-      .from("lesson_content_blocks")
-      .select("id, language, content, source_type, sequence")
-      .eq("lesson_id", id)
-      .order("sequence", { ascending: true });
-
-    setContentBlocks(
-      (blocks || []).map((block) => ({
-        id: block.id,
-        language: block.language as "ar" | "en",
-        content: block.content,
-        source_type: block.source_type || "lesson",
-        sequence: block.sequence || 0,
-      }))
-    );
 
     setLoading(false);
   }, [id]);
@@ -630,12 +531,55 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     finally { setSlideSaving(false); }
   }, [id, lessonTasks, slideLanguageMode, slides]);
 
+  const processPublishedVideo = useCallback(
+    async (successText: string) => {
+      const response = await fetch(`/api/teacher/lessons/${id}/process-video`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ language_hint: "ar" }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Video transcript processing failed");
+      }
+
+      const processedText =
+        data.embedding_count > 0
+          ? `${successText} Transcript and search index updated.`
+          : `${successText} Transcript updated.`;
+
+      setSaveMessage({ type: "success", text: processedText });
+      setTimeout(() => setSaveMessage(null), 3000);
+    },
+    [id]
+  );
+
   const handleSlideVideoReady = useCallback(
     async (urls: LessonVideoUrls) => {
       setForm((prev) => applyVideoUrlsToForm(prev, urls));
 
       try {
-        await persistLessonVideoUrls(urls, "Recorded video saved");
+        await persistLessonVideoUrls(urls);
+        const nextVideoKey = getLessonVideoKey({
+          video_url_1080p: urls.video_url_1080p,
+          video_url_360p: urls.video_url_360p,
+          video_url_480p: urls.video_url_480p,
+          video_url_720p: urls.video_url_720p,
+          video_duration_seconds:
+            urls.duration_seconds != null ? String(urls.duration_seconds) : "",
+        });
+
+        if (form.is_published && nextVideoKey) {
+          await processPublishedVideo("Recorded video saved.");
+          lastPersistedPublishedRef.current = true;
+          lastPersistedVideoKeyRef.current = nextVideoKey;
+        } else {
+          lastPersistedPublishedRef.current = form.is_published;
+          lastPersistedVideoKeyRef.current = nextVideoKey;
+          setSaveMessage({ type: "success", text: "Recorded video saved" });
+          setTimeout(() => setSaveMessage(null), 2000);
+        }
       } catch (error) {
         setSaveMessage({
           type: "error",
@@ -643,7 +587,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         });
       }
     },
-    [persistLessonVideoUrls]
+    [form.is_published, persistLessonVideoUrls, processPublishedVideo]
   );
 
   const slideGenerationBlockedReason = getCurriculumRequirementMessage(
@@ -654,49 +598,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
   const selectedSubject = subjects.find((subject) => subject.id === form.subject_id) ?? null;
   const requiresCurriculum = hasMappedCurriculum(selectedSubject, form.grade_level);
-  const contentGenerationBlockedReason = getCurriculumRequirementMessage(
-    selectedSubject,
-    form.grade_level,
-    form.curriculum_topic
-  );
-
-  function updateQuestion(questionId: string, updates: Partial<QuestionForm>) {
-    setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, ...updates } : q)));
-  }
-
-  function addQuestion() {
-    setQuestions((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        question_type: "multiple_choice",
-        question_text_ar: "",
-        question_text_en: "",
-        options: ["", "", "", ""],
-        correct_answer: "",
-        points: 10,
-        timestamp_seconds: 0,
-        is_required: true,
-        allow_retry: true,
-      },
-    ]);
-  }
-
-  function removeQuestion(questionId: string) {
-    setQuestions((prev) => prev.filter((q) => q.id !== questionId));
-  }
-
-  function addContentBlock(language: "ar" | "en") {
-    setContentBlocks((prev) => [
-      ...prev,
-      {
-        language,
-        content: "",
-        source_type: "lesson",
-        sequence: prev.length,
-      },
-    ]);
-  }
 
   async function saveAll() {
     if (!form.title_ar.trim() || !form.subject_id) {
@@ -792,47 +693,28 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         throw new Error("Slides: " + (data.error || "Failed to save slides"));
       }
 
-      await syncLessonQuestions(supabase, id, questions);
       await syncLessonTasks(supabase, id, syncedTasks);
+      const nextVideoKey = getLessonVideoKey(form);
+      const shouldProcessPublishedVideo =
+        Boolean(form.is_published && nextVideoKey) &&
+        (!lastPersistedPublishedRef.current ||
+          lastPersistedVideoKeyRef.current !== nextVideoKey);
 
-      // Save content blocks
-      await fetch("/api/teacher/lessons/content", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lesson_id: id,
-          blocks: contentBlocks.map((block, index) => ({
-            language: block.language,
-            content: block.content,
-            source_type: block.source_type,
-            sequence: index,
-          })),
-        }),
-      });
-
-      setSaveMessage({ type: "success", text: "Saved" });
-      setTimeout(() => setSaveMessage(null), 2000);
+      if (shouldProcessPublishedVideo) {
+        await processPublishedVideo("Saved.");
+        lastPersistedPublishedRef.current = true;
+        lastPersistedVideoKeyRef.current = nextVideoKey;
+      } else {
+        lastPersistedPublishedRef.current = form.is_published;
+        lastPersistedVideoKeyRef.current = nextVideoKey;
+        setSaveMessage({ type: "success", text: "Saved" });
+        setTimeout(() => setSaveMessage(null), 2000);
+      }
     } catch (err) {
       setSaveMessage({ type: "error", text: err instanceof Error ? err.message : "Save failed" });
     } finally {
       setSaving(false);
     }
-  }
-
-  async function rebuildEmbeddings() {
-    setSaveMessage({ type: "success", text: "Embedding..." });
-    const response = await fetch("/api/teacher/lessons/embed", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lesson_id: id }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setSaveMessage({ type: "error", text: data.error || "Failed to embed" });
-      return;
-    }
-    setSaveMessage({ type: "success", text: `Embedded ${data.count || 0} chunks` });
-    setTimeout(() => setSaveMessage(null), 3000);
   }
 
   if (authLoading || loading) {
@@ -845,7 +727,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "details", label: "Details" },
-    { key: "questions", label: "Questions", count: questions.length },
     {
       key: "activities",
       label: "Activities",
@@ -854,7 +735,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       ).length,
     },
     { key: "slides", label: "Slides", count: slides.length },
-    { key: "content", label: "Content", count: contentBlocks.length },
     { key: "results", label: "Results" },
   ];
 
@@ -1069,15 +949,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           </div>
         )}
 
-        {activeTab === "questions" && (
-          <QuestionsTab
-            questions={questions}
-            updateQuestion={updateQuestion}
-            addQuestion={addQuestion}
-            removeQuestion={removeQuestion}
-          />
-        )}
-
         {activeTab === "activities" && (
           <ActivitiesTab
             slides={slides}
@@ -1090,23 +961,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             onAddActivity={handleAddActivity}
             onRemoveActivity={handleRemoveActivity}
             onEditSlide={handleEditActivitySlide}
-          />
-        )}
-
-        {activeTab === "content" && (
-          <ContentTab
-            lessonId={id}
-            form={form}
-            slides={slides}
-            questions={questions}
-            contentBlocks={contentBlocks}
-            setContentBlocks={setContentBlocks}
-            setQuestions={setQuestions}
-            setSlides={setSlides}
-            setLessonTasks={setLessonTasks}
-            addContentBlock={addContentBlock}
-            contentGenerationBlockedReason={contentGenerationBlockedReason}
-            rebuildEmbeddings={rebuildEmbeddings}
           />
         )}
 
@@ -1319,164 +1173,6 @@ function DetailsTab({
   );
 }
 
-/* ─── Questions Tab ─── */
-
-function QuestionsTab({
-  questions,
-  updateQuestion,
-  addQuestion,
-  removeQuestion,
-}: {
-  questions: QuestionForm[];
-  updateQuestion: (id: string, updates: Partial<QuestionForm>) => void;
-  addQuestion: () => void;
-  removeQuestion: (id: string) => void;
-}) {
-  return (
-    <div className="space-y-6">
-      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-            Questions {questions.length > 0 && <span className="text-gray-400">({questions.length})</span>}
-          </h2>
-          <button
-            onClick={addQuestion}
-            className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors"
-          >
-            + Add Question
-          </button>
-        </div>
-
-        {questions.length === 0 ? (
-          <div className="text-center py-8 border border-dashed border-gray-200 rounded-xl">
-            <p className="text-sm text-gray-400">No questions yet. Add one manually or use the AI generator in the Content tab.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {questions.map((question, index) => (
-              <div key={question.id} className="border border-gray-100 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-gray-700">Q{index + 1}</span>
-                  <button
-                    onClick={() => removeQuestion(question.id)}
-                    className="text-xs text-red-500 hover:text-red-700"
-                  >
-                    Remove
-                  </button>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Arabic Text</label>
-                    <input
-                      value={question.question_text_ar}
-                      onChange={(e) => updateQuestion(question.id, { question_text_ar: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">English Text</label>
-                    <input
-                      value={question.question_text_en}
-                      onChange={(e) => updateQuestion(question.id, { question_text_en: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
-                    <select
-                      value={question.question_type}
-                      onChange={(e) =>
-                        updateQuestion(question.id, { question_type: e.target.value as QuestionForm["question_type"] })
-                      }
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                    >
-                      <option value="multiple_choice">Multiple Choice</option>
-                      <option value="true_false">True / False</option>
-                      <option value="fill_in_blank">Fill in the Blank</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Correct Answer</label>
-                    <input
-                      value={question.correct_answer}
-                      onChange={(e) => updateQuestion(question.id, { correct_answer: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Points</label>
-                    <input
-                      type="number"
-                      value={question.points}
-                      onChange={(e) => updateQuestion(question.id, { points: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Timestamp (sec)</label>
-                    <input
-                      type="number"
-                      value={question.timestamp_seconds}
-                      onChange={(e) => updateQuestion(question.id, { timestamp_seconds: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                    />
-                  </div>
-                </div>
-
-                {question.question_type !== "fill_in_blank" && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-2">Options</label>
-                    <div className="grid md:grid-cols-2 gap-2">
-                      {question.options.map((option, idx) => (
-                        <input
-                          key={`${question.id}-opt-${idx}`}
-                          value={option}
-                          onChange={(e) => {
-                            const next = [...question.options];
-                            next[idx] = e.target.value;
-                            updateQuestion(question.id, { options: next });
-                          }}
-                          placeholder={`Option ${idx + 1}`}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-4 text-sm">
-                  <label className="flex items-center gap-2 text-gray-600">
-                    <input
-                      type="checkbox"
-                      checked={question.is_required}
-                      onChange={(e) => updateQuestion(question.id, { is_required: e.target.checked })}
-                      className="rounded"
-                    />
-                    Required
-                  </label>
-                  <label className="flex items-center gap-2 text-gray-600">
-                    <input
-                      type="checkbox"
-                      checked={question.allow_retry}
-                      onChange={(e) => updateQuestion(question.id, { allow_retry: e.target.checked })}
-                      className="rounded"
-                    />
-                    Allow retry
-                  </label>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
 /* ─── Activities Tab ─── */
 
 function ActivitiesTab({
@@ -1515,19 +1211,12 @@ function ActivitiesTab({
       current.map((task) => (task.id === activityId ? { ...task, ...updates } : task))
     );
   }, [setLessonTasks]);
-
-  useEffect(() => {
-    if (activities.length === 0) {
-      setSelectedActivityId(null);
-      return;
+  const effectiveSelectedActivityId = useMemo(() => {
+    if (selectedActivityId && activities.some((activity) => activity.id === selectedActivityId)) {
+      return selectedActivityId;
     }
-
-    setSelectedActivityId((current) =>
-      current && activities.some((activity) => activity.id === current)
-        ? current
-        : activities[0].id
-    );
-  }, [activities]);
+    return activities[0]?.id ?? null;
+  }, [activities, selectedActivityId]);
 
   const effectiveDuration = loadedPreviewDuration > 0 ? loadedPreviewDuration : videoDurationSeconds;
   const timedActivities = useMemo(
@@ -1567,7 +1256,7 @@ function ActivitiesTab({
   );
 
   const selectedActivity =
-    activities.find((activity) => activity.id === selectedActivityId) ?? activities[0] ?? null;
+    activities.find((activity) => activity.id === effectiveSelectedActivityId) ?? activities[0] ?? null;
   const selectedTiming = selectedActivity ? activityTimingById.get(selectedActivity.id) : null;
   const selectedLinkedSlide =
     selectedTiming?.sourceSlide ??
@@ -2013,186 +1702,6 @@ function ActivitiesTab({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-/* ─── Content Tab ─── */
-
-function ContentTab({
-  lessonId,
-  form,
-  slides,
-  questions,
-  contentBlocks,
-  setContentBlocks,
-  setQuestions,
-  setSlides,
-  setLessonTasks,
-  addContentBlock,
-  contentGenerationBlockedReason,
-  rebuildEmbeddings,
-}: {
-  lessonId: string;
-  form: LessonForm;
-  slides: Slide[];
-  questions: QuestionForm[];
-  contentBlocks: ContentBlock[];
-  setContentBlocks: (blocks: ContentBlock[] | ((prev: ContentBlock[]) => ContentBlock[])) => void;
-  setQuestions: (questions: QuestionForm[]) => void;
-  setSlides: (slides: Slide[] | ((prev: Slide[]) => Slide[])) => void;
-  setLessonTasks: (tasks: LessonTaskForm[] | ((prev: LessonTaskForm[]) => LessonTaskForm[])) => void;
-  addContentBlock: (language: "ar" | "en") => void;
-  contentGenerationBlockedReason: string | null;
-  rebuildEmbeddings: () => void;
-}) {
-  return (
-    <div className="space-y-6">
-      {/* AI Generator */}
-      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">AI Content Generator</h2>
-        <AIContentGenerator
-          lessonId={lessonId}
-          hasVideo={!!(form.video_url_1080p || form.video_url_360p || form.video_url_480p || form.video_url_720p)}
-          hasExistingContent={questions.length > 0 || contentBlocks.length > 0}
-          disabledReason={contentGenerationBlockedReason}
-          onGenerated={(data) => {
-            const newQuestions: QuestionForm[] = data.questions.map((q) => ({
-              id: crypto.randomUUID(),
-              question_type: q.question_type,
-              question_text_ar: q.question_text_ar,
-              question_text_en: q.question_text_en,
-              options: q.options || (q.question_type === "true_false" ? ["صحيح", "خطأ"] : []),
-              correct_answer: q.correct_answer,
-              points: 10,
-              timestamp_seconds: q.timestamp_seconds,
-              is_required: q.is_required,
-              allow_retry: q.allow_retry,
-            }));
-            setQuestions(newQuestions);
-
-            const newBlocks: ContentBlock[] = data.contentBlocks.map((b) => ({
-              language: b.language,
-              content: b.content,
-              source_type: b.source_type,
-              sequence: b.sequence,
-            }));
-            setContentBlocks(newBlocks);
-
-            if (data.tasks && data.tasks.length > 0) {
-              const newTasks = data.tasks.map((task) =>
-                normalizeLessonTaskForm({
-                  id: crypto.randomUUID(),
-                  task_type: task.task_type,
-                  title_ar: task.title_ar,
-                  title_en: task.title_en,
-                  instruction_ar: task.instruction_ar,
-                  instruction_en: task.instruction_en,
-                  timestamp_seconds: task.timestamp_seconds,
-                  task_data: task.task_data,
-                  timeout_seconds: null,
-                  is_skippable: task.is_skippable,
-                  required: true,
-                  points: task.points,
-                  display_order: task.timestamp_seconds,
-                  linked_slide_id: null,
-                })
-              );
-              const preservedSlides = slides.filter((slide) => !slide.activity_id);
-              const slidesWithActivities = ensureSlidesForSupportedTasks(preservedSlides, newTasks);
-              const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, newTasks);
-
-              setSlides(slidesWithActivities);
-              setLessonTasks(syncedTasks);
-            }
-          }}
-        />
-      </section>
-
-      {/* Content Blocks */}
-      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-            Content Blocks {contentBlocks.length > 0 && <span className="text-gray-400">({contentBlocks.length})</span>}
-          </h2>
-          <div className="flex gap-2">
-            <button
-              onClick={() => addContentBlock("ar")}
-              className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors"
-            >
-              + Arabic
-            </button>
-            <button
-              onClick={() => addContentBlock("en")}
-              className="px-3 py-1.5 bg-gray-700 text-white rounded-lg text-xs font-medium hover:bg-gray-800 transition-colors"
-            >
-              + English
-            </button>
-          </div>
-        </div>
-
-        {contentBlocks.length === 0 ? (
-          <div className="text-center py-8 border border-dashed border-gray-200 rounded-xl">
-            <p className="text-sm text-gray-400">No content blocks yet. Use the AI generator or add manually.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {contentBlocks.map((block, index) => (
-              <div key={`${block.language}-${index}`} className="border border-gray-100 rounded-xl p-4 space-y-2">
-                <div className="flex items-center gap-3">
-                  <select
-                    value={block.language}
-                    onChange={(e) => {
-                      const next = [...contentBlocks];
-                      next[index] = { ...block, language: e.target.value as "ar" | "en" };
-                      setContentBlocks(next);
-                    }}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
-                  >
-                    <option value="ar">Arabic</option>
-                    <option value="en">English</option>
-                  </select>
-                  <input
-                    value={block.source_type}
-                    onChange={(e) => {
-                      const next = [...contentBlocks];
-                      next[index] = { ...block, source_type: e.target.value };
-                      setContentBlocks(next);
-                    }}
-                    placeholder="Source type"
-                    className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
-                  />
-                  <button
-                    onClick={() => setContentBlocks(contentBlocks.filter((_, idx) => idx !== index))}
-                    className="text-xs text-red-500 hover:text-red-700"
-                  >
-                    Remove
-                  </button>
-                </div>
-                <textarea
-                  value={block.content}
-                  onChange={(e) => {
-                    const next = [...contentBlocks];
-                    next[index] = { ...block, content: e.target.value };
-                    setContentBlocks(next);
-                  }}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                />
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex justify-end">
-          <button
-            onClick={rebuildEmbeddings}
-            className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200 transition-colors"
-          >
-            Rebuild Embeddings
-          </button>
-        </div>
-      </section>
     </div>
   );
 }
