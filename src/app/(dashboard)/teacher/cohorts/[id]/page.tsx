@@ -70,6 +70,7 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
   const [studentResults, setStudentResults] = useState<Array<{ id: string; full_name: string; avatar_url: string | null }>>([]);
   const [addingStudentId, setAddingStudentId] = useState<string | null>(null);
   const [removingStudentId, setRemovingStudentId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     name: "",
     description: "",
@@ -334,15 +335,23 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
       .eq("student_id", studentId)
       .maybeSingle();
 
+    let error;
     if (existing) {
-      await supabase
+      ({ error } = await supabase
         .from("cohort_students")
         .update({ is_active: true, status: "approved" })
-        .eq("id", existing.id);
+        .eq("id", existing.id));
     } else {
-      await supabase
+      ({ error } = await supabase
         .from("cohort_students")
-        .insert({ cohort_id: id, student_id: studentId, is_active: true, status: "approved" });
+        .insert({ cohort_id: id, student_id: studentId, is_active: true, status: "approved" }));
+    }
+
+    if (error) {
+      console.error("Failed to add student:", error);
+      setActionError("Failed to add student: " + error.message);
+    } else {
+      setActionError(null);
     }
 
     setStudentSearch("");
@@ -366,10 +375,16 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
   async function approveStudent(enrollmentId: string) {
     setApprovingId(enrollmentId);
     const supabase = createClient();
-    await supabase
+    const { error } = await supabase
       .from("cohort_students")
       .update({ status: "approved", is_active: true })
       .eq("id", enrollmentId);
+    if (error) {
+      console.error("Failed to approve student:", error);
+      setActionError("Failed to approve student: " + error.message);
+    } else {
+      setActionError(null);
+    }
     setApprovingId(null);
     void loadCohortData();
   }
@@ -377,10 +392,16 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
   async function rejectStudent(enrollmentId: string) {
     setRejectingId(enrollmentId);
     const supabase = createClient();
-    await supabase
+    const { error } = await supabase
       .from("cohort_students")
       .update({ status: "rejected" })
       .eq("id", enrollmentId);
+    if (error) {
+      console.error("Failed to reject student:", error);
+      setActionError("Failed to reject student: " + error.message);
+    } else {
+      setActionError(null);
+    }
     setRejectingId(null);
     void loadCohortData();
   }
@@ -524,6 +545,13 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
         {/* Students Tab */}
         {activeTab === "students" && (
           <>
+          {/* Action Error */}
+          {actionError && (
+            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between">
+              <span>{actionError}</span>
+              <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-600 ml-2">&times;</button>
+            </div>
+          )}
           {/* Pending Requests */}
           {pendingStudents.length > 0 && (
             <div className="bg-amber-50 rounded-2xl border border-amber-200 shadow-sm overflow-hidden mb-6">

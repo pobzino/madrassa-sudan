@@ -211,28 +211,39 @@ export default function CohortsPage() {
     setRequestingId(cohortId);
     setMessage(null);
 
-    // Check if there's an existing enrollment (rejected or inactive)
-    const { data: existing } = await supabase
-      .from("cohort_students")
-      .select("id, status")
-      .eq("cohort_id", cohortId)
-      .eq("student_id", userId)
-      .maybeSingle();
-
-    if (existing) {
-      await supabase
+    try {
+      // Check if there's an existing enrollment (rejected or inactive)
+      const { data: existing } = await supabase
         .from("cohort_students")
-        .update({ status: "pending", is_active: true })
-        .eq("id", existing.id);
-    } else {
-      await supabase.from("cohort_students").insert({
-        cohort_id: cohortId,
-        student_id: userId,
-        status: "pending",
-      });
-    }
+        .select("id, status")
+        .eq("cohort_id", cohortId)
+        .eq("student_id", userId)
+        .maybeSingle();
 
-    setMessage({ type: "success", text: t.requestSent });
+      let error;
+      if (existing) {
+        ({ error } = await supabase
+          .from("cohort_students")
+          .update({ status: "pending", is_active: true })
+          .eq("id", existing.id));
+      } else {
+        ({ error } = await supabase.from("cohort_students").insert({
+          cohort_id: cohortId,
+          student_id: userId,
+          status: "pending",
+        }));
+      }
+
+      if (error) {
+        console.error("Join request failed:", error);
+        setMessage({ type: "error", text: language === "ar" ? "فشل الطلب. حاول مرة أخرى." : "Request failed. Please try again." });
+      } else {
+        setMessage({ type: "success", text: t.requestSent });
+      }
+    } catch (err) {
+      console.error("Join request error:", err);
+      setMessage({ type: "error", text: language === "ar" ? "فشل الطلب. حاول مرة أخرى." : "Request failed. Please try again." });
+    }
     setRequestingId(null);
     void loadData();
   };
