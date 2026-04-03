@@ -674,8 +674,10 @@ export type Database = {
           questions_correct: number
           quiz_attempts: number
           quiz_passed: boolean
+          required_tasks_completed: number
           student_id: string
           tasks_completed: number
+          tasks_skipped: number
           tasks_total_score: number
           total_watch_time_seconds: number
           updated_at: string
@@ -693,8 +695,10 @@ export type Database = {
           questions_correct?: number
           quiz_attempts?: number
           quiz_passed?: boolean
+          required_tasks_completed?: number
           student_id: string
           tasks_completed?: number
+          tasks_skipped?: number
           tasks_total_score?: number
           total_watch_time_seconds?: number
           updated_at?: string
@@ -712,8 +716,10 @@ export type Database = {
           questions_correct?: number
           quiz_attempts?: number
           quiz_passed?: boolean
+          required_tasks_completed?: number
           student_id?: string
           tasks_completed?: number
+          tasks_skipped?: number
           tasks_total_score?: number
           total_watch_time_seconds?: number
           updated_at?: string
@@ -791,39 +797,42 @@ export type Database = {
       }
       lesson_task_responses: {
         Row: {
-          id: string
-          task_id: string
-          student_id: string
-          response_data: Json
-          completion_score: number
-          is_completed: boolean
-          time_spent_seconds: number
           attempts: number
+          completion_score: number
           created_at: string
+          id: string
+          is_completed: boolean
+          response_data: Json
+          status: string
+          student_id: string
+          task_id: string
+          time_spent_seconds: number
           updated_at: string
         }
         Insert: {
-          id?: string
-          task_id: string
-          student_id: string
-          response_data?: Json
-          completion_score?: number
-          is_completed?: boolean
-          time_spent_seconds?: number
           attempts?: number
+          completion_score?: number
           created_at?: string
+          id?: string
+          is_completed?: boolean
+          response_data?: Json
+          status?: string
+          student_id: string
+          task_id: string
+          time_spent_seconds?: number
           updated_at?: string
         }
         Update: {
-          id?: string
-          task_id?: string
-          student_id?: string
-          response_data?: Json
-          completion_score?: number
-          is_completed?: boolean
-          time_spent_seconds?: number
           attempts?: number
+          completion_score?: number
           created_at?: string
+          id?: string
+          is_completed?: boolean
+          response_data?: Json
+          status?: string
+          student_id?: string
+          task_id?: string
+          time_spent_seconds?: number
           updated_at?: string
         }
         Relationships: [
@@ -908,54 +917,60 @@ export type Database = {
       }
       lesson_tasks: {
         Row: {
+          created_at: string
           id: string
-          lesson_id: string
-          task_type: Database["public"]["Enums"]["task_type"]
-          title_ar: string
-          title_en: string | null
+          display_order: number
           instruction_ar: string
           instruction_en: string | null
-          timestamp_seconds: number
-          display_order: number
-          task_data: Json
-          timeout_seconds: number | null
           is_skippable: boolean
+          lesson_id: string
+          linked_slide_id: string | null
           points: number
-          created_at: string
+          required: boolean
+          task_data: Json
+          task_type: Database["public"]["Enums"]["task_type"]
+          timeout_seconds: number | null
+          timestamp_seconds: number
+          title_ar: string
+          title_en: string | null
           updated_at: string
         }
         Insert: {
+          created_at?: string
           id?: string
-          lesson_id: string
-          task_type: Database["public"]["Enums"]["task_type"]
-          title_ar: string
-          title_en?: string | null
+          display_order?: number
           instruction_ar: string
           instruction_en?: string | null
-          timestamp_seconds?: number
-          display_order?: number
-          task_data?: Json
-          timeout_seconds?: number | null
           is_skippable?: boolean
+          lesson_id: string
+          linked_slide_id?: string | null
           points?: number
-          created_at?: string
+          required?: boolean
+          task_data?: Json
+          task_type: Database["public"]["Enums"]["task_type"]
+          timeout_seconds?: number | null
+          timestamp_seconds?: number
+          title_ar: string
+          title_en?: string | null
           updated_at?: string
         }
         Update: {
+          created_at?: string
           id?: string
-          lesson_id?: string
-          task_type?: Database["public"]["Enums"]["task_type"]
-          title_ar?: string
-          title_en?: string | null
+          display_order?: number
           instruction_ar?: string
           instruction_en?: string | null
-          timestamp_seconds?: number
-          display_order?: number
-          task_data?: Json
-          timeout_seconds?: number | null
           is_skippable?: boolean
+          lesson_id?: string
+          linked_slide_id?: string | null
           points?: number
-          created_at?: string
+          required?: boolean
+          task_data?: Json
+          task_type?: Database["public"]["Enums"]["task_type"]
+          timeout_seconds?: number | null
+          timestamp_seconds?: number
+          title_ar?: string
+          title_en?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1650,6 +1665,13 @@ export type Database = {
       task_type:
         | "matching_pairs"
         | "sorting_order"
+        | "choose_correct"
+        | "true_false"
+        | "fill_missing_word"
+        | "tap_to_count"
+        | "match_pairs"
+        | "sequence_order"
+        | "sort_groups"
         | "fill_in_blank_enhanced"
         | "drag_drop_label"
         | "drawing_tracing"

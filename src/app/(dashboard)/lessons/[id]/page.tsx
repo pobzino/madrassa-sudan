@@ -19,9 +19,10 @@ import type { Slide } from "@/lib/slides.types";
 import { Confetti } from "@/components/illustrations";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import EnhancedQuizOverlay from "@/components/lessons/EnhancedQuizOverlay";
+import LessonActivityOverlay from "@/components/lessons/LessonActivityOverlay";
 import ProgressGateModal from "@/components/lessons/ProgressGateModal";
-import TaskOverlay from "@/components/tasks/TaskOverlay";
 import SlideInteractionOverlay from "@/components/lessons/SlideInteractionOverlay";
+import { isCanonicalActivityTask, normalizeLessonTaskForm } from "@/lib/lesson-activities";
 import {
   getInteractiveSlides,
   getSlideInteractionStorageKey,
@@ -236,6 +237,52 @@ function mapSlideResponsesToStoredState(
   }, {});
 }
 
+type StoredTaskResponseState = {
+  status: "completed" | "skipped" | "timed_out";
+  completionScore: number;
+  responseData: Record<string, unknown>;
+  timeSpentSeconds: number;
+  attempts: number;
+};
+
+function mapTaskResponsesToState(
+  responses:
+    | Array<{
+        task_id: string;
+        status: string;
+        completion_score: number | null;
+        response_data: unknown;
+        time_spent_seconds: number | null;
+        attempts: number | null;
+      }>
+    | null
+    | undefined
+): Record<string, StoredTaskResponseState> {
+  if (!responses || responses.length === 0) {
+    return {};
+  }
+
+  return responses.reduce<Record<string, StoredTaskResponseState>>((acc, response) => {
+    const payload =
+      response.response_data && typeof response.response_data === "object" && !Array.isArray(response.response_data)
+        ? (response.response_data as Record<string, unknown>)
+        : {};
+
+    acc[response.task_id] = {
+      status:
+        response.status === "skipped" || response.status === "timed_out"
+          ? response.status
+          : "completed",
+      completionScore: response.completion_score ?? 0,
+      responseData: payload,
+      timeSpentSeconds: response.time_spent_seconds ?? 0,
+      attempts: response.attempts ?? 1,
+    };
+
+    return acc;
+  }, {});
+}
+
 export default function LessonPlayerPage() {
   const params = useParams();
   const lessonId = params.id as string;
@@ -274,8 +321,8 @@ export default function LessonPlayerPage() {
 
   // Task overlay state
   const [tasks, setTasks] = useState<LessonTask[]>([]);
-  const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
-  const [activeTask, setActiveTask] = useState<LessonTask | null>(null);
+  const [taskResponses, setTaskResponses] = useState<Record<string, StoredTaskResponseState>>({});
+  const [activeActivity, setActiveActivity] = useState<LessonTask | null>(null);
 
   // Slide interaction state
   const [slideDeck, setSlideDeck] = useState<Slide[]>([]);
@@ -288,6 +335,7 @@ export default function LessonPlayerPage() {
 
   // Celebration state
   const [showConfetti, setShowConfetti] = useState(false);
+  const lastPlaybackSecondRef = useRef(0);
 
   // Load lesson data
   useEffect(() => {
@@ -388,17 +436,48 @@ export default function LessonPlayerPage() {
         .eq("lesson_id", lessonId)
         .order("timestamp_seconds");
       if (tasksData) {
-        setTasks(tasksData as unknown as LessonTask[]);
+        const normalizedTasks = tasksData.map((task) => {
+          const normalized = normalizeLessonTaskForm({
+            ...(task as unknown as Partial<LessonTask>),
+            id: task.id,
+            task_type: task.task_type,
+            required: task.required ?? true,
+            linked_slide_id: task.linked_slide_id ?? null,
+          });
 
-        if (tasksData.length > 0) {
+          return {
+            ...(task as unknown as LessonTask),
+            ...normalized,
+            lesson_id: task.lesson_id,
+            created_at: task.created_at,
+            updated_at: task.updated_at,
+            title_en: normalized.title_en || null,
+            instruction_en: normalized.instruction_en || null,
+          } satisfies LessonTask;
+        });
+
+        setTasks(normalizedTasks);
+
+        if (normalizedTasks.length > 0) {
           const { data: taskResponseData } = await supabase
             .from("lesson_task_responses")
-            .select("task_id")
+            .select("task_id, status, completion_score, response_data, time_spent_seconds, attempts")
             .eq("student_id", user.id)
-            .in("task_id", tasksData.map((task) => task.id));
+            .in("task_id", normalizedTasks.map((task) => task.id));
 
           if (taskResponseData) {
-            setCompletedTasks(new Set(taskResponseData.map((response) => response.task_id)));
+            setTaskResponses(
+              mapTaskResponsesToState(
+                taskResponseData as Array<{
+                  task_id: string;
+                  status: string;
+                  completion_score: number | null;
+                  response_data: unknown;
+                  time_spent_seconds: number | null;
+                  attempts: number | null;
+                }>
+              )
+            );
           }
         }
       }
@@ -479,21 +558,158 @@ export default function LessonPlayerPage() {
     [lessonId, userId]
   );
 
-  const findDueInteractiveSlide = useCallback(
-    (atSecond: number) => {
+  const persistTaskResponse = useCallback(
+    async (
+      task: LessonTask,
+      payload: {
+        answer?: boolean | number | string | string[] | null;
+        status: "completed" | "skipped" | "timed_out";
+        timeSpentSeconds?: number;
+      }
+    ) => {
+      const timeSpentSeconds = payload.timeSpentSeconds ?? 0;
+
+      try {
+        const response = await fetch(`/api/lessons/${lessonId}/task-responses`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            task_id: task.id,
+            answer: payload.answer ?? null,
+            status: payload.status,
+            time_spent_seconds: timeSpentSeconds,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to save activity response");
+        }
+
+        const json = await response.json();
+        setTaskResponses((prev) => ({
+          ...prev,
+          [task.id]: {
+            status: json.status ?? payload.status,
+            completionScore: json.score ?? 0,
+            responseData:
+              payload.answer !== undefined && payload.answer !== null
+                ? { answer: payload.answer }
+                : {},
+            timeSpentSeconds,
+            attempts: (prev[task.id]?.attempts ?? 0) + 1,
+          },
+        }));
+      } catch {
+        setTaskResponses((prev) => ({
+          ...prev,
+          [task.id]: {
+            status: payload.status,
+            completionScore: payload.status === "completed" ? 1 : 0,
+            responseData:
+              payload.answer !== undefined && payload.answer !== null
+                ? { answer: payload.answer }
+                : {},
+            timeSpentSeconds,
+            attempts: (prev[task.id]?.attempts ?? 0) + 1,
+          },
+        }));
+      }
+    },
+    [lessonId]
+  );
+
+  const linkedTaskIds = useMemo(
+    () => new Set(tasks.filter((task) => task.linked_slide_id).map((task) => task.id)),
+    [tasks]
+  );
+
+  const taskByLinkedSlideId = useMemo(
+    () =>
+      new Map(
+        tasks
+          .filter((task) => task.linked_slide_id)
+          .map((task) => [task.linked_slide_id as string, task])
+      ),
+    [tasks]
+  );
+
+  const findDueLegacyInteractiveSlide = useCallback(
+    (fromSecond: number, toSecond: number) => {
+      const lowerBound = Math.floor(Math.min(fromSecond, toSecond));
+      const upperBound = Math.floor(Math.max(fromSecond, toSecond));
       const interactiveSlides = getInteractiveSlides(
         slideDeck,
         duration || lesson?.video_duration_seconds || null
       );
 
       return (
-        interactiveSlides.find(
-          ({ slide, triggerSecond }) =>
-            triggerSecond <= atSecond && !slideInteractionResponses[slide.id]
-        )?.slide || null
+        interactiveSlides.find(({ slide, triggerSecond }) => {
+          if (taskByLinkedSlideId.has(slide.id) || (slide.activity_id && linkedTaskIds.has(slide.activity_id))) {
+            return false;
+          }
+
+          return (
+            triggerSecond > lowerBound &&
+            triggerSecond <= upperBound &&
+            !slideInteractionResponses[slide.id]
+          );
+        })?.slide || null
       );
     },
-    [duration, lesson?.video_duration_seconds, slideDeck, slideInteractionResponses]
+    [
+      duration,
+      lesson?.video_duration_seconds,
+      linkedTaskIds,
+      slideDeck,
+      slideInteractionResponses,
+      taskByLinkedSlideId,
+    ]
+  );
+
+  const findDueQuestion = useCallback(
+    (fromSecond: number, toSecond: number) => {
+      const lowerBound = Math.floor(Math.min(fromSecond, toSecond));
+      const upperBound = Math.floor(Math.max(fromSecond, toSecond));
+
+      return (
+        questions.find(
+          (question) =>
+            question.timestamp_seconds > lowerBound &&
+            question.timestamp_seconds <= upperBound &&
+            !answeredQuestions.has(question.id)
+        ) || null
+      );
+    },
+    [answeredQuestions, questions]
+  );
+
+  const findDueTask = useCallback(
+    (fromSecond: number, toSecond: number) => {
+      const lowerBound = Math.floor(Math.min(fromSecond, toSecond));
+      const upperBound = Math.floor(Math.max(fromSecond, toSecond));
+
+      return (
+        tasks.find(
+          (task) =>
+            isCanonicalActivityTask(task.task_type) &&
+            task.timestamp_seconds > lowerBound &&
+            task.timestamp_seconds <= upperBound &&
+            !taskResponses[task.id]
+        ) || null
+      );
+    },
+    [taskResponses, tasks]
+  );
+
+  const findPendingRequiredTask = useCallback(
+    () =>
+      tasks.find(
+        (task) =>
+          isCanonicalActivityTask(task.task_type) &&
+          task.required !== false &&
+          taskResponses[task.id]?.status !== "completed"
+      ) || null,
+    [taskResponses, tasks]
   );
 
   const availableVideoSources = useMemo(() => getLessonVideoSources(lesson), [lesson]);
@@ -568,47 +784,55 @@ export default function LessonPlayerPage() {
     return () => clearInterval(interval);
   }, [isPlaying, saveProgress]);
 
+  const maybeActivateDueInteraction = useCallback(
+    (fromSecond: number, toSecond: number) => {
+      if (!videoRef.current) {
+        return false;
+      }
+
+      const questionAtTime = findDueQuestion(fromSecond, toSecond);
+      if (questionAtTime) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+        setActiveQuestion(questionAtTime);
+        return true;
+      }
+
+      const taskAtTime = findDueTask(fromSecond, toSecond);
+      if (taskAtTime) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+        setActiveActivity(taskAtTime);
+        return true;
+      }
+
+      const interactiveSlideAtTime = findDueLegacyInteractiveSlide(fromSecond, toSecond);
+      if (interactiveSlideAtTime) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+        setActiveSlideInteraction(interactiveSlideAtTime);
+        return true;
+      }
+
+      return false;
+    },
+    [findDueLegacyInteractiveSlide, findDueQuestion, findDueTask]
+  );
+
   // Handle video time update
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
 
     const nextTime = videoRef.current.currentTime;
+    const previousTime = lastPlaybackSecondRef.current;
+    lastPlaybackSecondRef.current = nextTime;
     setCurrentTime(nextTime);
 
-    if (!isPlaying || activeQuestion || activeTask || activeSlideInteraction) {
+    if (!isPlaying || activeQuestion || activeActivity || activeSlideInteraction) {
       return;
     }
 
-    const currentSecond = Math.floor(nextTime);
-    const questionAtTime = questions.find(
-      (question) => question.timestamp_seconds === currentSecond && !answeredQuestions.has(question.id)
-    );
-
-    if (questionAtTime) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-      setActiveQuestion(questionAtTime);
-      return;
-    }
-
-    const taskAtTime = tasks.find(
-      (task) => task.timestamp_seconds === currentSecond && !completedTasks.has(task.id)
-    );
-
-    if (taskAtTime) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-      setActiveTask(taskAtTime);
-      return;
-    }
-
-    const interactiveSlideAtTime = findDueInteractiveSlide(currentSecond);
-
-    if (interactiveSlideAtTime) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-      setActiveSlideInteraction(interactiveSlideAtTime);
-    }
+    maybeActivateDueInteraction(previousTime, nextTime);
   };
 
   // Handle video metadata loaded
@@ -619,13 +843,16 @@ export default function LessonPlayerPage() {
       // Resume from last position
       if (progress?.last_position_seconds) {
         videoRef.current.currentTime = progress.last_position_seconds;
+        lastPlaybackSecondRef.current = progress.last_position_seconds;
+      } else {
+        lastPlaybackSecondRef.current = 0;
       }
     }
   };
 
   // Toggle play/pause
   const togglePlay = () => {
-    if (!videoRef.current || activeQuestion || activeTask || activeSlideInteraction) return;
+    if (!videoRef.current || activeQuestion || activeActivity || activeSlideInteraction) return;
     if (isPlaying) {
       videoRef.current.pause();
     } else {
@@ -638,8 +865,14 @@ export default function LessonPlayerPage() {
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!videoRef.current) return;
     const time = parseFloat(e.target.value);
+    const previousTime = currentTime;
     videoRef.current.currentTime = time;
+    lastPlaybackSecondRef.current = time;
     setCurrentTime(time);
+
+    if (!activeQuestion && !activeActivity && !activeSlideInteraction && time > previousTime) {
+      maybeActivateDueInteraction(previousTime, time);
+    }
   };
 
   // Format time
@@ -694,7 +927,15 @@ export default function LessonPlayerPage() {
   }, [correctQuestions, questions]);
 
   const handleVideoEnded = useCallback(() => {
-    const pendingInteractiveSlide = findDueInteractiveSlide(Math.floor(duration || 0));
+    const pendingRequiredTask = findPendingRequiredTask();
+
+    if (pendingRequiredTask) {
+      setActiveActivity(pendingRequiredTask);
+      setIsPlaying(false);
+      return;
+    }
+
+    const pendingInteractiveSlide = findDueLegacyInteractiveSlide(0, Math.floor(duration || 0));
 
     if (pendingInteractiveSlide) {
       setActiveSlideInteraction(pendingInteractiveSlide);
@@ -705,13 +946,20 @@ export default function LessonPlayerPage() {
     if (quizSettings.require_pass_to_continue && correctQuestions.size < quizSettings.min_pass_questions) {
       setShowProgressGate(true);
     }
-  }, [correctQuestions, duration, findDueInteractiveSlide, quizSettings]);
+  }, [correctQuestions, duration, findDueLegacyInteractiveSlide, findPendingRequiredTask, quizSettings]);
 
   // Mark lesson as complete
   const handleMarkComplete = async () => {
     if (!userId || !lessonId) return;
 
-    const pendingInteractiveSlide = findDueInteractiveSlide(Math.floor(duration || 0));
+    const pendingRequiredTask = findPendingRequiredTask();
+
+    if (pendingRequiredTask) {
+      setActiveActivity(pendingRequiredTask);
+      return;
+    }
+
+    const pendingInteractiveSlide = findDueLegacyInteractiveSlide(0, Math.floor(duration || 0));
 
     if (pendingInteractiveSlide) {
       setActiveSlideInteraction(pendingInteractiveSlide);
@@ -779,9 +1027,26 @@ export default function LessonPlayerPage() {
   const timedInteractiveSlides = getInteractiveSlides(
     slideDeck,
     duration || lesson.video_duration_seconds || null
+  ).filter(
+    ({ slide }) =>
+      !taskByLinkedSlideId.has(slide.id) &&
+      !(slide.activity_id && linkedTaskIds.has(slide.activity_id))
   );
   const completedInteractiveSlideCount = timedInteractiveSlides.filter(
     ({ slide }) => slideInteractionResponses[slide.id]
+  ).length;
+  const canonicalActivityCount = tasks.filter((task) => isCanonicalActivityTask(task.task_type)).length;
+  const completedActivityCount = tasks.filter(
+    (task) => isCanonicalActivityTask(task.task_type) && taskResponses[task.id]?.status === "completed"
+  ).length;
+  const requiredActivityCount = tasks.filter(
+    (task) => isCanonicalActivityTask(task.task_type) && task.required !== false
+  ).length;
+  const completedRequiredActivityCount = tasks.filter(
+    (task) =>
+      isCanonicalActivityTask(task.task_type) &&
+      task.required !== false &&
+      taskResponses[task.id]?.status === "completed"
   ).length;
 
   return (
@@ -857,7 +1122,7 @@ export default function LessonPlayerPage() {
             </video>
 
             {/* Play button overlay when paused */}
-            {!isPlaying && !activeQuestion && !activeTask && !activeSlideInteraction && (
+            {!isPlaying && !activeQuestion && !activeActivity && !activeSlideInteraction && (
               <div
                 className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer"
                 onClick={togglePlay}
@@ -889,22 +1154,43 @@ export default function LessonPlayerPage() {
             )}
 
             {/* Task Overlay */}
-            {activeTask && (
-              <TaskOverlay
-                task={activeTask}
-                lessonId={lessonId}
-                onComplete={() => {
-                  setCompletedTasks(prev => new Set(prev).add(activeTask.id));
-                  setActiveTask(null);
+            {activeActivity && (
+              <LessonActivityOverlay
+                task={activeActivity}
+                sourceSlide={
+                  slideDeck.find(
+                    (slide) =>
+                      slide.id === activeActivity.linked_slide_id ||
+                      slide.activity_id === activeActivity.id
+                  ) || null
+                }
+                language={language}
+                onComplete={async (result) => {
+                  await persistTaskResponse(activeActivity, {
+                    answer: result.answer,
+                    status: "completed",
+                    timeSpentSeconds: result.timeSpentSeconds,
+                  });
+                  if (result.isCorrect) {
+                    setShowConfetti(true);
+                    setTimeout(() => setShowConfetti(false), 3000);
+                  }
+                  setActiveActivity(null);
                   videoRef.current?.play();
                   setIsPlaying(true);
                 }}
-                onSkip={() => {
-                  setCompletedTasks(prev => new Set(prev).add(activeTask.id));
-                  setActiveTask(null);
-                  videoRef.current?.play();
-                  setIsPlaying(true);
-                }}
+                onSkip={
+                  activeActivity.is_skippable
+                    ? async () => {
+                        await persistTaskResponse(activeActivity, {
+                          status: "skipped",
+                        });
+                        setActiveActivity(null);
+                        videoRef.current?.play();
+                        setIsPlaying(true);
+                      }
+                    : undefined
+                }
               />
             )}
 
@@ -1093,9 +1379,10 @@ export default function LessonPlayerPage() {
                   {t.question}: {answeredQuestions.size}/{questions.length}
                 </span>
               )}
-              {tasks.length > 0 && (
+              {canonicalActivityCount > 0 && (
                 <span>
-                  {language === "ar" ? "مهام" : "Tasks"}: {completedTasks.size}/{tasks.length}
+                  {language === "ar" ? "الأنشطة" : "Activities"}: {completedActivityCount}/{canonicalActivityCount}
+                  {requiredActivityCount > 0 ? ` • ${completedRequiredActivityCount}/${requiredActivityCount} ${language === "ar" ? "مطلوبة" : "required"}` : ""}
                 </span>
               )}
               {timedInteractiveSlides.length > 0 && (

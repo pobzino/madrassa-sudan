@@ -1,58 +1,96 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import type { Database, Json } from '@/lib/database.types'
-import type { TaskType, MatchPairsData, SortingOrderData } from '@/lib/tasks.types'
+import {
+  computeActivityScore,
+  normalizeLessonTaskForm,
+  readAnswerFromTaskResponse,
+  toStoredActivityResponse,
+} from '@/lib/lesson-activities'
+import type { Database } from '@/lib/database.types'
 
 const TaskResponseSchema = z.object({
   task_id: z.string().uuid(),
-  response_data: z.record(z.string(), z.unknown()),
-  time_spent_seconds: z.number().min(0),
+  answer: z.unknown().optional(),
+  response_data: z.record(z.string(), z.unknown()).optional(),
+  time_spent_seconds: z.number().min(0).default(0),
+  status: z.enum(['completed', 'skipped', 'timed_out']).default('completed'),
 })
 
-function computeScore(
-  taskType: TaskType,
-  taskData: Record<string, unknown>,
-  responseData: Record<string, unknown>
-): number {
-  switch (taskType) {
-    case 'matching_pairs': {
-      const data = taskData as unknown as MatchPairsData
-      const matches = (responseData.matches || []) as Array<{ left_id: string; right_id: string }>
-      if (!data.pairs || data.pairs.length === 0) return 0
-      // Build correct mapping: left_id -> right text (we use pair id matching)
-      let correct = 0
-      for (const match of matches) {
-        const pair = data.pairs.find(p => p.id === match.left_id)
-        // The right_id should also be the pair id for a correct match
-        if (pair && match.right_id === pair.id) {
-          correct++
-        }
-      }
-      return correct / data.pairs.length
-    }
-    case 'sorting_order': {
-      const data = taskData as unknown as SortingOrderData
-      const orderedIds = (responseData.ordered_item_ids || []) as string[]
-      if (!data.items || data.items.length === 0) return 0
-      let correct = 0
-      for (const item of data.items) {
-        if (orderedIds[item.correct_position] === item.id) {
-          correct++
-        }
-      }
-      return correct / data.items.length
-    }
-    case 'drawing_tracing':
-    case 'audio_recording':
-      // Completion-based: if they submitted, they get full score
-      return 1.0
-    default:
-      return 0
+function getAnswerFromPayload(payload: z.infer<typeof TaskResponseSchema>) {
+  if (payload.answer !== undefined) {
+    return payload.answer
+  }
+
+  if (payload.response_data) {
+    return readAnswerFromTaskResponse({ response_data: payload.response_data })
+  }
+
+  return null
+}
+
+async function updateLessonTaskProgress(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  lessonId: string,
+  studentId: string
+) {
+  const { data: tasks, error: tasksError } = await supabase
+    .from('lesson_tasks')
+    .select('id, required')
+    .eq('lesson_id', lessonId)
+
+  if (tasksError) {
+    throw tasksError
+  }
+
+  const taskIds = (tasks || []).map((task) => task.id)
+  if (taskIds.length === 0) {
+    return
+  }
+
+  const { data: responses, error: responsesError } = await supabase
+    .from('lesson_task_responses')
+    .select('task_id, completion_score, status')
+    .eq('student_id', studentId)
+    .in('task_id', taskIds)
+
+  if (responsesError) {
+    throw responsesError
+  }
+
+  const requiredTaskIds = new Set(
+    (tasks || []).filter((task) => task.required !== false).map((task) => task.id)
+  )
+
+  const taskResponses = responses || []
+  const tasksCompleted = taskResponses.filter((response) => response.status === 'completed').length
+  const requiredTasksCompleted = taskResponses.filter(
+    (response) => response.status === 'completed' && requiredTaskIds.has(response.task_id)
+  ).length
+  const tasksSkipped = taskResponses.filter((response) => response.status === 'skipped').length
+  const tasksTotalScore = taskResponses.reduce(
+    (sum, response) => sum + (response.status === 'completed' ? response.completion_score || 0 : 0),
+    0
+  )
+
+  const updatePayload: Database['public']['Tables']['lesson_progress']['Insert'] = {
+    student_id: studentId,
+    lesson_id: lessonId,
+    tasks_completed: tasksCompleted,
+    required_tasks_completed: requiredTasksCompleted,
+    tasks_skipped: tasksSkipped,
+    tasks_total_score: tasksTotalScore,
+  }
+
+  const { error: progressError } = await supabase
+    .from('lesson_progress')
+    .upsert(updatePayload, { onConflict: 'student_id,lesson_id' })
+
+  if (progressError) {
+    throw progressError
   }
 }
 
-// POST - Submit a task response
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -60,7 +98,10 @@ export async function POST(
   const supabase = await createClient()
   const { id: lessonId } = await context.params
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -74,31 +115,34 @@ export async function POST(
     )
   }
 
-  const { task_id, response_data, time_spent_seconds } = validation.data
+  const { task_id, status, time_spent_seconds } = validation.data
 
-  // Fetch the task to verify it belongs to this lesson
-  const { data: task, error: taskError } = await supabase
+  const { data: taskRow, error: taskError } = await supabase
     .from('lesson_tasks')
     .select('*')
     .eq('id', task_id)
     .single()
 
-  if (taskError || !task) {
+  if (taskError || !taskRow) {
     return NextResponse.json({ error: 'Task not found' }, { status: 404 })
   }
 
-  if (task.lesson_id !== lessonId) {
+  if (taskRow.lesson_id !== lessonId) {
     return NextResponse.json({ error: 'Task does not belong to this lesson' }, { status: 400 })
   }
 
-  // Compute score server-side
-  const completion_score = computeScore(
-    task.task_type as TaskType,
-    task.task_data as Record<string, unknown>,
-    response_data
-  )
+  const task = normalizeLessonTaskForm({
+    ...taskRow,
+    required: taskRow.required ?? true,
+    linked_slide_id: taskRow.linked_slide_id ?? null,
+  })
+  const answer = getAnswerFromPayload(validation.data)
+  const responseData = toStoredActivityResponse(answer)
+  const completionScore =
+    status === 'completed'
+      ? computeActivityScore(task.task_type, task.task_data, answer)
+      : 0
 
-  // Check for existing response
   const { data: existing } = await supabase
     .from('lesson_task_responses')
     .select('id, attempts')
@@ -106,16 +150,16 @@ export async function POST(
     .eq('student_id', user.id)
     .maybeSingle()
 
-  const responseJson = response_data as Json
   let responseRow: Database['public']['Tables']['lesson_task_responses']['Row'] | null = null
 
   if (existing) {
     const { data: updated, error: updateError } = await supabase
       .from('lesson_task_responses')
       .update({
-        response_data: responseJson,
-        completion_score,
-        is_completed: true,
+        response_data: responseData,
+        completion_score: completionScore,
+        is_completed: status === 'completed',
+        status,
         time_spent_seconds,
         attempts: existing.attempts + 1,
       })
@@ -133,9 +177,10 @@ export async function POST(
       .insert({
         task_id,
         student_id: user.id,
-        response_data: responseJson,
-        completion_score,
-        is_completed: true,
+        response_data: responseData,
+        completion_score: completionScore,
+        is_completed: status === 'completed',
+        status,
         time_spent_seconds,
         attempts: 1,
       })
@@ -148,38 +193,16 @@ export async function POST(
     responseRow = inserted
   }
 
-  // Update lesson_progress task counts
-  const { data: allTasks } = await supabase
-    .from('lesson_tasks')
-    .select('id')
-    .eq('lesson_id', lessonId)
-
-  const taskIds = (allTasks || []).map((t: { id: string }) => t.id)
-
-  if (taskIds.length > 0) {
-    const { data: allResponses } = await supabase
-      .from('lesson_task_responses')
-      .select('completion_score, is_completed')
-      .eq('student_id', user.id)
-      .in('task_id', taskIds)
-
-    const tasksCompleted = (allResponses || []).filter((r: { is_completed: boolean }) => r.is_completed).length
-    const totalScore = (allResponses || []).reduce(
-      (sum: number, r: { completion_score: number }) => sum + r.completion_score, 0
-    )
-
-    await supabase
-      .from('lesson_progress')
-      .upsert({
-        student_id: user.id,
-        lesson_id: lessonId,
-        tasks_completed: tasksCompleted,
-        tasks_total_score: totalScore,
-      }, { onConflict: 'student_id,lesson_id' })
+  try {
+    await updateLessonTaskProgress(supabase, lessonId, user.id)
+  } catch (progressError) {
+    console.error('Update task progress error:', progressError)
+    return NextResponse.json({ error: 'Failed to update lesson progress' }, { status: 500 })
   }
 
   return NextResponse.json({
     response: responseRow,
-    score: completion_score,
+    score: responseRow?.completion_score ?? 0,
+    status: responseRow?.status ?? status,
   })
 }

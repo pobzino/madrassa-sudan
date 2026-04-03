@@ -194,14 +194,14 @@ Requirements:
 Requirements:
 - Generate interactive tasks distributed across the video timeline
 - Keep every task tightly aligned to the selected curriculum topic and stage
-- Use ONLY these task_type values: "matching_pairs" or "sorting_order"
+- Use ONLY these task_type values: "match_pairs" or "sequence_order"
 - Each task must have a timestamp_seconds where it naturally fits the content (different from question timestamps)
 - title_ar and instruction_ar MUST be in Arabic
 - title_en and instruction_en should be English translations
-- For "matching_pairs": task_data must include "pairs" (array of {id, left_ar, left_en, right_ar, right_en}) and "shuffle_right" (boolean true)
+- For "match_pairs": task_data must include "pairs" (array of {id, left_ar, left_en, right_ar, right_en}) and "shuffle_right" (boolean true)
   - Generate 4-6 pairs related to vocabulary, concepts, or relationships in the lesson
   - Each pair id should be a unique short string like "p1", "p2", etc.
-- For "sorting_order": task_data must include "items" (array of {id, text_ar, text_en, correct_position}) and "instruction_type" (one of "ascending", "descending", "chronological", "custom")
+- For "sequence_order": task_data must include "items" (array of {id, text_ar, text_en, correct_position}) and "instruction_type" (one of "ascending", "descending", "chronological", "custom")
   - Generate 4-6 items for ordering (chronological events, size ordering, process steps, etc.)
   - correct_position is 0-indexed (0 = first position)
   - Each item id should be a unique short string like "s1", "s2", etc.
@@ -267,7 +267,7 @@ Requirements:
                 items: {
                   type: "object",
                   properties: {
-                    task_type: { type: "string", enum: ["matching_pairs", "sorting_order"] },
+                    task_type: { type: "string", enum: ["match_pairs", "sequence_order"] },
                     title_ar: { type: "string" },
                     title_en: { type: "string" },
                     instruction_ar: { type: "string" },

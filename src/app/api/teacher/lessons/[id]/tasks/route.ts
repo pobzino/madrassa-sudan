@@ -2,9 +2,13 @@ import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import type { Database, Json } from '@/lib/database.types'
+import { normalizeTaskType } from '@/lib/lesson-activities'
 
 const TaskSchema = z.object({
+  id: z.string().uuid().optional(),
   task_type: z.enum([
+    'choose_correct', 'true_false', 'fill_missing_word', 'tap_to_count',
+    'match_pairs', 'sequence_order', 'sort_groups',
     'matching_pairs', 'sorting_order', 'fill_in_blank_enhanced',
     'drag_drop_label', 'drawing_tracing', 'audio_recording'
   ]),
@@ -16,8 +20,10 @@ const TaskSchema = z.object({
   task_data: z.record(z.string(), z.unknown()),
   timeout_seconds: z.number().min(5).optional().nullable(),
   is_skippable: z.boolean().default(true),
+  required: z.boolean().default(true),
   points: z.number().min(0).default(10),
   display_order: z.number().optional(),
+  linked_slide_id: z.string().min(1).optional().nullable(),
 })
 
 type LessonTaskInsert = Database['public']['Tables']['lesson_tasks']['Insert']
@@ -25,8 +31,9 @@ type LessonTaskUpdate = Database['public']['Tables']['lesson_tasks']['Update']
 
 function toLessonTaskInsert(lessonId: string, task: z.infer<typeof TaskSchema>): LessonTaskInsert {
   return {
+    id: task.id,
     lesson_id: lessonId,
-    task_type: task.task_type,
+    task_type: normalizeTaskType(task.task_type),
     title_ar: task.title_ar,
     title_en: task.title_en ?? null,
     instruction_ar: task.instruction_ar,
@@ -35,15 +42,17 @@ function toLessonTaskInsert(lessonId: string, task: z.infer<typeof TaskSchema>):
     task_data: task.task_data as Json,
     timeout_seconds: task.timeout_seconds ?? null,
     is_skippable: task.is_skippable,
+    required: task.required,
     points: task.points,
     display_order: task.display_order,
+    linked_slide_id: task.linked_slide_id ?? null,
   }
 }
 
 function toLessonTaskUpdate(task: Partial<z.infer<typeof TaskSchema>>): LessonTaskUpdate {
   const update: LessonTaskUpdate = {}
 
-  if (task.task_type !== undefined) update.task_type = task.task_type
+  if (task.task_type !== undefined) update.task_type = normalizeTaskType(task.task_type)
   if (task.title_ar !== undefined) update.title_ar = task.title_ar
   if (task.title_en !== undefined) update.title_en = task.title_en ?? null
   if (task.instruction_ar !== undefined) update.instruction_ar = task.instruction_ar
@@ -52,8 +61,10 @@ function toLessonTaskUpdate(task: Partial<z.infer<typeof TaskSchema>>): LessonTa
   if (task.task_data !== undefined) update.task_data = task.task_data as Json
   if (task.timeout_seconds !== undefined) update.timeout_seconds = task.timeout_seconds ?? null
   if (task.is_skippable !== undefined) update.is_skippable = task.is_skippable
+  if (task.required !== undefined) update.required = task.required
   if (task.points !== undefined) update.points = task.points
   if (task.display_order !== undefined) update.display_order = task.display_order
+  if (task.linked_slide_id !== undefined) update.linked_slide_id = task.linked_slide_id ?? null
 
   return update
 }

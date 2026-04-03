@@ -1,6 +1,13 @@
-// ── Task Type Enum ──
+export type SupportedTaskType =
+  | 'choose_correct'
+  | 'true_false'
+  | 'fill_missing_word'
+  | 'tap_to_count'
+  | 'match_pairs'
+  | 'sequence_order'
+  | 'sort_groups';
 
-export type TaskType =
+export type LegacyTaskType =
   | 'matching_pairs'
   | 'sorting_order'
   | 'fill_in_blank_enhanced'
@@ -8,9 +15,32 @@ export type TaskType =
   | 'drawing_tracing'
   | 'audio_recording';
 
-// ── Task Data (what the teacher defines) ──
+export type TaskType = SupportedTaskType | LegacyTaskType;
 
-export interface MatchingPairsData {
+export type LessonTaskResponseStatus = 'completed' | 'skipped' | 'timed_out';
+
+export interface ChooseCorrectData {
+  options_ar: string[];
+  options_en: string[];
+  correct_index: number;
+}
+
+export interface TrueFalseData {
+  correct_answer: boolean;
+}
+
+export interface FillMissingWordData {
+  options_ar: string[];
+  options_en: string[];
+  correct_index: number;
+}
+
+export interface TapToCountData {
+  count_target: number;
+  visual_emoji?: string | null;
+}
+
+export interface MatchPairsData {
   pairs: Array<{
     id: string;
     left_ar: string;
@@ -21,7 +51,7 @@ export interface MatchingPairsData {
   shuffle_right: boolean;
 }
 
-export interface SortingOrderData {
+export interface SequenceOrderData {
   items: Array<{
     id: string;
     text_ar: string;
@@ -29,6 +59,20 @@ export interface SortingOrderData {
     correct_position: number;
   }>;
   instruction_type: 'ascending' | 'descending' | 'chronological' | 'custom';
+}
+
+export type MatchingPairsData = MatchPairsData;
+export type SortingOrderData = SequenceOrderData;
+
+export interface SortGroupsData {
+  groups_ar: string[];
+  groups_en: string[];
+  items: Array<{
+    id: string;
+    text_ar: string;
+    text_en?: string;
+    group_index: number;
+  }>;
 }
 
 export interface FillInBlankEnhancedData {
@@ -73,13 +117,24 @@ export interface AudioRecordingData {
   reference_audio_url?: string;
 }
 
-// ── Response Data (what the student produces) ──
+export type TaskData =
+  | ChooseCorrectData
+  | TrueFalseData
+  | FillMissingWordData
+  | TapToCountData
+  | MatchPairsData
+  | SequenceOrderData
+  | SortGroupsData
+  | FillInBlankEnhancedData
+  | DragDropLabelData
+  | DrawingTracingData
+  | AudioRecordingData;
 
 export interface MatchingPairsResponse {
   matches: Array<{ left_id: string; right_id: string }>;
 }
 
-export interface SortingOrderResponse {
+export interface SequenceOrderResponse {
   ordered_item_ids: string[];
 }
 
@@ -100,7 +155,22 @@ export interface AudioRecordingResponse {
   duration_seconds: number;
 }
 
-// ── DB Row Types ──
+export interface LessonTaskForm {
+  id: string;
+  task_type: TaskType;
+  title_ar: string;
+  title_en: string;
+  instruction_ar: string;
+  instruction_en: string;
+  timestamp_seconds: number;
+  task_data: Record<string, unknown>;
+  timeout_seconds: number | null;
+  is_skippable: boolean;
+  required: boolean;
+  points: number;
+  linked_slide_id: string | null;
+  display_order: number;
+}
 
 export interface LessonTask {
   id: string;
@@ -115,6 +185,8 @@ export interface LessonTask {
   task_data: Record<string, unknown>;
   timeout_seconds: number | null;
   is_skippable: boolean;
+  required: boolean;
+  linked_slide_id: string | null;
   points: number;
   created_at: string;
   updated_at: string;
@@ -127,8 +199,23 @@ export interface LessonTaskResponse {
   response_data: Record<string, unknown>;
   completion_score: number;
   is_completed: boolean;
+  status: LessonTaskResponseStatus;
   time_spent_seconds: number;
   attempts: number;
   created_at: string;
   updated_at: string;
+}
+
+export const SUPPORTED_TASK_TYPES: SupportedTaskType[] = [
+  'choose_correct',
+  'true_false',
+  'fill_missing_word',
+  'tap_to_count',
+  'match_pairs',
+  'sequence_order',
+  'sort_groups',
+];
+
+export function isSupportedTaskType(value: string): value is SupportedTaskType {
+  return SUPPORTED_TASK_TYPES.includes(value as SupportedTaskType);
 }

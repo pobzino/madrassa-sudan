@@ -64,6 +64,7 @@ export interface Slide {
   interaction_targets_ar?: string[] | null;
   interaction_targets_en?: string[] | null;
   interaction_solution_map?: number[] | null;
+  activity_id?: string | null;
 }
 
 export interface SlideDeck {

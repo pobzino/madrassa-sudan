@@ -67,6 +67,7 @@ export default function SlideInteractionFields({
   function setInteractionType(nextType: SlideInteractionType | '') {
     if (!nextType) {
       onUpdate({
+        activity_id: null,
         interaction_type: null,
         interaction_prompt_ar: null,
         interaction_prompt_en: null,
@@ -86,6 +87,7 @@ export default function SlideInteractionFields({
     }
 
     const baseUpdates: Partial<Slide> = {
+      activity_id: slide.activity_id ?? crypto.randomUUID(),
       interaction_type: nextType,
       interaction_prompt_ar: slide.interaction_prompt_ar ?? slide.body_ar ?? '',
       interaction_prompt_en: slide.interaction_prompt_en ?? slide.body_en ?? '',

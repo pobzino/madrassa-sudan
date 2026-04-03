@@ -8,7 +8,6 @@ import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import AIContentGenerator from "@/components/teacher/AIContentGenerator";
-import TaskEditor, { type TaskForm } from "@/components/teacher/TaskEditor";
 import {
   getCurriculumRequirementMessage,
   getCurriculumSelectionForLesson,
@@ -22,6 +21,13 @@ import InteractionResultsPanel from "@/components/teacher/InteractionResultsPane
 import SlideEditor from "@/components/slides/SlideEditor";
 import SlideGenerateButton from "@/components/slides/SlideGenerateButton";
 import type { Slide } from "@/lib/slides.types";
+import {
+  ensureSlidesForSupportedTasks,
+  isCanonicalActivityTask,
+  normalizeLessonTaskForm,
+  syncTaskFormsFromSlides,
+} from "@/lib/lesson-activities";
+import type { LessonTaskForm } from "@/lib/tasks.types";
 import {
   clampSlideCount,
   DEFAULT_SLIDE_LENGTH_PRESET,
@@ -112,6 +118,126 @@ function applyVideoUrlsToForm(previous: LessonForm, urls: LessonVideoUrls): Less
   };
 }
 
+async function syncLessonQuestions(
+  supabase: ReturnType<typeof createClient>,
+  lessonId: string,
+  questions: QuestionForm[]
+) {
+  const { data: existingRows, error: existingError } = await supabase
+    .from("lesson_questions")
+    .select("id")
+    .eq("lesson_id", lessonId);
+
+  if (existingError) {
+    throw new Error("Questions: " + existingError.message);
+  }
+
+  const nextRows = questions.map((question, index) => ({
+    id: question.id,
+    lesson_id: lessonId,
+    question_type: question.question_type,
+    question_text_ar: question.question_text_ar,
+    question_text_en: question.question_text_en || null,
+    options:
+      question.question_type === "fill_in_blank"
+        ? null
+        : question.options.filter((option) => option.trim()),
+    correct_answer: question.correct_answer,
+    explanation_ar: null,
+    explanation_en: null,
+    is_required: question.is_required,
+    allow_retry: question.allow_retry,
+    display_order: index + 1,
+    timestamp_seconds: question.timestamp_seconds || 0,
+  }));
+
+  if (nextRows.length > 0) {
+    const { error: upsertError } = await supabase
+      .from("lesson_questions")
+      .upsert(nextRows, { onConflict: "id" });
+
+    if (upsertError) {
+      throw new Error("Questions: " + upsertError.message);
+    }
+  }
+
+  const nextIds = new Set(nextRows.map((row) => row.id));
+  const removedIds = (existingRows || [])
+    .map((row) => row.id)
+    .filter((rowId) => !nextIds.has(rowId));
+
+  if (removedIds.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("lesson_questions")
+      .delete()
+      .in("id", removedIds);
+
+    if (deleteError) {
+      throw new Error("Questions: " + deleteError.message);
+    }
+  }
+}
+
+async function syncLessonTasks(
+  supabase: ReturnType<typeof createClient>,
+  lessonId: string,
+  tasks: LessonTaskForm[]
+) {
+  const normalizedTasks = tasks.map(normalizeLessonTaskForm);
+  const { data: existingRows, error: existingError } = await supabase
+    .from("lesson_tasks")
+    .select("id")
+    .eq("lesson_id", lessonId);
+
+  if (existingError) {
+    throw new Error("Activities: " + existingError.message);
+  }
+
+  const nextRows: Database["public"]["Tables"]["lesson_tasks"]["Insert"][] = normalizedTasks.map((task, index) => ({
+    id: task.id,
+    lesson_id: lessonId,
+    task_type: task.task_type as Database["public"]["Tables"]["lesson_tasks"]["Insert"]["task_type"],
+    title_ar: task.title_ar,
+    title_en: task.title_en || null,
+    instruction_ar: task.instruction_ar,
+    instruction_en: task.instruction_en || null,
+    timestamp_seconds: task.timestamp_seconds || 0,
+    display_order: index,
+    task_data: task.task_data as Database["public"]["Tables"]["lesson_tasks"]["Insert"]["task_data"],
+    timeout_seconds: task.timeout_seconds,
+    is_skippable: task.is_skippable,
+    required: task.required,
+    linked_slide_id: task.linked_slide_id,
+    points: task.points,
+  }));
+
+  if (nextRows.length > 0) {
+    const { error: upsertError } = await supabase
+      .from("lesson_tasks")
+      .upsert(nextRows, { onConflict: "id" });
+
+    if (upsertError) {
+      throw new Error("Activities: " + upsertError.message);
+    }
+  }
+
+  const nextIds = new Set(nextRows.map((row) => row.id as string));
+  const removedIds = (existingRows || [])
+    .map((row) => row.id)
+    .filter((rowId) => !nextIds.has(rowId));
+
+  if (removedIds.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("lesson_tasks")
+      .delete()
+      .in("id", removedIds);
+
+    if (deleteError) {
+      throw new Error("Activities: " + deleteError.message);
+    }
+  }
+}
+
 export default function LessonEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -159,7 +285,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   });
 
   const [questions, setQuestions] = useState<QuestionForm[]>([]);
-  const [lessonTasks, setLessonTasks] = useState<TaskForm[]>([]);
+  const [lessonTasks, setLessonTasks] = useState<LessonTaskForm[]>([]);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
 
   const persistLessonVideoUrls = useCallback(
@@ -244,9 +370,9 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       fetch(`/api/teacher/lessons/${id}/slides`).then((r) => r.json()).catch(() => null),
     ]);
 
-    if (slidesRes?.slideDeck?.slides) {
-      setSlides(slidesRes.slideDeck.slides);
-    }
+    const loadedSlides = Array.isArray(slidesRes?.slideDeck?.slides)
+      ? (slidesRes.slideDeck.slides as Slide[])
+      : [];
     if (slidesRes?.slideDeck?.language_mode === "en") {
       setSlideLanguageMode("en");
     } else if (
@@ -331,20 +457,17 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       .eq("lesson_id", id)
       .order("timestamp_seconds");
 
-    const taskForms: TaskForm[] = (taskRows || []).map((t: Record<string, unknown>) => ({
-      id: t.id as string,
-      task_type: t.task_type as TaskForm["task_type"],
-      title_ar: (t.title_ar as string) || "",
-      title_en: (t.title_en as string) || "",
-      instruction_ar: (t.instruction_ar as string) || "",
-      instruction_en: (t.instruction_en as string) || "",
-      timestamp_seconds: (t.timestamp_seconds as number) || 0,
-      task_data: (t.task_data as Record<string, unknown>) || {},
-      timeout_seconds: t.timeout_seconds as number | null,
-      is_skippable: (t.is_skippable as boolean) ?? true,
-      points: (t.points as number) || 10,
-    }));
-    setLessonTasks(taskForms);
+    const taskForms: LessonTaskForm[] = (taskRows || []).map((task) =>
+      normalizeLessonTaskForm({
+        ...(task as unknown as Partial<LessonTaskForm>),
+        id: task.id,
+        task_type: String(task.task_type),
+      })
+    );
+    const slidesWithActivities = ensureSlidesForSupportedTasks(loadedSlides, taskForms);
+    const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, taskForms);
+    setSlides(slidesWithActivities);
+    setLessonTasks(syncedTasks);
 
     const { data: blocks } = await supabase
       .from("lesson_content_blocks")
@@ -373,6 +496,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       return () => clearTimeout(timeout);
     }
   }, [authLoading, loadLesson]);
+
+  useEffect(() => {
+    setLessonTasks((previous) => syncTaskFormsFromSlides(slides, previous));
+  }, [slides]);
 
   // Load slide generation context from sessionStorage
   useEffect(() => {
@@ -409,10 +536,17 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const handleSaveSlides = useCallback(async () => {
     setSlideSaving(true);
     try {
+      const slidesWithActivities = ensureSlidesForSupportedTasks(slides, lessonTasks);
+      const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, lessonTasks);
+      setSlides(slidesWithActivities);
+      setLessonTasks(syncedTasks);
       const res = await fetch(`/api/teacher/lessons/${id}/slides`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slides }),
+        body: JSON.stringify({
+          slides: slidesWithActivities,
+          language_mode: slideLanguageMode,
+        }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -422,7 +556,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       }
     } catch { alert("Save failed"); }
     finally { setSlideSaving(false); }
-  }, [id, slides]);
+  }, [id, lessonTasks, slideLanguageMode, slides]);
 
   const handleSlideVideoReady = useCallback(
     async (urls: LessonVideoUrls) => {
@@ -567,47 +701,27 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         }
       }
 
-      // Save questions
-      await supabase.from("lesson_questions").delete().eq("lesson_id", id);
-      if (questions.length > 0) {
-        const questionRows = questions.map((q, index) => ({
-          lesson_id: id,
-          question_type: q.question_type,
-          question_text_ar: q.question_text_ar,
-          question_text_en: q.question_text_en || null,
-          options: q.question_type === "fill_in_blank" ? null : q.options.filter((opt) => opt.trim()),
-          correct_answer: q.correct_answer,
-          explanation_ar: null,
-          explanation_en: null,
-          is_required: q.is_required,
-          allow_retry: q.allow_retry,
-          display_order: index + 1,
-          timestamp_seconds: q.timestamp_seconds || 0,
-        }));
-        const { error: qError } = await supabase.from("lesson_questions").insert(questionRows);
-        if (qError) throw new Error("Questions: " + qError.message);
+      const slidesWithActivities = ensureSlidesForSupportedTasks(slides, lessonTasks);
+      const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, lessonTasks);
+      setSlides(slidesWithActivities);
+      setLessonTasks(syncedTasks);
+
+      const slideSaveResponse = await fetch(`/api/teacher/lessons/${id}/slides`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slides: slidesWithActivities,
+          language_mode: slideLanguageMode,
+        }),
+      });
+
+      if (!slideSaveResponse.ok) {
+        const data = await slideSaveResponse.json().catch(() => ({}));
+        throw new Error("Slides: " + (data.error || "Failed to save slides"));
       }
 
-      // Save tasks
-      await supabase.from("lesson_tasks").delete().eq("lesson_id", id);
-      if (lessonTasks.length > 0) {
-        const taskRows: Database["public"]["Tables"]["lesson_tasks"]["Insert"][] = lessonTasks.map((t, index) => ({
-          lesson_id: id,
-          task_type: t.task_type as "matching_pairs" | "sorting_order" | "fill_in_blank_enhanced" | "drag_drop_label" | "drawing_tracing" | "audio_recording",
-          title_ar: t.title_ar,
-          title_en: t.title_en || null,
-          instruction_ar: t.instruction_ar,
-          instruction_en: t.instruction_en || null,
-          timestamp_seconds: t.timestamp_seconds || 0,
-          task_data: t.task_data as Database["public"]["Tables"]["lesson_tasks"]["Insert"]["task_data"],
-          timeout_seconds: t.timeout_seconds,
-          is_skippable: t.is_skippable,
-          points: t.points,
-          display_order: index,
-        }));
-        const { error: tError } = await supabase.from("lesson_tasks").insert(taskRows);
-        if (tError) throw new Error("Tasks: " + tError.message);
-      }
+      await syncLessonQuestions(supabase, id, questions);
+      await syncLessonTasks(supabase, id, syncedTasks);
 
       // Save content blocks
       await fetch("/api/teacher/lessons/content", {
@@ -878,6 +992,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         {activeTab === "questions" && (
           <QuestionsTasksTab
             questions={questions}
+            slides={slides}
             lessonTasks={lessonTasks}
             updateQuestion={updateQuestion}
             addQuestion={addQuestion}
@@ -890,10 +1005,12 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           <ContentTab
             lessonId={id}
             form={form}
+            slides={slides}
             questions={questions}
             contentBlocks={contentBlocks}
             setContentBlocks={setContentBlocks}
             setQuestions={setQuestions}
+            setSlides={setSlides}
             setLessonTasks={setLessonTasks}
             addContentBlock={addContentBlock}
             contentGenerationBlockedReason={contentGenerationBlockedReason}
@@ -1114,6 +1231,7 @@ function DetailsTab({
 
 function QuestionsTasksTab({
   questions,
+  slides,
   lessonTasks,
   updateQuestion,
   addQuestion,
@@ -1121,12 +1239,26 @@ function QuestionsTasksTab({
   setLessonTasks,
 }: {
   questions: QuestionForm[];
-  lessonTasks: TaskForm[];
+  slides: Slide[];
+  lessonTasks: LessonTaskForm[];
   updateQuestion: (id: string, updates: Partial<QuestionForm>) => void;
   addQuestion: () => void;
   removeQuestion: (id: string) => void;
-  setLessonTasks: (tasks: TaskForm[] | ((prev: TaskForm[]) => TaskForm[])) => void;
+  setLessonTasks: (tasks: LessonTaskForm[] | ((prev: LessonTaskForm[]) => LessonTaskForm[])) => void;
 }) {
+  const activities = lessonTasks.filter(
+    (task) => task.linked_slide_id && isCanonicalActivityTask(task.task_type)
+  );
+  const hiddenLegacyTasks = lessonTasks.filter(
+    (task) => !task.linked_slide_id || !isCanonicalActivityTask(task.task_type)
+  );
+
+  const updateActivity = (activityId: string, updates: Partial<LessonTaskForm>) => {
+    setLessonTasks((current) =>
+      current.map((task) => (task.id === activityId ? { ...task, ...updates } : task))
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Questions */}
@@ -1270,15 +1402,120 @@ function QuestionsTasksTab({
         )}
       </section>
 
-      {/* Tasks */}
+      {/* Activities */}
       <section className="bg-white rounded-xl border border-gray-100 p-5">
-        <TaskEditor
-          tasks={lessonTasks}
-          onChange={setLessonTasks}
-          onSave={() => {}}
-          saving={false}
-          hideSaveButton
-        />
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+              Activities {activities.length > 0 && <span className="text-gray-400">({activities.length})</span>}
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Edit activity content in the Slides tab. Use this panel for timing and completion rules.
+            </p>
+          </div>
+          <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+            Add or remove activity slides in Slides
+          </span>
+        </div>
+
+        {activities.length === 0 ? (
+          <div className="mt-4 rounded-xl border border-dashed border-amber-200 bg-amber-50/40 px-4 py-6 text-sm text-amber-700">
+            No linked activity slides yet. Add an interactive slide in the Slides tab to create one.
+          </div>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {activities.map((activity, index) => {
+              const linkedSlide = slides.find((slide) => slide.id === activity.linked_slide_id);
+              return (
+                <div key={activity.id} className="rounded-xl border border-amber-200 bg-amber-50/30 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-lg bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">
+                          Activity {index + 1}
+                        </span>
+                        <span className="rounded-lg bg-white px-2 py-1 text-xs font-medium text-gray-600">
+                          {activity.task_type}
+                        </span>
+                      </div>
+                      <h3 className="mt-2 text-sm font-semibold text-gray-900">
+                        {activity.title_en || activity.title_ar || linkedSlide?.title_en || linkedSlide?.title_ar || "Untitled activity"}
+                      </h3>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Linked slide: {linkedSlide?.title_en || linkedSlide?.title_ar || activity.linked_slide_id}
+                      </p>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Answers and prompts are edited directly on the linked activity slide.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Timestamp (sec)</label>
+                      <input
+                        type="number"
+                        value={activity.timestamp_seconds}
+                        onChange={(event) =>
+                          updateActivity(activity.id, { timestamp_seconds: Number(event.target.value) })
+                        }
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Points</label>
+                      <input
+                        type="number"
+                        value={activity.points}
+                        onChange={(event) => updateActivity(activity.id, { points: Number(event.target.value) })}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Timeout (sec)</label>
+                      <input
+                        type="number"
+                        value={activity.timeout_seconds ?? ""}
+                        onChange={(event) =>
+                          updateActivity(activity.id, {
+                            timeout_seconds: event.target.value ? Number(event.target.value) : null,
+                          })
+                        }
+                        placeholder="No limit"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <label className="flex items-end gap-2 pb-2 text-sm text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={activity.required}
+                        onChange={(event) => updateActivity(activity.id, { required: event.target.checked })}
+                        className="rounded"
+                      />
+                      Required
+                    </label>
+                    <label className="flex items-end gap-2 pb-2 text-sm text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={activity.is_skippable}
+                        onChange={(event) => updateActivity(activity.id, { is_skippable: event.target.checked })}
+                        className="rounded"
+                      />
+                      Skippable
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {hiddenLegacyTasks.length > 0 && (
+          <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+            {hiddenLegacyTasks.length} legacy task{hiddenLegacyTasks.length === 1 ? "" : "s"} remain for compatibility.
+            They are preserved on save but not editable until their runtime UI is rebuilt.
+          </div>
+        )}
       </section>
     </div>
   );
@@ -1289,10 +1526,12 @@ function QuestionsTasksTab({
 function ContentTab({
   lessonId,
   form,
+  slides,
   questions,
   contentBlocks,
   setContentBlocks,
   setQuestions,
+  setSlides,
   setLessonTasks,
   addContentBlock,
   contentGenerationBlockedReason,
@@ -1300,11 +1539,13 @@ function ContentTab({
 }: {
   lessonId: string;
   form: LessonForm;
+  slides: Slide[];
   questions: QuestionForm[];
   contentBlocks: ContentBlock[];
   setContentBlocks: (blocks: ContentBlock[] | ((prev: ContentBlock[]) => ContentBlock[])) => void;
   setQuestions: (questions: QuestionForm[]) => void;
-  setLessonTasks: (tasks: TaskForm[] | ((prev: TaskForm[]) => TaskForm[])) => void;
+  setSlides: (slides: Slide[] | ((prev: Slide[]) => Slide[])) => void;
+  setLessonTasks: (tasks: LessonTaskForm[] | ((prev: LessonTaskForm[]) => LessonTaskForm[])) => void;
   addContentBlock: (language: "ar" | "en") => void;
   contentGenerationBlockedReason: string | null;
   rebuildEmbeddings: () => void;
@@ -1343,20 +1584,30 @@ function ContentTab({
             setContentBlocks(newBlocks);
 
             if (data.tasks && data.tasks.length > 0) {
-              const newTasks: TaskForm[] = data.tasks.map((t) => ({
-                id: crypto.randomUUID(),
-                task_type: t.task_type as TaskForm["task_type"],
-                title_ar: t.title_ar,
-                title_en: t.title_en,
-                instruction_ar: t.instruction_ar,
-                instruction_en: t.instruction_en,
-                timestamp_seconds: t.timestamp_seconds,
-                task_data: t.task_data,
-                timeout_seconds: null,
-                is_skippable: t.is_skippable,
-                points: t.points,
-              }));
-              setLessonTasks(newTasks);
+              const newTasks = data.tasks.map((task) =>
+                normalizeLessonTaskForm({
+                  id: crypto.randomUUID(),
+                  task_type: task.task_type,
+                  title_ar: task.title_ar,
+                  title_en: task.title_en,
+                  instruction_ar: task.instruction_ar,
+                  instruction_en: task.instruction_en,
+                  timestamp_seconds: task.timestamp_seconds,
+                  task_data: task.task_data,
+                  timeout_seconds: null,
+                  is_skippable: task.is_skippable,
+                  required: true,
+                  points: task.points,
+                  display_order: task.timestamp_seconds,
+                  linked_slide_id: null,
+                })
+              );
+              const preservedSlides = slides.filter((slide) => !slide.activity_id);
+              const slidesWithActivities = ensureSlidesForSupportedTasks(preservedSlides, newTasks);
+              const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, newTasks);
+
+              setSlides(slidesWithActivities);
+              setLessonTasks(syncedTasks);
             }
           }}
         />

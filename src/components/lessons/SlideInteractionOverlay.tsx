@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import SlideCard from '@/components/slides/SlideCard';
 import type { Slide } from '@/lib/slides.types';
 import {
@@ -16,12 +16,18 @@ interface SlideInteractionOverlayProps {
   slide: Slide;
   language: 'ar' | 'en';
   onComplete: (result: SlideInteractionResult) => void;
+  badgeLabel?: string;
+  headerMeta?: ReactNode;
+  secondaryAction?: ReactNode;
 }
 
 export default function SlideInteractionOverlay({
   slide,
   language,
   onComplete,
+  badgeLabel,
+  headerMeta,
+  secondaryAction,
 }: SlideInteractionOverlayProps) {
   const isAr = language === 'ar';
   const startedAtRef = useRef(0);
@@ -543,8 +549,11 @@ export default function SlideInteractionOverlay({
                 {isAr ? slide.title_ar : slide.title_en}
               </h2>
             </div>
-            <div className="rounded-full bg-[#007229]/10 px-3 py-1 text-xs font-semibold text-[#007229]">
-              {slide.interaction_type === 'tap_to_count' ? text.counting : text.activity}
+            <div className="flex items-center gap-2">
+              {headerMeta}
+              <div className="rounded-full bg-[#007229]/10 px-3 py-1 text-xs font-semibold text-[#007229]">
+                {badgeLabel || (slide.interaction_type === 'tap_to_count' ? text.counting : text.activity)}
+              </div>
             </div>
           </div>
 
@@ -559,6 +568,8 @@ export default function SlideInteractionOverlay({
               </p>
 
               {renderInteractionControls()}
+
+              {!result && secondaryAction}
 
               {result && (
                 <div className={`mt-4 rounded-2xl border p-4 ${result.isCorrect ? 'border-green-300 bg-green-50' : 'border-amber-300 bg-amber-50'}`}>
