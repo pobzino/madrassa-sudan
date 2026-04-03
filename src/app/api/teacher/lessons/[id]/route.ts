@@ -76,7 +76,7 @@ export async function PATCH(
   // Verify teacher owns the lesson
   const { data: lesson, error: lessonError } = await supabase
     .from('lessons')
-    .select('created_by')
+    .select('created_by, is_published')
     .eq('id', lessonId)
     .single()
 
@@ -105,6 +105,16 @@ export async function PATCH(
   }
 
   const updates = validation.data
+  const isPublishingChange =
+    updates.is_published !== undefined && updates.is_published !== lesson.is_published
+
+  if (isPublishingChange && role !== 'admin') {
+    return NextResponse.json(
+      { error: 'Only admins can change lesson publish status.' },
+      { status: 403 }
+    )
+  }
+
   const { curriculum_topic, ...restUpdates } = updates
   const lessonUpdates: Database['public']['Tables']['lessons']['Update'] = {
     ...restUpdates,
@@ -126,4 +136,44 @@ export async function PATCH(
   }
 
   return NextResponse.json({ lesson: updatedLesson })
+}
+
+// DELETE - Delete lesson (cascades to all child rows)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createClient()
+  const { id: lessonId } = await params
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const role = await getTeacherRole(supabase, user.id)
+  if (!role) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { data: lesson } = await supabase
+    .from('lessons')
+    .select('created_by')
+    .eq('id', lessonId)
+    .single()
+
+  if (!lesson || !canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { error } = await supabase
+    .from('lessons')
+    .delete()
+    .eq('id', lessonId)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import CurriculumTopicSelector from "@/components/teacher/CurriculumTopicSelector";
 import { createClient } from "@/lib/supabase/client";
@@ -115,7 +116,9 @@ function applyVideoUrlsToForm(previous: LessonForm, urls: LessonVideoUrls): Less
 
 export default function LessonEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { loading: authLoading } = useTeacherGuard();
+  const router = useRouter();
+  const { profile, loading: authLoading } = useTeacherGuard();
+  const [deleting, setDeleting] = useState(false);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [availableCohorts, setAvailableCohorts] = useState<CohortOption[]>([]);
   const [assignedCohortIds, setAssignedCohortIds] = useState<string[]>([]);
@@ -137,6 +140,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [slideLanguageMode, setSlideLanguageMode] = useState<SlideLanguageMode>("ar");
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
   const [slideGenProgress, setSlideGenProgress] = useState("");
+  const canPublishLesson = profile?.role === "admin";
 
   const [form, setForm] = useState<LessonForm>({
     title_ar: "",
@@ -695,12 +699,17 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                   {form.title_en || form.title_ar || "Untitled Lesson"}
                 </h1>
                 <button
-                  onClick={() => setForm({ ...form, is_published: !form.is_published })}
+                  onClick={() => {
+                    if (!canPublishLesson) return;
+                    setForm({ ...form, is_published: !form.is_published });
+                  }}
+                  disabled={!canPublishLesson}
                   className={`flex-shrink-0 px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors ${
                     form.is_published
                       ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                       : "bg-amber-50 text-amber-700 hover:bg-amber-100"
-                  }`}
+                  } ${!canPublishLesson ? "cursor-not-allowed opacity-70 hover:bg-inherit" : ""}`}
+                  title={!canPublishLesson ? "Only admins can change lesson publish status." : undefined}
                 >
                   {form.is_published ? "Published" : "Draft"}
                 </button>
@@ -712,6 +721,29 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                   {saveMessage.text}
                 </span>
               )}
+              <button
+                onClick={async () => {
+                  if (!window.confirm("Delete this lesson and all its content? This cannot be undone.")) return;
+                  setDeleting(true);
+                  try {
+                    const res = await fetch(`/api/teacher/lessons/${id}`, { method: "DELETE" });
+                    if (!res.ok) {
+                      const data = await res.json().catch(() => ({}));
+                      alert(data.error || "Failed to delete lesson");
+                      return;
+                    }
+                    router.push("/teacher/lessons");
+                  } catch {
+                    alert("Failed to delete lesson");
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+                disabled={deleting || saving}
+                className="px-3 py-1.5 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-60"
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
               <button
                 onClick={saveAll}
                 disabled={saving}
@@ -1039,6 +1071,11 @@ function DetailsTab({
               If no classes are selected, this lesson stays available to all students when published. Selecting one or
               more classes restricts the lesson to those class members.
             </p>
+            {!canPublishLesson && (
+              <p className="mt-2 text-sm text-amber-600">
+                Only admins can publish or unpublish lessons.
+              </p>
+            )}
           </div>
           {assignedCohortIds.length > 0 && (
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
