@@ -112,8 +112,8 @@ export default function AIContentGenerator({
         setProgress('Transcription complete. Generating content...');
       }
 
-      // Step 2: Generate questions, content blocks, and tasks
-      const generateResult = await fetchJSON(
+      // Step 2: Generate questions, content blocks, and tasks (streaming)
+      const genRes = await fetch(
         `/api/teacher/lessons/${lessonId}/generate`,
         {
           method: 'POST',
@@ -121,6 +121,30 @@ export default function AIContentGenerator({
           body: JSON.stringify({ language_hint: 'ar' }),
         }
       );
+
+      if (!genRes.ok && !genRes.body) {
+        const ct = genRes.headers.get('content-type') || '';
+        if (ct.includes('application/json')) {
+          const errData = await genRes.json();
+          throw new Error(errData.error || 'Generation failed');
+        }
+        throw new Error(`Server returned an unexpected response (${genRes.status}). Please try again.`);
+      }
+
+      // Read the streaming response — JSON is at the end after a newline
+      const responseText = await genRes.text();
+      const jsonStart = responseText.lastIndexOf('\n');
+      const jsonStr = jsonStart >= 0 ? responseText.slice(jsonStart + 1) : responseText.trim();
+
+      if (!jsonStr) {
+        throw new Error('AI did not return content. Please try again.');
+      }
+
+      const generateResult = JSON.parse(jsonStr);
+
+      if (generateResult.error) {
+        throw new Error(generateResult.error);
+      }
 
       setProgress('Processing results...');
 

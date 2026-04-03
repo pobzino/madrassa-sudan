@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import {
   getCurriculumPromptBlock,
   getCurriculumRequirementMessage,
@@ -10,15 +10,16 @@ import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-acc
 
 export const maxDuration = 300;
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 /**
  * Step 2: Generate questions, content blocks, and tasks from an existing transcript.
- * The transcript must already be saved to lessons.ai_transcript (via the /transcribe endpoint).
+ * Uses streaming to keep the connection alive and avoid gateway timeouts.
  */
 export async function POST(
   request: NextRequest,
@@ -28,10 +29,7 @@ export async function POST(
     const { id: lessonId } = await params;
     const openai = getOpenAIClient();
     if (!openai) {
-      return NextResponse.json(
-        { error: "AI not configured" },
-        { status: 500 }
-      );
+      return jsonResponse({ error: "AI not configured" }, 500);
     }
 
     const supabase = await createClient();
@@ -41,12 +39,12 @@ export async function POST(
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
     const role = await getTeacherRole(supabase, user.id);
     if (!role) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return jsonResponse({ error: "Forbidden" }, 403);
     }
 
     const { data: lesson } = await supabase
@@ -56,18 +54,17 @@ export async function POST(
       .single();
 
     if (!lesson || !canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
-      return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+      return jsonResponse({ error: "Lesson not found" }, 404);
     }
 
     const body = await request.json().catch(() => ({}));
     const questionCount = Math.min(Math.max(body.question_count || 6, 3), 12);
 
-    // Read transcript from DB (saved by /transcribe endpoint)
     const transcriptText = lesson.ai_transcript as string | null;
     if (!transcriptText || transcriptText.trim().length < 20) {
-      return NextResponse.json(
+      return jsonResponse(
         { error: "No transcript available. Run transcription first." },
-        { status: 400 }
+        400
       );
     }
 
@@ -86,7 +83,7 @@ export async function POST(
     );
 
     if (curriculumRequirement) {
-      return NextResponse.json({ error: curriculumRequirement }, { status: 400 });
+      return jsonResponse({ error: curriculumRequirement }, 400);
     }
 
     const curriculumBlock = getCurriculumPromptBlock(curriculumSelection);
@@ -150,9 +147,11 @@ Requirements:
   - Each item id should be a unique short string like "s1", "s2", etc.
 - Set is_skippable to true and points to 10 for all tasks`;
 
-    const completion = await openai.chat.completions.create({
+    // Use streaming to keep the connection alive and avoid gateway timeouts
+    const stream = await openai.chat.completions.create({
       model: AI_MODEL,
       messages: [{ role: "user", content: prompt }],
+      stream: true,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -286,33 +285,61 @@ Requirements:
       },
     });
 
-    const content = completion.choices?.[0]?.message?.content;
-    if (!content) {
-      return NextResponse.json(
-        { error: "AI did not return content. Please try again." },
-        { status: 502 }
-      );
-    }
+    // Stream the response to the client to keep the connection alive
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        let fullContent = "";
+        try {
+          for await (const chunk of stream) {
+            const delta = chunk.choices?.[0]?.delta?.content || "";
+            if (delta) {
+              fullContent += delta;
+              // Send a keep-alive dot so the gateway knows the connection is active
+              controller.enqueue(encoder.encode(" "));
+            }
+          }
 
-    const generated = JSON.parse(content);
+          const generated = JSON.parse(fullContent);
 
-    // Update lesson with generation timestamp
-    await supabase
-      .from("lessons")
-      .update({ ai_generated_at: new Date().toISOString() })
-      .eq("id", lessonId)
-      .then(() => {});
+          // Update lesson with generation timestamp
+          supabase
+            .from("lessons")
+            .update({ ai_generated_at: new Date().toISOString() })
+            .eq("id", lessonId)
+            .then(() => {});
 
-    return NextResponse.json({
-      transcript: { text: transcriptText },
-      questions: generated.questions || [],
-      contentBlocks: generated.contentBlocks || [],
-      tasks: generated.tasks || [],
+          const result = JSON.stringify({
+            transcript: { text: transcriptText },
+            questions: generated.questions || [],
+            contentBlocks: generated.contentBlocks || [],
+            tasks: generated.tasks || [],
+          });
+
+          // Clear the keep-alive spaces and send the real JSON preceded by a newline marker
+          controller.enqueue(encoder.encode("\n" + result));
+          controller.close();
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : "Generation failed";
+          controller.enqueue(
+            encoder.encode("\n" + JSON.stringify({ error: errorMsg }))
+          );
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+        "Cache-Control": "no-cache",
+      },
     });
   } catch (error) {
     console.error("generate error:", error);
     const message =
       error instanceof Error ? error.message : "Generation failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return jsonResponse({ error: message }, 500);
   }
 }
