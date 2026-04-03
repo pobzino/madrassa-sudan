@@ -147,7 +147,11 @@ export async function PATCH(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Verify teacher owns the lesson
+  const role = await getTeacherRole(supabase, user.id)
+  if (!role) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { data: lesson, error: lessonError } = await supabase
     .from('lessons')
     .select('created_by')
@@ -158,7 +162,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
   }
 
-  if (lesson.created_by !== user.id) {
+  if (!canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -211,7 +215,11 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Verify teacher owns the lesson
+  const role = await getTeacherRole(supabase, user.id)
+  if (!role) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { data: lesson, error: lessonError } = await supabase
     .from('lessons')
     .select('created_by')
@@ -222,7 +230,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
   }
 
-  if (lesson.created_by !== user.id) {
+  if (!canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -254,7 +262,11 @@ export async function PUT(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Verify teacher owns the lesson
+  const role = await getTeacherRole(supabase, user.id)
+  if (!role) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { data: lesson, error: lessonError } = await supabase
     .from('lessons')
     .select('created_by')
@@ -265,7 +277,7 @@ export async function PUT(
     return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
   }
 
-  if (lesson.created_by !== user.id) {
+  if (!canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -289,7 +301,7 @@ export async function PUT(
   try {
     await Promise.all(updates)
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to reorder questions' }, { status: 500 })
   }
 }
