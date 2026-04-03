@@ -307,9 +307,11 @@ export default function SlideEditor({
   }, [presentIndex]);
 
   // Snapshot slide when presentIndex or revealedCount changes during recording
+  // Small delay lets React paint the new slide before html-to-image captures it
   useEffect(() => {
     if (recording && (recorderState === 'recording' || recorderState === 'paused')) {
-      snapshotSlide();
+      const t = setTimeout(() => snapshotSlide(), 120);
+      return () => clearTimeout(t);
     }
   }, [presentIndex, revealedCount, recording, recorderState, snapshotSlide]);
 

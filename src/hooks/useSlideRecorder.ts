@@ -112,11 +112,19 @@ export function useSlideRecorder({
   // Snapshot the slide DOM to a cached Image
   const snapshotSlide = useCallback(() => {
     const el = slideContainerRef.current;
-    if (!el) return;
+    if (!el || isSnappingRef.current) return;
 
-    toPng(el, {
-      width: el.offsetWidth,
-      height: el.offsetHeight,
+    isSnappingRef.current = true;
+
+    // Capture at high enough resolution so the canvas doesn't upscale
+    const elW = el.offsetWidth || canvasWidth;
+    const elH = el.offsetHeight || canvasHeight;
+    const pixelRatio = Math.max(canvasWidth / elW, canvasHeight / elH, 1);
+
+    const opts = {
+      width: elW,
+      height: elH,
+      pixelRatio,
       cacheBust: true,
       // Skip cross-origin images that can't be captured
       filter: (node: HTMLElement) => {
@@ -128,18 +136,38 @@ export function useSlideRecorder({
         }
         return true;
       },
-    })
+    };
+
+    toPng(el, opts)
       .then((dataUrl) => {
         const img = new Image();
         img.onload = () => {
           slideImageRef.current = img;
+          isSnappingRef.current = false;
         };
+        img.onerror = () => { isSnappingRef.current = false; };
         img.src = dataUrl;
       })
       .catch(() => {
-        // Snapshot failed — keep the last cached image
+        isSnappingRef.current = false;
+        // Retry once after a short delay (DOM may not have fully painted)
+        setTimeout(() => {
+          if (!slideContainerRef.current) return;
+          isSnappingRef.current = true;
+          toPng(slideContainerRef.current, opts)
+            .then((dataUrl) => {
+              const img = new Image();
+              img.onload = () => {
+                slideImageRef.current = img;
+                isSnappingRef.current = false;
+              };
+              img.onerror = () => { isSnappingRef.current = false; };
+              img.src = dataUrl;
+            })
+            .catch(() => { isSnappingRef.current = false; });
+        }, 200);
       });
-  }, [slideContainerRef]);
+  }, [slideContainerRef, canvasWidth, canvasHeight]);
 
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
@@ -255,10 +283,10 @@ export function useSlideRecorder({
         recorder = preferredMimeType
           ? new MediaRecorder(combinedStream, {
               mimeType: preferredMimeType,
-              videoBitsPerSecond: 2_500_000,
+              videoBitsPerSecond: 5_000_000,
             })
           : new MediaRecorder(combinedStream, {
-              videoBitsPerSecond: 2_500_000,
+              videoBitsPerSecond: 5_000_000,
             });
       } catch {
         recorder = new MediaRecorder(combinedStream);
@@ -337,6 +365,11 @@ export function useSlideRecorder({
       mediaRecorderRef.current = recorder;
       recordingStartedAtRef.current = Date.now();
       recorder.start(250);
+
+      // Periodic re-snapshot: safety net so slide changes are always captured
+      snapshotIntervalRef.current = setInterval(() => {
+        if (isRecordingRef.current) snapshotSlide();
+      }, 400);
 
       // Duration timer
       const startTime = Date.now();
