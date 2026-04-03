@@ -566,6 +566,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       setSlides(nextSlides);
       setLessonTasks(syncedTasks);
       setSlideEditorFocusId(newSlide.id);
+      setActiveTab("slides");
     },
     [lessonTasks, slides]
   );
@@ -1549,7 +1550,7 @@ function ActivitiesTab({
               Activities {activities.length > 0 && <span className="text-gray-400">({activities.length})</span>}
             </h2>
             <p className="mt-1 text-sm text-gray-500">
-              Add or remove activities here. Each activity automatically creates and manages a linked activity slide.
+              Add or remove activities here. Creating one opens the new linked activity slide immediately.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1561,7 +1562,7 @@ function ActivitiesTab({
                 className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
                 title={option.hint}
               >
-                {option.icon} {option.label}
+                {option.icon} Add {option.label}
               </button>
             ))}
           </div>
@@ -1569,7 +1570,7 @@ function ActivitiesTab({
 
         {activities.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-amber-200 bg-amber-50/40 px-4 py-6 text-sm text-amber-700">
-            No activities yet. Add one above and a linked activity slide will be created automatically.
+            No activities yet. Use an add button above to create a linked activity slide and jump straight into editing it.
           </div>
         ) : (
           <div className="mt-4 space-y-4">
