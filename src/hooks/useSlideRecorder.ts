@@ -27,6 +27,20 @@ interface UseSlideRecorderReturn {
   snapshotSlide: () => void;
 }
 
+type CropTargetLike = unknown;
+type CropTargetConstructor = {
+  fromElement: (element: Element) => Promise<CropTargetLike>;
+};
+type CropCapableTrack = MediaStreamTrack & {
+  cropTo?: (target: CropTargetLike) => Promise<void>;
+};
+type BrowserDisplayMediaOptions = DisplayMediaStreamOptions & {
+  preferCurrentTab?: boolean;
+  selfBrowserSurface?: 'include' | 'exclude';
+  surfaceSwitching?: 'include' | 'exclude';
+  systemAudio?: 'include' | 'exclude';
+};
+
 export function useSlideRecorder({
   slideContainerRef,
   canvasWidth = 1920,
@@ -54,8 +68,10 @@ export function useSlideRecorder({
   const snapshotPromiseRef = useRef<Promise<void> | null>(null);
   const pendingSnapshotRef = useRef(false);
   const displayStreamRef = useRef<MediaStream | null>(null);
+  const displayTrackRef = useRef<MediaStreamTrack | null>(null);
   const displayVideoRef = useRef<HTMLVideoElement | null>(null);
   const cropRectRef = useRef<{ sx: number; sy: number; sw: number; sh: number } | null>(null);
+  const useDirectDisplayTrackRef = useRef(false);
   const isRecordingRef = useRef(false);
   const isSnappingRef = useRef(false);
   const stopRequestedRef = useRef(false);
@@ -97,12 +113,14 @@ export function useSlideRecorder({
       displayStreamRef.current.getTracks().forEach((t) => t.stop());
       displayStreamRef.current = null;
     }
+    displayTrackRef.current = null;
     if (displayVideoRef.current) {
       displayVideoRef.current.pause();
       displayVideoRef.current.srcObject = null;
       displayVideoRef.current = null;
     }
     cropRectRef.current = null;
+    useDirectDisplayTrackRef.current = false;
     if (combinedStreamRef.current) {
       combinedStreamRef.current.getTracks().forEach((t) => t.stop());
       combinedStreamRef.current = null;
@@ -149,12 +167,14 @@ export function useSlideRecorder({
       displayStreamRef.current.getTracks().forEach((t) => t.stop());
       displayStreamRef.current = null;
     }
+    displayTrackRef.current = null;
     if (displayVideoRef.current) {
       displayVideoRef.current.pause();
       displayVideoRef.current.srcObject = null;
       displayVideoRef.current = null;
     }
     cropRectRef.current = null;
+    useDirectDisplayTrackRef.current = false;
     if (combinedStreamRef.current) {
       combinedStreamRef.current.getTracks().forEach((t) => t.stop());
       combinedStreamRef.current = null;
@@ -189,6 +209,10 @@ export function useSlideRecorder({
 
   // Snapshot the slide DOM to a cached Image
   const snapshotSlide = useCallback(async function captureSlide() {
+    if (useDirectDisplayTrackRef.current) {
+      return;
+    }
+
     if (displayVideoRef.current) {
       updateCropRect();
       return;
@@ -351,6 +375,7 @@ export function useSlideRecorder({
 
     try {
       let displayStream: MediaStream | null = null;
+      let canUseDirectDisplayTrack = false;
 
       if (navigator.mediaDevices.getDisplayMedia) {
         displayStream = await navigator.mediaDevices.getDisplayMedia({
@@ -361,9 +386,13 @@ export function useSlideRecorder({
           },
           audio: false,
           preferCurrentTab: true,
-        } as DisplayMediaStreamOptions & { preferCurrentTab?: boolean });
+          selfBrowserSurface: 'include',
+          surfaceSwitching: 'include',
+          systemAudio: 'exclude',
+        } as BrowserDisplayMediaOptions);
 
         const displayTrack = displayStream.getVideoTracks()[0];
+        displayTrackRef.current = displayTrack;
         const displaySurface = displayTrack?.getSettings().displaySurface;
         if (displaySurface && displaySurface !== 'browser') {
           displayStream.getTracks().forEach((track) => track.stop());
@@ -371,17 +400,52 @@ export function useSlideRecorder({
         }
 
         displayStreamRef.current = displayStream;
+        if ('contentHint' in displayTrack) {
+          displayTrack.contentHint = 'detail';
+        }
 
-        const displayVideo = document.createElement('video');
-        displayVideo.muted = true;
-        displayVideo.playsInline = true;
-        displayVideo.srcObject = displayStream;
-        await new Promise<void>((resolve, reject) => {
-          displayVideo.onloadedmetadata = () => resolve();
-          displayVideo.onerror = () => reject(new Error('Failed to start tab capture.'));
-        });
-        await displayVideo.play();
-        displayVideoRef.current = displayVideo;
+        const cropTargetConstructor = (
+          window as Window & { CropTarget?: CropTargetConstructor }
+        ).CropTarget;
+        const cropTrack = displayTrack as CropCapableTrack;
+        if (
+          slideContainerRef.current &&
+          cropTargetConstructor?.fromElement &&
+          typeof cropTrack.cropTo === 'function'
+        ) {
+          try {
+            const cropTarget = await cropTargetConstructor.fromElement(slideContainerRef.current);
+            await cropTrack.cropTo(cropTarget);
+            canUseDirectDisplayTrack = true;
+            useDirectDisplayTrackRef.current = true;
+          } catch (error) {
+            console.warn('Region capture failed; falling back to canvas compositing.', error);
+          }
+        }
+
+        displayTrack.onended = () => {
+          if (stopRequestedRef.current || mediaRecorderRef.current?.state === 'inactive') {
+            return;
+          }
+
+          cleanup();
+          setRecorderState('idle');
+          setRecordedBlob(null);
+          setErrorMessage('Screen sharing stopped. Please choose this browser tab and record again.');
+        };
+
+        if (!canUseDirectDisplayTrack) {
+          const displayVideo = document.createElement('video');
+          displayVideo.muted = true;
+          displayVideo.playsInline = true;
+          displayVideo.srcObject = displayStream;
+          await new Promise<void>((resolve, reject) => {
+            displayVideo.onloadedmetadata = () => resolve();
+            displayVideo.onerror = () => reject(new Error('Failed to start tab capture.'));
+          });
+          await displayVideo.play();
+          displayVideoRef.current = displayVideo;
+        }
       }
 
       // Request microphone only (no webcam)
@@ -406,46 +470,57 @@ export function useSlideRecorder({
 
       await snapshotSlide();
 
-      // Start canvas compositing
-      const canvas = canvasRef.current;
-      if (!canvas) throw new Error('Canvas not available');
-
-      canvas.width = canvasWidth;
-      canvas.height = canvasHeight;
-
-      isRecordingRef.current = true;
-      renderFrame();
-
-      // Combine canvas video stream + mic audio
-      const canvasStream = canvas.captureStream(30);
       const audioTracks = stream.getAudioTracks();
-      const combinedStream = new MediaStream([
-        ...canvasStream.getVideoTracks(),
-        ...audioTracks,
-      ]);
+      let combinedStream: MediaStream;
+
+      if (canUseDirectDisplayTrack && displayTrackRef.current) {
+        isRecordingRef.current = true;
+        combinedStream = new MediaStream([
+          displayTrackRef.current,
+          ...audioTracks,
+        ]);
+      } else {
+        const canvas = canvasRef.current;
+        if (!canvas) throw new Error('Canvas not available');
+
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        isRecordingRef.current = true;
+        renderFrame();
+
+        const canvasStream = canvas.captureStream(30);
+        combinedStream = new MediaStream([
+          ...canvasStream.getVideoTracks(),
+          ...audioTracks,
+        ]);
+        animFrameRef.current = requestAnimationFrame(drawFrame);
+      }
+
       combinedStreamRef.current = combinedStream;
-      animFrameRef.current = requestAnimationFrame(drawFrame);
 
-      const observedSlide = slideContainerRef.current;
-      if (observedSlide) {
-        mutationObserverRef.current = new MutationObserver(() => {
-          if (isRecordingRef.current) {
-            scheduleSnapshot(90);
-          }
-        });
-        mutationObserverRef.current.observe(observedSlide, {
-          subtree: true,
-          childList: true,
-          characterData: true,
-          attributes: true,
-        });
+      if (!canUseDirectDisplayTrack) {
+        const observedSlide = slideContainerRef.current;
+        if (observedSlide) {
+          mutationObserverRef.current = new MutationObserver(() => {
+            if (isRecordingRef.current) {
+              scheduleSnapshot(90);
+            }
+          });
+          mutationObserverRef.current.observe(observedSlide, {
+            subtree: true,
+            childList: true,
+            characterData: true,
+            attributes: true,
+          });
 
-        resizeObserverRef.current = new ResizeObserver(() => {
-          if (isRecordingRef.current) {
-            scheduleSnapshot(90);
-          }
-        });
-        resizeObserverRef.current.observe(observedSlide);
+          resizeObserverRef.current = new ResizeObserver(() => {
+            if (isRecordingRef.current) {
+              scheduleSnapshot(90);
+            }
+          });
+          resizeObserverRef.current.observe(observedSlide);
+        }
       }
 
       // Create MediaRecorder
@@ -538,10 +613,12 @@ export function useSlideRecorder({
       recordingStartedAtRef.current = Date.now();
       recorder.start(250);
 
-      // Periodic re-snapshot: safety net so slide changes are always captured
-      snapshotIntervalRef.current = setInterval(() => {
-        if (isRecordingRef.current) snapshotSlide();
-      }, 250);
+      if (!canUseDirectDisplayTrack) {
+        // Periodic re-snapshot: safety net so slide changes are always captured
+        snapshotIntervalRef.current = setInterval(() => {
+          if (isRecordingRef.current) snapshotSlide();
+        }, 250);
+      }
 
       // Duration timer
       const startTime = Date.now();
