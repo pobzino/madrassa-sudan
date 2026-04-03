@@ -297,6 +297,13 @@ export default function SlideEditor({
     ? (language === 'ar' ? presentSlide.reveal_items_ar : presentSlide.reveal_items_en) || []
     : [];
   const totalRevealItems = presentRevealItems.length;
+  const presentSpeakerNotesPrimary = language === 'ar'
+    ? presentSlide?.speaker_notes_ar?.trim()
+    : presentSlide?.speaker_notes_en?.trim();
+  const presentSpeakerNotesFallback = language === 'ar'
+    ? presentSlide?.speaker_notes_en?.trim()
+    : presentSlide?.speaker_notes_ar?.trim();
+  const presentSpeakerNotes = presentSpeakerNotesPrimary || presentSpeakerNotesFallback || '';
   const canGoPreviousWhileRecording = presentIndex > 0;
   const canGoNextWhileRecording = presentIndex < slides.length - 1 || revealedCount < totalRevealItems;
 
@@ -599,16 +606,39 @@ export default function SlideEditor({
   // Fullscreen present mode
   if (presenting) {
     return (
-      <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-        <div ref={slideContainerRef} className="w-full max-w-6xl mx-auto">
-          <SlideCard
-            key={`${presentIndex}:${revealedCount}:${language}`}
-            slide={slides[presentIndex]}
-            language={language}
-            className="!rounded-none !shadow-2xl"
-            revealedCount={slides[presentIndex]?.type === 'question_answer' ? revealedCount : undefined}
-            onReveal={() => setRevealedCount((c) => c + 1)}
-          />
+      <div className="fixed inset-0 z-50 bg-black">
+        <div className="flex h-full w-full items-center justify-center gap-6 px-4 py-6 lg:px-6">
+          <div
+            ref={slideContainerRef}
+            className={`mx-auto w-full ${recording ? 'max-w-5xl lg:max-w-[min(72vw,1100px)]' : 'max-w-6xl'}`}
+          >
+            <SlideCard
+              key={`${presentIndex}:${revealedCount}:${language}`}
+              slide={slides[presentIndex]}
+              language={language}
+              className="!rounded-none !shadow-2xl"
+              revealedCount={slides[presentIndex]?.type === 'question_answer' ? revealedCount : undefined}
+              onReveal={() => setRevealedCount((c) => c + 1)}
+            />
+          </div>
+
+          {recording && presentSpeakerNotes && (
+            <aside className="hidden lg:flex w-80 shrink-0 self-stretch max-h-[calc(100vh-3rem)] flex-col rounded-3xl border border-white/15 bg-white/10 p-5 text-white shadow-2xl backdrop-blur-md">
+              <div className="mb-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/60">
+                  Presenter Notes
+                </p>
+                <p className="mt-2 text-sm font-semibold text-white/90" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+                  {language === 'ar' ? presentSlide?.title_ar || presentSlide?.title_en : presentSlide?.title_en || presentSlide?.title_ar}
+                </p>
+              </div>
+              <div className="overflow-y-auto pr-1">
+                <p className="whitespace-pre-wrap text-sm leading-6 text-white/90" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+                  {presentSpeakerNotes}
+                </p>
+              </div>
+            </aside>
+          )}
         </div>
 
         {/* Recording overlay (countdown, REC indicator, controls) */}
@@ -675,6 +705,17 @@ export default function SlideEditor({
             <span className="text-white/80 text-sm font-medium">
               {presentIndex + 1} / {slides.length}
             </span>
+          </div>
+        )}
+
+        {recording && presentSpeakerNotes && (
+          <div className="fixed inset-x-4 bottom-24 z-[55] rounded-2xl border border-white/15 bg-black/75 p-4 text-white shadow-2xl backdrop-blur-sm lg:hidden">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
+              Presenter Notes
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/90" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+              {presentSpeakerNotes}
+            </p>
           </div>
         )}
 
