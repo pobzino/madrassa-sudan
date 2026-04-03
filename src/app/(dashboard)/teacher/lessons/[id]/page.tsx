@@ -7,8 +7,6 @@ import CurriculumTopicSelector from "@/components/teacher/CurriculumTopicSelecto
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
-import BunnyVideoUploader from "@/components/teacher/BunnyVideoUploader";
-import VideoPreview from "@/components/teacher/VideoPreview";
 import AIContentGenerator from "@/components/teacher/AIContentGenerator";
 import TaskEditor, { type TaskForm } from "@/components/teacher/TaskEditor";
 import {
@@ -126,7 +124,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("details");
-  const [videoInputMode, setVideoInputMode] = useState<"upload" | "manual">("upload");
   const [slides, setSlides] = useState<Slide[]>([]);
   const [slideSaving, setSlideSaving] = useState(false);
   const [slideLastSaved, setSlideLastSaved] = useState<string | null>(null);
@@ -433,22 +430,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
       try {
         await persistLessonVideoUrls(urls, "Recorded video saved");
-      } catch (error) {
-        setSaveMessage({
-          type: "error",
-          text: error instanceof Error ? error.message : "Video save failed",
-        });
-      }
-    },
-    [persistLessonVideoUrls]
-  );
-
-  const handleUploadedVideoReady = useCallback(
-    async (urls: LessonVideoUrls) => {
-      setForm((prev) => applyVideoUrlsToForm(prev, urls));
-
-      try {
-        await persistLessonVideoUrls(urls, "Uploaded video saved");
       } catch (error) {
         setSaveMessage({
           type: "error",
@@ -792,11 +773,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           availableCohorts={availableCohorts}
           assignedCohortIds={assignedCohortIds}
           setAssignedCohortIds={setAssignedCohortIds}
-          videoInputMode={videoInputMode}
-          setVideoInputMode={setVideoInputMode}
           canPublishLesson={canPublishLesson}
-          lessonId={id}
-          onVideosReady={handleUploadedVideoReady}
         />
         )}
 
@@ -944,11 +921,7 @@ function DetailsTab({
   availableCohorts,
   assignedCohortIds,
   setAssignedCohortIds,
-  videoInputMode,
-  setVideoInputMode,
   canPublishLesson,
-  lessonId,
-  onVideosReady,
 }: {
   form: LessonForm;
   setForm: (f: LessonForm | ((prev: LessonForm) => LessonForm)) => void;
@@ -957,11 +930,7 @@ function DetailsTab({
   availableCohorts: CohortOption[];
   assignedCohortIds: string[];
   setAssignedCohortIds: (value: string[] | ((prev: string[]) => string[])) => void;
-  videoInputMode: "upload" | "manual";
-  setVideoInputMode: (mode: "upload" | "manual") => void;
   canPublishLesson: boolean;
-  lessonId: string;
-  onVideosReady: (urls: LessonVideoUrls) => void | Promise<void>;
 }) {
   return (
     <div className="space-y-6">
@@ -1136,119 +1105,6 @@ function DetailsTab({
         )}
       </section>
 
-      {/* Video & Media */}
-      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Video & Media</h2>
-          <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={() => setVideoInputMode("upload")}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                videoInputMode === "upload"
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              Upload
-            </button>
-            <button
-              type="button"
-              onClick={() => setVideoInputMode("manual")}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                videoInputMode === "manual"
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              Manual URLs
-            </button>
-          </div>
-        </div>
-
-        <VideoPreview
-          video_url_1080p={form.video_url_1080p}
-          video_url_720p={form.video_url_720p}
-          video_url_480p={form.video_url_480p}
-          video_url_360p={form.video_url_360p}
-        />
-
-        {videoInputMode === "upload" ? (
-          <BunnyVideoUploader
-            lessonId={lessonId}
-            lessonTitle={form.title_ar || form.title_en || "Untitled"}
-            onVideosReady={(urls) => {
-              void onVideosReady(urls);
-            }}
-            currentVideoUrl={form.video_url_1080p || form.video_url_720p || undefined}
-          />
-        ) : (
-          <div className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Video 1080p</label>
-                <input
-                  value={form.video_url_1080p}
-                  onChange={(e) => setForm({ ...form, video_url_1080p: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Video 360p</label>
-                <input
-                  value={form.video_url_360p}
-                  onChange={(e) => setForm({ ...form, video_url_360p: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Video 480p</label>
-                <input
-                  value={form.video_url_480p}
-                  onChange={(e) => setForm({ ...form, video_url_480p: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Video 720p</label>
-                <input
-                  value={form.video_url_720p}
-                  onChange={(e) => setForm({ ...form, video_url_720p: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
-                />
-              </div>
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Captions (Arabic)</label>
-                <input
-                  value={form.captions_ar_url}
-                  onChange={(e) => setForm({ ...form, captions_ar_url: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Captions (English)</label>
-                <input
-                  value={form.captions_en_url}
-                  onChange={(e) => setForm({ ...form, captions_en_url: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Thumbnail URL</label>
-          <input
-            value={form.thumbnail_url}
-            onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })}
-            placeholder="https://..."
-            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
-          />
-        </div>
-      </section>
 
     </div>
   );

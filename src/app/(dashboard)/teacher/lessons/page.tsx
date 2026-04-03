@@ -274,25 +274,17 @@ export default function TeacherLessonsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Lessons</h1>
           <p className="text-sm text-gray-500 mt-0.5">{lessons.length} lesson{lessons.length !== 1 ? "s" : ""}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={openQuickCreateModal}
-            disabled={!canQuickCreateSlides}
-            className="px-4 py-2 bg-[#007229] text-white rounded-xl text-sm font-medium hover:bg-[#005C22] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-            </svg>
-            Generate Slides
-          </button>
-          <Link
-            href="/teacher/lessons/new"
-            className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
-          >
-            New Lesson
-          </Link>
-        </div>
+        <button
+          type="button"
+          onClick={openQuickCreateModal}
+          disabled={!canQuickCreateSlides}
+          className="px-4 py-2 bg-[#007229] text-white rounded-xl text-sm font-medium hover:bg-[#005C22] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          New Lesson
+        </button>
       </div>
 
       {/* Filters */}
@@ -344,7 +336,7 @@ export default function TeacherLessonsPage() {
               onClick={openQuickCreateModal}
               className="mt-3 text-sm text-emerald-600 hover:text-emerald-700 font-medium"
             >
-              Generate your first slides
+              Create your first lesson
             </button>
           )}
         </div>
