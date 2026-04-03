@@ -1361,57 +1361,107 @@ export default function LessonPlayerPage() {
         )}
       </div>
 
-      {/* Bottom info & navigation */}
+      {/* Bottom section */}
       <div className="bg-white border-t border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto px-4 py-5 space-y-5">
+
+          {/* Progress bars */}
+          {(questions.length > 0 || canonicalActivityCount > 0 || timedInteractiveSlides.length > 0) && (
+            <div className="grid gap-3 sm:grid-cols-3">
+              {questions.length > 0 && (
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-medium text-gray-500">
+                      {language === "ar" ? "الأسئلة" : "Questions"}
+                    </span>
+                    <span className="text-xs font-bold text-gray-700">
+                      {answeredQuestions.size}/{questions.length}
+                    </span>
+                  </div>
+                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-violet-500 rounded-full transition-all duration-500"
+                      style={{ width: `${(answeredQuestions.size / questions.length) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              {canonicalActivityCount > 0 && (
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-medium text-gray-500">
+                      {language === "ar" ? "الأنشطة" : "Activities"}
+                    </span>
+                    <span className="text-xs font-bold text-gray-700">
+                      {completedActivityCount}/{canonicalActivityCount}
+                    </span>
+                  </div>
+                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber-500 rounded-full transition-all duration-500"
+                      style={{ width: `${(completedActivityCount / canonicalActivityCount) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              {timedInteractiveSlides.length > 0 && (
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-medium text-gray-500">
+                      {language === "ar" ? "شرائح تفاعلية" : "Interactive"}
+                    </span>
+                    <span className="text-xs font-bold text-gray-700">
+                      {completedInteractiveSlideCount}/{timedInteractiveSlides.length}
+                    </span>
+                  </div>
+                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-cyan-500 rounded-full transition-all duration-500"
+                      style={{ width: `${(completedInteractiveSlideCount / timedInteractiveSlides.length) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Lesson description */}
           {(lesson.description_ar || lesson.description_en) && (
-            <p className="text-gray-600 mb-4">
-              {language === "ar" ? lesson.description_ar : lesson.description_en}
-            </p>
+            <div className="flex items-start gap-3 bg-gray-50 rounded-xl p-4">
+              <span className="text-lg mt-0.5">📖</span>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {language === "ar" ? lesson.description_ar : lesson.description_en}
+              </p>
+            </div>
           )}
 
           {/* Navigation */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             {adjacentLessons.prev ? (
               <Link
                 href={`/lessons/${adjacentLessons.prev.id}`}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
+                className="flex items-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors min-w-0 flex-shrink"
               >
-                {isRtl ? Icons.chevronRight : Icons.chevronLeft}
-                <span className="hidden sm:inline">{t.prevLesson}</span>
+                <span className={`flex-shrink-0 ${isRtl ? "rotate-180" : ""}`}>{Icons.chevronLeft}</span>
+                <span className="truncate text-sm font-medium hidden sm:inline">
+                  {language === "ar" ? adjacentLessons.prev.title_ar : (adjacentLessons.prev.title_en || adjacentLessons.prev.title_ar)}
+                </span>
+                <span className="sm:hidden text-sm font-medium">{t.prevLesson}</span>
               </Link>
             ) : (
               <div />
             )}
 
-            {/* Progress indicator */}
-            <div className="text-gray-500 text-sm flex items-center gap-3">
-              {questions.length > 0 && (
-                <span>
-                  {t.question}: {answeredQuestions.size}/{questions.length}
-                </span>
-              )}
-              {canonicalActivityCount > 0 && (
-                <span>
-                  {language === "ar" ? "الأنشطة" : "Activities"}: {completedActivityCount}/{canonicalActivityCount}
-                  {requiredActivityCount > 0 ? ` • ${completedRequiredActivityCount}/${requiredActivityCount} ${language === "ar" ? "مطلوبة" : "required"}` : ""}
-                </span>
-              )}
-              {timedInteractiveSlides.length > 0 && (
-                <span>
-                  {language === "ar" ? "شرائح تفاعلية" : "Interactive Slides"}: {completedInteractiveSlideCount}/{timedInteractiveSlides.length}
-                </span>
-              )}
-            </div>
-
             {adjacentLessons.next ? (
               <Link
                 href={`/lessons/${adjacentLessons.next.id}`}
-                className="flex items-center gap-2 px-4 py-2 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-lg shadow-[#007229]/20"
+                className="flex items-center gap-2 px-4 py-3 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-lg shadow-[#007229]/20 min-w-0 flex-shrink"
               >
-                <span className="hidden sm:inline">{t.nextLesson}</span>
-                {isRtl ? Icons.chevronLeft : Icons.chevronRight}
+                <span className="truncate text-sm font-medium hidden sm:inline">
+                  {language === "ar" ? adjacentLessons.next.title_ar : (adjacentLessons.next.title_en || adjacentLessons.next.title_ar)}
+                </span>
+                <span className="sm:hidden text-sm font-medium">{t.nextLesson}</span>
+                <span className={`flex-shrink-0 ${isRtl ? "rotate-180" : ""}`}>{Icons.chevronRight}</span>
               </Link>
             ) : (
               <div />
