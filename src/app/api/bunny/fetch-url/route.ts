@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
 
 /**
@@ -59,8 +60,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify teacher owns the lesson
-    const { data: lesson } = await supabase
+    // Verify teacher/admin can manage the lesson.
+    // Use service client so this check does not depend on lesson RLS visibility.
+    const service = createServiceClient();
+    const { data: lesson } = await service
       .from("lessons")
       .select("created_by")
       .eq("id", lessonId)

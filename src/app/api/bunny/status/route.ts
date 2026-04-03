@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getTeacherRole } from "@/lib/server/teacher-lesson-access";
 
 const STATUS_LABELS: Record<number, string> = {
   0: "created",
@@ -22,13 +23,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || (profile.role !== "teacher" && profile.role !== "admin")) {
+    const role = await getTeacherRole(supabase, user.id);
+    if (!role) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
