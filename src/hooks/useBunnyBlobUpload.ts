@@ -70,22 +70,14 @@ export function useBunnyBlobUpload({
         if (!res.ok) return;
 
         const data = await res.json();
-        const hasPlayableUrl = Boolean(
-          data.urls &&
-          (data.urls.video_url_1080p ||
-            data.urls.video_url_720p ||
-            data.urls.video_url_480p ||
-            data.urls.video_url_360p)
-        );
-
-        if (data.status === 'finished' && hasPlayableUrl) {
+        if (data.status === 'finished' && data.urls) {
           if (pollingRef.current) clearInterval(pollingRef.current);
           setState('ready');
           setVideoUrls({
-            video_url_1080p: data.urls.video_url_1080p || '',
-            video_url_360p: data.urls.video_url_360p || '',
-            video_url_480p: data.urls.video_url_480p || '',
-            video_url_720p: data.urls.video_url_720p || '',
+            video_url_1080p: data.urls.video_url_1080p,
+            video_url_360p: data.urls.video_url_360p,
+            video_url_480p: data.urls.video_url_480p,
+            video_url_720p: data.urls.video_url_720p,
             duration_seconds: data.durationSeconds,
           });
         } else if (data.status === 'error') {

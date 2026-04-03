@@ -1133,13 +1133,7 @@ function DetailsTab({
               onVideosReady={(urls) => {
                 void onVideosReady(urls);
               }}
-              currentVideoUrl={
-                form.video_url_1080p ||
-                form.video_url_720p ||
-                form.video_url_480p ||
-                form.video_url_360p ||
-                undefined
-              }
+              currentVideoUrl={form.video_url_1080p || form.video_url_720p || undefined}
             />
             {(form.video_url_1080p || form.video_url_720p || form.video_url_480p || form.video_url_360p) && (
               <div className="space-y-0.5 text-xs text-gray-400">

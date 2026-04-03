@@ -23,7 +23,7 @@ interface UseSlideRecorderReturn {
   resumeRecording: () => void;
   cancelRecording: () => void;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  snapshotSlide: () => Promise<void>;
+  snapshotSlide: () => void;
 }
 
 export function useSlideRecorder({
@@ -67,48 +67,36 @@ export function useSlideRecorder({
   }
 
   // Snapshot the slide DOM to a cached Image
-  const snapshotSlide = useCallback(async () => {
+  const snapshotSlide = useCallback(() => {
     const el = slideContainerRef.current;
     if (!el) return;
 
-    const width = el.clientWidth;
-    const height = el.clientHeight;
-    if (!width || !height) return;
-
-    try {
-      const dataUrl = await toPng(el, {
-        width,
-        height,
-        canvasWidth,
-        canvasHeight,
-        pixelRatio: 1,
-        backgroundColor: '#ffffff',
-        cacheBust: true,
-        // Skip cross-origin images that can't be captured
-        filter: (node: HTMLElement) => {
-          if (node.tagName === 'IMG') {
-            const src = (node as HTMLImageElement).src;
-            if (src && !src.startsWith(window.location.origin) && !src.startsWith('data:')) {
-              return false;
-            }
+    toPng(el, {
+      width: el.offsetWidth,
+      height: el.offsetHeight,
+      cacheBust: true,
+      // Skip cross-origin images that can't be captured
+      filter: (node: HTMLElement) => {
+        if (node.tagName === 'IMG') {
+          const src = (node as HTMLImageElement).src;
+          if (src && !src.startsWith(window.location.origin) && !src.startsWith('data:')) {
+            return false;
           }
-          return true;
-        },
-      });
-
-      await new Promise<void>((resolve, reject) => {
+        }
+        return true;
+      },
+    })
+      .then((dataUrl) => {
         const img = new Image();
         img.onload = () => {
           slideImageRef.current = img;
-          resolve();
         };
-        img.onerror = () => reject(new Error('Failed to load captured slide image'));
         img.src = dataUrl;
+      })
+      .catch(() => {
+        // Snapshot failed — keep the last cached image
       });
-    } catch {
-      // Snapshot failed — keep the last cached image
-    }
-  }, [slideContainerRef, canvasWidth, canvasHeight]);
+  }, [slideContainerRef]);
 
   // Canvas compositing loop
   function drawFrame() {
@@ -127,7 +115,7 @@ export function useSlideRecorder({
     }
 
     // Clear canvas
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
     // Draw cached slide image, scaled to fill canvas
@@ -184,9 +172,9 @@ export function useSlideRecorder({
       await document.fonts.ready;
 
       // Take initial slide snapshot
-      await snapshotSlide();
-      // Brief delay to ensure layout settles before countdown starts.
-      await new Promise((r) => setTimeout(r, 120));
+      snapshotSlide();
+      // Allow time for snapshot
+      await new Promise((r) => setTimeout(r, 200));
 
       // Countdown 3-2-1
       setRecorderState('countdown');

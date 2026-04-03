@@ -51,7 +51,7 @@ export default function RecordingReviewModal({
               ref={videoRef}
               src={blobUrl}
               controls
-              className="w-full rounded-xl bg-white aspect-video object-contain"
+              className="w-full rounded-xl bg-black aspect-video"
             />
           )}
         </div>
