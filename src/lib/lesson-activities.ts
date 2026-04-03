@@ -21,6 +21,21 @@ type ActivityTaskSeed = Pick<
   'id' | 'timestamp_seconds' | 'timeout_seconds' | 'is_skippable' | 'required' | 'points' | 'display_order'
 > | null;
 
+type ActivityTimingTask = Pick<
+  LessonTaskForm,
+  'id' | 'task_type' | 'timestamp_seconds' | 'linked_slide_id' | 'display_order'
+>;
+
+export interface EffectiveActivityTiming<T extends ActivityTimingTask = ActivityTimingTask> {
+  task: T;
+  sourceSlide: Slide | null;
+  timingMode: 'manual' | 'auto';
+  effectiveTimestampSeconds: number;
+  timelinePosition: number;
+}
+
+const FALLBACK_SECONDS_PER_SLIDE = 20;
+
 export function normalizeTaskType(taskType: string): TaskType {
   switch (taskType) {
     case 'matching_pairs':
@@ -201,7 +216,7 @@ export function buildSlideUpdatesFromTask(task: Pick<
     activity_id: task.id,
     type: 'activity',
     lesson_phase: 'practice',
-    timestamp_seconds: task.timestamp_seconds,
+    timestamp_seconds: task.timestamp_seconds > 0 ? task.timestamp_seconds : null,
     title_ar: task.title_ar,
     title_en: task.title_en,
     body_ar: task.instruction_ar,
@@ -316,7 +331,7 @@ export function createActivitySlideFromTask(
     sequence,
     type: slideType,
     is_required: true,
-    timestamp_seconds: task.timestamp_seconds,
+    timestamp_seconds: task.timestamp_seconds > 0 ? task.timestamp_seconds : null,
     title_ar: task.title_ar,
     title_en: task.title_en,
     body_ar: task.instruction_ar,
@@ -342,6 +357,107 @@ export function createActivitySlideFromTask(
     representation_stage: 'not_applicable',
     ...buildSlideUpdatesFromTask(task),
   };
+}
+
+function clampTimelinePosition(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.min(1, Math.max(0, value));
+}
+
+function getFallbackDurationSeconds(slides: Slide[], videoDurationSeconds: number | null) {
+  if (videoDurationSeconds && Number.isFinite(videoDurationSeconds) && videoDurationSeconds > 0) {
+    return Math.round(videoDurationSeconds);
+  }
+
+  return Math.max(60, slides.length * FALLBACK_SECONDS_PER_SLIDE);
+}
+
+export function getSlideTimelinePosition(slides: Slide[], slideId: string | null | undefined): number | null {
+  if (!slideId || slides.length === 0) {
+    return null;
+  }
+
+  const slideIndex = slides.findIndex((slide) => slide.id === slideId);
+  if (slideIndex < 0) {
+    return null;
+  }
+
+  if (slides.length === 1) {
+    return 0.5;
+  }
+
+  return clampTimelinePosition(slideIndex / (slides.length - 1));
+}
+
+export function resolveEffectiveActivityTiming<T extends ActivityTimingTask>(
+  task: T,
+  slides: Slide[],
+  videoDurationSeconds: number | null
+): EffectiveActivityTiming<T> {
+  const sourceSlide =
+    (task.linked_slide_id && slides.find((slide) => slide.id === task.linked_slide_id)) || null;
+  const manualTimestamp = Number(task.timestamp_seconds ?? 0);
+
+  if (manualTimestamp > 0) {
+    const duration = getFallbackDurationSeconds(slides, videoDurationSeconds);
+    return {
+      task,
+      sourceSlide,
+      timingMode: 'manual',
+      effectiveTimestampSeconds: Math.round(manualTimestamp),
+      timelinePosition: clampTimelinePosition(duration > 0 ? manualTimestamp / duration : 0),
+    };
+  }
+
+  const duration = getFallbackDurationSeconds(slides, videoDurationSeconds);
+  const linkedSlidePosition = getSlideTimelinePosition(slides, task.linked_slide_id);
+  const activityTasks = slides
+    .filter((slide) => slide.interaction_type && isCanonicalActivityTask(slide.interaction_type))
+    .sort((left, right) => left.sequence - right.sequence);
+  const sourceSlideIndex = sourceSlide
+    ? activityTasks.findIndex((slide) => slide.id === sourceSlide.id)
+    : -1;
+  const activityPosition =
+    sourceSlideIndex >= 0 && activityTasks.length > 1
+      ? sourceSlideIndex / (activityTasks.length - 1)
+      : sourceSlideIndex === 0
+        ? 0.5
+        : null;
+  const timelinePosition = clampTimelinePosition(
+    linkedSlidePosition ?? activityPosition ?? 0
+  );
+
+  return {
+    task,
+    sourceSlide,
+    timingMode: 'auto',
+    effectiveTimestampSeconds: Math.round(duration * timelinePosition),
+    timelinePosition,
+  };
+}
+
+export function getEffectiveActivityTimings<T extends ActivityTimingTask>(
+  slides: Slide[],
+  tasks: T[],
+  videoDurationSeconds: number | null
+): Array<EffectiveActivityTiming<T>> {
+  return tasks
+    .filter((task) => isCanonicalActivityTask(task.task_type))
+    .map((task) => resolveEffectiveActivityTiming(task, slides, videoDurationSeconds))
+    .sort((left, right) => {
+      if (left.effectiveTimestampSeconds !== right.effectiveTimestampSeconds) {
+        return left.effectiveTimestampSeconds - right.effectiveTimestampSeconds;
+      }
+
+      if (left.sourceSlide && right.sourceSlide && left.sourceSlide.sequence !== right.sourceSlide.sequence) {
+        return left.sourceSlide.sequence - right.sourceSlide.sequence;
+      }
+
+      return left.task.display_order - right.task.display_order;
+    });
 }
 
 export function buildActivityInteractionSlide(

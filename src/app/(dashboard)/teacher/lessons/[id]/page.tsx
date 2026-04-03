@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, use } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import CurriculumTopicSelector from "@/components/teacher/CurriculumTopicSelector";
@@ -23,11 +23,13 @@ import SlideGenerateButton from "@/components/slides/SlideGenerateButton";
 import type { Slide } from "@/lib/slides.types";
 import {
   ensureSlidesForSupportedTasks,
+  getEffectiveActivityTimings,
   isCanonicalActivityTask,
   normalizeLessonTaskForm,
   syncTaskFormsFromSlides,
 } from "@/lib/lesson-activities";
 import type { LessonTaskForm } from "@/lib/tasks.types";
+import { toPlayableVideoUrl } from "@/lib/bunny-playback";
 import {
   clampSlideCount,
   DEFAULT_SLIDE_LENGTH_PRESET,
@@ -116,6 +118,23 @@ function applyVideoUrlsToForm(previous: LessonForm, urls: LessonVideoUrls): Less
       ? { video_duration_seconds: String(urls.duration_seconds) }
       : {}),
   };
+}
+
+function formatTimestampLabel(value: number) {
+  const totalSeconds = Math.max(0, Math.round(value));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function getTeacherPreviewVideoUrl(form: LessonForm) {
+  return toPlayableVideoUrl(
+    form.video_url_720p ||
+      form.video_url_480p ||
+      form.video_url_360p ||
+      form.video_url_1080p ||
+      ""
+  );
 }
 
 async function syncLessonQuestions(
@@ -994,6 +1013,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             questions={questions}
             slides={slides}
             lessonTasks={lessonTasks}
+            videoUrl={getTeacherPreviewVideoUrl(form)}
+            videoDurationSeconds={
+              form.video_duration_seconds ? Number(form.video_duration_seconds) : null
+            }
             updateQuestion={updateQuestion}
             addQuestion={addQuestion}
             removeQuestion={removeQuestion}
@@ -1233,6 +1256,8 @@ function QuestionsTasksTab({
   questions,
   slides,
   lessonTasks,
+  videoUrl,
+  videoDurationSeconds,
   updateQuestion,
   addQuestion,
   removeQuestion,
@@ -1241,6 +1266,8 @@ function QuestionsTasksTab({
   questions: QuestionForm[];
   slides: Slide[];
   lessonTasks: LessonTaskForm[];
+  videoUrl: string;
+  videoDurationSeconds: number | null;
   updateQuestion: (id: string, updates: Partial<QuestionForm>) => void;
   addQuestion: () => void;
   removeQuestion: (id: string) => void;
@@ -1252,12 +1279,42 @@ function QuestionsTasksTab({
   const hiddenLegacyTasks = lessonTasks.filter(
     (task) => !task.linked_slide_id || !isCanonicalActivityTask(task.task_type)
   );
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
+  const [loadedPreviewDuration, setLoadedPreviewDuration] = useState(0);
 
-  const updateActivity = (activityId: string, updates: Partial<LessonTaskForm>) => {
+  const updateActivity = useCallback((activityId: string, updates: Partial<LessonTaskForm>) => {
     setLessonTasks((current) =>
       current.map((task) => (task.id === activityId ? { ...task, ...updates } : task))
     );
-  };
+  }, [setLessonTasks]);
+
+  const effectiveDuration = loadedPreviewDuration > 0 ? loadedPreviewDuration : videoDurationSeconds;
+  const timedActivities = useMemo(
+    () => getEffectiveActivityTimings(slides, activities, effectiveDuration),
+    [activities, effectiveDuration, slides]
+  );
+  const activityTimingById = useMemo(
+    () => new Map(timedActivities.map((timing) => [timing.task.id, timing])),
+    [timedActivities]
+  );
+
+  const seekPreviewVideo = useCallback((timeInSeconds: number) => {
+    if (!previewVideoRef.current) {
+      return;
+    }
+
+    previewVideoRef.current.currentTime = timeInSeconds;
+    setPreviewCurrentTime(timeInSeconds);
+  }, []);
+
+  const stampCurrentVideoTime = useCallback(
+    (activityId: string) => {
+      const sourceTime = previewVideoRef.current?.currentTime ?? previewCurrentTime;
+      updateActivity(activityId, { timestamp_seconds: Math.max(0, Math.round(sourceTime)) });
+    },
+    [previewCurrentTime, updateActivity]
+  );
 
   return (
     <div className="space-y-6">
@@ -1424,8 +1481,115 @@ function QuestionsTasksTab({
           </div>
         ) : (
           <div className="mt-4 space-y-4">
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Activity Timeline</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Leave the timestamp blank to place an activity automatically from its linked slide order.
+                    Use the preview video to stamp an exact trigger time when needed.
+                  </p>
+                </div>
+                <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600">
+                  Preview time: {formatTimestampLabel(previewCurrentTime)}
+                </div>
+              </div>
+
+              {videoUrl ? (
+                <div className="mt-4 overflow-hidden rounded-2xl border border-gray-200 bg-black">
+                  <video
+                    ref={previewVideoRef}
+                    src={videoUrl}
+                    controls
+                    preload="metadata"
+                    className="aspect-video w-full bg-black"
+                    onTimeUpdate={(event) => {
+                      setPreviewCurrentTime(event.currentTarget.currentTime);
+                    }}
+                    onLoadedMetadata={(event) => {
+                      const nextDuration = Number.isFinite(event.currentTarget.duration)
+                        ? event.currentTarget.duration
+                        : 0;
+                      if (nextDuration > 0) {
+                        setLoadedPreviewDuration(nextDuration);
+                      }
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="mt-4 rounded-xl border border-dashed border-gray-200 bg-white px-4 py-3 text-sm text-gray-500">
+                  No lesson video yet. Auto timing will still follow slide order, and exact time stamping becomes
+                  available after a video is recorded or uploaded.
+                </div>
+              )}
+
+              <div className="mt-5 rounded-2xl border border-white bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  <span>Lesson flow</span>
+                  <span>
+                    {effectiveDuration && effectiveDuration > 0
+                      ? formatTimestampLabel(effectiveDuration)
+                      : `${slides.length} slides`}
+                  </span>
+                </div>
+                <div className="relative mt-6">
+                  <div className="h-3 rounded-full bg-gray-100" />
+                  {slides.length > 1 && (
+                    <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-between px-1">
+                      {slides.map((slide) => (
+                        <span
+                          key={`tick-${slide.id}`}
+                          className="h-4 w-px bg-gray-300"
+                          aria-hidden="true"
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {timedActivities.map((timing, index) => (
+                    <button
+                      key={timing.task.id}
+                      type="button"
+                      onClick={() => seekPreviewVideo(timing.effectiveTimestampSeconds)}
+                      className="absolute top-1/2 flex h-7 w-7 -translate-y-1/2 -translate-x-1/2 items-center justify-center rounded-full border-2 border-white bg-emerald-600 text-[11px] font-bold text-white shadow-md transition hover:scale-105 hover:bg-emerald-700"
+                      style={{ left: `${timing.timelinePosition * 100}%` }}
+                      title={`${timing.task.title_en || timing.task.title_ar || `Activity ${index + 1}`} · ${formatTimestampLabel(
+                        timing.effectiveTimestampSeconds
+                      )}`}
+                    >
+                      {index + 1}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4 grid gap-2 md:grid-cols-2">
+                  {timedActivities.map((timing, index) => (
+                    <button
+                      key={`summary-${timing.task.id}`}
+                      type="button"
+                      onClick={() => seekPreviewVideo(timing.effectiveTimestampSeconds)}
+                      className="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 text-left hover:border-emerald-200 hover:bg-emerald-50/60"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-900">
+                          {timing.task.title_en || timing.task.title_ar || `Activity ${index + 1}`}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {timing.timingMode === "manual"
+                            ? "Manual time"
+                            : `Auto from slide ${((timing.sourceSlide?.sequence ?? 0) || 0) + 1}`}
+                        </p>
+                      </div>
+                      <span className="ml-3 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                        {formatTimestampLabel(timing.effectiveTimestampSeconds)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {activities.map((activity, index) => {
-              const linkedSlide = slides.find((slide) => slide.id === activity.linked_slide_id);
+              const timing = activityTimingById.get(activity.id);
+              const linkedSlide = timing?.sourceSlide ?? slides.find((slide) => slide.id === activity.linked_slide_id);
               return (
                 <div key={activity.id} className="rounded-xl border border-amber-200 bg-amber-50/30 p-4 space-y-3">
                   <div className="flex items-center justify-between gap-3">
@@ -1450,17 +1614,56 @@ function QuestionsTasksTab({
                     </p>
                   </div>
 
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="rounded-full bg-white px-2.5 py-1 font-semibold text-gray-600">
+                      Shows at {formatTimestampLabel(timing?.effectiveTimestampSeconds ?? activity.timestamp_seconds)}
+                    </span>
+                    <span
+                      className={`rounded-full px-2.5 py-1 font-semibold ${
+                        timing?.timingMode === "manual"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-sky-100 text-sky-700"
+                      }`}
+                    >
+                      {timing?.timingMode === "manual"
+                        ? "Manual trigger"
+                        : `Auto from slide ${((linkedSlide?.sequence ?? 0) || 0) + 1}`}
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Timestamp (sec)</label>
                       <input
                         type="number"
-                        value={activity.timestamp_seconds}
+                        value={activity.timestamp_seconds > 0 ? activity.timestamp_seconds : ""}
                         onChange={(event) =>
-                          updateActivity(activity.id, { timestamp_seconds: Number(event.target.value) })
+                          updateActivity(activity.id, {
+                            timestamp_seconds: event.target.value ? Number(event.target.value) : 0,
+                          })
+                        }
+                        placeholder={
+                          timing ? `Auto (${formatTimestampLabel(timing.effectiveTimestampSeconds)})` : "Auto"
                         }
                         className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                       />
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => stampCurrentVideoTime(activity.id)}
+                          disabled={!videoUrl}
+                          className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Use current video time
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateActivity(activity.id, { timestamp_seconds: 0 })}
+                          className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                        >
+                          Use slide order
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Points</label>

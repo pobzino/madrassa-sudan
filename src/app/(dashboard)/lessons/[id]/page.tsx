@@ -22,7 +22,11 @@ import EnhancedQuizOverlay from "@/components/lessons/EnhancedQuizOverlay";
 import LessonActivityOverlay from "@/components/lessons/LessonActivityOverlay";
 import ProgressGateModal from "@/components/lessons/ProgressGateModal";
 import SlideInteractionOverlay from "@/components/lessons/SlideInteractionOverlay";
-import { isCanonicalActivityTask, normalizeLessonTaskForm } from "@/lib/lesson-activities";
+import {
+  getEffectiveActivityTimings,
+  isCanonicalActivityTask,
+  normalizeLessonTaskForm,
+} from "@/lib/lesson-activities";
 import {
   getInteractiveSlides,
   getSlideInteractionStorageKey,
@@ -623,6 +627,16 @@ export default function LessonPlayerPage() {
     [tasks]
   );
 
+  const timedActivities = useMemo(
+    () =>
+      getEffectiveActivityTimings(
+        slideDeck,
+        tasks,
+        duration || lesson?.video_duration_seconds || null
+      ),
+    [duration, lesson?.video_duration_seconds, slideDeck, tasks]
+  );
+
   const taskByLinkedSlideId = useMemo(
     () =>
       new Map(
@@ -689,16 +703,15 @@ export default function LessonPlayerPage() {
       const upperBound = Math.floor(Math.max(fromSecond, toSecond));
 
       return (
-        tasks.find(
-          (task) =>
-            isCanonicalActivityTask(task.task_type) &&
-            task.timestamp_seconds > lowerBound &&
-            task.timestamp_seconds <= upperBound &&
+        timedActivities.find(
+          ({ task, effectiveTimestampSeconds }) =>
+            effectiveTimestampSeconds > lowerBound &&
+            effectiveTimestampSeconds <= upperBound &&
             !taskResponses[task.id]
-        ) || null
+        )?.task || null
       );
     },
-    [taskResponses, tasks]
+    [taskResponses, timedActivities]
   );
 
   const findPendingRequiredTask = useCallback(
