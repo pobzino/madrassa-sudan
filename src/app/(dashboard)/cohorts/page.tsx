@@ -200,7 +200,7 @@ export default function CohortsPage() {
       .select("*")
       .eq("join_code", joinCode.trim().toUpperCase())
       .eq("is_active", true)
-      .single();
+      .maybeSingle();
 
     if (!cohort) {
       setMessage({ type: "error", text: t.invalidCode });
@@ -214,7 +214,7 @@ export default function CohortsPage() {
       .select("*")
       .eq("cohort_id", cohort.id)
       .eq("student_id", userId)
-      .single();
+      .maybeSingle();
 
     if (existing) {
       if (existing.is_active) {
