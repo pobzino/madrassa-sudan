@@ -51,6 +51,8 @@ export function useSlideRecorder({
   const slideImageRef = useRef<HTMLImageElement | null>(null);
   const mutationObserverRef = useRef<MutationObserver | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const snapshotPromiseRef = useRef<Promise<void> | null>(null);
+  const pendingSnapshotRef = useRef(false);
   const isRecordingRef = useRef(false);
   const isSnappingRef = useRef(false);
   const stopRequestedRef = useRef(false);
@@ -74,6 +76,8 @@ export function useSlideRecorder({
       clearTimeout(snapshotDebounceRef.current);
       snapshotDebounceRef.current = null;
     }
+    snapshotPromiseRef.current = null;
+    pendingSnapshotRef.current = false;
     if (finalizeTimeoutRef.current) {
       clearTimeout(finalizeTimeoutRef.current);
       finalizeTimeoutRef.current = null;
@@ -115,6 +119,8 @@ export function useSlideRecorder({
       clearTimeout(snapshotDebounceRef.current);
       snapshotDebounceRef.current = null;
     }
+    snapshotPromiseRef.current = null;
+    pendingSnapshotRef.current = false;
     if (mutationObserverRef.current) {
       mutationObserverRef.current.disconnect();
       mutationObserverRef.current = null;
@@ -137,11 +143,17 @@ export function useSlideRecorder({
   }
 
   // Snapshot the slide DOM to a cached Image
-  const snapshotSlide = useCallback(() => {
+  const snapshotSlide = useCallback(async function captureSlide() {
     const el = slideContainerRef.current;
-    if (!el || isSnappingRef.current) return;
+    if (!el) return;
+
+    if (isSnappingRef.current) {
+      pendingSnapshotRef.current = true;
+      return snapshotPromiseRef.current ?? Promise.resolve();
+    }
 
     isSnappingRef.current = true;
+    pendingSnapshotRef.current = false;
 
     // Capture at high enough resolution so the canvas doesn't upscale
     const elW = el.offsetWidth || canvasWidth;
@@ -165,35 +177,47 @@ export function useSlideRecorder({
       },
     };
 
-    toPng(el, opts)
-      .then((dataUrl) => {
+    const loadImage = (dataUrl: string) =>
+      new Promise<void>((resolve, reject) => {
         const img = new Image();
         img.onload = () => {
           slideImageRef.current = img;
-          isSnappingRef.current = false;
+          resolve();
         };
-        img.onerror = () => { isSnappingRef.current = false; };
+        img.onerror = () => reject(new Error('Failed to load captured slide image.'));
         img.src = dataUrl;
-      })
-      .catch(() => {
-        isSnappingRef.current = false;
-        // Retry once after a short delay (DOM may not have fully painted)
-        setTimeout(() => {
-          if (!slideContainerRef.current) return;
-          isSnappingRef.current = true;
-          toPng(slideContainerRef.current, opts)
-            .then((dataUrl) => {
-              const img = new Image();
-              img.onload = () => {
-                slideImageRef.current = img;
-                isSnappingRef.current = false;
-              };
-              img.onerror = () => { isSnappingRef.current = false; };
-              img.src = dataUrl;
-            })
-            .catch(() => { isSnappingRef.current = false; });
-        }, 200);
       });
+
+    snapshotPromiseRef.current = (async () => {
+      try {
+        let dataUrl: string;
+
+        try {
+          dataUrl = await toPng(el, opts);
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          const retryEl = slideContainerRef.current;
+          if (!retryEl) {
+            return;
+          }
+          dataUrl = await toPng(retryEl, opts);
+        }
+
+        await loadImage(dataUrl);
+      } catch {
+        // Keep the previous cached frame if recapture fails.
+      } finally {
+        isSnappingRef.current = false;
+        snapshotPromiseRef.current = null;
+
+        if (pendingSnapshotRef.current) {
+          pendingSnapshotRef.current = false;
+          void captureSlide();
+        }
+      }
+    })();
+
+    return snapshotPromiseRef.current;
   }, [slideContainerRef, canvasWidth, canvasHeight]);
 
   const scheduleSnapshot = useCallback((delay = 90) => {
@@ -283,9 +307,7 @@ export function useSlideRecorder({
       await document.fonts.ready;
 
       // Take initial slide snapshot
-      snapshotSlide();
-      // Allow time for snapshot
-      await new Promise((r) => setTimeout(r, 200));
+      await snapshotSlide();
 
       // Countdown 3-2-1
       setRecorderState('countdown');
@@ -293,6 +315,8 @@ export function useSlideRecorder({
         setCountdownValue(i);
         await new Promise((r) => setTimeout(r, 1000));
       }
+
+      await snapshotSlide();
 
       // Start canvas compositing
       const canvas = canvasRef.current;
