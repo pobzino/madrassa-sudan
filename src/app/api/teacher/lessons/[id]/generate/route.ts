@@ -4,14 +4,11 @@ import {
   getCurriculumRequirementMessage,
   getCurriculumSelectionForLesson,
 } from "@/lib/curriculum";
-import { getSiteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import { getOpenAIClient, AI_MODEL } from "@/lib/ai/openai-client";
 import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
 
-export const maxDuration = 300; // 5 minutes for Netlify
-
-const MAX_WHISPER_SIZE = 25 * 1024 * 1024; // 25 MB
+export const maxDuration = 300;
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -19,6 +16,10 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+/**
+ * Step 2: Generate questions, content blocks, and tasks from an existing transcript.
+ * The transcript must already be saved to lessons.ai_transcript (via the /transcribe endpoint).
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -33,7 +34,6 @@ export async function POST(
       );
     }
 
-    // Auth check
     const supabase = await createClient();
     const {
       data: { user },
@@ -49,7 +49,6 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Get lesson with subject info
     const { data: lesson } = await supabase
       .from("lessons")
       .select("*, subject:subjects(name_ar, name_en)")
@@ -60,74 +59,21 @@ export async function POST(
       return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
     }
 
-    // Parse request body
     const body = await request.json().catch(() => ({}));
-    const languageHint = (body.language_hint as string) || undefined;
     const questionCount = Math.min(Math.max(body.question_count || 6, 3), 12);
 
-    // Get video URL (prefer smallest for faster download)
-    const videoUrl =
-      lesson.video_url_360p || lesson.video_url_480p || lesson.video_url_720p || lesson.video_url_1080p;
-
-    if (!videoUrl) {
+    // Read transcript from DB (saved by /transcribe endpoint)
+    const transcriptText = lesson.ai_transcript as string | null;
+    if (!transcriptText || transcriptText.trim().length < 20) {
       return NextResponse.json(
-        { error: "No video URL available. Upload a video first." },
+        { error: "No transcript available. Run transcription first." },
         { status: 400 }
       );
     }
 
-    // --- Step 1: Download video from Bunny CDN ---
-    const videoResponse = await fetch(videoUrl, {
-      signal: AbortSignal.timeout(60000),
-      headers: { Referer: getSiteUrl() },
-    });
-
-    if (!videoResponse.ok) {
-      return NextResponse.json(
-        { error: "Could not download video from CDN" },
-        { status: 502 }
-      );
-    }
-
-    let videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-    let warning: string | undefined;
-
-    if (videoBuffer.length > MAX_WHISPER_SIZE) {
-      videoBuffer = videoBuffer.subarray(0, MAX_WHISPER_SIZE);
-      warning =
-        "Video was truncated for transcription. Only a portion was processed.";
-    }
-
-    // --- Step 2: Transcribe with OpenAI Whisper ---
-    const file = new File([videoBuffer], "lesson.mp4", { type: "video/mp4" });
-
-    const transcription = await openai.audio.transcriptions.create({
-      model: "whisper-1",
-      file,
-      response_format: "verbose_json",
-      timestamp_granularities: ["segment"],
-      ...(languageHint ? { language: languageHint } : {}),
-    });
-
-    const segments: Array<{ start: number; end: number; text: string }> =
-      (transcription as unknown as { segments?: Array<{ start: number; end: number; text: string }> })
-        .segments || [];
-
-    const transcriptText =
-      (transcription as unknown as { text?: string }).text ||
-      segments.map((s) => s.text).join(" ");
-
-    if (!transcriptText || transcriptText.trim().length < 20) {
-      return NextResponse.json(
-        { error: "Could not extract meaningful transcript from the video. Check that the video has audio." },
-        { status: 422 }
-      );
-    }
-
-    // --- Step 3: Generate content with GPT ---
     const subject = lesson.subject as { name_ar?: string; name_en?: string } | null;
     const subjectName = subject?.name_en || subject?.name_ar || "General";
-    const durationSeconds = lesson.video_duration_seconds || segments[segments.length - 1]?.end || 300;
+    const durationSeconds = lesson.video_duration_seconds || 300;
     const curriculumSelection = getCurriculumSelectionForLesson(
       subject,
       lesson.grade_level,
@@ -143,9 +89,6 @@ export async function POST(
       return NextResponse.json({ error: curriculumRequirement }, { status: 400 });
     }
 
-    const segmentText = segments.length > 0
-      ? segments.map((s) => `[${formatTime(s.start)} - ${formatTime(s.end)}] ${s.text}`).join("\n")
-      : transcriptText;
     const curriculumBlock = getCurriculumPromptBlock(curriculumSelection);
 
     const prompt = `You are an expert curriculum designer for Amal Madrassa, an educational platform for Sudanese children.
@@ -159,8 +102,8 @@ Given the following video lesson transcript, generate quiz questions and bilingu
 - Video Duration: ${durationSeconds} seconds
 ${curriculumBlock}
 
-## Transcript with Timestamps
-${segmentText}
+## Transcript
+${transcriptText}
 
 ## Task 1: Generate ${questionCount} Quiz Questions
 
@@ -353,26 +296,18 @@ Requirements:
 
     const generated = JSON.parse(content);
 
-    // Update lesson with transcript and generation timestamp
+    // Update lesson with generation timestamp
     await supabase
       .from("lessons")
-      .update({
-        ai_generated_at: new Date().toISOString(),
-        ai_transcript: transcriptText,
-      })
+      .update({ ai_generated_at: new Date().toISOString() })
       .eq("id", lessonId)
-      .then(() => {}); // non-blocking, ignore errors
+      .then(() => {});
 
     return NextResponse.json({
-      transcript: {
-        text: transcriptText,
-        language: (transcription as unknown as { language?: string }).language || languageHint || "unknown",
-        segments,
-      },
+      transcript: { text: transcriptText },
       questions: generated.questions || [],
       contentBlocks: generated.contentBlocks || [],
       tasks: generated.tasks || [],
-      ...(warning ? { warning } : {}),
     });
   } catch (error) {
     console.error("generate error:", error);

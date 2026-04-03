@@ -48,6 +48,23 @@ interface AIContentGeneratorProps {
   }) => void;
 }
 
+async function fetchJSON(url: string, options: RequestInit) {
+  const res = await fetch(url, options);
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(
+      res.status === 504 || res.status === 502
+        ? 'Request timed out. Please try again.'
+        : `Server returned an unexpected response (${res.status}). Please try again.`
+    );
+  }
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Request failed');
+  }
+  return data;
+}
+
 export default function AIContentGenerator({
   lessonId,
   hasVideo,
@@ -73,43 +90,49 @@ export default function AIContentGenerator({
 
     setGenerating(true);
     setError('');
-    setProgress('Transcribing video...');
 
     try {
-      const res = await fetch(`/api/teacher/lessons/${lessonId}/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language_hint: 'ar' }),
-      });
+      // Step 1: Transcribe video (or use cached transcript)
+      setProgress('Transcribing video...');
+      const transcribeResult = await fetchJSON(
+        `/api/teacher/lessons/${lessonId}/generate/transcribe`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ language_hint: 'ar' }),
+        }
+      );
 
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error(
-          res.status === 504 || res.status === 502
-            ? 'Request timed out. The video may be too long — try a shorter video.'
-            : `Server returned an unexpected response (${res.status}). Please try again.`
-        );
+      const transcriptText = transcribeResult.transcript || '';
+      setTranscript(transcriptText);
+
+      if (transcribeResult.cached) {
+        setProgress('Transcript found. Generating content...');
+      } else {
+        setProgress('Transcription complete. Generating content...');
       }
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Generation failed');
-      }
+      // Step 2: Generate questions, content blocks, and tasks
+      const generateResult = await fetchJSON(
+        `/api/teacher/lessons/${lessonId}/generate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ language_hint: 'ar' }),
+        }
+      );
 
       setProgress('Processing results...');
 
-      setTranscript(data.transcript?.text || null);
-
       onGenerated({
-        questions: data.questions || [],
-        contentBlocks: data.contentBlocks || [],
-        tasks: data.tasks || [],
-        transcript: data.transcript?.text || '',
+        questions: generateResult.questions || [],
+        contentBlocks: generateResult.contentBlocks || [],
+        tasks: generateResult.tasks || [],
+        transcript: transcriptText,
       });
 
-      if (data.warning) {
-        setError(data.warning);
+      if (transcribeResult.warning) {
+        setError(transcribeResult.warning);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Generation failed');
