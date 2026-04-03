@@ -41,8 +41,10 @@ export function useSlideRecorder({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const micStreamRef = useRef<MediaStream | null>(null);
+  const combinedStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number>(0);
   const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const finalizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const slideImageRef = useRef<HTMLImageElement | null>(null);
   const isRecordingRef = useRef(false);
 
@@ -56,6 +58,14 @@ export function useSlideRecorder({
   function cleanup() {
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+    if (finalizeTimeoutRef.current) {
+      clearTimeout(finalizeTimeoutRef.current);
+      finalizeTimeoutRef.current = null;
+    }
+    if (combinedStreamRef.current) {
+      combinedStreamRef.current.getTracks().forEach((t) => t.stop());
+      combinedStreamRef.current = null;
+    }
     if (micStreamRef.current) {
       micStreamRef.current.getTracks().forEach((t) => t.stop());
       micStreamRef.current = null;
@@ -134,13 +144,13 @@ export function useSlideRecorder({
   }
 
   // Find supported MIME type
-  function getSupportedMimeType(): string {
+  function getSupportedMimeType(): string | null {
     const types = [
+      'video/webm',
       'video/webm;codecs=vp8,opus',
       'video/webm;codecs=vp9,opus',
-      'video/webm',
     ];
-    return types.find((mt) => MediaRecorder.isTypeSupported(mt)) || 'video/webm';
+    return types.find((mt) => MediaRecorder.isTypeSupported(mt)) || null;
   }
 
   const startRecording = useCallback(async () => {
@@ -200,40 +210,63 @@ export function useSlideRecorder({
         ...canvasStream.getVideoTracks(),
         ...audioTracks,
       ]);
+      combinedStreamRef.current = combinedStream;
 
       // Create MediaRecorder
-      const mimeType = getSupportedMimeType();
-      const recorder = new MediaRecorder(combinedStream, {
-        mimeType,
-        videoBitsPerSecond: 2_500_000,
-      });
+      const preferredMimeType = getSupportedMimeType();
+      let recorder: MediaRecorder;
+      try {
+        recorder = preferredMimeType
+          ? new MediaRecorder(combinedStream, {
+              mimeType: preferredMimeType,
+              videoBitsPerSecond: 2_500_000,
+            })
+          : new MediaRecorder(combinedStream, {
+              videoBitsPerSecond: 2_500_000,
+            });
+      } catch {
+        recorder = new MediaRecorder(combinedStream);
+      }
+      const outputMimeType = recorder.mimeType || preferredMimeType || 'video/webm';
 
       chunksRef.current = [];
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-        if (blob.size === 0) {
-          setRecordedBlob(null);
-          setRecorderState('idle');
-          setErrorMessage('Recording failed to save video data. Please record again for at least 2 seconds.');
+        // Some browsers dispatch the final dataavailable event slightly after stop.
+        finalizeTimeoutRef.current = setTimeout(() => {
+          finalizeTimeoutRef.current = null;
+          const typedBlob = new Blob(chunksRef.current, { type: outputMimeType });
+          const blob = typedBlob.size > 0 ? typedBlob : new Blob(chunksRef.current);
+
+          if (blob.size === 0) {
+            setRecordedBlob(null);
+            setRecorderState('idle');
+            setErrorMessage('Recording failed to save video data. Please record again.');
+          } else {
+            setRecordedBlob(blob);
+            setRecorderState('stopped');
+          }
+
+          if (combinedStreamRef.current) {
+            combinedStreamRef.current.getTracks().forEach((t) => t.stop());
+            combinedStreamRef.current = null;
+          }
+          if (micStreamRef.current) {
+            micStreamRef.current.getTracks().forEach((t) => t.stop());
+            micStreamRef.current = null;
+          }
+
           // Stop compositing loop
           isRecordingRef.current = false;
           if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
           if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
-          return;
-        }
-        setRecordedBlob(blob);
-        setRecorderState('stopped');
-        // Stop compositing loop
-        isRecordingRef.current = false;
-        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-        if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+        }, 180);
       };
 
       mediaRecorderRef.current = recorder;
-      recorder.start(250); // frequent chunks reduce empty-blob edge cases
+      recorder.start(400); // Slightly larger chunks are more reliable on slower devices.
 
       // Duration timer
       const startTime = Date.now();
@@ -265,11 +298,6 @@ export function useSlideRecorder({
           // ignore
         }
       }, 120);
-    }
-    // Stop mic
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((t) => t.stop());
-      micStreamRef.current = null;
     }
   }, []);
 
