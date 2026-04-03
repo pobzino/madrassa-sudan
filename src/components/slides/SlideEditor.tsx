@@ -11,7 +11,6 @@ import RecordingOverlay from './RecordingOverlay';
 import RecordingReviewModal from './RecordingReviewModal';
 import { useSlideRecorder } from '@/hooks/useSlideRecorder';
 import { useBunnyBlobUpload } from '@/hooks/useBunnyBlobUpload';
-import { MAX_GENERATED_SLIDE_COUNT } from '@/lib/slides-generation';
 
 interface InteractivePlaceholders {
   title_ar: string;
@@ -418,11 +417,6 @@ export default function SlideEditor({
 
   const addSlide = useCallback(
     (type: SlideType) => {
-      if (slides.length >= MAX_GENERATED_SLIDE_COUNT) {
-        window.alert(`Decks are capped at ${MAX_GENERATED_SLIDE_COUNT} slides.`);
-        return;
-      }
-
       const newSlide: Slide = {
         id: crypto.randomUUID(),
         type,
@@ -476,11 +470,6 @@ export default function SlideEditor({
 
   const addInteractiveSlide = useCallback(
     (request: InteractiveSlideRequest) => {
-      if (slides.length >= MAX_GENERATED_SLIDE_COUNT) {
-        window.alert(`Decks are capped at ${MAX_GENERATED_SLIDE_COUNT} slides.`);
-        return;
-      }
-
       const { interactionType, slideType } = request;
 
       // Placeholder content per interaction type — picks an unused variant
