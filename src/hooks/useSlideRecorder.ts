@@ -343,10 +343,10 @@ export function useSlideRecorder({
         recorder = preferredMimeType
           ? new MediaRecorder(combinedStream, {
               mimeType: preferredMimeType,
-              videoBitsPerSecond: 8_000_000,
+              videoBitsPerSecond: 12_000_000,
             })
           : new MediaRecorder(combinedStream, {
-              videoBitsPerSecond: 8_000_000,
+              videoBitsPerSecond: 12_000_000,
             });
       } catch {
         recorder = new MediaRecorder(combinedStream);

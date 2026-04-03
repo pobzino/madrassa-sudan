@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import type { Slide, SlideType } from '@/lib/slides.types';
 import SlideCard from './SlideCard';
 import SlideThumbnail from './SlideThumbnail';
@@ -317,6 +318,39 @@ export default function SlideEditor({
     }
   }, [presentIndex, revealedCount, recording, recorderState, snapshotSlide]);
 
+  const captureAfterNavigation = useCallback(() => {
+    if (!recording || (recorderState !== 'recording' && recorderState !== 'paused')) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        snapshotSlide();
+      });
+    });
+  }, [recording, recorderState, snapshotSlide]);
+
+  const goToNextPresentStep = useCallback(() => {
+    flushSync(() => {
+      if (totalRevealItems > 0 && revealedCount < totalRevealItems) {
+        setRevealedCount((c) => c + 1);
+      } else {
+        setPresentIndex((i) => Math.min(i + 1, slides.length - 1));
+      }
+    });
+
+    captureAfterNavigation();
+  }, [captureAfterNavigation, revealedCount, slides.length, totalRevealItems]);
+
+  const goToPreviousPresentStep = useCallback(() => {
+    flushSync(() => {
+      setPresentIndex((i) => Math.max(i - 1, 0));
+      setRevealedCount(0);
+    });
+
+    captureAfterNavigation();
+  }, [captureAfterNavigation]);
+
   // When recording stops, show review modal
   useEffect(() => {
     if (recorderState === 'stopped' && recordedBlob) {
@@ -343,14 +377,10 @@ export default function SlideEditor({
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
         e.preventDefault();
-        if (totalRevealItems > 0 && revealedCount < totalRevealItems) {
-          setRevealedCount((c) => c + 1);
-        } else {
-          setPresentIndex((i) => Math.min(i + 1, slides.length - 1));
-        }
+        goToNextPresentStep();
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.preventDefault();
-        setPresentIndex((i) => Math.max(i - 1, 0));
+        goToPreviousPresentStep();
       } else if (e.key === 'Escape') {
         if (recording) {
           // During recording, Escape stops recording instead of exiting
@@ -362,7 +392,7 @@ export default function SlideEditor({
     }
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [presenting, slides.length, totalRevealItems, revealedCount, recording, recorderStop]);
+  }, [goToNextPresentStep, goToPreviousPresentStep, presenting, recording, recorderStop]);
 
   const updateSlide = useCallback(
     (updates: Partial<Slide>) => {
@@ -559,17 +589,12 @@ export default function SlideEditor({
   }
 
   const handlePreviousWhileRecording = useCallback(() => {
-    setPresentIndex((i) => Math.max(i - 1, 0));
-  }, []);
+    goToPreviousPresentStep();
+  }, [goToPreviousPresentStep]);
 
   const handleNextWhileRecording = useCallback(() => {
-    if (totalRevealItems > 0 && revealedCount < totalRevealItems) {
-      setRevealedCount((c) => c + 1);
-      return;
-    }
-
-    setPresentIndex((i) => Math.min(i + 1, slides.length - 1));
-  }, [revealedCount, slides.length, totalRevealItems]);
+    goToNextPresentStep();
+  }, [goToNextPresentStep]);
 
   // Fullscreen present mode
   if (presenting) {
@@ -577,6 +602,7 @@ export default function SlideEditor({
       <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
         <div ref={slideContainerRef} className="w-full max-w-6xl mx-auto">
           <SlideCard
+            key={`${presentIndex}:${revealedCount}:${language}`}
             slide={slides[presentIndex]}
             language={language}
             className="!rounded-none !shadow-2xl"
@@ -613,7 +639,7 @@ export default function SlideEditor({
         {!recording && (
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/60 backdrop-blur-sm rounded-full px-6 py-3">
             <button
-              onClick={() => setPresentIndex((i) => Math.max(i - 1, 0))}
+              onClick={goToPreviousPresentStep}
               disabled={presentIndex === 0}
               className="text-white/80 hover:text-white disabled:text-white/30 transition-colors"
             >
@@ -625,13 +651,7 @@ export default function SlideEditor({
               {presentIndex + 1} / {slides.length}
             </span>
             <button
-              onClick={() => {
-                if (totalRevealItems > 0 && revealedCount < totalRevealItems) {
-                  setRevealedCount((c) => c + 1);
-                } else {
-                  setPresentIndex((i) => Math.min(i + 1, slides.length - 1));
-                }
-              }}
+              onClick={goToNextPresentStep}
               disabled={presentIndex === slides.length - 1 && revealedCount >= totalRevealItems}
               className="text-white/80 hover:text-white disabled:text-white/30 transition-colors"
             >
