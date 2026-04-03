@@ -10,6 +10,23 @@ const STATUS_LABELS: Record<number, string> = {
   5: "error",
 };
 
+async function isPlayableVideoUrl(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Range: "bytes=0-1",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    });
+
+    return response.status === 206 || response.status === 200;
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -76,13 +93,39 @@ export async function GET(request: NextRequest) {
     };
 
     if (statusCode === 4) {
-      response.urls = {
+      const candidateUrls = {
         video_url_1080p: `https://${cdnHostname}/${videoId}/play_1080p.mp4`,
         video_url_360p: `https://${cdnHostname}/${videoId}/play_360p.mp4`,
         video_url_480p: `https://${cdnHostname}/${videoId}/play_480p.mp4`,
         video_url_720p: `https://${cdnHostname}/${videoId}/play_720p.mp4`,
       };
+
+      const entries = Object.entries(candidateUrls) as Array<
+        [keyof typeof candidateUrls, string]
+      >;
+      const checks = await Promise.all(
+        entries.map(async ([key, url]) => [key, url, await isPlayableVideoUrl(url)] as const)
+      );
+
+      const playableUrls = checks.reduce<Record<string, string>>((acc, [key, url, playable]) => {
+        acc[key] = playable ? url : "";
+        return acc;
+      }, {});
+
+      const playableQualities = checks
+        .filter(([, , playable]) => playable)
+        .map(([key]) => key);
+
+      response.urls = playableUrls;
+      response.playableQualities = playableQualities;
       response.hlsUrl = `https://${cdnHostname}/${videoId}/playlist.m3u8`;
+
+      if (playableQualities.length === 0) {
+        response.status = "transcoding";
+        response.statusCode = 3;
+        response.awaitingPlayableRenditions = true;
+      }
+
       if (data.length) {
         response.durationSeconds = data.length;
       }

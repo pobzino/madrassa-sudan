@@ -15,7 +15,7 @@ interface SlideCardProps {
   className?: string;
   revealedCount?: number;
   onReveal?: () => void;
-  renderMode?: 'default' | 'thumbnail';
+  renderMode?: 'default' | 'thumbnail' | 'capture';
 }
 
 const DESIGN_WIDTH = 1280;
@@ -84,6 +84,14 @@ export default function SlideCard({
         >
           {renderedContent}
         </div>
+      </div>
+    );
+  }
+
+  if (renderMode === 'capture') {
+    return (
+      <div className={`w-full h-full rounded-none overflow-hidden bg-white ${className}`}>
+        {renderedContent}
       </div>
     );
   }

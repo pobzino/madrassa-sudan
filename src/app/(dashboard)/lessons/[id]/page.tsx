@@ -523,6 +523,7 @@ export default function LessonPlayerPage() {
 
     if (fallbackSource) {
       setQuality(fallbackSource.quality);
+      setCurrentTime(0);
       setVideoErrorMessage(`Could not load ${resolvedVideoSource.quality}. Switched to ${fallbackSource.quality}.`);
       return;
     }
@@ -832,10 +833,12 @@ export default function LessonPlayerPage() {
         {videoUrl ? (
           <>
             <video
+              key={videoUrl}
               ref={videoRef}
               src={videoUrl}
               className="w-full h-full"
               playsInline
+              preload="metadata"
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
               onEnded={handleVideoEnded}

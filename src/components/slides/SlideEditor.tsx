@@ -309,7 +309,7 @@ export default function SlideEditor({
   // Snapshot slide when presentIndex or revealedCount changes during recording
   useEffect(() => {
     if (recording && (recorderState === 'recording' || recorderState === 'paused')) {
-      snapshotSlide();
+      void snapshotSlide();
     }
   }, [presentIndex, revealedCount, recording, recorderState, snapshotSlide]);
 
@@ -529,8 +529,8 @@ export default function SlideEditor({
     setPresenting(true);
     setRecording(true);
     // Small delay so the presentation DOM renders before we start recording
-    await new Promise((r) => setTimeout(r, 100));
-    recorderStart();
+    await new Promise((r) => setTimeout(r, 180));
+    await recorderStart();
   }
 
   function handleRetake() {
@@ -558,14 +558,17 @@ export default function SlideEditor({
   if (presenting) {
     return (
       <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-        <div ref={slideContainerRef} className="w-full max-w-6xl mx-auto px-4">
-          <SlideCard
-            slide={slides[presentIndex]}
-            language={language}
-            className="!rounded-none !shadow-2xl"
-            revealedCount={slides[presentIndex]?.type === 'question_answer' ? revealedCount : undefined}
-            onReveal={() => setRevealedCount((c) => c + 1)}
-          />
+        <div className="w-full max-w-6xl mx-auto px-4">
+          <div ref={slideContainerRef} className="w-full aspect-video overflow-hidden">
+            <SlideCard
+              slide={slides[presentIndex]}
+              language={language}
+              renderMode="capture"
+              className="!rounded-none !shadow-none !w-full !h-full"
+              revealedCount={slides[presentIndex]?.type === 'question_answer' ? revealedCount : undefined}
+              onReveal={() => setRevealedCount((c) => c + 1)}
+            />
+          </div>
         </div>
 
         {/* Recording overlay (countdown, REC indicator, controls) */}
