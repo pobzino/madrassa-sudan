@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import type { Database, Json } from '@/lib/database.types'
-import type { TaskType, MatchingPairsData, SortingOrderData } from '@/lib/tasks.types'
+import type { TaskType, MatchPairsData, SortingOrderData } from '@/lib/tasks.types'
 
 const TaskResponseSchema = z.object({
   task_id: z.string().uuid(),
@@ -17,7 +17,7 @@ function computeScore(
 ): number {
   switch (taskType) {
     case 'matching_pairs': {
-      const data = taskData as unknown as MatchingPairsData
+      const data = taskData as unknown as MatchPairsData
       const matches = (responseData.matches || []) as Array<{ left_id: string; right_id: string }>
       if (!data.pairs || data.pairs.length === 0) return 0
       // Build correct mapping: left_id -> right text (we use pair id matching)
