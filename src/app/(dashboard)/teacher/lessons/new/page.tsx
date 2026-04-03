@@ -161,7 +161,7 @@ function getAutosaveMessage(status: AutosaveState, error: string) {
 }
 
 export default function NewLessonPage() {
-  const { loading: authLoading } = useTeacherGuard();
+  const { profile, loading: authLoading } = useTeacherGuard();
   const router = useRouter();
   const searchParams = useSearchParams();
   const draftParam = searchParams.get("draft");
@@ -237,6 +237,7 @@ export default function NewLessonPage() {
     selectedSubject,
     form.grade_level
   );
+  const canPublishLesson = profile?.role === "admin";
 
   useEffect(() => {
     if (authLoading || loading || !didHydrateDraftRef.current) return;
@@ -582,18 +583,26 @@ export default function NewLessonPage() {
             Publish immediately
           </span>
           <button
-            onClick={() =>
-              setForm({ ...form, is_published: !form.is_published })
-            }
+            onClick={() => {
+              if (!canPublishLesson) return;
+              setForm({ ...form, is_published: !form.is_published });
+            }}
+            disabled={!canPublishLesson}
             className={`w-12 h-6 rounded-full flex items-center px-1 transition-colors ${
               form.is_published
                 ? "bg-emerald-500 justify-end"
                 : "bg-gray-200 justify-start"
-            }`}
+            } ${!canPublishLesson ? "cursor-not-allowed opacity-60" : ""}`}
+            title={!canPublishLesson ? "Only admins can publish lessons." : undefined}
           >
             <span className="w-4 h-4 bg-white rounded-full shadow" />
           </button>
         </div>
+        {!canPublishLesson && (
+          <p className="text-xs text-amber-600">
+            New lessons created by teachers stay as drafts until an admin publishes them.
+          </p>
+        )}
 
         <div className="pt-4 flex items-center justify-between gap-3">
           <p className="text-xs text-gray-500">

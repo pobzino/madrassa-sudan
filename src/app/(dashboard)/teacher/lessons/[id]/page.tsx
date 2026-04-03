@@ -787,13 +787,14 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         <DetailsTab
           form={form}
           setForm={setForm}
-            subjects={subjects}
-            selectedSubject={selectedSubject}
-            availableCohorts={availableCohorts}
-            assignedCohortIds={assignedCohortIds}
-            setAssignedCohortIds={setAssignedCohortIds}
+          subjects={subjects}
+          selectedSubject={selectedSubject}
+          availableCohorts={availableCohorts}
+          assignedCohortIds={assignedCohortIds}
+          setAssignedCohortIds={setAssignedCohortIds}
           videoInputMode={videoInputMode}
           setVideoInputMode={setVideoInputMode}
+          canPublishLesson={canPublishLesson}
           lessonId={id}
           onVideosReady={handleUploadedVideoReady}
         />
@@ -945,6 +946,7 @@ function DetailsTab({
   setAssignedCohortIds,
   videoInputMode,
   setVideoInputMode,
+  canPublishLesson,
   lessonId,
   onVideosReady,
 }: {
@@ -957,6 +959,7 @@ function DetailsTab({
   setAssignedCohortIds: (value: string[] | ((prev: string[]) => string[])) => void;
   videoInputMode: "upload" | "manual";
   setVideoInputMode: (mode: "upload" | "manual") => void;
+  canPublishLesson: boolean;
   lessonId: string;
   onVideosReady: (urls: LessonVideoUrls) => void | Promise<void>;
 }) {
