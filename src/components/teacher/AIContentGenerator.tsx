@@ -82,13 +82,22 @@ export default function AIContentGenerator({
         body: JSON.stringify({ language_hint: 'ar' }),
       });
 
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(
+          res.status === 504 || res.status === 502
+            ? 'Request timed out. The video may be too long — try a shorter video.'
+            : `Server returned an unexpected response (${res.status}). Please try again.`
+        );
+      }
+
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error || 'Generation failed');
       }
 
       setProgress('Processing results...');
-      const data = await res.json();
 
       setTranscript(data.transcript?.text || null);
 

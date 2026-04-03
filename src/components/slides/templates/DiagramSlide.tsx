@@ -104,12 +104,14 @@ export default function DiagramSlide({ slide, language }: Props) {
             {hasImage ? (
               <SlideImage src={slide.image_url!} className="w-full h-full max-h-full shadow-md" />
             ) : (
-              <div className="w-full h-full min-h-[120px] flex flex-col items-center justify-center p-4 sm:p-6">
-                <div className="w-24 h-24 sm:w-32 sm:h-32 mb-3">
-                  <OwlThinking />
-                </div>
+              <div className="w-full h-full min-h-[120px] flex flex-col items-center justify-center p-4 sm:p-6 rounded-2xl border-2 border-dashed border-cyan-300 bg-cyan-50/50">
+                <svg className="w-10 h-10 sm:w-12 sm:h-12 text-cyan-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 21l5-5 3 3 4-6 3 4" />
+                </svg>
                 {slide.visual_hint && (
-                  <p className="text-xs sm:text-sm text-cyan-600 text-center font-medium max-w-[200px]">
+                  <p className="text-xs sm:text-sm text-cyan-400 text-center italic max-w-[220px] leading-snug">
                     {slide.visual_hint}
                   </p>
                 )}
