@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useLanguage } from '@/contexts/LanguageContext'
 import type { QuizSettings } from '@/lib/database.types'
+import { getIncorrectFeedback, getCorrectFeedback } from '@/lib/feedback-messages'
 
 interface QuizQuestion {
   id: string
@@ -198,20 +199,20 @@ export default function EnhancedQuizOverlay({
     if (!hasAnswered) return null
 
     return (
-      <div className={`p-6 rounded-xl ${isCorrect ? 'bg-green-50 border-2 border-green-500' : 'bg-red-50 border-2 border-red-500'}`}>
+      <div className={`p-6 rounded-xl ${isCorrect ? 'bg-green-50 border-2 border-green-500' : 'bg-amber-50 border-2 border-amber-400'}`}>
         <div className="flex items-center gap-3 mb-4">
           {isCorrect ? (
             <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center text-white text-2xl">
               ✓
             </div>
           ) : (
-            <div className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center text-white text-2xl">
-              ✗
+            <div className="w-12 h-12 rounded-full bg-amber-400 flex items-center justify-center text-white text-2xl">
+              💪
             </div>
           )}
           <div>
-            <p className={`text-lg font-bold ${isCorrect ? 'text-green-700' : 'text-red-700'}`}>
-              {isCorrect ? text.correct : text.incorrect}
+            <p className={`text-lg font-bold ${isCorrect ? 'text-green-700' : 'text-amber-700'}`}>
+              {isCorrect ? getCorrectFeedback(language) : getIncorrectFeedback(language)}
             </p>
             <p className="text-sm text-gray-600">
               {text.attempt} {attemptCount}

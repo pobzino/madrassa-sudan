@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { getIncorrectFeedback, getCorrectFeedback } from '@/lib/feedback-messages';
 // Inline SVG icons (no lucide-react dependency)
 const Check = ({ className = '' }: { className?: string }) => (
   <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -240,22 +241,18 @@ export function QuizOverlay({
 
         {/* Feedback */}
         {submitted && (
-          <div className={`mx-6 p-4 rounded-lg ${isCorrect ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+          <div className={`mx-6 p-4 rounded-lg ${isCorrect ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
             <div className="flex items-start gap-3">
               {isCorrect ? (
                 <Check className="h-6 w-6 text-green-600 flex-shrink-0 mt-0.5" />
               ) : (
-                <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+                <AlertCircle className="h-6 w-6 text-amber-600 flex-shrink-0 mt-0.5" />
               )}
               <div className="flex-1">
-                <p className={`font-semibold ${isCorrect ? 'text-green-900' : 'text-red-900'}`}>
+                <p className={`font-semibold ${isCorrect ? 'text-green-900' : 'text-amber-900'}`}>
                   {isCorrect
-                    ? language === 'ar'
-                      ? 'صحيح! أحسنت'
-                      : 'Correct! Well done'
-                    : language === 'ar'
-                    ? 'خطأ. حاول مرة أخرى'
-                    : 'Incorrect. Try again'}
+                    ? getCorrectFeedback(language)
+                    : getIncorrectFeedback(language)}
                 </p>
                 {settings.show_explanation && explanationText && (
                   <p className="text-sm mt-2" dir={language === 'ar' ? 'rtl' : 'ltr'}>

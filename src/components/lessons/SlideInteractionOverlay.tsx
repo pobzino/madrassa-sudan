@@ -11,6 +11,7 @@ import {
   getStableInteractionOrder,
   type SlideInteractionResult,
 } from '@/lib/slide-interactions';
+import { getIncorrectFeedback, getCorrectFeedback } from '@/lib/feedback-messages';
 
 interface SlideInteractionOverlayProps {
   slide: Slide;
@@ -574,7 +575,7 @@ export default function SlideInteractionOverlay({
               {result && (
                 <div className={`mt-4 rounded-2xl border p-4 ${result.isCorrect ? 'border-green-300 bg-green-50' : 'border-amber-300 bg-amber-50'}`}>
                   <p className={`text-sm font-semibold ${result.isCorrect ? 'text-green-700' : 'text-amber-700'}`}>
-                    {result.isCorrect ? text.correct : text.incorrect}
+                    {result.isCorrect ? getCorrectFeedback(language) : getIncorrectFeedback(language)}
                   </p>
                   <button
                     onClick={() => onComplete(result)}

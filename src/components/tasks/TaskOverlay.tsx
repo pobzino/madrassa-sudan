@@ -39,7 +39,7 @@ export default function TaskOverlay({ task, lessonId, onComplete, onSkip }: Task
       perfect: 'ممتاز! 🎉',
       great: 'أحسنت! 👏',
       good: 'جيد!',
-      tryBetter: 'حاول أكثر في المرة القادمة',
+      tryBetter: 'واصل المحاولة، ستتحسن! 💪',
       timeUp: 'انتهى الوقت!',
       seconds: 'ث',
     },
@@ -51,7 +51,7 @@ export default function TaskOverlay({ task, lessonId, onComplete, onSkip }: Task
       perfect: 'Perfect! 🎉',
       great: 'Great job! 👏',
       good: 'Good!',
-      tryBetter: 'Try harder next time',
+      tryBetter: 'Keep going, you\u2019ll get there! 💪',
       timeUp: "Time's up!",
       seconds: 's',
     },
@@ -197,9 +197,7 @@ export default function TaskOverlay({ task, lessonId, onComplete, onSkip }: Task
               <div className={`p-6 rounded-xl ${
                 result.score >= 0.7
                   ? 'bg-green-50 border-2 border-green-400'
-                  : result.score >= 0.4
-                  ? 'bg-amber-50 border-2 border-amber-400'
-                  : 'bg-red-50 border-2 border-red-400'
+                  : 'bg-amber-50 border-2 border-amber-400'
               }`}>
                 <div className="text-center mb-4">
                   <div className="text-4xl mb-2">
