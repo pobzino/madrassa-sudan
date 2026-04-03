@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
 
 /**
  * Extract a direct download URL from a Google Drive share link.
@@ -45,13 +46,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || (profile.role !== "teacher" && profile.role !== "admin")) {
+    const role = await getTeacherRole(supabase, user.id);
+    if (!role) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -70,7 +66,7 @@ export async function POST(request: NextRequest) {
       .eq("id", lessonId)
       .single();
 
-    if (!lesson || lesson.created_by !== user.id) {
+    if (!lesson || !canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

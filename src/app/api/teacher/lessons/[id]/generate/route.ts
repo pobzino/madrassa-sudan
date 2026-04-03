@@ -7,6 +7,7 @@ import {
 import { getSiteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import { getOpenAIClient, AI_MODEL } from "@/lib/ai/openai-client";
+import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
 
 export const maxDuration = 300; // 5 minutes for Netlify
 
@@ -43,13 +44,8 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || (profile.role !== "teacher" && profile.role !== "admin")) {
+    const role = await getTeacherRole(supabase, user.id);
+    if (!role) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -60,7 +56,7 @@ export async function POST(
       .eq("id", lessonId)
       .single();
 
-    if (!lesson || lesson.created_by !== user.id) {
+    if (!lesson || !canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
       return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
     }
 

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { canManageLesson, getTeacherRole } from '@/lib/server/teacher-lesson-access';
 
 const QuestionUpdateSchema = z.object({
   question_type: z.enum(['multiple_choice', 'true_false', 'fill_in_blank']).optional(),
@@ -35,14 +36,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Verify lesson ownership
+  const role = await getTeacherRole(supabase, user.id);
+  if (!role) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const { data: lesson } = await supabase
     .from('lessons')
     .select('created_by')
     .eq('id', id)
     .single();
 
-  if (!lesson || lesson.created_by !== user.id) {
+  if (!lesson || !canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -84,14 +89,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Verify lesson ownership
+  const role = await getTeacherRole(supabase, user.id);
+  if (!role) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const { data: lesson } = await supabase
     .from('lessons')
     .select('created_by')
     .eq('id', id)
     .single();
 
-  if (!lesson || lesson.created_by !== user.id) {
+  if (!lesson || !canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

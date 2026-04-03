@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { Database, Json } from '@/lib/database.types'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { canManageLesson, getTeacherRole } from '@/lib/server/teacher-lesson-access'
 
 const QuizSettingsSchema = z.object({
   require_pass_to_continue: z.boolean(),
@@ -46,8 +47,12 @@ export async function GET(
     return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
   }
 
-  // Verify teacher owns the lesson
-  if (lesson.created_by !== user.id) {
+  const role = await getTeacherRole(supabase, user.id)
+  if (!role) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  if (!canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -79,7 +84,12 @@ export async function PATCH(
     return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
   }
 
-  if (lesson.created_by !== user.id) {
+  const role = await getTeacherRole(supabase, user.id)
+  if (!role) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  if (!canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

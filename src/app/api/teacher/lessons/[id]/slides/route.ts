@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
 
 export async function GET(
   _request: NextRequest,
@@ -17,14 +18,18 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify ownership
+    const role = await getTeacherRole(supabase, user.id);
+    if (!role) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { data: lesson } = await supabase
       .from("lessons")
       .select("id, created_by")
       .eq("id", lessonId)
       .single();
 
-    if (!lesson || lesson.created_by !== user.id) {
+    if (!lesson || !canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
@@ -57,13 +62,18 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const role = await getTeacherRole(supabase, user.id);
+    if (!role) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { data: lesson } = await supabase
       .from("lessons")
       .select("id, created_by")
       .eq("id", lessonId)
       .single();
 
-    if (!lesson || lesson.created_by !== user.id) {
+    if (!lesson || !canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 

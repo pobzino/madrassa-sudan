@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { canManageLesson, getTeacherRole } from '@/lib/server/teacher-lesson-access'
 
 const QuestionSchema = z.object({
   question_text_ar: z.string().min(1),
@@ -30,7 +31,11 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Verify teacher owns the lesson
+  const role = await getTeacherRole(supabase, user.id)
+  if (!role) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { data: lesson, error: lessonError } = await supabase
     .from('lessons')
     .select('created_by')
@@ -41,7 +46,7 @@ export async function GET(
     return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
   }
 
-  if (lesson.created_by !== user.id) {
+  if (!canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -73,7 +78,11 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Verify teacher owns the lesson
+  const role = await getTeacherRole(supabase, user.id)
+  if (!role) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { data: lesson, error: lessonError } = await supabase
     .from('lessons')
     .select('created_by')
@@ -84,7 +93,7 @@ export async function POST(
     return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
   }
 
-  if (lesson.created_by !== user.id) {
+  if (!canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
