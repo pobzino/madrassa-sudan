@@ -169,7 +169,7 @@ export default function ProgressPage() {
         .from("student_streaks")
         .select("*")
         .eq("student_id", user.id)
-        .single();
+        .maybeSingle();
 
       if (streakData) {
         setStats({

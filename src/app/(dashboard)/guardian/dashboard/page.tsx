@@ -109,7 +109,7 @@ export default function GuardianDashboardPage() {
             .from("student_streaks")
             .select("*")
             .eq("student_id", link.student_id)
-            .single();
+            .maybeSingle();
 
           // Get pending homework count
           const { count: pendingCount } = await supabase
@@ -125,7 +125,7 @@ export default function GuardianDashboardPage() {
             .eq("student_id", link.student_id)
             .order("updated_at", { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
           return {
             ...link,

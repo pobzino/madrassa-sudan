@@ -225,7 +225,11 @@ export default function DashboardPage() {
         setSubjects(coreSubjects);
       }
 
-      const { data: streakData } = await supabase.from("student_streaks").select("*").eq("student_id", user.id).single();
+      const { data: streakData } = await supabase
+        .from("student_streaks")
+        .select("*")
+        .eq("student_id", user.id)
+        .maybeSingle();
       if (streakData) {
         setStats({
           lessons: streakData.total_lessons_completed,

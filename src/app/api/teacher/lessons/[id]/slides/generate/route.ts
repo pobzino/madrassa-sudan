@@ -13,8 +13,9 @@ import {
 
 export const maxDuration = 30;
 
-function shouldUseBackgroundGeneration() {
-  return process.env.NETLIFY === "true";
+function shouldUseBackgroundGeneration(request: NextRequest) {
+  const hostname = request.nextUrl.hostname.toLowerCase();
+  return hostname !== "localhost" && hostname !== "127.0.0.1";
 }
 
 async function queueBackgroundGeneration({
@@ -56,7 +57,7 @@ async function queueBackgroundGeneration({
   if (!enqueueResponse.ok) {
     const errorText = await enqueueResponse.text();
     console.error("Queue background slide generation failed:", errorText);
-    throw new SlideGenerationError("Failed to queue slide generation", 502);
+    return null;
   }
 
   return NextResponse.json({ queued: true }, { status: 202 });
@@ -91,8 +92,8 @@ export async function POST(
         ? body.language_mode
         : "ar";
 
-    if (shouldUseBackgroundGeneration()) {
-      return await queueBackgroundGeneration({
+    if (shouldUseBackgroundGeneration(request)) {
+      const queuedResponse = await queueBackgroundGeneration({
         request,
         lessonId,
         userId: user.id,
@@ -100,6 +101,10 @@ export async function POST(
         languageMode,
         generationContext,
       });
+
+      if (queuedResponse) {
+        return queuedResponse;
+      }
     }
 
     const slides = await generateSlidesForLesson({

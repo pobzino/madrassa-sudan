@@ -147,7 +147,7 @@ export default function StudentDetailPage({ params: paramsPromise }: { params: P
         .from("student_streaks")
         .select("*")
         .eq("student_id", params.id)
-        .single();
+        .maybeSingle();
 
       // Load subject progress
       const { data: subjectProgress } = await supabase
