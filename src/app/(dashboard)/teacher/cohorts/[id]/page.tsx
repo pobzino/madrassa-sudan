@@ -14,6 +14,14 @@ interface Student {
   homework_submitted: number;
 }
 
+interface PendingStudent {
+  enrollment_id: string;
+  student_id: string;
+  full_name: string;
+  avatar_url: string | null;
+  requested_at: string;
+}
+
 interface Assignment {
   id: string;
   title_ar: string;
@@ -47,10 +55,13 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
   const { loading: authLoading } = useTeacherGuard();
   const [cohort, setCohort] = useState<Cohort | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
+  const [pendingStudents, setPendingStudents] = useState<PendingStudent[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [assignedLessons, setAssignedLessons] = useState<AssignedLesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"students" | "assignments" | "lessons">("students");
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [savingCohort, setSavingCohort] = useState(false);
@@ -145,7 +156,7 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
     const assignedLessonIds = lessonRows.map((lesson) => lesson.id);
     setAssignedLessons(lessonRows);
 
-    // Get students in cohort
+    // Get approved students in cohort
     const { data: cohortStudents } = await supabase
       .from("cohort_students")
       .select(`
@@ -157,7 +168,36 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
         )
       `)
       .eq("cohort_id", id)
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .eq("status", "approved");
+
+    // Get pending join requests
+    const { data: pendingData } = await supabase
+      .from("cohort_students")
+      .select(`
+        id,
+        student_id,
+        enrolled_at,
+        profiles (
+          id,
+          full_name,
+          avatar_url
+        )
+      `)
+      .eq("cohort_id", id)
+      .eq("status", "pending");
+
+    const pendingList: PendingStudent[] = (pendingData || []).map((ps) => {
+      const profile = ps.profiles as unknown as { id: string; full_name: string; avatar_url: string | null };
+      return {
+        enrollment_id: ps.id,
+        student_id: ps.student_id,
+        full_name: profile?.full_name || "Unknown",
+        avatar_url: profile?.avatar_url || null,
+        requested_at: ps.enrolled_at,
+      };
+    });
+    setPendingStudents(pendingList);
 
     const studentsData: Student[] = [];
     for (const cs of cohortStudents || []) {
@@ -297,12 +337,12 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
     if (existing) {
       await supabase
         .from("cohort_students")
-        .update({ is_active: true })
+        .update({ is_active: true, status: "approved" })
         .eq("id", existing.id);
     } else {
       await supabase
         .from("cohort_students")
-        .insert({ cohort_id: id, student_id: studentId, is_active: true });
+        .insert({ cohort_id: id, student_id: studentId, is_active: true, status: "approved" });
     }
 
     setStudentSearch("");
@@ -320,6 +360,28 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
       .eq("cohort_id", id)
       .eq("student_id", studentId);
     setRemovingStudentId(null);
+    void loadCohortData();
+  }
+
+  async function approveStudent(enrollmentId: string) {
+    setApprovingId(enrollmentId);
+    const supabase = createClient();
+    await supabase
+      .from("cohort_students")
+      .update({ status: "approved", is_active: true })
+      .eq("id", enrollmentId);
+    setApprovingId(null);
+    void loadCohortData();
+  }
+
+  async function rejectStudent(enrollmentId: string) {
+    setRejectingId(enrollmentId);
+    const supabase = createClient();
+    await supabase
+      .from("cohort_students")
+      .update({ status: "rejected" })
+      .eq("id", enrollmentId);
+    setRejectingId(null);
     void loadCohortData();
   }
 
@@ -431,6 +493,11 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
             }`}
           >
             Students ({students.length})
+            {pendingStudents.length > 0 && (
+              <span className="ml-1.5 px-2 py-0.5 bg-amber-500 text-white text-xs font-bold rounded-full">
+                {pendingStudents.length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab("assignments")}
@@ -456,6 +523,51 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
 
         {/* Students Tab */}
         {activeTab === "students" && (
+          <>
+          {/* Pending Requests */}
+          {pendingStudents.length > 0 && (
+            <div className="bg-amber-50 rounded-2xl border border-amber-200 shadow-sm overflow-hidden mb-6">
+              <div className="p-4 border-b border-amber-200">
+                <h2 className="font-semibold text-amber-800">
+                  Pending Requests ({pendingStudents.length})
+                </h2>
+              </div>
+              <div className="divide-y divide-amber-100">
+                {pendingStudents.map((student) => (
+                  <div key={student.enrollment_id} className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 font-semibold">
+                        {student.full_name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{student.full_name}</p>
+                        <p className="text-xs text-gray-500">
+                          Requested {new Date(student.requested_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => rejectStudent(student.enrollment_id)}
+                        disabled={rejectingId === student.enrollment_id}
+                        className="px-3 py-1.5 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-60"
+                      >
+                        {rejectingId === student.enrollment_id ? "..." : "Reject"}
+                      </button>
+                      <button
+                        onClick={() => approveStudent(student.enrollment_id)}
+                        disabled={approvingId === student.enrollment_id}
+                        className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60"
+                      >
+                        {approvingId === student.enrollment_id ? "..." : "Approve"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-gray-100">
               <label className="block text-sm font-medium text-gray-700 mb-2">Add student</label>
@@ -534,6 +646,7 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
               </table>
             )}
           </div>
+          </>
         )}
 
         {activeTab === "lessons" && (

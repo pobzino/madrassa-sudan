@@ -123,6 +123,7 @@ export type Database = {
           enrolled_at: string
           id: string
           is_active: boolean
+          status: string
           student_id: string
         }
         Insert: {
@@ -130,6 +131,7 @@ export type Database = {
           enrolled_at?: string
           id?: string
           is_active?: boolean
+          status?: string
           student_id: string
         }
         Update: {
@@ -137,6 +139,7 @@ export type Database = {
           enrolled_at?: string
           id?: string
           is_active?: boolean
+          status?: string
           student_id?: string
         }
         Relationships: [

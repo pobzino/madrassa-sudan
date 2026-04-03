@@ -14,6 +14,7 @@ interface Cohort {
   join_code: string;
   is_active: boolean;
   student_count: number;
+  pending_count: number;
 }
 
 export default function TeacherCohortsPage() {
@@ -58,16 +59,25 @@ export default function TeacherCohortsPage() {
     for (const ct of cohortTeachers || []) {
       const cohort = ct.cohorts as unknown as Cohort;
       if (cohort) {
-        // Get student count
+        // Get approved student count
         const { count } = await supabase
           .from("cohort_students")
           .select("*", { count: "exact", head: true })
           .eq("cohort_id", cohort.id)
-          .eq("is_active", true);
+          .eq("is_active", true)
+          .eq("status", "approved");
+
+        // Get pending request count
+        const { count: pending } = await supabase
+          .from("cohort_students")
+          .select("*", { count: "exact", head: true })
+          .eq("cohort_id", cohort.id)
+          .eq("status", "pending");
 
         cohortsData.push({
           ...cohort,
           student_count: count || 0,
+          pending_count: pending || 0,
         });
       }
     }
@@ -211,6 +221,13 @@ export default function TeacherCohortsPage() {
                       <span className="text-lg">👥</span>
                       <span className="text-gray-600">{cohort.student_count} students</span>
                     </div>
+                    {cohort.pending_count > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">
+                          {cohort.pending_count} pending
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Join Code */}
