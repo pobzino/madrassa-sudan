@@ -16,6 +16,7 @@ interface SlideCardProps {
   revealedCount?: number;
   onReveal?: () => void;
   renderMode?: 'default' | 'thumbnail';
+  showActivityAnswer?: boolean;
 }
 
 const DESIGN_WIDTH = 1280;
@@ -30,6 +31,7 @@ export default function SlideCard({
   revealedCount,
   onReveal,
   renderMode = 'default',
+  showActivityAnswer = false,
 }: SlideCardProps) {
   let renderedContent: ReactNode;
 
@@ -57,7 +59,13 @@ export default function SlideCard({
       renderedContent = <DiagramSlide slide={slide} language={language} />;
       break;
     case 'activity':
-      renderedContent = <ActivitySlide slide={slide} language={language} />;
+      renderedContent = (
+        <ActivitySlide
+          slide={slide}
+          language={language}
+          showAnswer={showActivityAnswer}
+        />
+      );
       break;
     case 'quiz_preview':
       renderedContent = <QuizPreviewSlide slide={slide} language={language} />;

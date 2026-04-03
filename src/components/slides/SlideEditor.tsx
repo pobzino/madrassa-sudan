@@ -259,6 +259,7 @@ export default function SlideEditor({
   const [presenting, setPresenting] = useState(false);
   const [presentIndex, setPresentIndex] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
+  const [showActivityAnswer, setShowActivityAnswer] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [recording, setRecording] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -316,6 +317,7 @@ export default function SlideEditor({
     ? presentSlide?.speaker_notes_en?.trim()
     : presentSlide?.speaker_notes_ar?.trim();
   const presentSpeakerNotes = presentSpeakerNotesPrimary || presentSpeakerNotesFallback || '';
+  const isPresentActivitySlide = presentSlide?.type === 'activity';
   const canGoPreviousWhileRecording = presentIndex > 0;
   const canGoNextWhileRecording = presentIndex < slides.length - 1 || revealedCount < totalRevealItems;
 
@@ -323,6 +325,7 @@ export default function SlideEditor({
   useEffect(() => {
     const timeout = setTimeout(() => {
       setRevealedCount(0);
+      setShowActivityAnswer(false);
     }, 0);
 
     return () => clearTimeout(timeout);
@@ -335,7 +338,7 @@ export default function SlideEditor({
       const t = setTimeout(() => snapshotSlide(), 120);
       return () => clearTimeout(t);
     }
-  }, [presentIndex, revealedCount, recording, recorderState, snapshotSlide]);
+  }, [presentIndex, revealedCount, showActivityAnswer, recording, recorderState, snapshotSlide]);
 
   const captureAfterNavigation = useCallback(() => {
     if (!recording || (recorderState !== 'recording' && recorderState !== 'paused')) {
@@ -407,11 +410,14 @@ export default function SlideEditor({
         } else {
           setPresenting(false);
         }
+      } else if ((e.key === 'a' || e.key === 'A') && presentSlide?.type === 'activity') {
+        e.preventDefault();
+        setShowActivityAnswer((current) => !current);
       }
     }
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [goToNextPresentStep, goToPreviousPresentStep, presenting, recording, recorderStop]);
+  }, [goToNextPresentStep, goToPreviousPresentStep, presentSlide?.type, presenting, recording, recorderStop]);
 
   const updateSlide = useCallback(
     (updates: Partial<Slide>) => {
@@ -607,6 +613,10 @@ export default function SlideEditor({
     goToNextPresentStep();
   }, [goToNextPresentStep]);
 
+  const handleToggleAnswerReveal = useCallback(() => {
+    setShowActivityAnswer((current) => !current);
+  }, []);
+
   // Fullscreen present mode
   if (presenting) {
     return (
@@ -623,6 +633,7 @@ export default function SlideEditor({
               className="!rounded-none !shadow-2xl"
               revealedCount={slides[presentIndex]?.type === 'question_answer' ? revealedCount : undefined}
               onReveal={() => setRevealedCount((c) => c + 1)}
+              showActivityAnswer={isPresentActivitySlide ? showActivityAnswer : false}
             />
           </div>
 
@@ -653,9 +664,12 @@ export default function SlideEditor({
             recordingDuration={recordingDuration}
             canGoPrevious={canGoPreviousWhileRecording}
             canGoNext={canGoNextWhileRecording}
+            canRevealAnswer={isPresentActivitySlide}
+            isAnswerRevealed={showActivityAnswer}
             canvasRef={canvasRef}
             onPrevious={handlePreviousWhileRecording}
             onNext={handleNextWhileRecording}
+            onToggleAnswer={handleToggleAnswerReveal}
             onPause={pauseRecording}
             onResume={resumeRecording}
             onStop={recorderStop}
@@ -693,6 +707,21 @@ export default function SlideEditor({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
               </svg>
             </button>
+            {isPresentActivitySlide && (
+              <>
+                <div className="w-px h-5 bg-white/30" />
+                <button
+                  onClick={handleToggleAnswerReveal}
+                  className={`text-sm font-medium transition-colors ${
+                    showActivityAnswer
+                      ? 'text-amber-300 hover:text-amber-200'
+                      : 'text-white/80 hover:text-white'
+                  }`}
+                >
+                  {showActivityAnswer ? 'Hide Answer' : 'Reveal Answer'}
+                </button>
+              </>
+            )}
             <div className="w-px h-5 bg-white/30" />
             <button
               onClick={() => setPresenting(false)}

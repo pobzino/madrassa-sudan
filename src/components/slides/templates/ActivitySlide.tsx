@@ -11,6 +11,7 @@ import {
 interface Props {
   slide: Slide;
   language: 'ar' | 'en';
+  showAnswer?: boolean;
 }
 
 /* ─── Theme config per interaction type ─── */
@@ -171,7 +172,7 @@ function getTheme(type: SlideInteractionType | null | undefined): InteractionThe
 
 /* ─── Interaction Preview ─── */
 
-function InteractionPreview({ slide, language }: Props) {
+function InteractionPreview({ slide, language, showAnswer = false }: Props) {
   const isAr = language === 'ar';
   const type = slide.interaction_type;
   if (!type) return null;
@@ -197,8 +198,8 @@ function InteractionPreview({ slide, language }: Props) {
             <span
               key={i}
               className={`inline-block px-3 py-1.5 rounded-xl text-xs border ${
-                i === slide.interaction_correct_index
-                  ? 'border-[#007229]/30 bg-[#007229]/5 text-[#007229]/70'
+                showAnswer && i === slide.interaction_correct_index
+                  ? 'border-[#007229]/40 bg-[#007229]/10 text-[#007229]'
                   : 'border-gray-200 bg-white text-gray-400'
               } ${isAr ? 'font-cairo' : 'font-inter'}`}
             >
@@ -208,27 +209,55 @@ function InteractionPreview({ slide, language }: Props) {
                 </span>
               )}
               {option}
+              {showAnswer && i === slide.interaction_correct_index && (
+                <span className="ml-1 font-bold">✓</span>
+              )}
             </span>
           ))}
         </div>
       )}
 
       {type === 'match_pairs' && (
-        <div className="grid grid-cols-[1fr_auto_1fr] gap-x-2 gap-y-1.5 items-center">
-          {items.map((item, index) => (
-            <div key={`pair-${index}`} className="contents">
-              <div className={`rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs ${isAr ? 'font-cairo' : 'font-inter'}`}>
-                {item}
+        showAnswer ? (
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-x-2 gap-y-1.5 items-center">
+            {items.map((item, index) => (
+              <div key={`pair-${index}`} className="contents">
+                <div className={`rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs ${isAr ? 'font-cairo' : 'font-inter'}`}>
+                  {item}
+                </div>
+                <svg className="w-4 h-4 text-teal-300 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+                <div className={`rounded-xl border border-dashed border-teal-300/60 bg-teal-50/50 px-3 py-1.5 text-xs text-teal-700 ${isAr ? 'font-cairo' : 'font-inter'}`}>
+                  {targets[index] ?? '?'}
+                </div>
               </div>
-              <svg className="w-4 h-4 text-teal-300 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-              <div className={`rounded-xl border border-dashed border-teal-300/60 bg-teal-50/50 px-3 py-1.5 text-xs text-teal-700 ${isAr ? 'font-cairo' : 'font-inter'}`}>
-                {targets[index] ?? '?'}
-              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              {items.map((item, index) => (
+                <div
+                  key={`left-${index}`}
+                  className={`rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs ${isAr ? 'font-cairo' : 'font-inter'}`}
+                >
+                  {item}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+            <div className="space-y-1.5">
+              {targets.map((target, index) => (
+                <div
+                  key={`right-${index}`}
+                  className={`rounded-xl border border-dashed border-teal-300/60 bg-teal-50/50 px-3 py-1.5 text-xs text-teal-700 ${isAr ? 'font-cairo' : 'font-inter'}`}
+                >
+                  {target}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
       )}
 
       {type === 'sequence_order' && (
@@ -238,9 +267,11 @@ function InteractionPreview({ slide, language }: Props) {
               key={index}
               className={`inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs ${isAr ? 'font-cairo' : 'font-inter'}`}
             >
-              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-orange-100 text-orange-600 text-[10px] font-bold flex-shrink-0">
-                {index + 1}
-              </span>
+              {showAnswer && (
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-orange-100 text-orange-600 text-[10px] font-bold flex-shrink-0">
+                  {index + 1}
+                </span>
+              )}
               {item}
             </span>
           ))}
@@ -248,34 +279,63 @@ function InteractionPreview({ slide, language }: Props) {
       )}
 
       {type === 'sort_groups' && (
-        <div className="space-y-2">
-          <div className="flex flex-wrap gap-1.5">
-            {targets.map((target, index) => (
-              <span
-                key={index}
-                className={`inline-block rounded-xl border border-pink-300/40 bg-pink-100/50 px-3 py-1 text-[10px] font-semibold text-pink-700 ${isAr ? 'font-cairo' : 'font-inter'}`}
-              >
-                📦 {target}
-              </span>
-            ))}
+        showAnswer ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {targets.map((target, targetIndex) => {
+              const solutionMap = slide.interaction_solution_map || [];
+              const groupedItems = items.filter((_, itemIndex) => solutionMap[itemIndex] === targetIndex);
+              return (
+                <div
+                  key={targetIndex}
+                  className="rounded-2xl border border-pink-300/40 bg-pink-50/70 p-3"
+                >
+                  <p className={`mb-2 text-[11px] font-semibold uppercase tracking-wide text-pink-700 ${isAr ? 'font-cairo' : 'font-inter'}`}>
+                    {target}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {groupedItems.map((item, itemIndex) => (
+                      <span
+                        key={`${targetIndex}-${itemIndex}`}
+                        className={`inline-block rounded-xl border border-white bg-white px-3 py-1.5 text-xs ${isAr ? 'font-cairo' : 'font-inter'}`}
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {items.map((item, index) => (
-              <span
-                key={index}
-                className={`inline-block rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs ${isAr ? 'font-cairo' : 'font-inter'}`}
-              >
-                {item}
-              </span>
-            ))}
+        ) : (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-1.5">
+              {targets.map((target, index) => (
+                <span
+                  key={index}
+                  className={`inline-block rounded-xl border border-pink-300/40 bg-pink-100/50 px-3 py-1 text-[10px] font-semibold text-pink-700 ${isAr ? 'font-cairo' : 'font-inter'}`}
+                >
+                  📦 {target}
+                </span>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {items.map((item, index) => (
+                <span
+                  key={index}
+                  className={`inline-block rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs ${isAr ? 'font-cairo' : 'font-inter'}`}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
+        )
       )}
 
       {type === 'true_false' && (
         <div className="flex gap-3 justify-center">
           <span className={`inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-semibold border-2 ${
-            slide.interaction_true_false_answer === true
+            showAnswer && slide.interaction_true_false_answer === true
               ? 'border-[#007229]/40 bg-[#007229]/10 text-[#007229]'
               : 'border-gray-200 bg-white text-gray-400'
           }`}>
@@ -285,7 +345,7 @@ function InteractionPreview({ slide, language }: Props) {
             {isAr ? 'صح' : 'True'}
           </span>
           <span className={`inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-semibold border-2 ${
-            slide.interaction_true_false_answer === false
+            showAnswer && slide.interaction_true_false_answer === false
               ? 'border-[#D21034]/40 bg-[#D21034]/10 text-[#D21034]'
               : 'border-gray-200 bg-white text-gray-400'
           }`}>
@@ -306,8 +366,12 @@ function InteractionPreview({ slide, language }: Props) {
               </span>
             ))}
           </div>
-          <span className="text-xs font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">
-            ? = {slide.interaction_count_target ?? 5}
+          <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+            showAnswer
+              ? 'text-amber-700 bg-amber-100'
+              : 'text-gray-500 bg-gray-100'
+          }`}>
+            {showAnswer ? `= ${slide.interaction_count_target ?? 5}` : '?'}
           </span>
         </div>
       )}
@@ -317,12 +381,13 @@ function InteractionPreview({ slide, language }: Props) {
 
 /* ─── Main ActivitySlide ─── */
 
-export default function ActivitySlide({ slide, language }: Props) {
+export default function ActivitySlide({ slide, language, showAnswer = false }: Props) {
   const isAr = language === 'ar';
   const title = isAr ? slide.title_ar : slide.title_en;
   const body = isAr ? slide.body_ar : slide.body_en;
   const hasImage = !!slide.image_url;
   const theme = getTheme(slide.interaction_type);
+  const answerLabel = isAr ? 'الإجابة الصحيحة' : 'Correct Answer';
 
   if (slide.layout === 'full_image' && hasImage) {
     return (
@@ -339,7 +404,12 @@ export default function ActivitySlide({ slide, language }: Props) {
             {body}
           </p>
         </div>
-        <InteractionPreview slide={slide} language={language} />
+        {showAnswer && (
+          <span className="relative z-10 mt-4 rounded-full border border-white/25 bg-white/15 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur-sm">
+            {answerLabel}
+          </span>
+        )}
+        <InteractionPreview slide={slide} language={language} showAnswer={showAnswer} />
       </div>
     );
   }
@@ -386,7 +456,14 @@ export default function ActivitySlide({ slide, language }: Props) {
         </p>
       </div>
 
-      <InteractionPreview slide={slide} language={language} />
+      {showAnswer && (
+        <span className="relative z-10 mt-4 inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/90 px-4 py-1.5 text-xs font-semibold text-gray-700 shadow-sm">
+          <span className="text-base">{theme.emoji}</span>
+          {answerLabel}
+        </span>
+      )}
+
+      <InteractionPreview slide={slide} language={language} showAnswer={showAnswer} />
     </div>
   );
 }
