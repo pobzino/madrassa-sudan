@@ -56,12 +56,19 @@ export async function GET(request: NextRequest) {
       {
         headers: { AccessKey: apiKey },
         cache: "no-store",
+        signal: AbortSignal.timeout(10000),
       }
     );
 
     if (!bunnyRes.ok) {
+      const errText = await bunnyRes.text().catch(() => "");
+      console.error("Bunny status endpoint returned non-OK", {
+        status: bunnyRes.status,
+        body: errText,
+        videoId,
+      });
       return NextResponse.json(
-        { error: "Failed to fetch video status" },
+        { error: `Failed to fetch video status (${bunnyRes.status})` },
         { status: 502 }
       );
     }

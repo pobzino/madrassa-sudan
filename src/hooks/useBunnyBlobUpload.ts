@@ -56,6 +56,7 @@ export function useBunnyBlobUpload({
   const pollTranscodeStatus = useCallback((videoId: string) => {
     setState('transcoding');
     pollingStartRef.current = Date.now();
+    let consecutiveStatusFailures = 0;
 
     pollingRef.current = setInterval(async () => {
       if (Date.now() - pollingStartRef.current > POLL_TIMEOUT) {
@@ -67,17 +68,46 @@ export function useBunnyBlobUpload({
 
       try {
         const res = await fetch(`/api/bunny/status?videoId=${videoId}`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          consecutiveStatusFailures += 1;
+
+          let message = `Could not check video status (${res.status}).`;
+          try {
+            const data = await res.json();
+            if (typeof data.error === 'string' && data.error.trim()) {
+              message = data.error;
+            }
+          } catch {
+            // Keep default message if response is not JSON.
+          }
+
+          if (consecutiveStatusFailures >= 3 || res.status < 500) {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+            setState('error');
+            setErrorMessage(message);
+          }
+          return;
+        }
 
         const data = await res.json();
-        if (data.status === 'finished' && data.urls) {
+        consecutiveStatusFailures = 0;
+
+        const hasPlayableUrl = Boolean(
+          data.urls &&
+          (data.urls.video_url_1080p ||
+            data.urls.video_url_720p ||
+            data.urls.video_url_480p ||
+            data.urls.video_url_360p)
+        );
+
+        if (data.status === 'finished' && hasPlayableUrl) {
           if (pollingRef.current) clearInterval(pollingRef.current);
           setState('ready');
           setVideoUrls({
-            video_url_1080p: data.urls.video_url_1080p,
-            video_url_360p: data.urls.video_url_360p,
-            video_url_480p: data.urls.video_url_480p,
-            video_url_720p: data.urls.video_url_720p,
+            video_url_1080p: data.urls.video_url_1080p || '',
+            video_url_360p: data.urls.video_url_360p || '',
+            video_url_480p: data.urls.video_url_480p || '',
+            video_url_720p: data.urls.video_url_720p || '',
             duration_seconds: data.durationSeconds,
           });
         } else if (data.status === 'error') {
@@ -86,12 +116,23 @@ export function useBunnyBlobUpload({
           setErrorMessage('Video transcoding failed. Please try again.');
         }
       } catch {
-        // Network error — will retry next tick
+        consecutiveStatusFailures += 1;
+        if (consecutiveStatusFailures >= 3) {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          setState('error');
+          setErrorMessage('Video status checks keep failing. Please try again.');
+        }
       }
     }, POLL_INTERVAL);
   }, []);
 
   const upload = useCallback(async (blob: Blob) => {
+    if (blob.size === 0) {
+      setState('error');
+      setErrorMessage('Recorded video is empty. Please retake the recording.');
+      return;
+    }
+
     setState('uploading');
     setProgress(0);
     setErrorMessage(null);
@@ -107,8 +148,15 @@ export function useBunnyBlobUpload({
       });
 
       if (!credRes.ok) {
-        const err = await credRes.json();
-        throw new Error(err.error || 'Failed to create video');
+        const text = await credRes.text();
+        let message = 'Failed to create video';
+        try {
+          const err = JSON.parse(text) as { error?: string };
+          if (err.error) message = err.error;
+        } catch {
+          if (text.trim()) message = text.trim();
+        }
+        throw new Error(message);
       }
 
       const { videoId, libraryId, tusEndpoint, authSignature, authExpire } =
