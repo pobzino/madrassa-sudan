@@ -117,6 +117,59 @@ export type Database = {
           },
         ]
       }
+      feedback: {
+        Row: {
+          id: string
+          user_id: string
+          category: string
+          title: string
+          description: string
+          page_url: string | null
+          screenshot_url: string | null
+          github_issue_number: number | null
+          github_issue_url: string | null
+          status: string
+          created_at: string
+          resolved_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          category: string
+          title: string
+          description: string
+          page_url?: string | null
+          screenshot_url?: string | null
+          github_issue_number?: number | null
+          github_issue_url?: string | null
+          status?: string
+          created_at?: string
+          resolved_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          category?: string
+          title?: string
+          description?: string
+          page_url?: string | null
+          screenshot_url?: string | null
+          github_issue_number?: number | null
+          github_issue_url?: string | null
+          status?: string
+          created_at?: string
+          resolved_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feedback_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cohort_students: {
         Row: {
           cohort_id: string

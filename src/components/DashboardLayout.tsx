@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { Profile } from "@/lib/database.types";
 import { clearAuthCache, getCachedProfile, getCachedUser } from "@/lib/supabase/auth-cache";
+import FeedbackModal from "@/components/FeedbackModal";
 import {
   FloatingRocket,
   GraduationCapIcon,
@@ -39,6 +40,7 @@ const translations = {
     studentView: "عرض الطالب",
     // Common
     settings: "الإعدادات",
+    reportIssue: "الإبلاغ عن مشكلة",
     logout: "تسجيل الخروج",
     loading: "جاري التحميل...",
   },
@@ -60,6 +62,7 @@ const translations = {
     studentView: "Student View",
     // Common
     settings: "Settings",
+    reportIssue: "Report Issue",
     logout: "Log out",
     loading: "Loading...",
   },
@@ -122,6 +125,7 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { language, setLanguage } = useLanguage();
@@ -262,6 +266,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Bottom Section */}
       <div className="p-3 border-t border-gray-100">
+        {isTeacherOrAdmin && (
+          <button
+            onClick={() => { setShowFeedback(true); if (mobile) setSidebarOpen(false); }}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium transition-all text-amber-600 hover:bg-amber-50 hover:text-amber-700 w-full"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+            {t.reportIssue}
+          </button>
+        )}
         <Link
           href="/settings"
           onClick={() => mobile && setSidebarOpen(false)}
@@ -343,6 +358,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className={`${isRtl ? "lg:mr-64" : "lg:ml-64"} pt-16 lg:pt-0`}>
         {children}
       </div>
+
+      {/* Feedback Modal */}
+      <FeedbackModal open={showFeedback} onClose={() => setShowFeedback(false)} />
     </div>
   );
 }
