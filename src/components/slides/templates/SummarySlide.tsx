@@ -2,7 +2,7 @@ import type { Slide } from '@/lib/slides.types';
 import { OwlCelebrating } from '@/components/illustrations';
 import SlideImage from './SlideImage';
 import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
-import { getSlideLanguageBlocks } from './bilingual';
+import { getSlideLanguageBlock } from './bilingual';
 
 interface Props {
   slide: Slide;
@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function SummarySlide({ slide, language }: Props) {
-  const [primary, secondary] = getSlideLanguageBlocks(slide, language);
+  const primary = getSlideLanguageBlock(slide, language);
   const hasImage = !!slide.image_url;
 
   return (
@@ -40,7 +40,7 @@ export default function SummarySlide({ slide, language }: Props) {
       </div>
 
       <span className="relative z-10 inline-block px-5 py-2 bg-[#F59E0B] text-white rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-5 shadow-md">
-        {language === 'en' ? 'Summary / ملخص' : 'ملخص / Summary'}
+        {language === 'en' ? 'Summary' : 'ملخص'}
       </span>
 
       <h2
@@ -52,41 +52,25 @@ export default function SummarySlide({ slide, language }: Props) {
       >
         {primary.title}
       </h2>
-      <p
-        dir={secondary.dir}
-        className={`relative z-10 mb-4 text-center text-white/85 ${getSlideTitleClasses(slide.title_size)} ${
-          secondary.isArabic ? 'font-cairo' : 'font-inter'
-        }`}
-      >
-        {secondary.title}
-      </p>
 
-      <div className="relative z-10 grid w-full max-w-[90%] gap-3 md:grid-cols-2">
-        {[primary, secondary].map((block) => {
+      <div className="relative z-10 w-full max-w-[90%]">
+        {(() => {
           const lines =
-            block.bullets.length > 0 ? block.bullets : block.body.split('\n').filter(Boolean);
+            primary.bullets.length > 0 ? primary.bullets : primary.body.split('\n').filter(Boolean);
 
           return (
-            <div key={block.language} className="space-y-2">
-              <p
-                dir={block.dir}
-                className={`text-xs font-semibold uppercase tracking-[0.18em] text-white/70 ${
-                  block.isArabic ? 'font-cairo' : ''
-                }`}
-              >
-                {block.label}
-              </p>
+            <div className="space-y-2">
               {lines.map((line, index) => (
-                <div key={`${block.language}-${index}`} className="flex items-start gap-3 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2.5">
+                <div key={`${primary.language}-${index}`} className="flex items-start gap-3 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2.5">
                   <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-[#F59E0B] text-white flex items-center justify-center shadow-sm">
                     <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
                   <p
-                    dir={block.dir}
+                    dir={primary.dir}
                     className={`flex-1 pt-0.5 text-white/95 ${getSlideBodyClasses(slide.body_size, 'list')} ${
-                      block.isArabic ? 'font-cairo' : 'font-inter'
+                      primary.isArabic ? 'font-cairo' : 'font-inter'
                     }`}
                   >
                     {line}
@@ -95,7 +79,7 @@ export default function SummarySlide({ slide, language }: Props) {
               ))}
             </div>
           );
-        })}
+        })()}
       </div>
     </div>
   );

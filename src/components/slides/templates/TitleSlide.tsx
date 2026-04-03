@@ -2,42 +2,35 @@ import type { Slide } from '@/lib/slides.types';
 import { OwlWelcome } from '@/components/illustrations';
 import SlideImage, { SlideBackgroundImage } from './SlideImage';
 import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
-import { getSlideLanguageBlocks } from './bilingual';
+import { getSlideLanguageBlock } from './bilingual';
 
 interface Props {
   slide: Slide;
   language: 'ar' | 'en';
 }
 
-function BilingualBody({ slide, language }: Props) {
-  const [primary, secondary] = getSlideLanguageBlocks(slide, language);
+function LanguageBody({ slide, language }: Props) {
+  const block = getSlideLanguageBlock(slide, language);
 
-  if (!primary.body && !secondary.body) {
+  if (!block.body) {
     return null;
   }
 
   return (
-    <div className="grid max-w-[88%] gap-3 rounded-2xl bg-white/15 px-6 py-4 backdrop-blur-sm md:grid-cols-2">
-      {[primary, secondary].map((block) => (
-        <div key={block.language} dir={block.dir}>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
-            {block.label}
-          </p>
-          <p
-            className={`text-white/90 ${getSlideBodyClasses(slide.body_size)} ${
-              block.isArabic ? 'font-cairo' : 'font-inter'
-            }`}
-          >
-            {block.body}
-          </p>
-        </div>
-      ))}
+    <div dir={block.dir} className="max-w-[88%] rounded-2xl bg-white/15 px-6 py-4 backdrop-blur-sm">
+      <p
+        className={`text-white/90 ${getSlideBodyClasses(slide.body_size)} ${
+          block.isArabic ? 'font-cairo' : 'font-inter'
+        }`}
+      >
+        {block.body}
+      </p>
     </div>
   );
 }
 
 export default function TitleSlide({ slide, language }: Props) {
-  const [primary, secondary] = getSlideLanguageBlocks(slide, language);
+  const primary = getSlideLanguageBlock(slide, language);
   const hasImage = !!slide.image_url;
   const isFullImage = slide.layout === 'full_image' && hasImage;
 
@@ -53,16 +46,8 @@ export default function TitleSlide({ slide, language }: Props) {
         >
           {primary.title}
         </h1>
-        <p
-          dir={secondary.dir}
-          className={`relative z-10 mb-5 text-center text-white/90 ${getSlideTitleClasses(slide.title_size)} ${
-            secondary.isArabic ? 'font-cairo' : 'font-inter'
-          }`}
-        >
-          {secondary.title}
-        </p>
         <div className="relative z-10 rounded-2xl bg-black/30 backdrop-blur-sm">
-          <BilingualBody slide={slide} language={language} />
+          <LanguageBody slide={slide} language={language} />
         </div>
       </div>
     );
@@ -103,17 +88,9 @@ export default function TitleSlide({ slide, language }: Props) {
       >
         {primary.title}
       </h1>
-      <p
-        dir={secondary.dir}
-        className={`relative z-10 mb-5 text-center text-white/90 ${getSlideTitleClasses(slide.title_size)} ${
-          secondary.isArabic ? 'font-cairo' : 'font-inter'
-        }`}
-      >
-        {secondary.title}
-      </p>
 
       <div className="relative z-10">
-        <BilingualBody slide={slide} language={language} />
+        <LanguageBody slide={slide} language={language} />
       </div>
     </div>
   );

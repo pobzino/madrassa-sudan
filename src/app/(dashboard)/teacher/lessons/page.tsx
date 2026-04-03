@@ -570,7 +570,7 @@ export default function TeacherLessonsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Language</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Slide Language</label>
                   <select
                     value={quickCreateForm.language_mode}
                     onChange={(e) =>
@@ -581,9 +581,8 @@ export default function TeacherLessonsPage() {
                     }
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   >
-                    <option value="ar">Arabic First</option>
-                    <option value="en">English First</option>
-                    <option value="both">Balanced</option>
+                    <option value="ar">Arabic Slides</option>
+                    <option value="en">English Slides</option>
                   </select>
                 </div>
 

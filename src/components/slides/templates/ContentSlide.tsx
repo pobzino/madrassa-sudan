@@ -2,7 +2,7 @@ import type { Slide } from '@/lib/slides.types';
 import { OwlReading } from '@/components/illustrations';
 import SlideImage, { SlideBackgroundImage } from './SlideImage';
 import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
-import { getSlideLanguageBlocks } from './bilingual';
+import { getSlideLanguageBlock } from './bilingual';
 
 interface Props {
   slide: Slide;
@@ -10,38 +10,26 @@ interface Props {
 }
 
 function BilingualPanels({ slide, language, dark = false }: Props & { dark?: boolean }) {
-  const blocks = getSlideLanguageBlocks(slide, language);
+  const block = getSlideLanguageBlock(slide, language);
 
   return (
-    <div className={`grid gap-3 md:grid-cols-2 ${dark ? '' : ''}`}>
-      {blocks.map((block) => (
-        <div
-          key={block.language}
-          dir={block.dir}
-          className={`rounded-xl p-3 ${dark ? 'bg-white/10' : 'bg-white/75'}`}
-        >
-          <p
-            className={`mb-2 text-xs font-semibold uppercase tracking-[0.18em] ${
-              dark ? 'text-white/70' : 'text-emerald-700/70'
-            }`}
-          >
-            {block.label}
-          </p>
-          <p
-            className={`whitespace-pre-line ${dark ? 'text-white/95' : 'text-gray-700'} ${getSlideBodyClasses(
-              slide.body_size
-            )} ${block.isArabic ? 'font-cairo' : 'font-inter'}`}
-          >
-            {block.body}
-          </p>
-        </div>
-      ))}
+    <div
+      dir={block.dir}
+      className={`rounded-xl p-3 ${dark ? 'bg-white/10' : 'bg-white/75'}`}
+    >
+      <p
+        className={`whitespace-pre-line ${dark ? 'text-white/95' : 'text-gray-700'} ${getSlideBodyClasses(
+          slide.body_size
+        )} ${block.isArabic ? 'font-cairo' : 'font-inter'}`}
+      >
+        {block.body}
+      </p>
     </div>
   );
 }
 
 export default function ContentSlide({ slide, language }: Props) {
-  const [primary, secondary] = getSlideLanguageBlocks(slide, language);
+  const primary = getSlideLanguageBlock(slide, language);
   const hasImage = !!slide.image_url;
   const layout = slide.layout || 'default';
 
@@ -57,14 +45,6 @@ export default function ContentSlide({ slide, language }: Props) {
         >
           {primary.title}
         </h2>
-        <p
-          dir={secondary.dir}
-          className={`relative z-10 mb-3 text-white/85 ${getSlideTitleClasses(slide.title_size)} ${
-            secondary.isArabic ? 'font-cairo' : 'font-inter'
-          }`}
-        >
-          {secondary.title}
-        </p>
         <div className="relative z-10 rounded-2xl bg-black/30 p-4 backdrop-blur-sm sm:p-6">
           <BilingualPanels slide={slide} language={language} dark />
         </div>
@@ -101,14 +81,6 @@ export default function ContentSlide({ slide, language }: Props) {
           >
             {primary.title}
           </h2>
-          <p
-            dir={secondary.dir}
-            className={`mb-4 text-emerald-900/75 ${getSlideTitleClasses(slide.title_size)} ${
-              secondary.isArabic ? 'font-cairo' : 'font-inter'
-            }`}
-          >
-            {secondary.title}
-          </p>
           <div className="rounded-2xl border border-emerald-100 bg-white/80 p-4 shadow-sm sm:p-6">
             <BilingualPanels slide={slide} language={language} />
           </div>

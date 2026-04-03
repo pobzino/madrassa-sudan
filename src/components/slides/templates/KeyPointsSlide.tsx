@@ -2,7 +2,7 @@ import type { Slide } from '@/lib/slides.types';
 import { OwlPointing } from '@/components/illustrations';
 import SlideImage from './SlideImage';
 import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
-import { getSlideLanguageBlocks } from './bilingual';
+import { getSlideLanguageBlock } from './bilingual';
 
 interface Props {
   slide: Slide;
@@ -19,7 +19,7 @@ const BULLET_COLORS = [
 ];
 
 export default function KeyPointsSlide({ slide, language }: Props) {
-  const [primary, secondary] = getSlideLanguageBlocks(slide, language);
+  const primary = getSlideLanguageBlock(slide, language);
   const hasImage = !!slide.image_url;
   const layout = slide.layout || 'default';
   const isHorizontal = layout === 'image_left' || layout === 'image_right';
@@ -53,53 +53,32 @@ export default function KeyPointsSlide({ slide, language }: Props) {
           >
             {primary.title}
           </h2>
-          <p
-            dir={secondary.dir}
-            className={`mb-4 text-emerald-900/75 ${getSlideTitleClasses(slide.title_size)} ${
-              secondary.isArabic ? 'font-cairo' : 'font-inter'
-            }`}
-          >
-            {secondary.title}
-          </p>
+          <div className="space-y-2">
+            {primary.bullets.map((bullet, index) => {
+              const color = BULLET_COLORS[index % BULLET_COLORS.length];
 
-          <div className="grid gap-3 md:grid-cols-2">
-            {[primary, secondary].map((block) => (
-              <div key={block.language} className="space-y-2">
-                <p
-                  dir={block.dir}
-                  className={`text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700/70 ${
-                    block.isArabic ? 'font-cairo' : ''
-                  }`}
-                >
-                  {block.label}
-                </p>
-                {block.bullets.map((bullet, index) => {
-                  const color = BULLET_COLORS[index % BULLET_COLORS.length];
-
-                  return (
-                    <div key={`${block.language}-${index}`} className="flex items-start gap-3">
-                      <div className={`flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${color.bg} text-white flex items-center justify-center text-sm sm:text-base font-bold shadow-sm`}>
-                        {index + 1}
-                      </div>
-                      <div
-                        dir={block.dir}
-                        className={`flex-1 ${color.card} border rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 text-gray-800 ${getSlideBodyClasses(
-                          slide.body_size,
-                          'list'
-                        )} ${block.isArabic ? 'font-cairo' : 'font-inter'}`}
-                      >
-                        {bullet}
-                      </div>
-                    </div>
-                  );
-                })}
-                {block.bullets.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-emerald-200 px-4 py-3 text-sm text-gray-400">
-                    No points added.
+              return (
+                <div key={`${primary.language}-${index}`} className="flex items-start gap-3">
+                  <div className={`flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${color.bg} text-white flex items-center justify-center text-sm sm:text-base font-bold shadow-sm`}>
+                    {index + 1}
                   </div>
-                )}
+                  <div
+                    dir={primary.dir}
+                    className={`flex-1 ${color.card} border rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 text-gray-800 ${getSlideBodyClasses(
+                      slide.body_size,
+                      'list'
+                    )} ${primary.isArabic ? 'font-cairo' : 'font-inter'}`}
+                  >
+                    {bullet}
+                  </div>
+                </div>
+              );
+            })}
+            {primary.bullets.length === 0 && (
+              <div className="rounded-xl border border-dashed border-emerald-200 px-4 py-3 text-sm text-gray-400">
+                {primary.isArabic ? 'لا توجد نقاط بعد.' : 'No points added.'}
               </div>
-            ))}
+            )}
           </div>
         </div>
 

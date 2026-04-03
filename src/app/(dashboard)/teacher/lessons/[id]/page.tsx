@@ -91,6 +91,27 @@ type ContentBlock = {
 
 type Tab = "details" | "questions" | "slides" | "content" | "results";
 
+type LessonVideoUrls = {
+  video_url_1080p: string;
+  video_url_360p: string;
+  video_url_480p: string;
+  video_url_720p: string;
+  duration_seconds?: number;
+};
+
+function applyVideoUrlsToForm(previous: LessonForm, urls: LessonVideoUrls): LessonForm {
+  return {
+    ...previous,
+    video_url_1080p: urls.video_url_1080p,
+    video_url_360p: urls.video_url_360p,
+    video_url_480p: urls.video_url_480p,
+    video_url_720p: urls.video_url_720p,
+    ...(urls.duration_seconds != null
+      ? { video_duration_seconds: String(urls.duration_seconds) }
+      : {}),
+  };
+}
+
 export default function LessonEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { loading: authLoading } = useTeacherGuard();
@@ -138,6 +159,33 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [questions, setQuestions] = useState<QuestionForm[]>([]);
   const [lessonTasks, setLessonTasks] = useState<TaskForm[]>([]);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
+
+  const persistLessonVideoUrls = useCallback(
+    async (urls: LessonVideoUrls, successText = "Video saved") => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("lessons")
+        .update({
+          video_url_1080p: urls.video_url_1080p,
+          video_url_360p: urls.video_url_360p,
+          video_url_480p: urls.video_url_480p,
+          video_url_720p: urls.video_url_720p,
+          ...(urls.duration_seconds != null
+            ? { video_duration_seconds: urls.duration_seconds }
+            : {}),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setSaveMessage({ type: "success", text: successText });
+      setTimeout(() => setSaveMessage(null), 2000);
+    },
+    [id]
+  );
 
   const loadLesson = useCallback(async () => {
     const supabase = createClient();
@@ -197,12 +245,13 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     if (slidesRes?.slideDeck?.slides) {
       setSlides(slidesRes.slideDeck.slides);
     }
-    if (
+    if (slidesRes?.slideDeck?.language_mode === "en") {
+      setSlideLanguageMode("en");
+    } else if (
       slidesRes?.slideDeck?.language_mode === "ar" ||
-      slidesRes?.slideDeck?.language_mode === "en" ||
       slidesRes?.slideDeck?.language_mode === "both"
     ) {
-      setSlideLanguageMode(slidesRes.slideDeck.language_mode);
+      setSlideLanguageMode("ar");
     }
 
     const cohortRows =
@@ -373,16 +422,37 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     finally { setSlideSaving(false); }
   }, [id, slides]);
 
-  const handleSlideVideoReady = useCallback(async (urls: { video_url_1080p: string; video_url_360p: string; video_url_480p: string; video_url_720p: string; duration_seconds?: number }) => {
-    const supabase = createClient();
-    await supabase.from("lessons").update({
-      video_url_1080p: urls.video_url_1080p,
-      video_url_360p: urls.video_url_360p,
-      video_url_480p: urls.video_url_480p,
-      video_url_720p: urls.video_url_720p,
-      ...(urls.duration_seconds != null ? { video_duration_seconds: urls.duration_seconds } : {}),
-    }).eq("id", id);
-  }, [id]);
+  const handleSlideVideoReady = useCallback(
+    async (urls: LessonVideoUrls) => {
+      setForm((prev) => applyVideoUrlsToForm(prev, urls));
+
+      try {
+        await persistLessonVideoUrls(urls, "Recorded video saved");
+      } catch (error) {
+        setSaveMessage({
+          type: "error",
+          text: error instanceof Error ? error.message : "Video save failed",
+        });
+      }
+    },
+    [persistLessonVideoUrls]
+  );
+
+  const handleUploadedVideoReady = useCallback(
+    async (urls: LessonVideoUrls) => {
+      setForm((prev) => applyVideoUrlsToForm(prev, urls));
+
+      try {
+        await persistLessonVideoUrls(urls, "Uploaded video saved");
+      } catch (error) {
+        setSaveMessage({
+          type: "error",
+          text: error instanceof Error ? error.message : "Video save failed",
+        });
+      }
+    },
+    [persistLessonVideoUrls]
+  );
 
   const slideGenerationBlockedReason = getCurriculumRequirementMessage(
     subjects.find((s) => s.id === form.subject_id) ?? null,
@@ -681,18 +751,19 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       {/* Tab content */}
       <div className={activeTab === "slides" ? "py-4" : "max-w-5xl mx-auto px-6 py-6"}>
         {activeTab === "details" && (
-          <DetailsTab
-            form={form}
-            setForm={setForm}
+        <DetailsTab
+          form={form}
+          setForm={setForm}
             subjects={subjects}
             selectedSubject={selectedSubject}
             availableCohorts={availableCohorts}
             assignedCohortIds={assignedCohortIds}
             setAssignedCohortIds={setAssignedCohortIds}
-            videoInputMode={videoInputMode}
-            setVideoInputMode={setVideoInputMode}
-            lessonId={id}
-          />
+          videoInputMode={videoInputMode}
+          setVideoInputMode={setVideoInputMode}
+          lessonId={id}
+          onVideosReady={handleUploadedVideoReady}
+        />
         )}
 
         {activeTab === "slides" && (
@@ -784,6 +855,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                 onChange={setSlides}
                 onSave={handleSaveSlides}
                 saving={slideSaving}
+                preferredLanguage={slideLanguageMode === "en" ? "en" : "ar"}
                 lessonId={id}
                 lessonTitle={form.title_ar || form.title_en || ""}
                 onVideoReady={handleSlideVideoReady}
@@ -841,6 +913,7 @@ function DetailsTab({
   videoInputMode,
   setVideoInputMode,
   lessonId,
+  onVideosReady,
 }: {
   form: LessonForm;
   setForm: (f: LessonForm | ((prev: LessonForm) => LessonForm)) => void;
@@ -852,6 +925,7 @@ function DetailsTab({
   videoInputMode: "upload" | "manual";
   setVideoInputMode: (mode: "upload" | "manual") => void;
   lessonId: string;
+  onVideosReady: (urls: LessonVideoUrls) => void | Promise<void>;
 }) {
   return (
     <div className="space-y-6">
@@ -1057,14 +1131,7 @@ function DetailsTab({
               lessonId={lessonId}
               lessonTitle={form.title_ar || form.title_en || "Untitled"}
               onVideosReady={(urls) => {
-                setForm((prev) => ({
-                  ...prev,
-                  video_url_1080p: urls.video_url_1080p,
-                  video_url_360p: urls.video_url_360p,
-                  video_url_480p: urls.video_url_480p,
-                  video_url_720p: urls.video_url_720p,
-                  ...(urls.duration_seconds ? { video_duration_seconds: String(urls.duration_seconds) } : {}),
-                }));
+                void onVideosReady(urls);
               }}
               currentVideoUrl={form.video_url_1080p || form.video_url_720p || undefined}
             />

@@ -30,7 +30,7 @@ async function queueBackgroundGeneration({
   lessonId: string;
   userId: string;
   slideCount: number;
-  languageMode: "ar" | "en" | "both";
+  languageMode: "ar" | "en";
   generationContext: ReturnType<typeof parseSlideGenerationContext>;
 }) {
   const internalSecret = getServiceRoleKey();
@@ -87,10 +87,7 @@ export async function POST(
         : generationContext?.requestedSlideCount ??
           suggestSlideCount(generationContext?.lessonDurationMinutes ?? null);
     const slideCount = clampSlideCount(requestedSlideCount || 10);
-    const languageMode =
-      body.language_mode === "ar" || body.language_mode === "en" || body.language_mode === "both"
-        ? body.language_mode
-        : "ar";
+    const languageMode = body.language_mode === "en" ? "en" : "ar";
 
     if (shouldUseBackgroundGeneration(request)) {
       const queuedResponse = await queueBackgroundGeneration({

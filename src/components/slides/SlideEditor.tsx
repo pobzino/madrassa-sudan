@@ -230,6 +230,7 @@ interface SlideEditorProps {
   onChange: (slides: Slide[]) => void;
   onSave: () => void;
   saving: boolean;
+  preferredLanguage?: 'ar' | 'en';
   lessonId?: string;
   lessonTitle?: string;
   onVideoReady?: (urls: {
@@ -246,18 +247,23 @@ export default function SlideEditor({
   onChange,
   onSave,
   saving,
+  preferredLanguage = 'ar',
   lessonId,
   lessonTitle,
   onVideoReady,
 }: SlideEditorProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [language, setLanguage] = useState<'ar' | 'en'>('ar');
+  const [language, setLanguage] = useState<'ar' | 'en'>(preferredLanguage);
   const [presenting, setPresenting] = useState(false);
   const [presentIndex, setPresentIndex] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [recording, setRecording] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
+
+  useEffect(() => {
+    setLanguage(preferredLanguage);
+  }, [preferredLanguage]);
 
   const slideContainerRef = useRef<HTMLDivElement>(null);
 

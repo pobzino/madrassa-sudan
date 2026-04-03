@@ -12,14 +12,11 @@ export type SlideLanguageBlock = {
   bullets: string[];
 };
 
-export function getSlideLanguageBlocks(
+export function getSlideLanguageBlock(
   slide: Slide,
-  preferredLanguage: SlideTemplateLanguage
-): [SlideLanguageBlock, SlideLanguageBlock] {
-  const order: SlideTemplateLanguage[] =
-    preferredLanguage === 'en' ? ['en', 'ar'] : ['ar', 'en'];
-
-  return order.map((language) => ({
+  language: SlideTemplateLanguage
+): SlideLanguageBlock {
+  return {
     language,
     isArabic: language === 'ar',
     label: language === 'ar' ? 'العربية' : 'English',
@@ -27,5 +24,18 @@ export function getSlideLanguageBlocks(
     title: language === 'ar' ? slide.title_ar : slide.title_en,
     body: language === 'ar' ? slide.body_ar : slide.body_en,
     bullets: (language === 'ar' ? slide.bullets_ar : slide.bullets_en) || [],
-  })) as [SlideLanguageBlock, SlideLanguageBlock];
+  };
+}
+
+export function getSlideLanguageBlocks(
+  slide: Slide,
+  preferredLanguage: SlideTemplateLanguage
+): [SlideLanguageBlock, SlideLanguageBlock] {
+  const order: SlideTemplateLanguage[] =
+    preferredLanguage === 'en' ? ['en', 'ar'] : ['ar', 'en'];
+
+  return order.map((language) => getSlideLanguageBlock(slide, language)) as [
+    SlideLanguageBlock,
+    SlideLanguageBlock,
+  ];
 }

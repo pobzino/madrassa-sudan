@@ -64,9 +64,7 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
   const requestedLanguageMode = searchParams.get('language');
   const autoGenerate = searchParams.get('autogenerate') === '1';
   const [languageMode, setLanguageMode] = useState<SlideLanguageMode>(
-    requestedLanguageMode === 'ar' || requestedLanguageMode === 'en' || requestedLanguageMode === 'both'
-      ? requestedLanguageMode
-      : 'ar'
+    requestedLanguageMode === 'en' ? 'en' : 'ar'
   );
 
   const handleVideoReady = useCallback(async (urls: VideoUrls) => {
@@ -113,12 +111,10 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
       setSlides(slidesRes.slideDeck.slides);
     }
 
-    if (
-      slidesRes?.slideDeck?.language_mode === 'ar' ||
-      slidesRes?.slideDeck?.language_mode === 'en' ||
-      slidesRes?.slideDeck?.language_mode === 'both'
-    ) {
-      setLanguageMode(slidesRes.slideDeck.language_mode);
+    if (slidesRes?.slideDeck?.language_mode === 'en') {
+      setLanguageMode('en');
+    } else if (slidesRes?.slideDeck?.language_mode === 'ar' || slidesRes?.slideDeck?.language_mode === 'both') {
+      setLanguageMode('ar');
     }
     setLoading(false);
   }, [id]);
@@ -329,6 +325,7 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
             onChange={setSlides}
             onSave={handleSave}
             saving={saving}
+            preferredLanguage={languageMode === 'en' ? 'en' : 'ar'}
             lessonId={id}
             lessonTitle={lessonTitle}
             onVideoReady={handleVideoReady}
