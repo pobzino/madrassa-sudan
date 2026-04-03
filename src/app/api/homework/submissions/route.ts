@@ -76,11 +76,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Build query
+    // Build query — disambiguate FK since homework_submissions has two FKs to profiles
     let dbQuery = supabase
       .from("homework_submissions")
       .select(
-        "*, profiles(id, full_name, avatar_url)",
+        "*, profiles!homework_submissions_student_id_fkey(id, full_name, avatar_url)",
         { count: "exact" }
       )
       .eq("assignment_id", query.assignment_id);
@@ -296,7 +296,7 @@ export async function POST(request: NextRequest) {
         .from("homework_submissions")
         .select(`
           *,
-          profiles(full_name),
+          profiles!homework_submissions_student_id_fkey(full_name),
           homework_responses(*)
         `)
         .eq("assignment_id", assignment_id);
