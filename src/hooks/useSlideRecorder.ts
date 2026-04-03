@@ -136,8 +136,8 @@ export function useSlideRecorder({
   // Find supported MIME type
   function getSupportedMimeType(): string {
     const types = [
-      'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=vp9,opus',
       'video/webm',
     ];
     return types.find((mt) => MediaRecorder.isTypeSupported(mt)) || 'video/webm';
@@ -214,6 +214,16 @@ export function useSlideRecorder({
       };
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType });
+        if (blob.size === 0) {
+          setRecordedBlob(null);
+          setRecorderState('idle');
+          setErrorMessage('Recording failed to save video data. Please record again for at least 2 seconds.');
+          // Stop compositing loop
+          isRecordingRef.current = false;
+          if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+          if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+          return;
+        }
         setRecordedBlob(blob);
         setRecorderState('stopped');
         // Stop compositing loop
@@ -223,7 +233,7 @@ export function useSlideRecorder({
       };
 
       mediaRecorderRef.current = recorder;
-      recorder.start(1000); // 1s chunks
+      recorder.start(250); // frequent chunks reduce empty-blob edge cases
 
       // Duration timer
       const startTime = Date.now();
@@ -245,7 +255,16 @@ export function useSlideRecorder({
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
+      const recorder = mediaRecorderRef.current;
+      // Flush pending data first to avoid zero-byte blobs in some browsers.
+      try { recorder.requestData(); } catch { /* ignore */ }
+      setTimeout(() => {
+        try {
+          if (recorder.state !== 'inactive') recorder.stop();
+        } catch {
+          // ignore
+        }
+      }, 120);
     }
     // Stop mic
     if (micStreamRef.current) {
