@@ -93,18 +93,22 @@ export default function TeacherCohortsPage() {
     const supabase = createClient();
     const user = await getCachedUser(supabase);
 
-    if (!user) return;
+    if (!user) {
+      setCreating(false);
+      return;
+    }
+
+    const cohortId = crypto.randomUUID();
 
     // Create cohort
-    const { data: cohort, error: cohortError } = await supabase
+    const { error: cohortError } = await supabase
       .from("cohorts")
       .insert({
+        id: cohortId,
         name: newCohort.name,
         description: newCohort.description || null,
         grade_level: newCohort.grade_level,
-      })
-      .select()
-      .single();
+      });
 
     if (cohortError) {
       console.error("Error creating cohort:", cohortError);
@@ -113,11 +117,17 @@ export default function TeacherCohortsPage() {
     }
 
     // Add teacher to cohort
-    await supabase.from("cohort_teachers").insert({
-      cohort_id: cohort.id,
+    const { error: teacherAssignError } = await supabase.from("cohort_teachers").insert({
+      cohort_id: cohortId,
       teacher_id: user.id,
       is_primary: true,
     });
+
+    if (teacherAssignError) {
+      console.error("Error assigning teacher to cohort:", teacherAssignError);
+      setCreating(false);
+      return;
+    }
 
     // Reset form and reload
     setNewCohort({ name: "", description: "", grade_level: 1 });
