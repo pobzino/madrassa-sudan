@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Slide, SlideType, SlideLayout, SlideTextSize } from '@/lib/slides.types';
+import { createClient } from '@/lib/supabase/client';
 import SlideInteractionFields from './SlideInteractionFields';
 import { OWL_OPTIONS, OWL_PREFIX, isOwlImage, getOwlKey } from '@/lib/owl-illustrations';
 import OwlImage from './OwlImage';
@@ -56,8 +57,12 @@ export default function SlideEditPanel({
   canDelete = true,
   canEditType = true,
 }: SlideEditPanelProps) {
+  const supabase = createClient();
   const [bulletLang, setBulletLang] = useState<'ar' | 'en'>('ar');
   const [revealLang, setRevealLang] = useState<'ar' | 'en'>('ar');
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleTypeChange(newType: SlideType) {
     const updates: Partial<Slide> = { type: newType };
@@ -134,6 +139,48 @@ export default function SlideEditPanel({
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     onUpdate({ [revealKey]: next });
+  }
+
+  async function handleImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setImageUploadError('Only image files are allowed.');
+      event.target.value = '';
+      return;
+    }
+
+    setImageUploading(true);
+    setImageUploadError(null);
+
+    try {
+      const extension = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : 'png';
+      const safeExtension = extension && /^[a-z0-9]+$/.test(extension) ? extension : 'png';
+      const path = `slides/${slide.id}/${crypto.randomUUID()}.${safeExtension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('lessons')
+        .upload(path, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } = supabase.storage.from('lessons').getPublicUrl(path);
+      onUpdate({ image_url: data.publicUrl });
+    } catch (error) {
+      setImageUploadError(error instanceof Error ? error.message : 'Image upload failed.');
+    } finally {
+      setImageUploading(false);
+      event.target.value = '';
+    }
   }
 
   return (
@@ -229,25 +276,46 @@ export default function SlideEditPanel({
       <div>
         <label className={labelClass}>Image</label>
         <div className="space-y-2">
-          {/* URL input */}
-          <div className="flex gap-1">
-            <input
-              value={isOwlImage(slide.image_url) ? '' : (slide.image_url || '')}
-              onChange={(e) => onUpdate({ image_url: e.target.value || null })}
-              placeholder="https://example.com/image.jpg"
-              className={inputClass}
-              disabled={isOwlImage(slide.image_url)}
-            />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageUpload}
+          />
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={imageUploading}
+              className="rounded-lg border border-[#007229] px-3 py-2 text-sm font-medium text-[#007229] transition-colors hover:bg-[#007229]/5 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {imageUploading ? 'Uploading…' : 'Upload image'}
+            </button>
             {slide.image_url && (
               <button
-                onClick={() => onUpdate({ image_url: null })}
-                className="flex-shrink-0 px-2 py-1 text-xs text-red-500 border border-red-200 rounded-lg hover:bg-red-50"
-                title="Remove image"
+                type="button"
+                onClick={() => {
+                  setImageUploadError(null);
+                  onUpdate({ image_url: null });
+                }}
+                className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-50"
               >
-                ✕
+                Remove image
               </button>
             )}
           </div>
+
+          <p className="text-[10px] text-gray-400">
+            Upload an image file for this slide. External image URLs are disabled.
+          </p>
+
+          {imageUploadError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {imageUploadError}
+            </div>
+          )}
 
           {/* Image preview */}
           {slide.image_url && !isOwlImage(slide.image_url) && (
