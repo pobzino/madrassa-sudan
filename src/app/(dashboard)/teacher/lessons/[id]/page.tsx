@@ -20,8 +20,10 @@ import type { Database } from "@/lib/database.types";
 import InteractionResultsPanel from "@/components/teacher/InteractionResultsPanel";
 import SlideEditor from "@/components/slides/SlideEditor";
 import SlideGenerateButton from "@/components/slides/SlideGenerateButton";
-import type { Slide } from "@/lib/slides.types";
+import type { Slide, SlideInteractionType } from "@/lib/slides.types";
 import {
+  ACTIVITY_TYPE_OPTIONS,
+  createDraftActivitySlide,
   ensureSlidesForSupportedTasks,
   getEffectiveActivityTimings,
   isCanonicalActivityTask,
@@ -97,7 +99,7 @@ type ContentBlock = {
   sequence: number;
 };
 
-type Tab = "details" | "questions" | "slides" | "content" | "results";
+type Tab = "details" | "questions" | "activities" | "slides" | "content" | "results";
 
 type LessonVideoUrls = {
   video_url_1080p: string;
@@ -273,6 +275,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [slideSaving, setSlideSaving] = useState(false);
   const [slideLastSaved, setSlideLastSaved] = useState<string | null>(null);
   const [slideGenContext, setSlideGenContext] = useState<SlideGenerationContext | null>(null);
+  const [slideEditorFocusId, setSlideEditorFocusId] = useState<string | null>(null);
   const [slideCount, setSlideCount] = useState(
     getSlideLengthPresetConfig(DEFAULT_SLIDE_LENGTH_PRESET).slideCount
   );
@@ -552,6 +555,55 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     }));
   }, []);
 
+  const handleAddActivity = useCallback(
+    (interactionType: SlideInteractionType) => {
+      const newSlide = createDraftActivitySlide(interactionType, slides.length);
+      const nextSlides = [...slides, newSlide].map((slide, index) => ({
+        ...slide,
+        sequence: index,
+      }));
+      const syncedTasks = syncTaskFormsFromSlides(nextSlides, lessonTasks);
+      setSlides(nextSlides);
+      setLessonTasks(syncedTasks);
+      setSlideEditorFocusId(newSlide.id);
+    },
+    [lessonTasks, slides]
+  );
+
+  const handleRemoveActivity = useCallback(
+    (activityId: string) => {
+      const task = lessonTasks.find((candidate) => candidate.id === activityId);
+      if (!task) {
+        return;
+      }
+
+      const nextSlides = slides
+        .filter(
+          (slide) =>
+            slide.id !== task.linked_slide_id &&
+            slide.activity_id !== activityId
+        )
+        .map((slide, index) => ({
+          ...slide,
+          sequence: index,
+        }));
+      const remainingTasks = lessonTasks.filter((candidate) => candidate.id !== activityId);
+      const syncedTasks = syncTaskFormsFromSlides(nextSlides, remainingTasks);
+      setSlides(nextSlides);
+      setLessonTasks(syncedTasks);
+    },
+    [lessonTasks, slides]
+  );
+
+  const handleEditActivitySlide = useCallback((slideId: string | null) => {
+    if (!slideId) {
+      return;
+    }
+
+    setSlideEditorFocusId(slideId);
+    setActiveTab("slides");
+  }, []);
+
   const handleSaveSlides = useCallback(async () => {
     setSlideSaving(true);
     try {
@@ -792,8 +844,15 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "details", label: "Details" },
+    { key: "questions", label: "Questions", count: questions.length },
+    {
+      key: "activities",
+      label: "Activities",
+      count: lessonTasks.filter(
+        (task) => task.linked_slide_id && isCanonicalActivityTask(task.task_type)
+      ).length,
+    },
     { key: "slides", label: "Slides", count: slides.length },
-    { key: "questions", label: "Questions & Tasks", count: questions.length + lessonTasks.length },
     { key: "content", label: "Content", count: contentBlocks.length },
     { key: "results", label: "Results" },
   ];
@@ -1003,24 +1062,33 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                 lessonId={id}
                 lessonTitle={form.title_ar || form.title_en || ""}
                 onVideoReady={handleSlideVideoReady}
+                focusedSlideId={slideEditorFocusId}
               />
             )}
           </div>
         )}
 
         {activeTab === "questions" && (
-          <QuestionsTasksTab
+          <QuestionsTab
             questions={questions}
+            updateQuestion={updateQuestion}
+            addQuestion={addQuestion}
+            removeQuestion={removeQuestion}
+          />
+        )}
+
+        {activeTab === "activities" && (
+          <ActivitiesTab
             slides={slides}
             lessonTasks={lessonTasks}
             videoUrl={getTeacherPreviewVideoUrl(form)}
             videoDurationSeconds={
               form.video_duration_seconds ? Number(form.video_duration_seconds) : null
             }
-            updateQuestion={updateQuestion}
-            addQuestion={addQuestion}
-            removeQuestion={removeQuestion}
             setLessonTasks={setLessonTasks}
+            onAddActivity={handleAddActivity}
+            onRemoveActivity={handleRemoveActivity}
+            onEditSlide={handleEditActivitySlide}
           />
         )}
 
@@ -1250,75 +1318,21 @@ function DetailsTab({
   );
 }
 
-/* ─── Questions & Tasks Tab ─── */
+/* ─── Questions Tab ─── */
 
-function QuestionsTasksTab({
+function QuestionsTab({
   questions,
-  slides,
-  lessonTasks,
-  videoUrl,
-  videoDurationSeconds,
   updateQuestion,
   addQuestion,
   removeQuestion,
-  setLessonTasks,
 }: {
   questions: QuestionForm[];
-  slides: Slide[];
-  lessonTasks: LessonTaskForm[];
-  videoUrl: string;
-  videoDurationSeconds: number | null;
   updateQuestion: (id: string, updates: Partial<QuestionForm>) => void;
   addQuestion: () => void;
   removeQuestion: (id: string) => void;
-  setLessonTasks: (tasks: LessonTaskForm[] | ((prev: LessonTaskForm[]) => LessonTaskForm[])) => void;
 }) {
-  const activities = lessonTasks.filter(
-    (task) => task.linked_slide_id && isCanonicalActivityTask(task.task_type)
-  );
-  const hiddenLegacyTasks = lessonTasks.filter(
-    (task) => !task.linked_slide_id || !isCanonicalActivityTask(task.task_type)
-  );
-  const previewVideoRef = useRef<HTMLVideoElement>(null);
-  const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
-  const [loadedPreviewDuration, setLoadedPreviewDuration] = useState(0);
-
-  const updateActivity = useCallback((activityId: string, updates: Partial<LessonTaskForm>) => {
-    setLessonTasks((current) =>
-      current.map((task) => (task.id === activityId ? { ...task, ...updates } : task))
-    );
-  }, [setLessonTasks]);
-
-  const effectiveDuration = loadedPreviewDuration > 0 ? loadedPreviewDuration : videoDurationSeconds;
-  const timedActivities = useMemo(
-    () => getEffectiveActivityTimings(slides, activities, effectiveDuration),
-    [activities, effectiveDuration, slides]
-  );
-  const activityTimingById = useMemo(
-    () => new Map(timedActivities.map((timing) => [timing.task.id, timing])),
-    [timedActivities]
-  );
-
-  const seekPreviewVideo = useCallback((timeInSeconds: number) => {
-    if (!previewVideoRef.current) {
-      return;
-    }
-
-    previewVideoRef.current.currentTime = timeInSeconds;
-    setPreviewCurrentTime(timeInSeconds);
-  }, []);
-
-  const stampCurrentVideoTime = useCallback(
-    (activityId: string) => {
-      const sourceTime = previewVideoRef.current?.currentTime ?? previewCurrentTime;
-      updateActivity(activityId, { timestamp_seconds: Math.max(0, Math.round(sourceTime)) });
-    },
-    [previewCurrentTime, updateActivity]
-  );
-
   return (
     <div className="space-y-6">
-      {/* Questions */}
       <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
@@ -1458,8 +1472,76 @@ function QuestionsTasksTab({
           </div>
         )}
       </section>
+    </div>
+  );
+}
 
-      {/* Activities */}
+/* ─── Activities Tab ─── */
+
+function ActivitiesTab({
+  slides,
+  lessonTasks,
+  videoUrl,
+  videoDurationSeconds,
+  setLessonTasks,
+  onAddActivity,
+  onRemoveActivity,
+  onEditSlide,
+}: {
+  slides: Slide[];
+  lessonTasks: LessonTaskForm[];
+  videoUrl: string;
+  videoDurationSeconds: number | null;
+  setLessonTasks: (tasks: LessonTaskForm[] | ((prev: LessonTaskForm[]) => LessonTaskForm[])) => void;
+  onAddActivity: (interactionType: SlideInteractionType) => void;
+  onRemoveActivity: (activityId: string) => void;
+  onEditSlide: (slideId: string | null) => void;
+}) {
+  const activities = lessonTasks.filter(
+    (task) => task.linked_slide_id && isCanonicalActivityTask(task.task_type)
+  );
+  const hiddenLegacyTasks = lessonTasks.filter(
+    (task) => !task.linked_slide_id || !isCanonicalActivityTask(task.task_type)
+  );
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
+  const [loadedPreviewDuration, setLoadedPreviewDuration] = useState(0);
+
+  const updateActivity = useCallback((activityId: string, updates: Partial<LessonTaskForm>) => {
+    setLessonTasks((current) =>
+      current.map((task) => (task.id === activityId ? { ...task, ...updates } : task))
+    );
+  }, [setLessonTasks]);
+
+  const effectiveDuration = loadedPreviewDuration > 0 ? loadedPreviewDuration : videoDurationSeconds;
+  const timedActivities = useMemo(
+    () => getEffectiveActivityTimings(slides, activities, effectiveDuration),
+    [activities, effectiveDuration, slides]
+  );
+  const activityTimingById = useMemo(
+    () => new Map(timedActivities.map((timing) => [timing.task.id, timing])),
+    [timedActivities]
+  );
+
+  const seekPreviewVideo = useCallback((timeInSeconds: number) => {
+    if (!previewVideoRef.current) {
+      return;
+    }
+
+    previewVideoRef.current.currentTime = timeInSeconds;
+    setPreviewCurrentTime(timeInSeconds);
+  }, []);
+
+  const stampCurrentVideoTime = useCallback(
+    (activityId: string) => {
+      const sourceTime = previewVideoRef.current?.currentTime ?? previewCurrentTime;
+      updateActivity(activityId, { timestamp_seconds: Math.max(0, Math.round(sourceTime)) });
+    },
+    [previewCurrentTime, updateActivity]
+  );
+
+  return (
+    <div className="space-y-6">
       <section className="bg-white rounded-xl border border-gray-100 p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -1467,17 +1549,27 @@ function QuestionsTasksTab({
               Activities {activities.length > 0 && <span className="text-gray-400">({activities.length})</span>}
             </h2>
             <p className="mt-1 text-sm text-gray-500">
-              Edit activity content in the Slides tab. Use this panel for timing and completion rules.
+              Add or remove activities here. Each activity automatically creates and manages a linked activity slide.
             </p>
           </div>
-          <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-            Add or remove activity slides in Slides
-          </span>
+          <div className="flex flex-wrap gap-2">
+            {ACTIVITY_TYPE_OPTIONS.map((option) => (
+              <button
+                key={option.type}
+                type="button"
+                onClick={() => onAddActivity(option.type)}
+                className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                title={option.hint}
+              >
+                {option.icon} {option.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {activities.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-amber-200 bg-amber-50/40 px-4 py-6 text-sm text-amber-700">
-            No linked activity slides yet. Add an interactive slide in the Slides tab to create one.
+            No activities yet. Add one above and a linked activity slide will be created automatically.
           </div>
         ) : (
           <div className="mt-4 space-y-4">
@@ -1609,9 +1701,26 @@ function QuestionsTasksTab({
                         Linked slide: {linkedSlide?.title_en || linkedSlide?.title_ar || activity.linked_slide_id}
                       </p>
                     </div>
-                    <p className="text-xs text-gray-500">
-                      Answers and prompts are edited directly on the linked activity slide.
-                    </p>
+                    <div className="flex flex-col items-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onEditSlide(activity.linked_slide_id)}
+                        className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        Edit slide
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm("Remove this activity and its linked slide?")) {
+                            onRemoveActivity(activity.id);
+                          }
+                        }}
+                        className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                      >
+                        Remove activity
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 text-xs">

@@ -2,26 +2,12 @@
 
 import { useState } from 'react';
 import type { SlideType, SlideInteractionType } from '@/lib/slides.types';
+import { ACTIVITY_TYPE_OPTIONS } from '@/lib/lesson-activities';
 
 export interface InteractiveSlideRequest {
   interactionType: SlideInteractionType;
   slideType: 'activity' | 'quiz_preview';
 }
-
-const INTERACTIVE_OPTIONS: {
-  type: SlideInteractionType;
-  label: string;
-  icon: string;
-  hint: string;
-}[] = [
-  { type: 'choose_correct', label: 'Multiple Choice', icon: '🔘', hint: 'Best for vocabulary & comprehension checks' },
-  { type: 'true_false', label: 'True / False', icon: '✅', hint: 'Best for quick fact review' },
-  { type: 'fill_missing_word', label: 'Fill the Blank', icon: '✏️', hint: 'Best for sentence completion & grammar' },
-  { type: 'tap_to_count', label: 'Tap to Count', icon: '🔢', hint: 'Best for early math & counting practice' },
-  { type: 'match_pairs', label: 'Match Pairs', icon: '🔗', hint: 'Best for linking terms to definitions' },
-  { type: 'sequence_order', label: 'Put in Order', icon: '📊', hint: 'Best for steps, timelines & processes' },
-  { type: 'sort_groups', label: 'Sort into Groups', icon: '📂', hint: 'Best for classification & categorization' },
-];
 
 interface SlideToolbarProps {
   language: 'ar' | 'en';
@@ -154,7 +140,7 @@ export default function SlideToolbar({
               <p className="text-sm text-gray-500 mt-0.5">Pick an activity type — the slide and interaction will be set up for you.</p>
             </div>
             <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
-              {INTERACTIVE_OPTIONS.map((opt) => (
+              {ACTIVITY_TYPE_OPTIONS.map((opt) => (
                 <button
                   key={opt.type}
                   onClick={() => {

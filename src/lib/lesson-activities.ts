@@ -36,6 +36,21 @@ export interface EffectiveActivityTiming<T extends ActivityTimingTask = Activity
 
 const FALLBACK_SECONDS_PER_SLIDE = 20;
 
+export const ACTIVITY_TYPE_OPTIONS: Array<{
+  type: SlideInteractionType;
+  label: string;
+  icon: string;
+  hint: string;
+}> = [
+  { type: 'choose_correct', label: 'Multiple Choice', icon: '🔘', hint: 'Best for vocabulary & comprehension checks' },
+  { type: 'true_false', label: 'True / False', icon: '✅', hint: 'Best for quick fact review' },
+  { type: 'fill_missing_word', label: 'Fill the Blank', icon: '✏️', hint: 'Best for sentence completion & grammar' },
+  { type: 'tap_to_count', label: 'Tap to Count', icon: '🔢', hint: 'Best for early math & counting practice' },
+  { type: 'match_pairs', label: 'Match Pairs', icon: '🔗', hint: 'Best for linking terms to definitions' },
+  { type: 'sequence_order', label: 'Put in Order', icon: '📊', hint: 'Best for steps, timelines & processes' },
+  { type: 'sort_groups', label: 'Sort into Groups', icon: '📂', hint: 'Best for classification & categorization' },
+];
+
 export function normalizeTaskType(taskType: string): TaskType {
   switch (taskType) {
     case 'matching_pairs':
@@ -156,6 +171,148 @@ export function buildTaskDataFromSlide(slide: Slide): Record<string, unknown> | 
     default:
       return null;
   }
+}
+
+function getDraftActivityContent(interactionType: SlideInteractionType) {
+  switch (interactionType) {
+    case 'choose_correct':
+      return {
+        title_ar: 'نشاط اختيار من متعدد',
+        title_en: 'Multiple Choice Activity',
+        body_ar: 'اختر الإجابة الصحيحة.',
+        body_en: 'Choose the correct answer.',
+        prompt_ar: 'اختر الإجابة الصحيحة.',
+        prompt_en: 'Choose the correct answer.',
+        options_ar: ['الخيار 1', 'الخيار 2', 'الخيار 3'],
+        options_en: ['Option 1', 'Option 2', 'Option 3'],
+        correct_index: 0,
+      };
+    case 'true_false':
+      return {
+        title_ar: 'نشاط صح أم خطأ',
+        title_en: 'True / False Activity',
+        body_ar: 'اختر صح أو خطأ.',
+        body_en: 'Choose true or false.',
+        prompt_ar: 'هل العبارة صحيحة؟',
+        prompt_en: 'Is the statement true?',
+        true_false_answer: true,
+      };
+    case 'fill_missing_word':
+      return {
+        title_ar: 'نشاط أكمل الفراغ',
+        title_en: 'Fill the Blank Activity',
+        body_ar: 'اختر الكلمة التي تكمل الجملة.',
+        body_en: 'Choose the word that completes the sentence.',
+        prompt_ar: 'أكمل الجملة بالكلمة الصحيحة.',
+        prompt_en: 'Complete the sentence with the correct word.',
+        options_ar: ['كلمة 1', 'كلمة 2', 'كلمة 3'],
+        options_en: ['Word 1', 'Word 2', 'Word 3'],
+        correct_index: 0,
+      };
+    case 'tap_to_count':
+      return {
+        title_ar: 'نشاط العد',
+        title_en: 'Tap to Count Activity',
+        body_ar: 'اضغط على العناصر ثم عدّها.',
+        body_en: 'Tap the items and count them.',
+        prompt_ar: 'كم عنصراً ترى؟',
+        prompt_en: 'How many items do you see?',
+        count_target: 5,
+        visual_emoji: '🍎',
+      };
+    case 'match_pairs':
+      return {
+        title_ar: 'نشاط التوصيل',
+        title_en: 'Match Pairs Activity',
+        body_ar: 'صل كل عنصر بما يناسبه.',
+        body_en: 'Match each item to its pair.',
+        prompt_ar: 'صل العناصر المتطابقة.',
+        prompt_en: 'Match the pairs.',
+        items_ar: ['عنصر 1', 'عنصر 2'],
+        items_en: ['Item 1', 'Item 2'],
+        targets_ar: ['تطابق 1', 'تطابق 2'],
+        targets_en: ['Match 1', 'Match 2'],
+      };
+    case 'sequence_order':
+      return {
+        title_ar: 'نشاط الترتيب',
+        title_en: 'Sequence Activity',
+        body_ar: 'رتب العناصر بالترتيب الصحيح.',
+        body_en: 'Put the items in the correct order.',
+        prompt_ar: 'رتب الخطوات.',
+        prompt_en: 'Put the steps in order.',
+        items_ar: ['الخطوة الأولى', 'الخطوة الثانية', 'الخطوة الثالثة'],
+        items_en: ['First step', 'Second step', 'Third step'],
+      };
+    case 'sort_groups':
+      return {
+        title_ar: 'نشاط التصنيف',
+        title_en: 'Sort into Groups Activity',
+        body_ar: 'ضع كل عنصر في المجموعة الصحيحة.',
+        body_en: 'Place each item into the correct group.',
+        prompt_ar: 'صنف العناصر.',
+        prompt_en: 'Sort the items.',
+        items_ar: ['عنصر 1', 'عنصر 2'],
+        items_en: ['Item 1', 'Item 2'],
+        targets_ar: ['المجموعة 1', 'المجموعة 2'],
+        targets_en: ['Group 1', 'Group 2'],
+        solution_map: [0, 1],
+      };
+  }
+}
+
+export function createDraftActivitySlide(
+  interactionType: SlideInteractionType,
+  sequence: number
+): Slide {
+  const activityId = crypto.randomUUID();
+  const content = getDraftActivityContent(interactionType);
+
+  return {
+    id: crypto.randomUUID(),
+    type: 'activity',
+    sequence,
+    is_required: false,
+    timestamp_seconds: null,
+    title_ar: content.title_ar,
+    title_en: content.title_en,
+    body_ar: content.body_ar,
+    body_en: content.body_en,
+    speaker_notes_ar: '',
+    speaker_notes_en: '',
+    visual_hint: '',
+    bullets_ar: null,
+    bullets_en: null,
+    reveal_items_ar: null,
+    reveal_items_en: null,
+    image_url: null,
+    layout: null,
+    title_size: 'md',
+    body_size: 'md',
+    lesson_phase: 'practice',
+    idea_focus_en: '',
+    idea_focus_ar: '',
+    vocabulary_word_en: null,
+    vocabulary_word_ar: null,
+    say_it_twice_prompt: null,
+    practice_question_count: 1,
+    representation_stage: 'not_applicable',
+    activity_id: activityId,
+    interaction_type: interactionType,
+    interaction_prompt_ar: content.prompt_ar,
+    interaction_prompt_en: content.prompt_en,
+    interaction_options_ar: 'options_ar' in content ? content.options_ar : null,
+    interaction_options_en: 'options_en' in content ? content.options_en : null,
+    interaction_correct_index: 'correct_index' in content ? content.correct_index : null,
+    interaction_true_false_answer: 'true_false_answer' in content ? content.true_false_answer : null,
+    interaction_count_target: 'count_target' in content ? content.count_target : null,
+    interaction_visual_emoji: 'visual_emoji' in content ? content.visual_emoji : null,
+    interaction_items_ar: 'items_ar' in content ? content.items_ar : null,
+    interaction_items_en: 'items_en' in content ? content.items_en : null,
+    interaction_targets_ar: 'targets_ar' in content ? content.targets_ar : null,
+    interaction_targets_en: 'targets_en' in content ? content.targets_en : null,
+    interaction_solution_map: 'solution_map' in content ? content.solution_map : null,
+  };
 }
 
 export function buildLessonTaskFormFromSlide(

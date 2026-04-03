@@ -231,6 +231,7 @@ interface SlideEditorProps {
   onSave: () => void;
   saving: boolean;
   preferredLanguage?: 'ar' | 'en';
+  focusedSlideId?: string | null;
   lessonId?: string;
   lessonTitle?: string;
   onVideoReady?: (urls: {
@@ -248,6 +249,7 @@ export default function SlideEditor({
   onSave,
   saving,
   preferredLanguage = 'ar',
+  focusedSlideId,
   lessonId,
   lessonTitle,
   onVideoReady,
@@ -264,6 +266,17 @@ export default function SlideEditor({
   useEffect(() => {
     setLanguage(preferredLanguage);
   }, [preferredLanguage]);
+
+  useEffect(() => {
+    if (!focusedSlideId) {
+      return;
+    }
+
+    const index = slides.findIndex((slide) => slide.id === focusedSlideId);
+    if (index >= 0) {
+      setSelectedIndex(index);
+    }
+  }, [focusedSlideId, slides]);
 
   const slideContainerRef = useRef<HTMLDivElement>(null);
 
