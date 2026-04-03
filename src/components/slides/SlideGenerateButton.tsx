@@ -40,7 +40,7 @@ export default function SlideGenerateButton({
 
   const tryRecoverSavedSlides = useCallback(
     async (generationStartedAtMs: number): Promise<Slide[] | null> => {
-      const maxAttempts = 40;
+      const maxAttempts = 80;
 
       setProgress('Checking for saved slides...');
       onGeneratingChange?.(true, 'Checking for saved slides...');
@@ -227,7 +227,7 @@ export default function SlideGenerateButton({
           </svg>
           <div>
             <p className="text-sm font-medium text-emerald-800">{progress}</p>
-            <p className="text-xs text-emerald-600">This usually takes 15–30 seconds.</p>
+            <p className="text-xs text-emerald-600">This usually takes about 1-2 minutes.</p>
           </div>
         </div>
       )}
