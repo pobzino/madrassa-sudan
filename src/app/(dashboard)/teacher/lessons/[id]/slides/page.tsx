@@ -19,6 +19,8 @@ import {
   getSlideGenerationContextStorageKey,
   getSlideLengthPresetConfig,
   getSlideLengthPresetFromCount,
+  MIN_GENERATED_SLIDE_COUNT,
+  MAX_GENERATED_SLIDE_COUNT,
   parseSlideGenerationContext,
   SLIDE_LENGTH_PRESET_OPTIONS,
   type SlideGenerationContext,
@@ -222,24 +224,52 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
           {!isGenerating && (
-            <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
-              <label className="mb-1 block text-xs font-medium text-gray-500">
-                Lesson Length
-              </label>
-              <select
-                value={slideLengthPreset}
-                onChange={(e) =>
-                  handleSlideLengthPresetChange(e.target.value as SlideLengthPreset)
-                }
-                className="border-0 bg-transparent p-0 pr-6 text-sm font-semibold text-gray-900 focus:ring-0"
-              >
-                {SLIDE_LENGTH_PRESET_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
+                <label className="mb-1 block text-xs font-medium text-gray-500">
+                  Lesson Length
+                </label>
+                <select
+                  value={slideLengthPreset}
+                  onChange={(e) =>
+                    handleSlideLengthPresetChange(e.target.value as SlideLengthPreset)
+                  }
+                  className="border-0 bg-transparent p-0 pr-6 text-sm font-semibold text-gray-900 focus:ring-0"
+                >
+                  {SLIDE_LENGTH_PRESET_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
+                <label className="mb-1 block text-xs font-medium text-gray-500">
+                  Slides
+                </label>
+                <input
+                  type="number"
+                  min={MIN_GENERATED_SLIDE_COUNT}
+                  max={MAX_GENERATED_SLIDE_COUNT}
+                  value={slideCount}
+                  onChange={(e) => {
+                    const raw = parseInt(e.target.value, 10);
+                    const clamped = clampSlideCount(raw);
+                    setSlideCount(clamped);
+                    setSlideLengthPreset(getSlideLengthPresetFromCount(clamped));
+                    setGenerationContext((prev) => ({
+                      learningObjective: prev?.learningObjective || '',
+                      keyIdeas: prev?.keyIdeas || [],
+                      sourceNotes: prev?.sourceNotes || '',
+                      lessonDurationMinutes: prev?.lessonDurationMinutes ?? null,
+                      slideGoalMix: prev?.slideGoalMix || 'balanced',
+                      requestedSlideCount: clamped,
+                    }));
+                  }}
+                  className="w-16 border-0 bg-transparent p-0 text-sm font-semibold text-gray-900 focus:ring-0"
+                />
+              </div>
+            </>
           )}
           <SlideGenerateButton
             lessonId={id}
