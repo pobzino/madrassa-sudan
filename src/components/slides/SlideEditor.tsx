@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import type { Slide, SlideType } from '@/lib/slides.types';
+import type { LessonVideoProcessingStatus } from '@/lib/lessons/video-processing';
 import SlideCard from './SlideCard';
 import SlideThumbnail from './SlideThumbnail';
 import SlideEditPanel from './SlideEditPanel';
@@ -267,6 +268,9 @@ interface SlideEditorProps {
     video_url_480p: string;
     video_url_720p: string;
     duration_seconds?: number;
+    video_processing_status?: LessonVideoProcessingStatus;
+    video_processing_error?: string | null;
+    video_processed_at?: string | null;
   }) => void;
 }
 

@@ -1119,6 +1119,9 @@ export type Database = {
           title_ar: string
           title_en: string
           updated_at: string
+          video_processed_at: string | null
+          video_processing_error: string | null
+          video_processing_status: string
           video_duration_seconds: number | null
           video_url_1080p: string | null
           video_url_360p: string | null
@@ -1145,6 +1148,9 @@ export type Database = {
           title_ar: string
           title_en: string
           updated_at?: string
+          video_processed_at?: string | null
+          video_processing_error?: string | null
+          video_processing_status?: string
           video_duration_seconds?: number | null
           video_url_1080p?: string | null
           video_url_360p?: string | null
@@ -1171,6 +1177,9 @@ export type Database = {
           title_ar?: string
           title_en?: string
           updated_at?: string
+          video_processed_at?: string | null
+          video_processing_error?: string | null
+          video_processing_status?: string
           video_duration_seconds?: number | null
           video_url_1080p?: string | null
           video_url_360p?: string | null

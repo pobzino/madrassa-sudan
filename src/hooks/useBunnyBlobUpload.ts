@@ -171,6 +171,9 @@ export function useBunnyBlobUpload(): UseBunnyBlobUploadReturn {
       const tusUpload = new tus.Upload(file, {
         endpoint: tusEndpoint,
         retryDelays: [0, 3000, 5000, 10000, 20000],
+        removeFingerprintOnSuccess: true,
+        fingerprint: async (currentFile) =>
+          [`lesson-${lessonId}`, currentFile.name, currentFile.size, currentFile.type].join("-"),
         headers: {
           AuthorizationSignature: authSignature,
           AuthorizationExpire: String(authExpire),
@@ -195,6 +198,10 @@ export function useBunnyBlobUpload(): UseBunnyBlobUploadReturn {
       });
 
       uploadRef.current = tusUpload;
+      const previousUploads = await tusUpload.findPreviousUploads();
+      if (previousUploads.length > 0) {
+        tusUpload.resumeFromPreviousUpload(previousUploads[0]);
+      }
       tusUpload.start();
     } catch (error) {
       setState('error');

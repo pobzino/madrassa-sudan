@@ -184,35 +184,35 @@ function getDraftActivityContent(interactionType: SlideInteractionType) {
   switch (interactionType) {
     case 'free_response':
       return {
-        title_ar: 'نشاط إجابة حرة',
-        title_en: 'Free Response Activity',
-        body_ar: 'اكتب إجابتك في المربع.',
-        body_en: 'Write your answer in the box.',
-        prompt_ar: 'أجب بطريقتك الخاصة.',
-        prompt_en: 'Answer in your own words.',
-        expected_answer_ar: 'إجابة نموذجية',
-        expected_answer_en: 'Model answer',
+        title_ar: 'فكر ثم أجب',
+        title_en: 'Think and Answer',
+        body_ar: 'اكتب إجابتك الكاملة مستخدماً فكرة من الدرس.',
+        body_en: 'Write a full answer using one idea from the lesson.',
+        prompt_ar: 'اشرح إجابتك في جملة أو جملتين.',
+        prompt_en: 'Explain your answer in one or two sentences.',
+        expected_answer_ar: 'إجابة نموذجية قصيرة وواضحة.',
+        expected_answer_en: 'A short, clear model answer.',
       };
     case 'choose_correct':
       return {
-        title_ar: 'نشاط اختيار من متعدد',
-        title_en: 'Multiple Choice Activity',
-        body_ar: 'اختر الإجابة الصحيحة.',
-        body_en: 'Choose the correct answer.',
-        prompt_ar: 'اختر الإجابة الصحيحة.',
-        prompt_en: 'Choose the correct answer.',
-        options_ar: ['الخيار 1', 'الخيار 2', 'الخيار 3'],
-        options_en: ['Option 1', 'Option 2', 'Option 3'],
-        correct_index: 0,
+        title_ar: 'اختر الإجابة الصحيحة',
+        title_en: 'Choose the Correct Answer',
+        body_ar: 'اقرأ السؤال ثم اختر أفضل إجابة.',
+        body_en: 'Read the question and choose the best answer.',
+        prompt_ar: 'أي خيار هو الصحيح؟',
+        prompt_en: 'Which option is correct?',
+        options_ar: ['الإجابة الأولى', 'الإجابة الصحيحة', 'إجابة أخرى'],
+        options_en: ['First answer', 'Correct answer', 'Another answer'],
+        correct_index: 1,
       };
     case 'true_false':
       return {
-        title_ar: 'نشاط صح أم خطأ',
-        title_en: 'True / False Activity',
-        body_ar: 'اختر صح أو خطأ.',
-        body_en: 'Choose true or false.',
-        prompt_ar: 'هل العبارة صحيحة؟',
-        prompt_en: 'Is the statement true?',
+        title_ar: 'صح أم خطأ',
+        title_en: 'True or False',
+        body_ar: 'اقرأ العبارة ثم قرر هل هي صحيحة أم خاطئة.',
+        body_en: 'Read the statement and decide if it is true or false.',
+        prompt_ar: 'هل هذه العبارة صحيحة؟',
+        prompt_en: 'Is this statement true?',
         true_false_answer: true,
       };
     case 'fill_missing_word':
@@ -229,54 +229,58 @@ function getDraftActivityContent(interactionType: SlideInteractionType) {
       };
     case 'tap_to_count':
       return {
-        title_ar: 'نشاط العد',
-        title_en: 'Tap to Count Activity',
-        body_ar: 'اضغط على العناصر ثم عدّها.',
-        body_en: 'Tap the items and count them.',
-        prompt_ar: 'كم عنصراً ترى؟',
-        prompt_en: 'How many items do you see?',
+        title_ar: 'عد العناصر',
+        title_en: 'Count the Items',
+        body_ar: 'اضغط على كل عنصر مرة واحدة ثم أدخل العدد النهائي.',
+        body_en: 'Tap each item once and enter the final count.',
+        prompt_ar: 'كم عنصراً ترى في الصورة؟',
+        prompt_en: 'How many items can you count?',
         count_target: 5,
         visual_emoji: '🍎',
       };
     case 'match_pairs':
       return {
-        title_ar: 'نشاط التوصيل',
-        title_en: 'Match Pairs Activity',
-        body_ar: 'صل كل عنصر بما يناسبه.',
-        body_en: 'Match each item to its pair.',
-        prompt_ar: 'صل العناصر المتطابقة.',
-        prompt_en: 'Match the pairs.',
-        items_ar: ['عنصر 1', 'عنصر 2'],
-        items_en: ['Item 1', 'Item 2'],
-        targets_ar: ['تطابق 1', 'تطابق 2'],
-        targets_en: ['Match 1', 'Match 2'],
+        title_ar: 'صل بين الأزواج',
+        title_en: 'Match the Pairs',
+        body_ar: 'صل كل بطاقة بما يناسبها.',
+        body_en: 'Match each card to its pair.',
+        prompt_ar: 'صل بين كل عنصر وعنصره المطابق.',
+        prompt_en: 'Match each item with its partner.',
+        items_ar: ['قلم', 'كتاب'],
+        items_en: ['Pen', 'Book'],
+        targets_ar: ['أداة للكتابة', 'شيء نقرأ منه'],
+        targets_en: ['Used for writing', 'Something we read'],
       };
     case 'sequence_order':
       return {
-        title_ar: 'نشاط الترتيب',
-        title_en: 'Sequence Activity',
-        body_ar: 'رتب العناصر بالترتيب الصحيح.',
-        body_en: 'Put the items in the correct order.',
-        prompt_ar: 'رتب الخطوات.',
-        prompt_en: 'Put the steps in order.',
-        items_ar: ['الخطوة الأولى', 'الخطوة الثانية', 'الخطوة الثالثة'],
-        items_en: ['First step', 'Second step', 'Third step'],
+        title_ar: 'رتب الخطوات',
+        title_en: 'Put the Steps in Order',
+        body_ar: 'اسحب الخطوات إلى الترتيب الصحيح.',
+        body_en: 'Drag the steps into the correct order.',
+        prompt_ar: 'ما الترتيب الصحيح لهذه الخطوات؟',
+        prompt_en: 'What is the correct order of these steps?',
+        items_ar: ['ابدأ', 'نفذ المهمة', 'راجع الإجابة'],
+        items_en: ['Start', 'Do the task', 'Check the answer'],
       };
     case 'sort_groups':
       return {
-        title_ar: 'نشاط التصنيف',
-        title_en: 'Sort into Groups Activity',
-        body_ar: 'ضع كل عنصر في المجموعة الصحيحة.',
+        title_ar: 'صنف العناصر',
+        title_en: 'Sort into Groups',
+        body_ar: 'ضع كل عنصر في المجموعة المناسبة.',
         body_en: 'Place each item into the correct group.',
-        prompt_ar: 'صنف العناصر.',
-        prompt_en: 'Sort the items.',
-        items_ar: ['عنصر 1', 'عنصر 2'],
-        items_en: ['Item 1', 'Item 2'],
-        targets_ar: ['المجموعة 1', 'المجموعة 2'],
-        targets_en: ['Group 1', 'Group 2'],
+        prompt_ar: 'أي مجموعة تناسب كل عنصر؟',
+        prompt_en: 'Which group does each item belong to?',
+        items_ar: ['تفاحة', 'جزر'],
+        items_en: ['Apple', 'Carrot'],
+        targets_ar: ['فاكهة', 'خضار'],
+        targets_en: ['Fruit', 'Vegetable'],
         solution_map: [0, 1],
       };
   }
+}
+
+function clonePlainObject<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 export function createDraftActivitySlide(
@@ -334,6 +338,32 @@ export function createDraftActivitySlide(
     interaction_targets_ar: 'targets_ar' in content ? content.targets_ar : null,
     interaction_targets_en: 'targets_en' in content ? content.targets_en : null,
     interaction_solution_map: 'solution_map' in content ? content.solution_map : null,
+  };
+}
+
+export function createDuplicatedActivityTask(task: LessonTaskForm): LessonTaskForm {
+  return {
+    ...normalizeLessonTaskForm({
+      ...task,
+      id: crypto.randomUUID(),
+      linked_slide_id: null,
+      task_data: clonePlainObject(task.task_data),
+    }),
+  };
+}
+
+export function createDuplicateActivitySlide(
+  slide: Slide,
+  duplicatedTaskId: string
+): Slide {
+  const duplicatedSlide = clonePlainObject(slide);
+
+  return {
+    ...duplicatedSlide,
+    id: crypto.randomUUID(),
+    activity_id: duplicatedTaskId,
+    timestamp_seconds:
+      typeof slide.timestamp_seconds === 'number' ? slide.timestamp_seconds : null,
   };
 }
 

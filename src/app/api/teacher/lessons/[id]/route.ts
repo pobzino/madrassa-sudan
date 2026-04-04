@@ -3,6 +3,9 @@ import type { Database, Json } from '@/lib/database.types'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { canManageLesson, getTeacherRole } from '@/lib/server/teacher-lesson-access'
+import { getLessonPublishReadiness } from '@/lib/lessons/publish-readiness'
+import { normalizeLessonTaskForm } from '@/lib/lesson-activities'
+import type { Slide } from '@/lib/slides.types'
 
 const QuizSettingsSchema = z.object({
   require_pass_to_continue: z.boolean(),
@@ -76,7 +79,24 @@ export async function PATCH(
   // Verify teacher owns the lesson
   const { data: lesson, error: lessonError } = await supabase
     .from('lessons')
-    .select('created_by, is_published')
+    .select(`
+      created_by,
+      is_published,
+      subject_id,
+      grade_level,
+      curriculum_topic,
+      video_url_1080p,
+      video_url_720p,
+      video_url_480p,
+      video_url_360p,
+      video_duration_seconds,
+      video_processing_status,
+      video_processing_error,
+      subjects (
+        name_ar,
+        name_en
+      )
+    `)
     .eq('id', lessonId)
     .single()
 
@@ -113,6 +133,52 @@ export async function PATCH(
       { error: 'Only admins can change lesson publish status.' },
       { status: 403 }
     )
+  }
+
+  if (updates.is_published === true) {
+    const [{ data: lessonSlides }, { data: lessonTasks }] = await Promise.all([
+      supabase
+        .from('lesson_slides')
+        .select('slides')
+        .eq('lesson_id', lessonId)
+        .maybeSingle(),
+      supabase
+        .from('lesson_tasks')
+        .select('*')
+        .eq('lesson_id', lessonId)
+        .order('display_order'),
+    ])
+
+    const publishReadiness = getLessonPublishReadiness({
+      subject: Array.isArray(lesson.subjects) ? lesson.subjects[0] ?? null : lesson.subjects,
+      gradeLevel: lesson.grade_level,
+      curriculumTopic: (updates.curriculum_topic ?? lesson.curriculum_topic ?? null) as never,
+      slides: Array.isArray(lessonSlides?.slides)
+        ? (lessonSlides?.slides as unknown as Slide[])
+        : [],
+      lessonTasks: (lessonTasks || []).map((task) =>
+        normalizeLessonTaskForm({
+          ...(task as Record<string, unknown>),
+          id: task.id,
+          task_type: String(task.task_type),
+        })
+      ),
+      video: lesson,
+      videoProcessingStatus: lesson.video_processing_status,
+      videoProcessingError: lesson.video_processing_error,
+    })
+
+    if (!publishReadiness.canPublish) {
+      return NextResponse.json(
+        {
+          error:
+            publishReadiness.blockingReasons[0]?.message ||
+            'Resolve the publish blockers before publishing this lesson.',
+          details: publishReadiness.blockingReasons,
+        },
+        { status: 400 }
+      )
+    }
   }
 
   const { curriculum_topic, ...restUpdates } = updates

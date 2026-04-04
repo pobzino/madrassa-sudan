@@ -20,10 +20,13 @@ import type { Database } from "@/lib/database.types";
 import InteractionResultsPanel from "@/components/teacher/InteractionResultsPanel";
 import SlideEditor from "@/components/slides/SlideEditor";
 import SlideGenerateButton from "@/components/slides/SlideGenerateButton";
+import SlideCard from "@/components/slides/SlideCard";
 import type { Slide, SlideInteractionType } from "@/lib/slides.types";
 import {
   ACTIVITY_TYPE_OPTIONS,
   createDraftActivitySlide,
+  createDuplicateActivitySlide,
+  createDuplicatedActivityTask,
   ensureSlidesForSupportedTasks,
   getEffectiveActivityTimings,
   isCanonicalActivityTask,
@@ -32,6 +35,12 @@ import {
 } from "@/lib/lesson-activities";
 import type { LessonTaskForm } from "@/lib/tasks.types";
 import { toPlayableVideoUrl } from "@/lib/bunny-playback";
+import { getLessonPublishReadiness } from "@/lib/lessons/publish-readiness";
+import {
+  getLessonVideoKey,
+  type LessonVideoProcessingStatus,
+  normalizeLessonVideoProcessingStatus,
+} from "@/lib/lessons/video-processing";
 import {
   clampSlideCount,
   DEFAULT_SLIDE_LENGTH_PRESET,
@@ -78,6 +87,9 @@ type LessonForm = {
   captions_ar_url: string;
   captions_en_url: string;
   video_duration_seconds: string;
+  video_processing_status: LessonVideoProcessingStatus;
+  video_processing_error: string;
+  video_processed_at: string;
 };
 
 type Tab = "details" | "activities" | "slides" | "results";
@@ -89,6 +101,9 @@ type LessonVideoUrls = {
   video_url_480p: string;
   video_url_720p: string;
   duration_seconds?: number;
+  video_processing_status?: LessonVideoProcessingStatus;
+  video_processing_error?: string | null;
+  video_processed_at?: string | null;
 };
 
 function applyVideoUrlsToForm(previous: LessonForm, urls: LessonVideoUrls): LessonForm {
@@ -100,6 +115,15 @@ function applyVideoUrlsToForm(previous: LessonForm, urls: LessonVideoUrls): Less
     video_url_720p: urls.video_url_720p,
     ...(urls.duration_seconds != null
       ? { video_duration_seconds: String(urls.duration_seconds) }
+      : {}),
+    ...(urls.video_processing_status
+      ? { video_processing_status: urls.video_processing_status }
+      : {}),
+    ...(urls.video_processing_error !== undefined
+      ? { video_processing_error: urls.video_processing_error || "" }
+      : {}),
+    ...(urls.video_processed_at !== undefined
+      ? { video_processed_at: urls.video_processed_at || "" }
       : {}),
   };
 }
@@ -181,25 +205,6 @@ async function syncLessonTasks(
   }
 }
 
-function getLessonVideoKey(
-  video: Pick<
-    LessonForm,
-    "video_url_1080p" | "video_url_360p" | "video_url_480p" | "video_url_720p"
-  > &
-    Partial<Pick<LessonForm, "video_duration_seconds">>
-) {
-  return [
-    video.video_url_360p,
-    video.video_url_480p,
-    video.video_url_720p,
-    video.video_url_1080p,
-    video.video_duration_seconds ?? "",
-  ]
-    .map((value) => value?.trim() || "")
-    .filter(Boolean)
-    .join("|");
-}
-
 function buildEditorSnapshot({
   form,
   assignedCohortIds,
@@ -213,8 +218,13 @@ function buildEditorSnapshot({
   lessonTasks: LessonTaskForm[];
   slideLanguageMode: SlideLanguageMode;
 }) {
+  const persistedForm = { ...form };
+  delete persistedForm.video_processing_status;
+  delete persistedForm.video_processing_error;
+  delete persistedForm.video_processed_at;
+
   return JSON.stringify({
-    form,
+    form: persistedForm,
     assignedCohortIds: [...assignedCohortIds].sort(),
     slideLanguageMode,
     slides,
@@ -280,6 +290,9 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     captions_ar_url: "",
     captions_en_url: "",
     video_duration_seconds: "",
+    video_processing_status: "idle",
+    video_processing_error: "",
+    video_processed_at: "",
   });
 
   const [lessonTasks, setLessonTasks] = useState<LessonTaskForm[]>([]);
@@ -397,6 +410,11 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         captions_ar_url: lesson.captions_ar_url || "",
         captions_en_url: lesson.captions_en_url || "",
         video_duration_seconds: lesson.video_duration_seconds ? String(lesson.video_duration_seconds) : "",
+        video_processing_status: normalizeLessonVideoProcessingStatus(
+          lesson.video_processing_status
+        ),
+        video_processing_error: lesson.video_processing_error || "",
+        video_processed_at: lesson.video_processed_at || "",
       };
       setForm(initialForm);
       lastPersistedPublishedRef.current = lesson.is_published;
@@ -480,7 +498,117 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       setSlides(nextSlides);
       setLessonTasks(syncedTasks);
       setSlideEditorFocusId(newSlide.id);
-      setActiveTab("slides");
+      return newSlide.activity_id ?? null;
+    },
+    [lessonTasks, slides]
+  );
+
+  const handleDuplicateActivity = useCallback(
+    (activityId: string) => {
+      const sourceTask = lessonTasks.find((task) => task.id === activityId);
+      if (!sourceTask) {
+        return null;
+      }
+
+      const sourceSlide =
+        slides.find((slide) => slide.id === sourceTask.linked_slide_id) ||
+        slides.find((slide) => slide.activity_id === activityId) ||
+        null;
+      const duplicatedTaskBase = createDuplicatedActivityTask(sourceTask);
+      const duplicatedSlide = sourceSlide
+        ? createDuplicateActivitySlide(sourceSlide, duplicatedTaskBase.id)
+        : null;
+      const duplicatedTask: LessonTaskForm = {
+        ...duplicatedTaskBase,
+        linked_slide_id: duplicatedSlide?.id ?? null,
+        display_order: sourceTask.display_order + 1,
+      };
+
+      const nextSlides = [...slides];
+      if (duplicatedSlide && sourceSlide) {
+        const sourceSlideIndex = nextSlides.findIndex(
+          (slide) => slide.id === sourceSlide.id
+        );
+        nextSlides.splice(sourceSlideIndex + 1, 0, duplicatedSlide);
+      }
+
+      const normalizedSlides = nextSlides.map((slide, index) => ({
+        ...slide,
+        sequence: index,
+      }));
+      const syncedTasks = syncTaskFormsFromSlides(normalizedSlides, [
+        ...lessonTasks,
+        duplicatedTask,
+      ]);
+
+      setSlides(normalizedSlides);
+      setLessonTasks(syncedTasks);
+      if (duplicatedSlide) {
+        setSlideEditorFocusId(duplicatedSlide.id);
+      }
+
+      return duplicatedTask.id;
+    },
+    [lessonTasks, slides]
+  );
+
+  const handleMoveActivity = useCallback(
+    (activityId: string, direction: "up" | "down") => {
+      const sourceTask = lessonTasks.find((task) => task.id === activityId);
+      if (!sourceTask?.linked_slide_id) {
+        return;
+      }
+
+      const orderedActivitySlides = lessonTasks
+        .filter(
+          (task) => task.linked_slide_id && isCanonicalActivityTask(task.task_type)
+        )
+        .map((task) => ({
+          taskId: task.id,
+          slide: slides.find((slide) => slide.id === task.linked_slide_id) || null,
+        }))
+        .filter(
+          (entry): entry is { taskId: string; slide: Slide } => Boolean(entry.slide)
+        )
+        .sort((left, right) => left.slide.sequence - right.slide.sequence);
+
+      const currentIndex = orderedActivitySlides.findIndex(
+        (entry) => entry.taskId === activityId
+      );
+      const targetIndex =
+        direction === "up" ? currentIndex - 1 : currentIndex + 1;
+
+      if (
+        currentIndex < 0 ||
+        targetIndex < 0 ||
+        targetIndex >= orderedActivitySlides.length
+      ) {
+        return;
+      }
+
+      const sourceSlide = orderedActivitySlides[currentIndex].slide;
+      const targetSlide = orderedActivitySlides[targetIndex].slide;
+      const sourceSlideIndex = slides.findIndex((slide) => slide.id === sourceSlide.id);
+      const targetSlideIndex = slides.findIndex((slide) => slide.id === targetSlide.id);
+
+      if (sourceSlideIndex < 0 || targetSlideIndex < 0) {
+        return;
+      }
+
+      const nextSlides = [...slides];
+      [nextSlides[sourceSlideIndex], nextSlides[targetSlideIndex]] = [
+        nextSlides[targetSlideIndex],
+        nextSlides[sourceSlideIndex],
+      ];
+
+      const normalizedSlides = nextSlides.map((slide, index) => ({
+        ...slide,
+        sequence: index,
+      }));
+      const syncedTasks = syncTaskFormsFromSlides(normalizedSlides, lessonTasks);
+
+      setSlides(normalizedSlides);
+      setLessonTasks(syncedTasks);
     },
     [lessonTasks, slides]
   );
@@ -557,6 +685,13 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         throw new Error(data.error || "Video transcript processing failed");
       }
 
+      setForm((previous) => ({
+        ...previous,
+        video_processing_status: "ready",
+        video_processing_error: "",
+        video_processed_at: new Date().toISOString(),
+      }));
+
       const processedText =
         data.embedding_count > 0
           ? `${successText} Transcript and search index updated.`
@@ -586,6 +721,25 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const selectedSubject = subjects.find((subject) => subject.id === form.subject_id) ?? null;
   const requiresCurriculum = hasMappedCurriculum(selectedSubject, form.grade_level);
   const hasLessonVideo = Boolean(getLessonVideoKey(form));
+  const publishReadiness = useMemo(
+    () =>
+      getLessonPublishReadiness({
+        subject: selectedSubject,
+        gradeLevel: form.grade_level,
+        curriculumTopic: form.curriculum_topic,
+        slides,
+        lessonTasks,
+        video: form,
+        videoProcessingStatus: form.video_processing_status,
+        videoProcessingError: form.video_processing_error,
+      }),
+    [
+      form,
+      lessonTasks,
+      selectedSubject,
+      slides,
+    ]
+  );
   const canAutosave =
     Boolean(form.title_ar.trim() && form.subject_id) &&
     (!requiresCurriculum || Boolean(form.curriculum_topic));
@@ -617,6 +771,15 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       if (requiresCurriculum && !form.curriculum_topic) {
         setSaveState("error");
         setSaveMessage({ type: "error", text: "Select a curriculum topic before saving." });
+        return;
+      }
+      if (form.is_published && !publishReadiness.canPublish) {
+        setSaveState("error");
+        setActiveTab("details");
+        setSaveMessage({
+          type: "error",
+          text: publishReadiness.blockingReasons[0]?.message || "Resolve the publish blockers before publishing this lesson.",
+        });
         return;
       }
 
@@ -710,9 +873,13 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
         await syncLessonTasks(supabase, id, syncedTasks);
         const nextVideoKey = getLessonVideoKey(form);
+        const normalizedVideoProcessingStatus = normalizeLessonVideoProcessingStatus(
+          form.video_processing_status
+        );
         const shouldProcessPublishedVideo =
           Boolean(form.is_published && nextVideoKey) &&
-          (!lastPersistedPublishedRef.current ||
+          (normalizedVideoProcessingStatus !== "ready" ||
+            !lastPersistedPublishedRef.current ||
             lastPersistedVideoKeyRef.current !== nextVideoKey);
 
         if (shouldProcessPublishedVideo) {
@@ -754,6 +921,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       id,
       lessonTasks,
       processPublishedVideo,
+      publishReadiness,
       requiresCurriculum,
       slideLanguageMode,
       slides,
@@ -823,9 +991,20 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     }
 
     setIsRetryingVideoProcessing(true);
+    setForm((previous) => ({
+      ...previous,
+      video_processing_status: "processing",
+      video_processing_error: "",
+    }));
     try {
       await processPublishedVideo("Video processed.");
     } catch (error) {
+      setForm((previous) => ({
+        ...previous,
+        video_processing_status: "error",
+        video_processing_error:
+          error instanceof Error ? error.message : "Video processing failed",
+      }));
       setSaveMessage({
         type: "error",
         text: error instanceof Error ? error.message : "Video processing failed",
@@ -871,13 +1050,48 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     }
 
     if (hasLessonVideo) {
+      const processingStatus = normalizeLessonVideoProcessingStatus(
+        form.video_processing_status
+      );
+
+      if (processingStatus === "processing") {
+        return {
+          tone: "amber" as const,
+          title: "Processing lesson video",
+          description:
+            "Transcript and search indexing are running for this lesson video. Publishing stays blocked until this finishes.",
+          actionLabel: null,
+        };
+      }
+
+      if (processingStatus === "error") {
+        return {
+          tone: "red" as const,
+          title: "Lesson video needs attention",
+          description:
+            form.video_processing_error ||
+            "Transcript or search processing failed. Retry it before publishing.",
+          actionLabel: "Retry transcript + search",
+        };
+      }
+
+      if (processingStatus === "pending") {
+        return {
+          tone: "amber" as const,
+          title: "Lesson video attached",
+          description:
+            "Run transcript and search processing before publishing this lesson.",
+          actionLabel: "Process video now",
+        };
+      }
+
       return {
-        tone: form.is_published ? ("emerald" as const) : ("gray" as const),
-        title: form.is_published ? "Published lesson video ready" : "Lesson video attached",
+        tone: "emerald" as const,
+        title: form.is_published ? "Published lesson video ready" : "Lesson video ready",
         description: form.is_published
-          ? "Transcript and search indexing run automatically when the lesson video changes. You can re-run processing if needed."
-          : "A lesson video is already attached. Publish the lesson or process the transcript and search index manually.",
-        actionLabel: form.is_published ? "Retry transcript + search" : "Process video now",
+          ? "Transcript and search indexing are up to date for this lesson video. You can re-run processing if needed."
+          : "Transcript and search indexing are ready. This lesson can now be published once the remaining checks pass.",
+        actionLabel: "Retry transcript + search",
       };
     }
 
@@ -892,6 +1106,8 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     backgroundUploadStage,
     backgroundUploadStatusMessage,
     form.is_published,
+    form.video_processing_error,
+    form.video_processing_status,
     hasLessonVideo,
     isBackgroundUploadForLesson,
   ]);
@@ -950,6 +1166,17 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                 <button
                   onClick={() => {
                     if (!canPublishLesson) return;
+                    if (!form.is_published && !publishReadiness.canPublish) {
+                      setActiveTab("details");
+                      setSaveState("error");
+                      setSaveMessage({
+                        type: "error",
+                        text:
+                          publishReadiness.blockingReasons[0]?.message ||
+                          "Resolve the publish blockers before publishing this lesson.",
+                      });
+                      return;
+                    }
                     setForm({ ...form, is_published: !form.is_published });
                   }}
                   disabled={!canPublishLesson}
@@ -1052,6 +1279,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           videoStatus={videoStatus}
           onRetryVideoProcessing={hasLessonVideo ? handleRetryVideoProcessing : null}
           isRetryingVideoProcessing={isRetryingVideoProcessing}
+          publishReadiness={publishReadiness}
         />
         )}
 
@@ -1192,6 +1420,8 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             }
             setLessonTasks={setLessonTasks}
             onAddActivity={handleAddActivity}
+            onDuplicateActivity={handleDuplicateActivity}
+            onMoveActivity={handleMoveActivity}
             onRemoveActivity={handleRemoveActivity}
             onEditSlide={handleEditActivitySlide}
           />
@@ -1221,6 +1451,7 @@ function DetailsTab({
   videoStatus,
   onRetryVideoProcessing,
   isRetryingVideoProcessing,
+  publishReadiness,
 }: {
   form: LessonForm;
   setForm: (f: LessonForm | ((prev: LessonForm) => LessonForm)) => void;
@@ -1238,6 +1469,7 @@ function DetailsTab({
   };
   onRetryVideoProcessing: (() => void) | null;
   isRetryingVideoProcessing: boolean;
+  publishReadiness: ReturnType<typeof getLessonPublishReadiness>;
 }) {
   const videoToneClasses = {
     gray: "border-gray-200 bg-gray-50/70 text-gray-700",
@@ -1374,6 +1606,48 @@ function DetailsTab({
         </div>
       </section>
 
+      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+              Publish Readiness
+            </h2>
+            <p className="mt-2 text-sm text-gray-500">
+              Publishing is blocked until the lesson has a video, slides, curriculum topic, and finished transcript/search processing.
+            </p>
+          </div>
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              publishReadiness.canPublish
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-amber-50 text-amber-700"
+            }`}
+          >
+            {publishReadiness.canPublish ? "Ready to publish" : "Needs attention"}
+          </span>
+        </div>
+
+        {publishReadiness.blockingReasons.length === 0 ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-4 text-sm text-emerald-800">
+            This lesson meets the current publish checks.
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-4">
+            <p className="text-sm font-semibold text-amber-900">
+              Resolve these before publishing:
+            </p>
+            <ul className="mt-3 space-y-2 text-sm text-amber-900">
+              {publishReadiness.blockingReasons.map((reason) => (
+                <li key={reason.code} className="flex gap-2">
+                  <span className="mt-0.5 text-amber-600">•</span>
+                  <span>{reason.message}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
       {/* Class Access */}
       <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
         <div className="flex items-start justify-between gap-4">
@@ -1459,6 +1733,8 @@ function ActivitiesTab({
   videoDurationSeconds,
   setLessonTasks,
   onAddActivity,
+  onDuplicateActivity,
+  onMoveActivity,
   onRemoveActivity,
   onEditSlide,
 }: {
@@ -1467,7 +1743,9 @@ function ActivitiesTab({
   videoUrl: string;
   videoDurationSeconds: number | null;
   setLessonTasks: (tasks: LessonTaskForm[] | ((prev: LessonTaskForm[]) => LessonTaskForm[])) => void;
-  onAddActivity: (interactionType: SlideInteractionType) => void;
+  onAddActivity: (interactionType: SlideInteractionType) => string | null;
+  onDuplicateActivity: (activityId: string) => string | null;
+  onMoveActivity: (activityId: string, direction: "up" | "down") => void;
   onRemoveActivity: (activityId: string) => void;
   onEditSlide: (slideId: string | null) => void;
 }) {
@@ -1543,6 +1821,15 @@ function ActivitiesTab({
   const selectedActivityIndex = selectedActivity
     ? activities.findIndex((activity) => activity.id === selectedActivity.id)
     : -1;
+  const selectedSlideLanguage =
+    selectedLinkedSlide?.title_ar ||
+    selectedLinkedSlide?.body_ar ||
+    selectedLinkedSlide?.interaction_prompt_ar
+      ? "ar"
+      : "en";
+  const canMoveSelectedActivityUp = selectedActivityIndex > 0;
+  const canMoveSelectedActivityDown =
+    selectedActivityIndex >= 0 && selectedActivityIndex < activities.length - 1;
 
   return (
     <div className="space-y-6">
@@ -1566,7 +1853,7 @@ function ActivitiesTab({
               </p>
               <h3 className="mt-2 text-lg font-semibold text-gray-900">Add or jump to an activity</h3>
               <p className="mt-1 text-sm text-gray-500">
-                Adding one creates the linked slide and opens it immediately in the slide editor.
+                Adding one creates the linked slide immediately. Use the rail to edit timing here or jump into the slide design when needed.
               </p>
               <button
                 type="button"
@@ -1635,11 +1922,16 @@ function ActivitiesTab({
                                 activity.task_type}
                             </p>
                           </div>
-                          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-gray-700">
-                            {formatTimestampLabel(
-                              timing?.effectiveTimestampSeconds ?? activity.timestamp_seconds
-                            )}
-                          </span>
+                          <div className="flex flex-col items-end gap-2">
+                            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-gray-700">
+                              {formatTimestampLabel(
+                                timing?.effectiveTimestampSeconds ?? activity.timestamp_seconds
+                              )}
+                            </span>
+                            <span className="rounded-full bg-gray-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                              {activity.task_type.replaceAll("_", " ")}
+                            </span>
+                          </div>
                         </div>
                       </button>
                     );
@@ -1794,7 +2086,35 @@ function ActivitiesTab({
                       Linked slide: {selectedLinkedSlide?.title_en || selectedLinkedSlide?.title_ar || selectedActivity.linked_slide_id}
                     </p>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const duplicatedActivityId = onDuplicateActivity(selectedActivity.id);
+                        if (duplicatedActivityId) {
+                          setSelectedActivityId(duplicatedActivityId);
+                        }
+                      }}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onMoveActivity(selectedActivity.id, "up")}
+                      disabled={!canMoveSelectedActivityUp}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Move up
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onMoveActivity(selectedActivity.id, "down")}
+                      disabled={!canMoveSelectedActivityDown}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Move down
+                    </button>
                     <button
                       type="button"
                       onClick={() => onEditSlide(selectedActivity.linked_slide_id)}
@@ -1811,7 +2131,7 @@ function ActivitiesTab({
                       }}
                       className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
                     >
-                      Remove activity
+                      Remove
                     </button>
                   </div>
                 </div>
@@ -1909,6 +2229,35 @@ function ActivitiesTab({
                     Skippable
                   </label>
                 </div>
+
+                {selectedLinkedSlide && (
+                  <div className="rounded-2xl border border-white/90 bg-white p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                          Linked Slide Preview
+                        </p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          This is the slide students will see in the video before the live activity overlay opens.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onEditSlide(selectedLinkedSlide.id)}
+                        className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        Open in Slides
+                      </button>
+                    </div>
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-gray-200 bg-gray-100">
+                      <SlideCard
+                        slide={selectedLinkedSlide}
+                        language={selectedSlideLanguage}
+                        className="!rounded-none !shadow-none"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-10 text-center">
@@ -1943,8 +2292,11 @@ function ActivitiesTab({
                   key={option.type}
                   type="button"
                   onClick={() => {
+                    const createdActivityId = onAddActivity(option.type);
+                    if (createdActivityId) {
+                      setSelectedActivityId(createdActivityId);
+                    }
                     setShowActivityPicker(false);
-                    onAddActivity(option.type);
                   }}
                   className="group flex w-full items-start gap-3 rounded-xl border border-gray-100 px-4 py-3 text-left transition-all hover:border-emerald-200 hover:bg-emerald-50/60"
                 >

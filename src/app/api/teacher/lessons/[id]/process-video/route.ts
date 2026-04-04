@@ -41,19 +41,13 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    if (!lesson.is_published) {
-      return NextResponse.json(
-        { error: "Only published lessons are processed automatically." },
-        { status: 400 }
-      );
-    }
-
     const body = await request.json().catch(() => ({}));
     const languageHint = (body.language_hint as string) || undefined;
     const result = await processPublishedLessonVideo(lessonId, languageHint);
 
     return NextResponse.json({
       success: true,
+      video_processing_status: "ready",
       transcript: result.transcript,
       transcript_cached: result.transcriptCached,
       embedding_count: result.embeddingCount,

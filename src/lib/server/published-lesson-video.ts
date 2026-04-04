@@ -2,6 +2,9 @@ import type OpenAI from "openai";
 
 import type { Database } from "@/lib/database.types";
 import { getOpenAIClient } from "@/lib/ai/openai-client";
+import {
+  type LessonVideoProcessingStatus,
+} from "@/lib/lessons/video-processing";
 import { getSiteUrl } from "@/lib/site-url";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -69,6 +72,34 @@ async function getLessonOrThrow(service: ServiceClient, lessonId: string) {
   }
 
   return lesson;
+}
+
+async function updateLessonVideoProcessingState(
+  service: ServiceClient,
+  lessonId: string,
+  {
+    status,
+    error,
+    processedAt,
+  }: {
+    status: LessonVideoProcessingStatus;
+    error?: string | null;
+    processedAt?: string | null;
+  }
+) {
+  const { error: updateError } = await service
+    .from("lessons")
+    .update({
+      video_processing_status: status,
+      video_processing_error: error ?? null,
+      video_processed_at: processedAt ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", lessonId);
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
 }
 
 export async function transcribeLessonVideo(
@@ -273,21 +304,44 @@ export async function processPublishedLessonVideo(
   const service = createServiceClient();
   const lesson = await getLessonOrThrow(service, lessonId);
 
-  if (!lesson.is_published) {
-    throw new Error("Lesson must be published before video processing can run.");
-  }
-
   if (!getPreferredVideoUrl(lesson)) {
     throw new Error("No video URL available. Upload a video first.");
   }
 
-  const transcription = await transcribeLessonVideo(lessonId, languageHint);
-  const embeddings = await embedLessonSources(lessonId);
+  await updateLessonVideoProcessingState(service, lessonId, {
+    status: "processing",
+    error: null,
+    processedAt: null,
+  });
 
-  return {
-    transcript: transcription.transcript,
-    transcriptCached: transcription.cached,
-    warning: transcription.warning,
-    embeddingCount: embeddings.count,
-  };
+  try {
+    const transcription = await transcribeLessonVideo(lessonId, languageHint);
+    const embeddings = await embedLessonSources(lessonId);
+
+    await updateLessonVideoProcessingState(service, lessonId, {
+      status: "ready",
+      error: null,
+      processedAt: new Date().toISOString(),
+    });
+
+    return {
+      transcript: transcription.transcript,
+      transcriptCached: transcription.cached,
+      warning: transcription.warning,
+      embeddingCount: embeddings.count,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Lesson video processing failed.";
+
+    await updateLessonVideoProcessingState(service, lessonId, {
+      status: "error",
+      error: message,
+      processedAt: null,
+    });
+
+    throw error;
+  }
 }

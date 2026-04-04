@@ -15,6 +15,11 @@ import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
+import { getLessonPublishReadiness } from "@/lib/lessons/publish-readiness";
+import {
+  type LessonVideoProcessingStatus,
+  normalizeLessonVideoProcessingStatus,
+} from "@/lib/lessons/video-processing";
 import { getDisallowedLessonVideoFields } from "@/lib/lessons/video-url-guards";
 import { TEACHER_GRADE_OPTIONS } from "@/lib/slides-generation";
 
@@ -41,6 +46,9 @@ type LessonForm = {
   captions_ar_url: string;
   captions_en_url: string;
   video_duration_seconds: string;
+  video_processing_status: LessonVideoProcessingStatus;
+  video_processing_error: string;
+  video_processed_at: string;
 };
 
 type AutosaveState = "idle" | "saving" | "saved" | "error";
@@ -66,6 +74,9 @@ function getInitialForm(): LessonForm {
     captions_ar_url: "",
     captions_en_url: "",
     video_duration_seconds: "",
+    video_processing_status: "idle",
+    video_processing_error: "",
+    video_processed_at: "",
   };
 }
 
@@ -104,6 +115,11 @@ function buildLessonFormFromRow(
     video_duration_seconds: row.video_duration_seconds
       ? String(row.video_duration_seconds)
       : "",
+    video_processing_status: normalizeLessonVideoProcessingStatus(
+      row.video_processing_status
+    ),
+    video_processing_error: row.video_processing_error || "",
+    video_processed_at: row.video_processed_at || "",
   };
 }
 
@@ -253,6 +269,16 @@ export default function NewLessonPage() {
     form.grade_level
   );
   const canPublishLesson = profile?.role === "admin";
+  const publishReadiness = getLessonPublishReadiness({
+    subject: selectedSubject,
+    gradeLevel: form.grade_level,
+    curriculumTopic: form.curriculum_topic,
+    slides: [],
+    lessonTasks: [],
+    video: form,
+    videoProcessingStatus: form.video_processing_status,
+    videoProcessingError: form.video_processing_error,
+  });
 
   useEffect(() => {
     if (authLoading || loading || !didHydrateDraftRef.current) return;
@@ -347,6 +373,15 @@ export default function NewLessonPage() {
     if (blockedVideoFields.length > 0) {
       alert(
         `YouTube video links are not allowed. Use ad-free hosted video URLs instead.\nBlocked fields: ${blockedVideoFields.join(", ")}`
+      );
+      return;
+    }
+
+    if (form.is_published && !publishReadiness.canPublish) {
+      alert(
+        publishReadiness.blockingReasons
+          .map((reason, index) => `${index + 1}. ${reason.message}`)
+          .join("\n")
       );
       return;
     }
@@ -618,6 +653,14 @@ export default function NewLessonPage() {
           <button
             onClick={() => {
               if (!canPublishLesson) return;
+              if (!form.is_published && !publishReadiness.canPublish) {
+                alert(
+                  publishReadiness.blockingReasons
+                    .map((reason, index) => `${index + 1}. ${reason.message}`)
+                    .join("\n")
+                );
+                return;
+              }
               setForm({ ...form, is_published: !form.is_published });
             }}
             disabled={!canPublishLesson}
@@ -635,6 +678,14 @@ export default function NewLessonPage() {
           <p className="text-xs text-amber-600">
             New lessons created by teachers stay as drafts until an admin publishes them.
           </p>
+        )}
+        {canPublishLesson && !publishReadiness.canPublish && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+            <p className="font-semibold">Publish is blocked on this page.</p>
+            <p className="mt-1">
+              Save the lesson as a draft first, then add slides, record/upload a video, and finish transcript/search processing in the lesson editor.
+            </p>
+          </div>
         )}
 
         <div className="pt-4 flex items-center justify-between gap-3">
