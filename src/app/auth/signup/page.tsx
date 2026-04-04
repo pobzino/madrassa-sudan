@@ -36,7 +36,7 @@ const RoleIcons = {
 const translations = {
   ar: {
     createAccount: "إنشاء حساب",
-    joinSubtitle: "انضم إلى أمل مدرسة اليوم",
+    joinSubtitle: "انضم إلى مدرسة أمل اليوم",
     fullNameLabel: "الاسم الكامل",
     fullNamePlaceholder: "أحمد محمد",
     emailLabel: "البريد الإلكتروني",
@@ -59,7 +59,7 @@ const translations = {
   },
   en: {
     createAccount: "Create Account",
-    joinSubtitle: "Join Amal Madrassa today",
+    joinSubtitle: "Join Amal School today",
     fullNameLabel: "Full Name",
     fullNamePlaceholder: "Ahmed Mohamed",
     emailLabel: "Email Address",

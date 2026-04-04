@@ -88,7 +88,7 @@ export async function POST(
 
     const curriculumBlock = getCurriculumPromptBlock(curriculumSelection);
 
-    const prompt = `You are an expert curriculum designer for Amal Madrassa, an educational platform for Sudanese children.
+    const prompt = `You are an expert curriculum designer for Amal School, an educational platform for Sudanese children.
 
 Given the following video lesson transcript, generate quiz questions and bilingual content summaries.
 

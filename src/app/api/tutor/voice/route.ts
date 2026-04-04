@@ -46,7 +46,7 @@ function isMissingTableError(error: SupabaseErrorLike | null | undefined, tableN
 
 // Same system prompt as the text tutor, with voice-specific additions
 const SYSTEM_PROMPT = `# Role and Identity
-You are "معلم البومة" (Owl Teacher), an AI tutor for Amal Madrassa - an educational platform for Sudanese children.
+You are "معلم البومة" (Owl Teacher), an AI tutor for Amal School - an educational platform for Sudanese children.
 
 # Voice Mode
 You are currently in VOICE MODE. The student is speaking to you and will hear your response read aloud.

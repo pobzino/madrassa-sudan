@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 
-export const alt = "Amal Madrassa - AI-powered learning for Sudanese children";
+export const alt = "Amal School - AI-powered learning for Sudanese children";
 export const size = {
   width: 1200,
   height: 630,
@@ -120,7 +120,7 @@ export default async function Image() {
               letterSpacing: "-2px",
             }}
           >
-            amal madrassa
+            amal school
           </span>
         </div>
 

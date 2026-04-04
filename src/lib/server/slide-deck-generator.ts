@@ -253,7 +253,7 @@ export async function generateSlidesForLesson({
     .map((note) => `- ${note}`)
     .join("\n");
 
-  const basePrompt = `You are an expert curriculum designer for Amal Madrassa, an educational platform for Sudanese children.
+  const basePrompt = `You are an expert curriculum designer for Amal School, an educational platform for Sudanese children.
 
 Generate a presentation slide deck for a teacher to use as visual aids while recording a video lesson.
 
@@ -645,7 +645,7 @@ ${validationSchemaNotes}
     invalidSlides: PolicySlide[],
     validationIssues: string[]
   ): Promise<PolicySlide[]> {
-    const repairPrompt = `You are repairing an Amal Madrassa lesson slide deck so it satisfies the mandatory lesson policy exactly.
+    const repairPrompt = `You are repairing an Amal School lesson slide deck so it satisfies the mandatory lesson policy exactly.
 
 Do not change the lesson topic, curriculum stage, or the separate English/Arabic slide intent. Keep as much of the existing slide wording as possible while fixing the policy violations.
 
@@ -713,7 +713,7 @@ ${JSON.stringify(
   }
 
   async function enrichSpeakerNotes(slides: PolicySlide[]): Promise<PolicySlide[]> {
-    const speakerNotesPrompt = `You are writing teacher speaker notes for an existing Amal Madrassa lesson deck.
+    const speakerNotesPrompt = `You are writing teacher speaker notes for an existing Amal School lesson deck.
 
 Do not change slide order, slide types, or visible on-screen content. Only write what the teacher should say.
 

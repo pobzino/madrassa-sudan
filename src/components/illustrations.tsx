@@ -288,7 +288,7 @@ export const MadrassaBirdLogo = ({
     <div className={`flex items-center ${sizes[size].gap} ${className}`}>
       <SecretaryBirdIcon className={sizes[size].icon} />
       <span className={`font-fredoka font-semibold ${sizes[size].text} tracking-tight text-[#007229]`}>
-        amal madrassa
+        amal school
       </span>
     </div>
   );
@@ -424,7 +424,7 @@ export const MadrassaLogo = ({
     <div className={`flex items-center ${sizes[size].gap} ${className}`}>
       <OwlTutorIcon className={sizes[size].icon} />
       <span className={`font-fredoka font-semibold ${sizes[size].text} tracking-tight text-[#007229]`}>
-        amal madrassa
+        amal school
       </span>
     </div>
   );

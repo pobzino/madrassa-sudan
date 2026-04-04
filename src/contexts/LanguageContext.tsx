@@ -15,8 +15,8 @@ interface LanguageContextType {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-const LANGUAGE_KEY = "amal-madrassa-language";
-const HAS_SELECTED_KEY = "amal-madrassa-has-selected-language";
+const LANGUAGE_KEY = "amal-school-language";
+const HAS_SELECTED_KEY = "amal-school-has-selected-language";
 
 type BrowserLanguageState = {
   cleanupParam: "lang" | "reset-lang" | null;

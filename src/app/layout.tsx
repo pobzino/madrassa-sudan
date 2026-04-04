@@ -25,19 +25,19 @@ const fredoka = Fredoka({
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
-  title: "أمل مدرسة | Amal Madrassa",
+  title: "مدرسة أمل | Amal School",
   description: "AI-powered online learning platform providing educational continuity for Sudanese children affected by conflict. Access quality education anywhere, anytime.",
   keywords: ["Sudan", "education", "online learning", "AI tutor", "refugee education", "Arabic", "children"],
   openGraph: {
-    title: "أمل مدرسة | Amal Madrassa",
+    title: "مدرسة أمل | Amal School",
     description: "Quality education for every Sudanese child, anywhere in the world.",
     type: "website",
-    siteName: "Amal Madrassa",
+    siteName: "Amal School",
     locale: "ar_SD",
   },
   twitter: {
     card: "summary_large_image",
-    title: "أمل مدرسة | Amal Madrassa",
+    title: "مدرسة أمل | Amal School",
     description: "Quality education for every Sudanese child, anywhere in the world.",
   },
 };
