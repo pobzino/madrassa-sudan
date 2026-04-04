@@ -660,12 +660,10 @@ export default function SlideInteractionOverlay({
             </div>
           </div>
 
-          <div className={`grid gap-4 ${slide.type !== 'activity' ? 'lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]' : ''}`}>
-            {slide.type !== 'activity' && (
-              <div className="overflow-hidden rounded-2xl bg-gray-100">
-                <SlideCard slide={slide} language={language} />
-              </div>
-            )}
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]">
+            <div className="overflow-hidden rounded-2xl bg-gray-100">
+              <SlideCard slide={slide} language={language} />
+            </div>
 
             <div className="flex flex-col rounded-2xl border border-gray-200 bg-gray-50 p-4">
               <p className={`mb-4 text-sm text-gray-700 ${isAr ? 'font-cairo' : 'font-inter'}`}>

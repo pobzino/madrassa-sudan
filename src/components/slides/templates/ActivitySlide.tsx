@@ -469,14 +469,12 @@ export default function ActivitySlide({ slide, language, showAnswer = false }: P
         <path d="M12 2l2.4 7.2H22l-6 4.8 2.4 7.2L12 16.4 5.6 21.2 8 14 2 9.2h7.6z" />
       </svg>
 
-      {/* Image or Owl mascot */}
-      <div className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 mb-2 sm:mb-3">
-        {hasImage ? (
+      {/* Image if provided */}
+      {hasImage && (
+        <div className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 mb-2 sm:mb-3">
           <SlideImage src={slide.image_url!} className="w-full h-full shadow-md" />
-        ) : (
-          <OwlExcited />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Badge — colored per interaction type */}
       <span className={`relative z-10 inline-block px-5 py-2 bg-gradient-to-r ${theme.badgeGradient} text-white rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-5 shadow-md`}>
