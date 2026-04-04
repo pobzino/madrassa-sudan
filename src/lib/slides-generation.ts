@@ -9,7 +9,7 @@ export type SlideGoalMix =
   | "quiz_review";
 
 export const MIN_GENERATED_SLIDE_COUNT = 9;
-export const MAX_GENERATED_SLIDE_COUNT = 10;
+export const MAX_GENERATED_SLIDE_COUNT = 20;
 
 export interface SlideGenerationContext {
   learningObjective: string;
@@ -32,23 +32,23 @@ export const SLIDE_LENGTH_PRESET_OPTIONS: Array<{
   {
     value: "short",
     label: "Short",
-    description: "Fast lesson with the fixed 9-slide teaching skeleton.",
+    description: "Quick lesson — 9 slides, ~15 minutes.",
     lessonDurationMinutes: 15,
     slideCount: 9,
   },
   {
     value: "medium",
     label: "Medium",
-    description: "Default lesson length with one extra explanation slide.",
+    description: "Standard lesson — 12 slides, ~20 minutes.",
     lessonDurationMinutes: 20,
-    slideCount: 10,
+    slideCount: 12,
   },
   {
     value: "long",
     label: "Long",
-    description: "Same capped structure with a little more speaking time.",
-    lessonDurationMinutes: 25,
-    slideCount: 10,
+    description: "Extended lesson — 15 slides, ~30 minutes.",
+    lessonDurationMinutes: 30,
+    slideCount: 15,
   },
 ];
 
