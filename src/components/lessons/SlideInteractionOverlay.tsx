@@ -601,7 +601,7 @@ export default function SlideInteractionOverlay({
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]">
-            <div className="overflow-hidden rounded-2xl bg-gray-100">
+            <div className="self-start overflow-hidden rounded-2xl bg-gray-100">
               <SlideCard slide={slide} language={language} />
             </div>
 
