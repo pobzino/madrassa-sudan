@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { readAnswerFromTaskResponse } from "@/lib/lesson-activities";
 import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
 
@@ -149,6 +150,8 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const service = createServiceClient();
+
   const [
     questionDefsResult,
     questionResponsesResult,
@@ -157,46 +160,46 @@ export async function GET(
     slideDeckResult,
     slideResponsesResult,
   ] = await Promise.all([
-    supabase
+    service
       .from("lesson_questions")
       .select("id, question_type, question_text_ar, question_text_en")
       .eq("lesson_id", lessonId)
       .order("timestamp_seconds", { ascending: true }),
-    supabase
+    service
       .from("lesson_question_responses")
       .select("question_id, student_id, is_correct, attempts, updated_at")
       .in(
         "question_id",
         (
-          await supabase
+          await service
             .from("lesson_questions")
             .select("id")
             .eq("lesson_id", lessonId)
         ).data?.map((question) => question.id) || []
       ),
-    supabase
+    service
       .from("lesson_tasks")
       .select("id, task_type, title_ar, title_en, required, task_data")
       .eq("lesson_id", lessonId)
       .order("timestamp_seconds", { ascending: true }),
-    supabase
+    service
       .from("lesson_task_responses")
       .select("id, task_id, student_id, status, completion_score, time_spent_seconds, attempts, updated_at, response_data")
       .in(
         "task_id",
         (
-          await supabase
+          await service
             .from("lesson_tasks")
             .select("id")
             .eq("lesson_id", lessonId)
         ).data?.map((task) => task.id) || []
       ),
-    supabase
+    service
       .from("lesson_slides")
       .select("slides")
       .eq("lesson_id", lessonId)
       .maybeSingle(),
-    supabase
+    service
       .from("lesson_slide_responses")
       .select("slide_id, student_id, interaction_type, is_correct, completion_score, time_spent_seconds, attempts, completed_at")
       .eq("lesson_id", lessonId)
@@ -239,7 +242,7 @@ export async function GET(
   );
 
   const { data: students } = studentIds.length
-    ? await supabase
+    ? await service
         .from("profiles")
         .select("id, full_name")
         .in("id", studentIds)
