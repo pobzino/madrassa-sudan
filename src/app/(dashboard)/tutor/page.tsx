@@ -436,6 +436,10 @@ export default function TutorPage() {
   const [speechInputSupported, setSpeechInputSupported] = useState(true);
   const [listening, setListening] = useState(false);
 
+  // Image upload state
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
   // Voice mode state
   const [voiceModeActive, setVoiceModeActive] = useState(false);
   const [voiceState, setVoiceState] = useState<"idle" | "recording" | "processing" | "playing">("idle");
@@ -981,15 +985,28 @@ export default function TutorPage() {
 
   // Send message
   const handleSend = async () => {
-    if (!input.trim() || isLoading || !userId) return;
+    if ((!input.trim() && !imagePreview) || isLoading || !userId) return;
 
     const userMessage = input.trim();
     setInput("");
+    const currentImage = imagePreview;
+    setImagePreview(null);
 
     try {
+      // Build message parts
+      const parts: Array<{ type: "text"; text: string } | { type: "image"; image: string }> = [];
+      if (userMessage) {
+        parts.push({ type: "text", text: userMessage });
+      }
+      if (currentImage) {
+        parts.push({ type: "image", image: currentImage });
+      }
+
       // Send message using AI SDK with dynamic body params
       await sendMessage(
-        { text: userMessage },
+        parts.length === 1 && parts[0].type === "text"
+          ? { text: userMessage }
+          : { parts },
         {
           body: {
             language: language,
@@ -1029,6 +1046,28 @@ export default function TutorPage() {
     } catch (err) {
       console.error("Quick send error:", err);
     }
+  };
+
+  // Image upload handler
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate: images only, max 5MB
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > 5 * 1024 * 1024) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+    // Reset the input so the same file can be re-selected
+    e.target.value = "";
+  };
+
+  const removeImagePreview = () => {
+    setImagePreview(null);
   };
 
   // Handle Enter key
@@ -1092,6 +1131,11 @@ export default function TutorPage() {
         return true;
       }
 
+      // Image content counts
+      if (part.type === "image") {
+        return true;
+      }
+
       // Skip hidden internal tools - they don't count as visible content
       if (HIDDEN_TOOLS.includes(part.type)) {
         return false;
@@ -1121,11 +1165,25 @@ export default function TutorPage() {
     return message.parts.map((part, index) => {
       // Text content with markdown rendering
       if (part.type === "text") {
+        // Strip [SUGGESTIONS: ...] from displayed text
+        const displayText = part.text.replace(/\[SUGGESTIONS:\s*"[^"]*"(?:\s*,\s*"[^"]*")*\s*\]/, "").trim();
+        if (!displayText) return null;
         return (
           <div key={index} className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-strong:text-gray-900">
-            <ReactMarkdown>{part.text}</ReactMarkdown>
+            <ReactMarkdown>{displayText}</ReactMarkdown>
           </div>
         );
+      }
+
+      // Image parts (from user messages)
+      if (part.type === "image") {
+        const imgPart = part as { image?: string };
+        if (imgPart.image) {
+          return (
+            <img key={index} src={imgPart.image} alt="Uploaded" className="max-h-48 rounded-lg object-cover" />
+          );
+        }
+        return null;
       }
 
       // Tool invocations with generative UI
@@ -1810,6 +1868,26 @@ export default function TutorPage() {
                               </button>
                             </div>
                           )}
+                          {/* Suggestion chips */}
+                          {msg.role === "assistant" && (() => {
+                            const meta = msg.metadata as { suggestions?: string[] } | undefined;
+                            const suggestions = meta?.suggestions;
+                            if (!suggestions || suggestions.length === 0) return null;
+                            return (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {suggestions.map((suggestion, si) => (
+                                  <button
+                                    key={si}
+                                    onClick={() => sendQuickMessage(suggestion)}
+                                    disabled={isLoading}
+                                    className="px-3 py-1.5 text-xs font-medium font-fredoka bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-full hover:bg-cyan-100 disabled:opacity-50 transition-colors"
+                                  >
+                                    {suggestion}
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -1854,7 +1932,36 @@ export default function TutorPage() {
           {/* Input area */}
           <div className="border-t border-gray-200 bg-white p-4">
             <div className="max-w-3xl mx-auto">
+              {/* Image preview */}
+              {imagePreview && (
+                <div className="mb-2 relative inline-block">
+                  <img src={imagePreview} alt="Preview" className="h-20 rounded-lg border border-gray-200 object-cover" />
+                  <button
+                    onClick={removeImagePreview}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
               <div className="flex gap-3">
+                {/* Hidden file input */}
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => imageInputRef.current?.click()}
+                  title={isRtl ? "إرفاق صورة" : "Attach image"}
+                  className="px-3 py-3 rounded-xl border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+                  </svg>
+                </button>
                 <textarea
                   ref={inputRef}
                   value={input}
@@ -1880,7 +1987,7 @@ export default function TutorPage() {
                 </button>
                 <button
                   onClick={handleSend}
-                  disabled={!input.trim() || isLoading}
+                  disabled={(!input.trim() && !imagePreview) || isLoading}
                   className="px-5 py-3 bg-cyan-500 text-white rounded-xl hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                 >
                   {isRtl ? null : Icons.send}

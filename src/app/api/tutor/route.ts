@@ -10,7 +10,7 @@ import { getOpenAIClient, AI_MODEL } from "@/lib/ai/openai-client";
 
 // Import tool implementations
 import { getStudentProfile, getStudentProgress, getWeakAreas, getSubjects } from "@/lib/ai/tools/student-tools";
-import { getAvailableLessons, getLessonDetails, getLessonContentChunk, getLessonContext, searchLessons, suggestLearningPath } from "@/lib/ai/tools/lesson-tools";
+import { getAvailableLessons, getLessonDetails, getLessonContentChunk, getLessonContext, searchLessons, suggestLearningPath, getLessonSlides } from "@/lib/ai/tools/lesson-tools";
 import { getStudentHomework, getHomeworkDetails, getHomeworkQuestionContext, createHomeworkAssignment } from "@/lib/ai/tools/homework-tools";
 import { getMistakePatterns } from "@/lib/ai/tools/insights-tools";
 
@@ -36,7 +36,7 @@ function isMissingTableError(error: SupabaseErrorLike | null | undefined, tableN
 
 // Enhanced system prompt with tool awareness
 const SYSTEM_PROMPT = `# Role and Identity
-You are "معلم البومة" (Owl Teacher), an AI tutor for Amal School - an educational platform for Sudanese children.
+You are "معلم البومة" (Owl Teacher), an AI tutor for Amal School - an educational platform for Sudanese children (ages 5-8, Grades 1-3).
 
 # Core Responsibilities
 1. Help students understand academic concepts across subjects (Math, Science, English, Arabic)
@@ -47,8 +47,11 @@ You are "معلم البومة" (Owl Teacher), an AI tutor for Amal School - an 
 
 # Communication Guidelines
 - LANGUAGE: You MUST respond in the student's preferred language as specified in the session context. If "English" is specified, respond ONLY in English. If "Arabic" is specified, respond ONLY in Arabic.
-- TONE: Friendly, patient, encouraging - like a supportive older sibling
-- COMPLEXITY: Match explanations to the student's grade level
+- TONE: Warm, playful, and very encouraging - like a fun big brother or sister
+- Use simple words a young child can understand
+- Use short sentences (under 15 words each when possible)
+- Celebrate every small effort with enthusiasm: "Well done!", "Great job!", "You're so smart!"
+- Use relatable examples: animals, food, family, games, things from Sudanese daily life
 - CULTURAL CONTEXT: Use examples relevant to Sudanese daily life, culture, and environment
 
 # Teaching Methodology
@@ -70,6 +73,15 @@ You are "معلم البومة" (Owl Teacher), an AI tutor for Amal School - an 
    - Offer alternative explanations or approaches
    - Remind them that struggle is part of learning
 
+# Conversational Practice
+When a student asks to practice or says "quiz me" or you sense they are ready for a quick check:
+- Ask ONE question at a time directly in the chat
+- For multiple choice: list options as A, B, C, D
+- Wait for their answer before revealing if correct
+- If correct: celebrate enthusiastically! If wrong: give a kind hint and let them try again
+- After 3-5 questions, summarize how they did with encouragement
+- This is for casual, in-the-moment practice (different from create_homework_assignment)
+
 # Tool Usage - VERY IMPORTANT
 
 ## NEVER use tools for:
@@ -85,17 +97,27 @@ For these, just reply with friendly conversational text. NO TOOLS.
 - Weak areas → get_weak_areas (e.g., "what should I study?", "where am I struggling?")
 - Practice/exercises → create_homework_assignment (e.g., "give me homework", "I need practice")
 - Available lessons → get_available_lessons (e.g., "what lessons are there?")
+- Lesson slide content → get_lesson_slides (when helping with a specific lesson's content)
 
 If unsure whether to use a tool, DON'T. Just have a conversation.
 
 For homework creation: First call shows preview, student confirms, then call again with confirm=true.
 
 # Response Format
-- Keep responses concise and focused (under 200 words when possible)
+- Keep responses short and focused (under 100 words for young learners, under 200 for older)
+- Use 1-2 fun emojis per response (stars, animals, hearts - not just 🦉)
 - Use bullet points or numbered lists for multi-step explanations
-- Include ONE relevant emoji per response maximum (🦉 preferred)
 - End responses with a question or encouragement to keep them engaged
 - For math: Use plain symbols × (times), ÷ (divide), + (plus), − (minus), = (equals). Do NOT use LaTeX like \times or \div
+- If the student sends an image, describe what you see and help them with it
+
+# Suggested Follow-ups
+At the END of every response, add a line in this exact format:
+[SUGGESTIONS: "suggestion 1", "suggestion 2", "suggestion 3"]
+These should be natural follow-up questions or actions the student might want.
+Keep each suggestion under 6 words. Write in the student's language.
+Examples (English): "Explain more", "Quiz me on this", "What's next?"
+Examples (Arabic): "اشرح أكثر", "اختبرني", "ماذا بعد؟"
 
 # Constraints
 - Do NOT search the internet or access external resources
@@ -384,13 +406,19 @@ export async function POST(request: NextRequest) {
           }
           return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
         }
+        case "get_lesson_slides": {
+          const logId = await logToolStart(supabase, conversationId, studentContext.id, "get_lesson_slides", params);
+          const result = await getLessonSlides(supabase, studentContext, params);
+          if (logId) await logToolComplete(supabase, logId, result);
+          return result.success ? { success: true, output: result.data } : { success: false, output: { error: result.error } };
+        }
         default:
           return { success: false, output: { error: `Unknown tool: ${toolName}` } };
       }
     };
 
     const inputMessages: Array<
-      | { type: "message"; role: "user" | "assistant"; content: string }
+      | { type: "message"; role: "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: string }> }
       | { type: "function_call_output"; call_id: string; output: string }
     > = [];
 
@@ -403,8 +431,29 @@ export async function POST(request: NextRequest) {
           .join(" ")
           .trim();
 
-        if (text) {
+        // Check for image parts in user messages
+        const imageParts = msg.role === "user"
+          ? msg.parts?.filter((part) => part.type === "image").map((part) => (part as { image?: string }).image).filter(Boolean) || []
+          : [];
+
+        if (text && imageParts.length > 0) {
+          // Multi-modal message with text + images
+          const contentParts: Array<{ type: string; text?: string; image_url?: string }> = [
+            { type: "input_text", text },
+          ];
+          for (const imageUrl of imageParts) {
+            contentParts.push({ type: "input_image", image_url: imageUrl as string });
+          }
+          inputMessages.push({ type: "message", role: msg.role as "user", content: contentParts });
+        } else if (text) {
           inputMessages.push({ type: "message", role: msg.role as "user" | "assistant", content: text });
+        } else if (imageParts.length > 0) {
+          // Image only, no text
+          const contentParts: Array<{ type: string; text?: string; image_url?: string }> = [];
+          for (const imageUrl of imageParts) {
+            contentParts.push({ type: "input_image", image_url: imageUrl as string });
+          }
+          inputMessages.push({ type: "message", role: "user", content: contentParts });
         }
 
         // Include tool outputs in context when available (helps with confirmation flows)
@@ -431,6 +480,23 @@ export async function POST(request: NextRequest) {
           });
       });
 
+    // Helper to parse [SUGGESTIONS: ...] from text and strip it
+    function parseSuggestions(text: string): { cleanText: string; suggestions: string[] } {
+      const match = text.match(/\[SUGGESTIONS:\s*"([^"]*)"(?:\s*,\s*"([^"]*)")*\s*\]/);
+      if (!match) return { cleanText: text, suggestions: [] };
+
+      const fullMatch = match[0];
+      const suggestions: string[] = [];
+      const regex = /"([^"]*)"/g;
+      let m;
+      while ((m = regex.exec(fullMatch)) !== null) {
+        if (m[1].trim()) suggestions.push(m[1].trim());
+      }
+
+      const cleanText = text.replace(fullMatch, "").trim();
+      return { cleanText, suggestions };
+    }
+
     const toolResultsForUi: Array<{
       toolName: string;
       toolCallId: string;
@@ -440,185 +506,216 @@ export async function POST(request: NextRequest) {
       errorText?: string;
     }> = [];
 
-    const getResponseText = (response: { output_text?: string; output?: Array<{ type: string; content?: Array<{ type: string; text: string }> }> }) => {
-      if (response.output_text) return response.output_text;
-      const outputs = response.output || [];
-      const messagesText = outputs
-        .filter((item) => item.type === "message")
-        .flatMap((item) => item.content || [])
-        .filter((content) => content.type === "output_text")
-        .map((content) => content.text);
-      return messagesText.join("\n").trim();
-    };
-
-    const extractToolCalls = (response: { output?: Array<{ type: string; name?: string; call_id?: string; arguments?: string }> }) => {
-      return (response.output || []).filter((item) => item.type === "function_call");
-    };
-
-    let response = await openaiClient.responses.create({
-      model: AI_MODEL,
-      instructions: SYSTEM_PROMPT + sessionContext,
-      input: inputMessages,
-      tools: responseTools,
-      tool_choice: "auto",
-    });
-
-    let toolCalls = extractToolCalls(response);
-    let guard = 0;
-
-    while (toolCalls.length > 0 && guard < 3) {
-      const toolOutputs: Array<{ type: "function_call_output"; call_id: string; output: string }> = [];
-
-      for (const call of toolCalls) {
-        const toolName = call.name || "";
-        const callId = call.call_id || crypto.randomUUID();
-        let parsedArgs: Record<string, unknown> = {};
-        try {
-          parsedArgs = call.arguments ? JSON.parse(call.arguments) : {};
-        } catch (error) {
-          parsedArgs = {};
-        }
-
-        const toolResult = await executeTool(toolName, parsedArgs);
-        const output = toolResult.output as Record<string, unknown>;
-
-        toolResultsForUi.push({
-          toolName,
-          toolCallId: callId,
-          input: parsedArgs,
-          output,
-          state: toolResult.success ? "output-available" : "output-error",
-          errorText: toolResult.success ? undefined : String(output.error || "Tool error"),
-        });
-
-        toolOutputs.push({
-          type: "function_call_output",
-          call_id: callId,
-          output: JSON.stringify(output),
-        });
-      }
-
-      response = await openaiClient.responses.create({
-        model: AI_MODEL,
-        instructions: SYSTEM_PROMPT + sessionContext,
-        previous_response_id: response.id,
-        input: toolOutputs,
-        tools: responseTools,
-        tool_choice: "auto",
-      });
-
-      toolCalls = extractToolCalls(response);
-      guard += 1;
-    }
-
-    const assistantText = getResponseText(response as { output_text?: string; output?: Array<{ type: string; content?: Array<{ type: string; text: string }> }> });
-
-    // Save conversation messages to database
-    if (canPersistConversation) {
-      try {
-        const lastUserMessage = messages.filter((m) => m.role === "user").pop();
-        const userText = lastUserMessage?.parts?.find((p) => p.type === "text")?.text || "";
-
-        if (userText) {
-          const { error: userInsertError } = await supabase.from("ai_messages").insert({
-            conversation_id: conversationId,
-            role: "user",
-            content: userText,
-          });
-          if (userInsertError) {
-            throw userInsertError;
-          }
-        }
-
-        const persistedToolResults = toolResultsForUi.map((toolResult) => ({
-          type: `tool-${toolResult.toolName}`,
-          toolName: toolResult.toolName,
-          state: toolResult.state,
-          output: toolResult.output,
-        }));
-
-        if (assistantText || persistedToolResults.length > 0) {
-          const { error: assistantInsertError } = await supabase.from("ai_messages").insert({
-            conversation_id: conversationId,
-            role: "assistant",
-            content: assistantText || "",
-            tool_results: persistedToolResults.length > 0 ? (persistedToolResults as unknown as Json) : null,
-          });
-          if (assistantInsertError) {
-            throw assistantInsertError;
-          }
-        }
-
-        const { error: conversationUpdateError } = await supabase
-          .from("ai_conversations")
-          .update({ updated_at: new Date().toISOString() })
-          .eq("id", conversationId);
-        if (conversationUpdateError) {
-          throw conversationUpdateError;
-        }
-      } catch (error) {
-        if (
-          isMissingTableError(error as SupabaseErrorLike, "ai_messages") ||
-          isMissingTableError(error as SupabaseErrorLike, "ai_conversations")
-        ) {
-          canPersistConversation = false;
-          console.warn("Tutor persistence tables are missing. Continuing without saving messages.");
-        } else {
-          console.error("Error saving messages:", error);
-        }
-      }
-    }
-
     const responseMetadata = canPersistConversation ? { conversation_id: conversationId } : undefined;
 
-    const stream = createUIMessageStream({
-      execute: ({ writer }) => {
-        const messageId = crypto.randomUUID();
-        writer.write({
-          type: "start",
-          messageId,
-          ...(responseMetadata ? { messageMetadata: responseMetadata } : {}),
-        });
-
-        toolResultsForUi.forEach((toolResult) => {
+    // True streaming: stream tokens to client as they arrive from OpenAI
+    const uiStream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        try {
+          const messageId = crypto.randomUUID();
+          const textId = crypto.randomUUID();
           writer.write({
-            type: "tool-input-available",
-            toolCallId: toolResult.toolCallId,
-            toolName: toolResult.toolName,
-            input: toolResult.input,
+            type: "start",
+            messageId,
+            ...(responseMetadata ? { messageMetadata: responseMetadata } : {}),
           });
 
-          if (toolResult.state === "output-error") {
-            writer.write({
-              type: "tool-output-error",
-              toolCallId: toolResult.toolCallId,
-              errorText: toolResult.errorText || "Tool error",
-            });
-          } else {
-            writer.write({
-              type: "tool-output-available",
-              toolCallId: toolResult.toolCallId,
-              output: toolResult.output,
-            });
+          let fullText = "";
+          let previousResponseId: string | undefined;
+          let guard = 0;
+          let currentInput: unknown = inputMessages;
+          let needsTextStart = true;
+
+          // Streaming + tool loop (max 3 tool iterations)
+          while (guard <= 3) {
+            const streamParams: Record<string, unknown> = {
+              model: AI_MODEL,
+              instructions: SYSTEM_PROMPT + sessionContext,
+              input: currentInput,
+              tools: responseTools,
+              tool_choice: "auto",
+              stream: true,
+            };
+            if (previousResponseId) {
+              streamParams.previous_response_id = previousResponseId;
+            }
+
+            const stream = await openaiClient.responses.create(streamParams as Parameters<typeof openaiClient.responses.create>[0]);
+
+            const pendingToolCalls: Map<string, { name: string; call_id: string; args: string }> = new Map();
+            let hasTextInThisIteration = false;
+
+            for await (const event of stream as AsyncIterable<{ type: string; delta?: string; item_id?: string; name?: string; call_id?: string; arguments?: string; output_index?: number; response_id?: string }>) {
+              // Stream text deltas to client
+              if (event.type === "response.output_text.delta" && event.delta) {
+                if (needsTextStart) {
+                  writer.write({ type: "text-start", id: textId });
+                  needsTextStart = false;
+                }
+                writer.write({ type: "text-delta", id: textId, delta: event.delta });
+                fullText += event.delta;
+                hasTextInThisIteration = true;
+              }
+
+              // Collect function call data
+              if (event.type === "response.function_call_arguments.done") {
+                const callId = event.call_id || crypto.randomUUID();
+                pendingToolCalls.set(callId, {
+                  name: event.name || "",
+                  call_id: callId,
+                  args: event.arguments || "{}",
+                });
+              }
+
+              // Capture response ID for chaining
+              if (event.type === "response.completed" && event.response_id) {
+                previousResponseId = event.response_id;
+              }
+            }
+
+            // If we got text and there are no tool calls, we're done
+            if (pendingToolCalls.size === 0) {
+              break;
+            }
+
+            // End text section if we started one (tool calls come after text)
+            if (hasTextInThisIteration && !needsTextStart) {
+              writer.write({ type: "text-end", id: textId });
+              needsTextStart = true;
+            }
+
+            // Execute tool calls and send results
+            const toolOutputs: Array<{ type: "function_call_output"; call_id: string; output: string }> = [];
+
+            for (const [, call] of pendingToolCalls) {
+              let parsedArgs: Record<string, unknown> = {};
+              try { parsedArgs = JSON.parse(call.args); } catch { parsedArgs = {}; }
+
+              const toolResult = await executeTool(call.name, parsedArgs);
+              const output = toolResult.output as Record<string, unknown>;
+
+              toolResultsForUi.push({
+                toolName: call.name,
+                toolCallId: call.call_id,
+                input: parsedArgs,
+                output,
+                state: toolResult.success ? "output-available" : "output-error",
+                errorText: toolResult.success ? undefined : String(output.error || "Tool error"),
+              });
+
+              // Emit tool results to client UI
+              writer.write({
+                type: "tool-input-available",
+                toolCallId: call.call_id,
+                toolName: call.name,
+                input: parsedArgs,
+              });
+              if (toolResult.success) {
+                writer.write({
+                  type: "tool-output-available",
+                  toolCallId: call.call_id,
+                  output,
+                });
+              } else {
+                writer.write({
+                  type: "tool-output-error",
+                  toolCallId: call.call_id,
+                  errorText: String(output.error || "Tool error"),
+                });
+              }
+
+              toolOutputs.push({
+                type: "function_call_output",
+                call_id: call.call_id,
+                output: JSON.stringify(output),
+              });
+            }
+
+            // Set up next iteration with tool outputs
+            currentInput = toolOutputs;
+            guard += 1;
           }
-        });
 
-        if (assistantText) {
-          const textId = crypto.randomUUID();
-          writer.write({ type: "text-start", id: textId });
-          writer.write({ type: "text-delta", id: textId, delta: assistantText });
-          writer.write({ type: "text-end", id: textId });
+          // Close text section if still open
+          if (!needsTextStart) {
+            writer.write({ type: "text-end", id: textId });
+          }
+
+          // Parse suggestions from the full text
+          const { cleanText, suggestions } = parseSuggestions(fullText);
+
+          // If suggestions were found, we need to send the clean text
+          // The text was already streamed token-by-token, so we can't un-send the suggestions portion.
+          // Instead, we include suggestions in metadata for the client to use.
+          const finalMetadata = {
+            ...responseMetadata,
+            ...(suggestions.length > 0 ? { suggestions } : {}),
+          };
+
+          writer.write({
+            type: "finish",
+            finishReason: "stop",
+            ...(Object.keys(finalMetadata).length > 0 ? { messageMetadata: finalMetadata } : {}),
+          });
+
+          // Persist messages asynchronously (don't block the stream)
+          const textToPersist = cleanText || fullText;
+          if (canPersistConversation) {
+            try {
+              const userText = lastUserText;
+              if (userText) {
+                const { error: userInsertError } = await supabase.from("ai_messages").insert({
+                  conversation_id: conversationId,
+                  role: "user",
+                  content: userText,
+                });
+                if (userInsertError) throw userInsertError;
+              }
+
+              const persistedToolResults = toolResultsForUi.map((tr) => ({
+                type: `tool-${tr.toolName}`,
+                toolName: tr.toolName,
+                state: tr.state,
+                output: tr.output,
+              }));
+
+              if (textToPersist || persistedToolResults.length > 0) {
+                const { error: assistantInsertError } = await supabase.from("ai_messages").insert({
+                  conversation_id: conversationId,
+                  role: "assistant",
+                  content: textToPersist || "",
+                  tool_results: persistedToolResults.length > 0 ? (persistedToolResults as unknown as Json) : null,
+                });
+                if (assistantInsertError) throw assistantInsertError;
+              }
+
+              await supabase
+                .from("ai_conversations")
+                .update({ updated_at: new Date().toISOString() })
+                .eq("id", conversationId);
+            } catch (error) {
+              if (
+                isMissingTableError(error as SupabaseErrorLike, "ai_messages") ||
+                isMissingTableError(error as SupabaseErrorLike, "ai_conversations")
+              ) {
+                console.warn("Tutor persistence tables missing.");
+              } else {
+                console.error("Error saving messages:", error);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Streaming error:", err);
+          const errorId = "stream-error";
+          writer.write({ type: "text-start", id: errorId });
+          writer.write({ type: "text-delta", id: errorId, delta: "An error occurred while generating a response." });
+          writer.write({ type: "text-end", id: errorId });
+          writer.write({ type: "finish", finishReason: "error" });
         }
-
-        writer.write({
-          type: "finish",
-          finishReason: "stop",
-          ...(responseMetadata ? { messageMetadata: responseMetadata } : {}),
-        });
       },
     });
 
-    return createUIMessageStreamResponse({ stream });
+    return createUIMessageStreamResponse({ stream: uiStream });
   } catch (error) {
     console.error("Tutor API error:", error);
     return createErrorStream("An error occurred while processing your request.");

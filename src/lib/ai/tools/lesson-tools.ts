@@ -642,6 +642,112 @@ export async function getLessonContext(
   }
 }
 
+// Get lesson slide deck content for tutoring context
+export async function getLessonSlides(
+  supabase: SupabaseClient,
+  studentContext: StudentContext,
+  params: Record<string, unknown>
+): Promise<ToolExecutionResult> {
+  try {
+    const lessonId = params.lesson_id as string;
+    if (!lessonId) {
+      return { success: false, error: "lesson_id is required" };
+    }
+
+    const lang = getPreferredLanguage(studentContext.preferred_language);
+
+    const { data: slideDeck, error } = await supabase
+      .from("lesson_slides")
+      .select("slides, language_mode")
+      .eq("lesson_id", lessonId)
+      .single();
+
+    if (error || !slideDeck) {
+      return { success: false, error: "No slide deck found for this lesson" };
+    }
+
+    const slides = (slideDeck.slides as Array<Record<string, unknown>>) || [];
+    if (slides.length === 0) {
+      return { success: false, error: "Slide deck is empty" };
+    }
+
+    // Extract condensed content from each slide
+    const summaries: Array<{
+      sequence: number;
+      type: string;
+      title: string;
+      body: string;
+      bullets: string[] | null;
+      vocabulary: string | null;
+      interaction: string | null;
+    }> = [];
+
+    let totalChars = 0;
+    const MAX_CHARS = 4000;
+
+    for (const slide of slides) {
+      if (totalChars >= MAX_CHARS) break;
+
+      const title = localizeText(
+        lang,
+        slide.title_ar as string | null,
+        slide.title_en as string | null,
+        ""
+      );
+      const body = localizeText(
+        lang,
+        slide.body_ar as string | null,
+        slide.body_en as string | null,
+        ""
+      );
+      const bulletsArr = (lang === "ar" ? slide.bullets_ar : slide.bullets_en) as string[] | null;
+      const vocab = localizeText(
+        lang,
+        slide.vocabulary_word_ar as string | null,
+        slide.vocabulary_word_en as string | null,
+        ""
+      ) || null;
+      const interaction = localizeText(
+        lang,
+        slide.interaction_prompt_ar as string | null,
+        slide.interaction_prompt_en as string | null,
+        ""
+      ) || null;
+
+      const entry = {
+        sequence: (slide.sequence as number) || 0,
+        type: (slide.type as string) || "content",
+        title,
+        body,
+        bullets: bulletsArr,
+        vocabulary: vocab,
+        interaction,
+      };
+
+      const entrySize = JSON.stringify(entry).length;
+      if (totalChars + entrySize > MAX_CHARS && summaries.length > 0) break;
+      totalChars += entrySize;
+      summaries.push(entry);
+    }
+
+    return {
+      success: true,
+      data: {
+        lesson_id: lessonId,
+        total_slides: slides.length,
+        slides_returned: summaries.length,
+        language_mode: slideDeck.language_mode,
+        slides: summaries,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to get lesson slides",
+    };
+  }
+}
+
 // Suggest a personalized learning path
 export async function suggestLearningPath(
   supabase: SupabaseClient,

@@ -3,7 +3,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { ToolDefinition, ToolExecutionResult, StudentContext } from "../types";
 import { getStudentProfile, getStudentProgress, getWeakAreas, getSubjects } from "./student-tools";
-import { getAvailableLessons, getLessonDetails, getLessonContentChunk, getLessonContext, searchLessons, suggestLearningPath } from "./lesson-tools";
+import { getAvailableLessons, getLessonDetails, getLessonContentChunk, getLessonContext, searchLessons, suggestLearningPath, getLessonSlides } from "./lesson-tools";
 import { getStudentHomework, getHomeworkDetails, getHomeworkQuestionContext, createHomeworkAssignment } from "./homework-tools";
 import { getMistakePatterns } from "./insights-tools";
 
@@ -27,6 +27,7 @@ const toolRegistry: Record<string, ToolFunction> = {
   get_lesson_context: getLessonContext,
   search_lessons: searchLessons,
   suggest_learning_path: suggestLearningPath,
+  get_lesson_slides: getLessonSlides,
   get_student_homework: getStudentHomework,
   get_homework_details: getHomeworkDetails,
   get_homework_question_context: getHomeworkQuestionContext,
@@ -213,6 +214,23 @@ export const toolDefinitions: ToolDefinition[] = [
           },
         },
         required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_lesson_slides",
+      description: "Get the slide deck content for a lesson including titles, explanations, key points, and activities. Use when helping a student understand specific lesson content or when they ask about what a lesson covers.",
+      parameters: {
+        type: "object",
+        properties: {
+          lesson_id: {
+            type: "string",
+            description: "The ID of the lesson to get slides for",
+          },
+        },
+        required: ["lesson_id"],
       },
     },
   },
