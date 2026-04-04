@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { OwlTutorIcon, OwlCelebrating, Confetti } from "@/components/illustrations";
+import { OwlCelebrating, Confetti } from "@/components/illustrations";
 import type { HomeworkAssignment, HomeworkQuestion, HomeworkSubmission, HomeworkResponse, Subject } from "@/lib/database.types";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import {
@@ -42,7 +42,6 @@ const translations = {
     teacherComment: "تعليق المعلم",
     dueAt: "موعد التسليم",
     overdue: "متأخر",
-    askTutor: "اسأل المعلم الذكي",
     saving: "جاري الحفظ...",
     saved: "تم الحفظ",
     prev: "السابق",
@@ -85,7 +84,6 @@ const translations = {
     teacherComment: "Teacher comment",
     dueAt: "Due",
     overdue: "Overdue",
-    askTutor: "Ask AI Tutor",
     saving: "Saving...",
     saved: "Saved",
     prev: "Previous",
@@ -840,14 +838,6 @@ export default function HomeworkAssignmentPage() {
                 {isRtl ? Icons.chevronRight : Icons.chevronLeft}
                 <span>{t.prev}</span>
               </button>
-
-              <Link
-                href={`/tutor?homework=${assignmentId}&question=${currentQ.id}`}
-                className="flex items-center gap-2 px-4 py-2 text-cyan-600 hover:bg-cyan-50 rounded-xl transition-colors"
-              >
-                <OwlTutorIcon className="w-5 h-5" />
-                <span className="hidden sm:inline">{t.askTutor}</span>
-              </Link>
 
               <button
                 onClick={() => setCurrentQuestion((prev) => Math.min(questions.length - 1, prev + 1))}
