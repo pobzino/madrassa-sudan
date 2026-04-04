@@ -2,6 +2,7 @@ import type { Slide } from '@/lib/slides.types';
 import { OwlConfused } from '@/components/illustrations';
 import SlideImage from './SlideImage';
 import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
+import { HelpCircle } from 'lucide-react';
 
 interface Props {
   slide: Slide;
@@ -44,7 +45,7 @@ export default function QuizPreviewSlide({ slide, language }: Props) {
 
       {/* Badge */}
       <span className="relative z-10 inline-block px-5 py-2 bg-gradient-to-r from-[#D21034] to-[#E8334F] text-white rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-5 shadow-md">
-        {isAr ? '❓ سؤال' : '❓ Quiz Question'}
+        <HelpCircle className="inline w-4 h-4" /> {isAr ? 'سؤال' : 'Quiz Question'}
       </span>
 
       {/* Title */}

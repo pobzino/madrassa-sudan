@@ -1,6 +1,7 @@
 'use client'
 
 import type { TaskType, MatchingPairsData, SortingOrderData } from '@/lib/tasks.types'
+import { Link2, ArrowUpDown, PenLine, Tag, Brush, Mic } from 'lucide-react'
 import MatchingPairsEditor from './editors/MatchingPairsEditor'
 import SortingOrderEditor from './editors/SortingOrderEditor'
 
@@ -18,13 +19,22 @@ export interface TaskForm {
   points: number
 }
 
-const TASK_TYPE_LABELS: Record<string, string> = {
-  matching_pairs: '🔗 Matching Pairs',
-  sorting_order: '📊 Sorting Order',
-  fill_in_blank_enhanced: '✏️ Fill in Blank',
-  drag_drop_label: '🏷️ Drag & Drop Labels',
-  drawing_tracing: '🎨 Drawing / Tracing',
-  audio_recording: '🎙️ Audio Recording',
+import type { LucideIcon } from 'lucide-react'
+
+const TASK_TYPE_META: Record<string, { icon: LucideIcon; label: string }> = {
+  matching_pairs: { icon: Link2, label: 'Matching Pairs' },
+  sorting_order: { icon: ArrowUpDown, label: 'Sorting Order' },
+  fill_in_blank_enhanced: { icon: PenLine, label: 'Fill in Blank' },
+  drag_drop_label: { icon: Tag, label: 'Drag & Drop Labels' },
+  drawing_tracing: { icon: Brush, label: 'Drawing / Tracing' },
+  audio_recording: { icon: Mic, label: 'Audio Recording' },
+}
+
+function TaskTypeLabel({ type }: { type: string }) {
+  const meta = TASK_TYPE_META[type]
+  if (!meta) return <>{type}</>
+  const Icon = meta.icon
+  return <><Icon className="inline w-3.5 h-3.5" /> {meta.label}</>
 }
 
 const SUPPORTED_TYPES: TaskType[] = ['matching_pairs', 'sorting_order']
@@ -124,7 +134,7 @@ export default function TaskEditor({ tasks, onChange, onSave, saving, hideSaveBu
               onClick={() => addTask(type)}
               className="px-3 py-2 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors"
             >
-              + {TASK_TYPE_LABELS[type]}
+              + <TaskTypeLabel type={type} />
             </button>
           ))}
         </div>
@@ -139,7 +149,7 @@ export default function TaskEditor({ tasks, onChange, onSave, saving, hideSaveBu
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold">
-                    {TASK_TYPE_LABELS[task.task_type]}
+                    <TaskTypeLabel type={task.task_type} />
                   </span>
                   <span className="text-sm font-semibold text-gray-700">Task {index + 1}</span>
                 </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { Paperclip } from "lucide-react";
 import type { HomeworkQuestion } from "@/lib/homework.types";
 
 interface QuestionRendererProps {
@@ -275,7 +276,7 @@ export function QuestionRenderer({
           <div className="space-y-3">
             {question.instructions && (
               <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                📎 {question.instructions}
+                <Paperclip className="inline w-4 h-4" /> {question.instructions}
               </p>
             )}
 

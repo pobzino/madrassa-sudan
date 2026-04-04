@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { SlideType, SlideInteractionType } from '@/lib/slides.types';
 import { ACTIVITY_TYPE_OPTIONS } from '@/lib/lesson-activities';
+import ActivityTypeIcon from '@/components/ActivityTypeIcon';
 
 export interface InteractiveSlideRequest {
   interactionType: SlideInteractionType;
@@ -149,7 +150,7 @@ export default function SlideToolbar({
                   }}
                   className="w-full flex items-start gap-3 px-4 py-3 rounded-xl border border-gray-100 hover:border-amber-300 hover:bg-amber-50/50 transition-all text-left group"
                 >
-                  <span className="text-2xl flex-shrink-0 mt-0.5">{opt.icon}</span>
+                  <span className="flex-shrink-0 mt-0.5 text-gray-500 group-hover:text-amber-600"><ActivityTypeIcon name={opt.icon} className="w-6 h-6" /></span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-gray-900 group-hover:text-amber-800">{opt.label}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{opt.hint}</p>

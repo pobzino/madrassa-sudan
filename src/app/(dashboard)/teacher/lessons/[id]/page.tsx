@@ -33,6 +33,7 @@ import {
   normalizeLessonTaskForm,
   syncTaskFormsFromSlides,
 } from "@/lib/lesson-activities";
+import ActivityTypeIcon from "@/components/ActivityTypeIcon";
 import type { LessonTaskForm } from "@/lib/tasks.types";
 import { toPlayableVideoUrl } from "@/lib/bunny-playback";
 import { getLessonPublishReadiness } from "@/lib/lessons/publish-readiness";
@@ -2300,7 +2301,7 @@ function ActivitiesTab({
                   }}
                   className="group flex w-full items-start gap-3 rounded-xl border border-gray-100 px-4 py-3 text-left transition-all hover:border-emerald-200 hover:bg-emerald-50/60"
                 >
-                  <span className="mt-0.5 text-2xl">{option.icon}</span>
+                  <span className="mt-0.5 text-gray-500 group-hover:text-emerald-600"><ActivityTypeIcon name={option.icon} className="w-6 h-6" /></span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-gray-900 group-hover:text-emerald-800">
                       {option.label}

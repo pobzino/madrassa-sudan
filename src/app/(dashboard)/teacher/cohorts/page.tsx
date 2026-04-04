@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { Plus, School, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
@@ -172,7 +173,7 @@ export default function TeacherCohortsPage() {
             onClick={() => setShowCreateModal(true)}
             className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors flex items-center gap-2"
           >
-            <span>➕</span>
+            <Plus className="w-4 h-4" />
             Create Class
           </button>
         </div>
@@ -180,7 +181,7 @@ export default function TeacherCohortsPage() {
         {/* Classes Grid */}
         {cohorts.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-            <span className="text-6xl mb-4 block">🏫</span>
+            <School className="w-16 h-16 mx-auto mb-4 text-gray-300" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">No classes yet</h2>
             <p className="text-gray-500 mb-4">Create your first class to get started</p>
             <button
@@ -218,7 +219,7 @@ export default function TeacherCohortsPage() {
 
                   <div className="flex items-center gap-4 mb-4">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">👥</span>
+                      <Users className="w-5 h-5 text-gray-500" />
                       <span className="text-gray-600">{cohort.student_count} students</span>
                     </div>
                     {cohort.pending_count > 0 && (

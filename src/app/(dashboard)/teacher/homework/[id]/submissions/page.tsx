@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
+import { ClipboardList } from "lucide-react";
 import { SubmissionQueue } from "@/components/homework/HomeworkList";
 import { GradingInterface } from "@/components/homework/GradingInterface";
 import type { SubmissionQueueItem, RubricCriterion } from "@/lib/homework.types";
@@ -333,7 +334,7 @@ export default function HomeworkSubmissionsPage() {
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
-              <span className="text-6xl mb-4 block">📝</span>
+              <ClipboardList className="w-16 h-16 mx-auto mb-4 text-gray-300" />
               <h2 className="text-xl font-semibold text-gray-900 mb-2">Select a submission</h2>
               <p className="text-gray-500">Choose a student from the list to start grading</p>
             </div>

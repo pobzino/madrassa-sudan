@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
+import { Users, BookOpen, ClipboardList, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 
@@ -629,7 +630,7 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
             </div>
             {students.length === 0 ? (
               <div className="p-12 text-center">
-                <span className="text-5xl mb-4 block">👥</span>
+                <Users className="w-14 h-14 mx-auto mb-4 text-gray-300" />
                 <h2 className="text-lg font-semibold text-gray-900 mb-2">No students yet</h2>
                 <p className="text-gray-500">Share the join code with your students to get started</p>
               </div>
@@ -684,14 +685,14 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
                 href="/teacher/lessons"
                 className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors flex items-center gap-2"
               >
-                <span>➕</span>
+                <Plus className="w-4 h-4" />
                 Assign Lessons
               </Link>
             </div>
 
             {assignedLessons.length === 0 ? (
               <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-                <span className="text-5xl mb-4 block">📚</span>
+                <BookOpen className="w-14 h-14 mx-auto mb-4 text-gray-300" />
                 <h2 className="text-lg font-semibold text-gray-900 mb-2">No lessons assigned yet</h2>
                 <p className="text-gray-500 mb-4">
                   Open a lesson and select this class in the Class Access section to make it visible to students.
@@ -739,14 +740,14 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
                 href={`/teacher/homework/create?cohort=${cohort.id}`}
                 className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors flex items-center gap-2"
               >
-                <span>➕</span>
+                <Plus className="w-4 h-4" />
                 Create Assignment
               </Link>
             </div>
 
             {assignments.length === 0 ? (
               <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-                <span className="text-5xl mb-4 block">📝</span>
+                <ClipboardList className="w-14 h-14 mx-auto mb-4 text-gray-300" />
                 <h2 className="text-lg font-semibold text-gray-900 mb-2">No assignments yet</h2>
                 <p className="text-gray-500 mb-4">Create your first assignment for this class</p>
                 <Link

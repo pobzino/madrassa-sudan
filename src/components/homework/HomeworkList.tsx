@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ClipboardList, BookOpen } from "lucide-react";
 import type { AssignmentWithStats, SubmissionQueueItem } from "@/lib/homework.types";
 
 // Teacher Homework List Component
@@ -33,7 +34,7 @@ export function TeacherHomeworkList({
   if (assignments.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-        <span className="text-6xl mb-4 block">📝</span>
+        <ClipboardList className="w-16 h-16 mx-auto mb-4 text-gray-300" />
         <h3 className="text-xl font-semibold text-gray-900 mb-2">No assignments yet</h3>
         <p className="text-gray-500 mb-6">Create your first assignment to get started</p>
         <Link
@@ -191,7 +192,7 @@ export function StudentHomeworkList({ homework, isLoading }: StudentHomeworkList
   if (homework.length === 0) {
     return (
       <div className="text-center py-16">
-        <span className="text-6xl mb-4 block">📚</span>
+        <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-300" />
         <h3 className="text-lg font-semibold text-gray-900 mb-2">No homework assigned</h3>
         <p className="text-gray-500">When your teacher assigns homework, it will appear here</p>
       </div>

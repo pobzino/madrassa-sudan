@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { OwlThinking, OwlSad } from "@/components/illustrations";
+import { School } from "lucide-react";
 import type { Profile } from "@/lib/database.types";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 
@@ -469,7 +470,7 @@ export default function CohortsPage() {
                 </div>
               ) : (
                 <div className="text-center py-16">
-                  <span className="text-6xl mb-4 block">🏫</span>
+                  <School className="w-16 h-16 mx-auto mb-4 text-gray-300" />
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">{t.noAvailableClasses}</h3>
                 </div>
               )}

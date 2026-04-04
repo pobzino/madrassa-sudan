@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { OwlTutorIcon } from "@/components/illustrations";
+import { Users, BookOpen, ClipboardList, PenLine, Plus, School, CheckSquare, FileText, UserCircle } from "lucide-react";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 
@@ -427,7 +428,7 @@ export default function TeacherDashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-3xl">👥</span>
+              <Users className="w-7 h-7 text-emerald-600" />
               <span className="text-2xl font-bold text-gray-900">{stats.totalStudents}</span>
             </div>
             <p className="text-sm text-gray-500">Total Students</p>
@@ -435,7 +436,7 @@ export default function TeacherDashboard() {
 
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-3xl">📚</span>
+              <BookOpen className="w-7 h-7 text-purple-600" />
               <span className="text-2xl font-bold text-gray-900">{stats.totalClasses}</span>
             </div>
             <p className="text-sm text-gray-500">My Classes</p>
@@ -443,7 +444,7 @@ export default function TeacherDashboard() {
 
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-3xl">📝</span>
+              <ClipboardList className="w-7 h-7 text-amber-600" />
               <span className="text-2xl font-bold text-amber-600">{stats.pendingGrading}</span>
             </div>
             <p className="text-sm text-gray-500">Pending Grading</p>
@@ -451,7 +452,7 @@ export default function TeacherDashboard() {
 
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-3xl">✏️</span>
+              <PenLine className="w-7 h-7 text-blue-600" />
               <span className="text-2xl font-bold text-gray-900">{stats.assignmentsCreated}</span>
             </div>
             <p className="text-sm text-gray-500">Assignments Created</p>
@@ -520,7 +521,7 @@ export default function TeacherDashboard() {
             href="/teacher/homework/create"
             className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-2xl p-6 hover:opacity-90 transition-opacity"
           >
-            <span className="text-3xl mb-3 block">➕</span>
+            <Plus className="w-8 h-8 mb-3" />
             <h3 className="font-semibold text-lg mb-1">Create Assignment</h3>
             <p className="text-emerald-100 text-sm">Create new homework for your classes</p>
           </Link>
@@ -529,7 +530,7 @@ export default function TeacherDashboard() {
             href="/teacher/lessons"
             className="bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-2xl p-6 hover:opacity-90 transition-opacity"
           >
-            <span className="text-3xl mb-3 block">📚</span>
+            <BookOpen className="w-8 h-8 mb-3" />
             <h3 className="font-semibold text-lg mb-1">Manage Lessons</h3>
             <p className="text-purple-100 text-sm">Edit lessons and content blocks</p>
           </Link>
@@ -538,7 +539,7 @@ export default function TeacherDashboard() {
             href="/teacher/cohorts"
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-2xl p-6 hover:opacity-90 transition-opacity"
           >
-            <span className="text-3xl mb-3 block">🏫</span>
+            <School className="w-8 h-8 mb-3" />
             <h3 className="font-semibold text-lg mb-1">Manage Classes</h3>
             <p className="text-blue-100 text-sm">View and manage your classes</p>
           </Link>
@@ -547,7 +548,7 @@ export default function TeacherDashboard() {
             href="/teacher/homework"
             className="bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-2xl p-6 hover:opacity-90 transition-opacity"
           >
-            <span className="text-3xl mb-3 block">✅</span>
+            <CheckSquare className="w-8 h-8 mb-3" />
             <h3 className="font-semibold text-lg mb-1">Grade Submissions</h3>
             <p className="text-amber-100 text-sm">{stats.pendingGrading} submissions waiting</p>
           </Link>
@@ -569,7 +570,7 @@ export default function TeacherDashboard() {
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                     activity.type === "submission" ? "bg-emerald-100" : "bg-blue-100"
                   }`}>
-                    {activity.type === "submission" ? "📄" : "👤"}
+                    {activity.type === "submission" ? <FileText className="w-5 h-5 text-emerald-700" /> : <UserCircle className="w-5 h-5 text-blue-700" />}
                   </div>
                   <div className="flex-1">
                     <p className="text-gray-900">{activity.description}</p>

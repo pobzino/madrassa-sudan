@@ -13,6 +13,9 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.25",
     "@ai-sdk/react": "^3.0.70",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@supabase/ssr": "^0.8.0",
@@ -20,6 +23,7 @@
     "ai": "^6.0.68",
     "fix-webm-duration": "^1.0.6",
     "html-to-image": "^1.11.13",
+    "lucide-react": "^1.7.0",
     "next": "16.1.6",
     "openai": "^6.17.0",
     "react": "19.2.3",

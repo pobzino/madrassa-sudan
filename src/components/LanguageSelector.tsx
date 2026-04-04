@@ -1,5 +1,6 @@
 "use client";
 
+import { BookOpen, Globe } from "lucide-react";
 import { useLanguage, Language } from "@/contexts/LanguageContext";
 
 export function LanguageSelector() {
@@ -24,7 +25,7 @@ export function LanguageSelector() {
         <div className="p-8 text-center">
           {/* Logo/Icon */}
           <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-            <span className="text-4xl">📚</span>
+            <BookOpen className="w-10 h-10 text-white" />
           </div>
 
           {/* Title - Both languages */}
@@ -56,7 +57,7 @@ export function LanguageSelector() {
               onClick={() => handleSelectLanguage("en")}
               className="w-full py-4 px-6 bg-white border-2 border-gray-200 text-gray-800 rounded-xl font-semibold hover:border-emerald-500 hover:bg-emerald-50 transition-all hover:-translate-y-0.5 flex items-center justify-center gap-3"
             >
-              <span className="text-2xl">🌍</span>
+              <Globe className="w-6 h-6" />
               <span className="text-lg">English</span>
               <span className="text-sm text-gray-500">(الإنجليزية)</span>
             </button>

@@ -43,14 +43,14 @@ export const ACTIVITY_TYPE_OPTIONS: Array<{
   icon: string;
   hint: string;
 }> = [
-  { type: 'free_response', label: 'Free Response', icon: '💬', hint: 'Best for open questions and written reflection' },
-  { type: 'choose_correct', label: 'Multiple Choice', icon: '🔘', hint: 'Best for vocabulary & comprehension checks' },
-  { type: 'true_false', label: 'True / False', icon: '✅', hint: 'Best for quick fact review' },
-  { type: 'fill_missing_word', label: 'Fill the Blank', icon: '✏️', hint: 'Best for sentence completion & grammar' },
-  { type: 'tap_to_count', label: 'Tap to Count', icon: '🔢', hint: 'Best for early math & counting practice' },
-  { type: 'match_pairs', label: 'Match Pairs', icon: '🔗', hint: 'Best for linking terms to definitions' },
-  { type: 'sequence_order', label: 'Put in Order', icon: '📊', hint: 'Best for steps, timelines & processes' },
-  { type: 'sort_groups', label: 'Sort into Groups', icon: '📂', hint: 'Best for classification & categorization' },
+  { type: 'free_response', label: 'Free Response', icon: 'message-square', hint: 'Best for open questions and written reflection' },
+  { type: 'choose_correct', label: 'Multiple Choice', icon: 'circle-check', hint: 'Best for vocabulary & comprehension checks' },
+  { type: 'true_false', label: 'True / False', icon: 'scale', hint: 'Best for quick fact review' },
+  { type: 'fill_missing_word', label: 'Fill the Blank', icon: 'pen-line', hint: 'Best for sentence completion & grammar' },
+  { type: 'tap_to_count', label: 'Tap to Count', icon: 'hash', hint: 'Best for early math & counting practice' },
+  { type: 'match_pairs', label: 'Match Pairs', icon: 'link-2', hint: 'Best for linking terms to definitions' },
+  { type: 'sequence_order', label: 'Put in Order', icon: 'arrow-up-down', hint: 'Best for steps, timelines & processes' },
+  { type: 'sort_groups', label: 'Sort into Groups', icon: 'folder-input', hint: 'Best for classification & categorization' },
 ];
 
 export function normalizeTaskType(taskType: string): TaskType {

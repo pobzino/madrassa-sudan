@@ -7,6 +7,18 @@ import {
   getSlideInteractionOptions,
   getSlideInteractionTargets,
 } from '@/lib/slide-interactions';
+import {
+  MessageSquare,
+  CircleCheck,
+  Scale,
+  PenLine,
+  Hash,
+  Link2,
+  ArrowUpDown,
+  FolderInput,
+  Target,
+  type LucideIcon,
+} from 'lucide-react';
 
 interface Props {
   slide: Slide;
@@ -17,7 +29,7 @@ interface Props {
 /* ─── Theme config per interaction type ─── */
 
 interface InteractionTheme {
-  emoji: string;
+  icon: LucideIcon;
   label_ar: string;
   label_en: string;
   gradient: string;
@@ -35,7 +47,7 @@ interface InteractionTheme {
 
 const INTERACTION_THEMES: Record<string, InteractionTheme> = {
   free_response: {
-    emoji: '💬',
+    icon: MessageSquare,
     label_ar: 'إجابة حرة',
     label_en: 'Free Response',
     gradient: 'from-slate-50 via-white to-emerald-50',
@@ -51,7 +63,7 @@ const INTERACTION_THEMES: Record<string, InteractionTheme> = {
     decorStar: 'text-slate-400/50',
   },
   choose_correct: {
-    emoji: '🅰️',
+    icon: CircleCheck,
     label_ar: 'اختيار من متعدد',
     label_en: 'Choose the Answer',
     gradient: 'from-emerald-50 via-white to-green-50',
@@ -67,7 +79,7 @@ const INTERACTION_THEMES: Record<string, InteractionTheme> = {
     decorStar: 'text-emerald-400/50',
   },
   true_false: {
-    emoji: '⚖️',
+    icon: Scale,
     label_ar: 'صح أو خطأ',
     label_en: 'True or False',
     gradient: 'from-blue-50 via-white to-indigo-50',
@@ -83,7 +95,7 @@ const INTERACTION_THEMES: Record<string, InteractionTheme> = {
     decorStar: 'text-blue-400/50',
   },
   fill_missing_word: {
-    emoji: '✏️',
+    icon: PenLine,
     label_ar: 'أكمل الكلمة',
     label_en: 'Fill the Blank',
     gradient: 'from-violet-50 via-white to-purple-50',
@@ -99,7 +111,7 @@ const INTERACTION_THEMES: Record<string, InteractionTheme> = {
     decorStar: 'text-violet-400/50',
   },
   tap_to_count: {
-    emoji: '🔢',
+    icon: Hash,
     label_ar: 'اضغط للعد',
     label_en: 'Count Them',
     gradient: 'from-amber-50 via-[#FFFBEB] to-yellow-50',
@@ -115,7 +127,7 @@ const INTERACTION_THEMES: Record<string, InteractionTheme> = {
     decorStar: 'text-amber-400/50',
   },
   match_pairs: {
-    emoji: '🔗',
+    icon: Link2,
     label_ar: 'طابق الأزواج',
     label_en: 'Match Pairs',
     gradient: 'from-teal-50 via-white to-cyan-50',
@@ -131,7 +143,7 @@ const INTERACTION_THEMES: Record<string, InteractionTheme> = {
     decorStar: 'text-teal-400/50',
   },
   sequence_order: {
-    emoji: '🔢',
+    icon: ArrowUpDown,
     label_ar: 'رتّب التسلسل',
     label_en: 'Put in Order',
     gradient: 'from-orange-50 via-white to-red-50',
@@ -147,7 +159,7 @@ const INTERACTION_THEMES: Record<string, InteractionTheme> = {
     decorStar: 'text-orange-400/50',
   },
   sort_groups: {
-    emoji: '📦',
+    icon: FolderInput,
     label_ar: 'صنّف في مجموعات',
     label_en: 'Sort Into Groups',
     gradient: 'from-pink-50 via-white to-rose-50',
@@ -165,7 +177,7 @@ const INTERACTION_THEMES: Record<string, InteractionTheme> = {
 };
 
 const DEFAULT_THEME: InteractionTheme = {
-  emoji: '🎯',
+  icon: Target,
   label_ar: 'نشاط',
   label_en: 'Activity',
   gradient: 'from-[#FFF7ED] via-[#FFFBEB] to-amber-100',
@@ -353,7 +365,7 @@ function InteractionPreview({ slide, language, showAnswer = false }: Props) {
                   key={index}
                   className={`inline-block rounded-xl border border-pink-300/40 bg-pink-100/50 px-3 py-1 text-[10px] font-semibold text-pink-700 ${isAr ? 'font-cairo' : 'font-inter'}`}
                 >
-                  📦 {target}
+                  <FolderInput className="inline w-3 h-3" /> {target}
                 </span>
               ))}
             </div>
@@ -432,8 +444,8 @@ export default function ActivitySlide({ slide, language, showAnswer = false }: P
     return (
       <div dir={isAr ? 'rtl' : 'ltr'} className="relative w-full h-full flex flex-col items-center p-8 sm:p-12 overflow-y-auto" style={{ justifyContent: 'safe center' }}>
         <SlideBackgroundImage src={slide.image_url!} />
-        <span className={`relative z-10 inline-block px-5 py-2 bg-gradient-to-r ${theme.badgeGradient} text-white rounded-full text-xs sm:text-sm font-bold mb-3 shadow-md`}>
-          {theme.emoji} {isAr ? theme.label_ar : theme.label_en}
+        <span className={`relative z-10 inline-flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r ${theme.badgeGradient} text-white rounded-full text-xs sm:text-sm font-bold mb-3 shadow-md`}>
+          <theme.icon className="w-4 h-4" /> {isAr ? theme.label_ar : theme.label_en}
         </span>
         <h2 className={`relative z-10 font-fredoka font-bold text-white text-center mb-4 drop-shadow-lg ${getSlideTitleClasses(slide.title_size)} ${isAr ? 'font-cairo' : ''}`}>
           {title}
@@ -477,8 +489,8 @@ export default function ActivitySlide({ slide, language, showAnswer = false }: P
       )}
 
       {/* Badge — colored per interaction type */}
-      <span className={`relative z-10 inline-block px-5 py-2 bg-gradient-to-r ${theme.badgeGradient} text-white rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-5 shadow-md`}>
-        {theme.emoji} {isAr ? theme.label_ar : theme.label_en}
+      <span className={`relative z-10 inline-flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r ${theme.badgeGradient} text-white rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-5 shadow-md`}>
+        <theme.icon className="w-4 h-4" /> {isAr ? theme.label_ar : theme.label_en}
       </span>
 
       {/* Title */}
@@ -495,7 +507,7 @@ export default function ActivitySlide({ slide, language, showAnswer = false }: P
 
       {showAnswer && (
         <span className="relative z-10 mt-4 inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/90 px-4 py-1.5 text-xs font-semibold text-gray-700 shadow-sm">
-          <span className="text-base">{theme.emoji}</span>
+          <theme.icon className="w-4 h-4" />
           {answerLabel}
         </span>
       )}

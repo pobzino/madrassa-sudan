@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
+import { ClipboardList } from "lucide-react";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 
 interface Question {
@@ -434,7 +435,7 @@ export default function GradeHomeworkPage({ params }: { params: Promise<{ id: st
               </div>
             ) : (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
-                <span className="text-5xl mb-4 block">📝</span>
+                <ClipboardList className="w-14 h-14 mx-auto mb-4 text-gray-300" />
                 <h2 className="text-lg font-semibold text-gray-900 mb-2">Select a submission</h2>
                 <p className="text-gray-500">Choose a student&apos;s submission from the list to start grading</p>
               </div>

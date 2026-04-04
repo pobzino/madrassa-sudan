@@ -7,6 +7,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { OwlThinking, OwlCelebrating } from "@/components/illustrations";
 import type { Subject } from "@/lib/database.types";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
+import { Clapperboard, BookOpen, GraduationCap, PenLine, ClipboardCheck, Flame, Star, Trophy, CircleDot, Sparkles, type LucideIcon } from "lucide-react";
 
 const translations = {
   ar: {
@@ -118,16 +119,16 @@ const Icons = {
 
 // Achievement definitions
 const achievements = [
-  { id: "first_lesson", icon: "🎬", titleAr: "أول درس", titleEn: "First Lesson", descAr: "أكمل درسك الأول", descEn: "Complete your first lesson", requirement: (stats: Stats) => stats.lessons >= 1 },
-  { id: "five_lessons", icon: "📚", titleAr: "قارئ نهم", titleEn: "Bookworm", descAr: "أكمل 5 دروس", descEn: "Complete 5 lessons", requirement: (stats: Stats) => stats.lessons >= 5 },
-  { id: "ten_lessons", icon: "🎓", titleAr: "طالب مجتهد", titleEn: "Dedicated Student", descAr: "أكمل 10 دروس", descEn: "Complete 10 lessons", requirement: (stats: Stats) => stats.lessons >= 10 },
-  { id: "first_homework", icon: "✏️", titleAr: "أول واجب", titleEn: "First Homework", descAr: "أكمل واجبك الأول", descEn: "Complete your first homework", requirement: (stats: Stats) => stats.homework >= 1 },
-  { id: "five_homework", icon: "📝", titleAr: "منجز الواجبات", titleEn: "Homework Hero", descAr: "أكمل 5 واجبات", descEn: "Complete 5 homework assignments", requirement: (stats: Stats) => stats.homework >= 5 },
-  { id: "three_streak", icon: "🔥", titleAr: "3 أيام متتالية", titleEn: "3 Day Streak", descAr: "حافظ على سلسلة 3 أيام", descEn: "Maintain a 3-day streak", requirement: (stats: Stats) => stats.streak >= 3 },
-  { id: "week_streak", icon: "⭐", titleAr: "أسبوع كامل", titleEn: "Week Warrior", descAr: "حافظ على سلسلة 7 أيام", descEn: "Maintain a 7-day streak", requirement: (stats: Stats) => stats.streak >= 7 },
-  { id: "month_streak", icon: "🏆", titleAr: "بطل الشهر", titleEn: "Monthly Champion", descAr: "حافظ على سلسلة 30 يوم", descEn: "Maintain a 30-day streak", requirement: (stats: Stats) => stats.longestStreak >= 30 },
-  { id: "hundred_points", icon: "💯", titleAr: "100 نقطة", titleEn: "Century", descAr: "اجمع 100 نقطة", descEn: "Earn 100 points", requirement: (stats: Stats) => stats.points >= 100 },
-  { id: "five_hundred_points", icon: "🌟", titleAr: "نجم ساطع", titleEn: "Rising Star", descAr: "اجمع 500 نقطة", descEn: "Earn 500 points", requirement: (stats: Stats) => stats.points >= 500 },
+  { id: "first_lesson", Icon: Clapperboard, titleAr: "أول درس", titleEn: "First Lesson", descAr: "أكمل درسك الأول", descEn: "Complete your first lesson", requirement: (stats: Stats) => stats.lessons >= 1 },
+  { id: "five_lessons", Icon: BookOpen, titleAr: "قارئ نهم", titleEn: "Bookworm", descAr: "أكمل 5 دروس", descEn: "Complete 5 lessons", requirement: (stats: Stats) => stats.lessons >= 5 },
+  { id: "ten_lessons", Icon: GraduationCap, titleAr: "طالب مجتهد", titleEn: "Dedicated Student", descAr: "أكمل 10 دروس", descEn: "Complete 10 lessons", requirement: (stats: Stats) => stats.lessons >= 10 },
+  { id: "first_homework", Icon: PenLine, titleAr: "أول واجب", titleEn: "First Homework", descAr: "أكمل واجبك الأول", descEn: "Complete your first homework", requirement: (stats: Stats) => stats.homework >= 1 },
+  { id: "five_homework", Icon: ClipboardCheck, titleAr: "منجز الواجبات", titleEn: "Homework Hero", descAr: "أكمل 5 واجبات", descEn: "Complete 5 homework assignments", requirement: (stats: Stats) => stats.homework >= 5 },
+  { id: "three_streak", Icon: Flame, titleAr: "3 أيام متتالية", titleEn: "3 Day Streak", descAr: "حافظ على سلسلة 3 أيام", descEn: "Maintain a 3-day streak", requirement: (stats: Stats) => stats.streak >= 3 },
+  { id: "week_streak", Icon: Star, titleAr: "أسبوع كامل", titleEn: "Week Warrior", descAr: "حافظ على سلسلة 7 أيام", descEn: "Maintain a 7-day streak", requirement: (stats: Stats) => stats.streak >= 7 },
+  { id: "month_streak", Icon: Trophy, titleAr: "بطل الشهر", titleEn: "Monthly Champion", descAr: "حافظ على سلسلة 30 يوم", descEn: "Maintain a 30-day streak", requirement: (stats: Stats) => stats.longestStreak >= 30 },
+  { id: "hundred_points", Icon: CircleDot, titleAr: "100 نقطة", titleEn: "Century", descAr: "اجمع 100 نقطة", descEn: "Earn 100 points", requirement: (stats: Stats) => stats.points >= 100 },
+  { id: "five_hundred_points", Icon: Sparkles, titleAr: "نجم ساطع", titleEn: "Rising Star", descAr: "اجمع 500 نقطة", descEn: "Earn 500 points", requirement: (stats: Stats) => stats.points >= 500 },
 ];
 
 type Stats = {
@@ -459,8 +460,8 @@ export default function ProgressPage() {
                       {Icons.lock}
                     </div>
                   )}
-                  <span className="text-4xl mb-2 block filter" style={{ filter: isUnlocked ? "none" : "grayscale(100%)" }}>
-                    {achievement.icon}
+                  <span className="mb-2 block" style={{ filter: isUnlocked ? "none" : "grayscale(100%)" }}>
+                    <achievement.Icon className={`w-10 h-10 mx-auto ${isUnlocked ? "text-amber-500" : "text-gray-400"}`} />
                   </span>
                   <p className={`text-base font-semibold font-fredoka ${isUnlocked ? "text-gray-900" : "text-gray-500"}`}>
                     {language === "ar" ? achievement.titleAr : achievement.titleEn}

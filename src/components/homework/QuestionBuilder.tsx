@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CircleDot, AlignLeft, FileText, Paperclip, CheckCircle, type LucideIcon } from "lucide-react";
 import type { CreateQuestionInput, RubricCriterion } from "@/lib/homework.types";
 
 type QuestionType = CreateQuestionInput["question_type"];
@@ -13,12 +14,12 @@ interface QuestionBuilderProps {
   onDuplicate: () => void;
 }
 
-const questionTypeLabels: Record<QuestionType, { ar: string; en: string; icon: string }> = {
-  multiple_choice: { ar: "اختيار من متعدد", en: "Multiple Choice", icon: "🔘" },
-  short_answer: { ar: "إجابة قصيرة", en: "Short Answer", icon: "📝" },
-  long_answer: { ar: "إجابة طويلة", en: "Long Answer", icon: "📄" },
-  file_upload: { ar: "رفع ملف", en: "File Upload", icon: "📎" },
-  true_false: { ar: "صح/خطأ", en: "True/False", icon: "✓/✗" },
+const questionTypeLabels: Record<QuestionType, { ar: string; en: string; Icon: LucideIcon }> = {
+  multiple_choice: { ar: "اختيار من متعدد", en: "Multiple Choice", Icon: CircleDot },
+  short_answer: { ar: "إجابة قصيرة", en: "Short Answer", Icon: AlignLeft },
+  long_answer: { ar: "إجابة طويلة", en: "Long Answer", Icon: FileText },
+  file_upload: { ar: "رفع ملف", en: "File Upload", Icon: Paperclip },
+  true_false: { ar: "صح/خطأ", en: "True/False", Icon: CheckCircle },
 };
 
 export function QuestionBuilder({
@@ -86,7 +87,7 @@ export function QuestionBuilder({
           >
             {Object.entries(questionTypeLabels).map(([type, labels]) => (
               <option key={type} value={type}>
-                {labels.icon} {labels.en}
+                {labels.en}
               </option>
             ))}
           </select>

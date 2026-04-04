@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { Bug, Sparkles, RefreshCw, MessageCircle, type LucideIcon } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
 
@@ -57,11 +58,11 @@ const translations = {
 
 const CATEGORIES = ["bug", "feature", "change", "other"] as const;
 
-const CATEGORY_ICONS: Record<string, string> = {
-  bug: "🐛",
-  feature: "✨",
-  change: "🔄",
-  other: "💬",
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  bug: Bug,
+  feature: Sparkles,
+  change: RefreshCw,
+  other: MessageCircle,
 };
 
 interface FeedbackModalProps {
@@ -248,7 +249,7 @@ export default function FeedbackModal({ open, onClose }: FeedbackModalProps) {
                         : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                     }`}
                   >
-                    {CATEGORY_ICONS[cat]}{" "}
+                    {(() => { const Icon = CATEGORY_ICONS[cat]; return Icon ? <Icon className="inline w-4 h-4" /> : null; })()}{" "}
                     {t[cat as keyof typeof t]}
                   </button>
                 ))}

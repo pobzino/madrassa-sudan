@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLanguage } from '@/contexts/LanguageContext'
 import type { LessonTask, MatchingPairsData, SortingOrderData } from '@/lib/tasks.types'
+import { Link2, ArrowUpDown, PenLine, Tag, Brush, Mic, type LucideIcon } from 'lucide-react'
 import MatchingPairsTask from './MatchingPairsTask'
 import SortingOrderTask from './SortingOrderTask'
 
@@ -13,13 +14,13 @@ interface TaskOverlayProps {
   onSkip: () => void
 }
 
-const TASK_LABELS: Record<string, { ar: string; en: string; emoji: string; color: string }> = {
-  matching_pairs: { ar: 'وصّل الأزواج', en: 'Match Pairs', emoji: '🔗', color: 'amber' },
-  sorting_order: { ar: 'رتّب', en: 'Sort', emoji: '📊', color: 'violet' },
-  fill_in_blank_enhanced: { ar: 'املأ الفراغ', en: 'Fill Blanks', emoji: '✏️', color: 'blue' },
-  drag_drop_label: { ar: 'سمّ الأجزاء', en: 'Label It', emoji: '🏷️', color: 'teal' },
-  drawing_tracing: { ar: 'ارسم', en: 'Draw', emoji: '🎨', color: 'pink' },
-  audio_recording: { ar: 'سجّل صوتك', en: 'Record', emoji: '🎙️', color: 'red' },
+const TASK_LABELS: Record<string, { ar: string; en: string; icon: LucideIcon; color: string }> = {
+  matching_pairs: { ar: 'وصّل الأزواج', en: 'Match Pairs', icon: Link2, color: 'amber' },
+  sorting_order: { ar: 'رتّب', en: 'Sort', icon: ArrowUpDown, color: 'violet' },
+  fill_in_blank_enhanced: { ar: 'املأ الفراغ', en: 'Fill Blanks', icon: PenLine, color: 'blue' },
+  drag_drop_label: { ar: 'سمّ الأجزاء', en: 'Label It', icon: Tag, color: 'teal' },
+  drawing_tracing: { ar: 'ارسم', en: 'Draw', icon: Brush, color: 'pink' },
+  audio_recording: { ar: 'سجّل صوتك', en: 'Record', icon: Mic, color: 'red' },
 }
 
 export default function TaskOverlay({ task, lessonId, onComplete, onSkip }: TaskOverlayProps) {
@@ -154,7 +155,7 @@ export default function TaskOverlay({ task, lessonId, onComplete, onSkip }: Task
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span className={`px-3 py-1.5 bg-${label.color}-100 text-${label.color}-700 rounded-full text-sm font-bold`}>
-                  {label.emoji} {isAr ? label.ar : label.en}
+                  <label.icon className="inline w-4 h-4" /> {isAr ? label.ar : label.en}
                 </span>
                 {task.points > 0 && (
                   <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">

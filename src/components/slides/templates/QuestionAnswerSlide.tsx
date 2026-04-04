@@ -1,5 +1,6 @@
 import type { Slide } from '@/lib/slides.types';
 import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
+import { Lightbulb } from 'lucide-react';
 
 interface Props {
   slide: Slide;
@@ -35,7 +36,7 @@ export default function QuestionAnswerSlide({ slide, language, revealedCount, on
 
       {/* Badge */}
       <span className="relative z-10 inline-block px-5 py-2 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-4 shadow-md">
-        {isAr ? '💡 سؤال وجواب' : '💡 Q&A Reveal'}
+        <Lightbulb className="inline w-4 h-4" /> {isAr ? 'سؤال وجواب' : 'Q&A Reveal'}
       </span>
 
       {/* Question (title) */}
