@@ -28,14 +28,6 @@ import {
   type SlideLanguageMode,
 } from '@/lib/slides-generation';
 
-type VideoUrls = {
-  video_url_1080p: string;
-  video_url_360p: string;
-  video_url_480p: string;
-  video_url_720p: string;
-  duration_seconds?: number;
-};
-
 type Subject = {
   name_ar?: string | null;
   name_en?: string | null;
@@ -68,23 +60,6 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
   const [languageMode, setLanguageMode] = useState<SlideLanguageMode>(
     requestedLanguageMode === 'en' ? 'en' : 'ar'
   );
-
-  const handleVideoReady = useCallback(async (urls: VideoUrls) => {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from('lessons')
-      .update({
-        video_url_1080p: urls.video_url_1080p,
-        video_url_360p: urls.video_url_360p,
-        video_url_480p: urls.video_url_480p,
-        video_url_720p: urls.video_url_720p,
-        ...(urls.duration_seconds != null ? { video_duration_seconds: urls.duration_seconds } : {}),
-      })
-      .eq('id', id);
-    if (error) {
-      console.error('Failed to save video URLs:', error);
-    }
-  }, [id]);
 
   const loadData = useCallback(async () => {
     const supabase = createClient();
@@ -358,7 +333,6 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
             preferredLanguage={languageMode === 'en' ? 'en' : 'ar'}
             lessonId={id}
             lessonTitle={lessonTitle}
-            onVideoReady={handleVideoReady}
           />
         </div>
       )}

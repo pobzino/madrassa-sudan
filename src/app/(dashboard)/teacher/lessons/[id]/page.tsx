@@ -249,30 +249,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
   const [lessonTasks, setLessonTasks] = useState<LessonTaskForm[]>([]);
 
-  const persistLessonVideoUrls = useCallback(
-    async (urls: LessonVideoUrls) => {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("lessons")
-        .update({
-          video_url_1080p: urls.video_url_1080p,
-          video_url_360p: urls.video_url_360p,
-          video_url_480p: urls.video_url_480p,
-          video_url_720p: urls.video_url_720p,
-          ...(urls.duration_seconds != null
-            ? { video_duration_seconds: urls.duration_seconds }
-            : {}),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
-
-      if (error) {
-        throw new Error(error.message);
-      }
-    },
-    [id]
-  );
-
   const loadLesson = useCallback(async () => {
     const supabase = createClient();
     const user = await getCachedUser(supabase);
@@ -560,36 +536,8 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const handleSlideVideoReady = useCallback(
     async (urls: LessonVideoUrls) => {
       setForm((prev) => applyVideoUrlsToForm(prev, urls));
-
-      try {
-        await persistLessonVideoUrls(urls);
-        const nextVideoKey = getLessonVideoKey({
-          video_url_1080p: urls.video_url_1080p,
-          video_url_360p: urls.video_url_360p,
-          video_url_480p: urls.video_url_480p,
-          video_url_720p: urls.video_url_720p,
-          video_duration_seconds:
-            urls.duration_seconds != null ? String(urls.duration_seconds) : "",
-        });
-
-        if (form.is_published && nextVideoKey) {
-          await processPublishedVideo("Recorded video saved.");
-          lastPersistedPublishedRef.current = true;
-          lastPersistedVideoKeyRef.current = nextVideoKey;
-        } else {
-          lastPersistedPublishedRef.current = form.is_published;
-          lastPersistedVideoKeyRef.current = nextVideoKey;
-          setSaveMessage({ type: "success", text: "Recorded video saved" });
-          setTimeout(() => setSaveMessage(null), 2000);
-        }
-      } catch (error) {
-        setSaveMessage({
-          type: "error",
-          text: error instanceof Error ? error.message : "Video save failed",
-        });
-      }
     },
-    [form.is_published, persistLessonVideoUrls, processPublishedVideo]
+    []
   );
 
   const slideGenerationBlockedReason = getCurriculumRequirementMessage(

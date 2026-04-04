@@ -5,7 +5,7 @@ import * as tus from 'tus-js-client';
 
 export type BlobUploadState = 'idle' | 'uploading' | 'uploaded' | 'transcoding' | 'ready' | 'error';
 
-interface VideoUrls {
+export interface VideoUrls {
   video_url_1080p: string;
   video_url_360p: string;
   video_url_480p: string;
@@ -13,13 +13,13 @@ interface VideoUrls {
   duration_seconds?: number;
 }
 
-interface UseBunnyBlobUploadOptions {
+interface BlobUploadRequest {
   lessonId: string;
   lessonTitle: string;
 }
 
 interface UseBunnyBlobUploadReturn {
-  upload: (blob: Blob) => Promise<void>;
+  upload: (blob: Blob, request: BlobUploadRequest) => Promise<void>;
   state: BlobUploadState;
   progress: number;
   videoUrls: VideoUrls | null;
@@ -31,10 +31,7 @@ interface UseBunnyBlobUploadReturn {
 const POLL_INTERVAL = 5000;
 const POLL_TIMEOUT = 15 * 60 * 1000;
 
-export function useBunnyBlobUpload({
-  lessonId,
-  lessonTitle,
-}: UseBunnyBlobUploadOptions): UseBunnyBlobUploadReturn {
+export function useBunnyBlobUpload(): UseBunnyBlobUploadReturn {
   const [state, setState] = useState<BlobUploadState>('idle');
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -126,7 +123,16 @@ export function useBunnyBlobUpload({
     }, POLL_INTERVAL);
   }, []);
 
-  const upload = useCallback(async (blob: Blob) => {
+  const upload = useCallback(async (blob: Blob, request: BlobUploadRequest) => {
+    const lessonId = request.lessonId.trim();
+    const lessonTitle = request.lessonTitle.trim() || 'Recording';
+
+    if (!lessonId) {
+      setState('error');
+      setErrorMessage('Lesson ID is required for upload.');
+      return;
+    }
+
     if (blob.size === 0) {
       setState('error');
       setErrorMessage('Recorded video is empty. Please retake the recording.');
@@ -194,7 +200,7 @@ export function useBunnyBlobUpload({
       setState('error');
       setErrorMessage(error instanceof Error ? error.message : 'Upload failed');
     }
-  }, [lessonId, lessonTitle, pollTranscodeStatus]);
+  }, [pollTranscodeStatus]);
 
   const cancel = useCallback(() => {
     if (uploadRef.current) {

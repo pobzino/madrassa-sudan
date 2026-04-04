@@ -9,8 +9,8 @@ import SlideEditPanel from './SlideEditPanel';
 import SlideToolbar, { type InteractiveSlideRequest } from './SlideToolbar';
 import RecordingOverlay from './RecordingOverlay';
 import RecordingReviewModal from './RecordingReviewModal';
+import { useBackgroundVideoUpload } from '@/contexts/BackgroundVideoUploadContext';
 import { useSlideRecorder } from '@/hooks/useSlideRecorder';
-import { useBunnyBlobUpload } from '@/hooks/useBunnyBlobUpload';
 
 interface InteractivePlaceholders {
   title_ar: string;
@@ -321,11 +321,7 @@ export default function SlideEditor({
     canvasRef,
     snapshotSlide,
   } = useSlideRecorder({ slideContainerRef });
-
-  const bunnyUpload = useBunnyBlobUpload({
-    lessonId: lessonId || '',
-    lessonTitle: lessonTitle || 'Recording',
-  });
+  const backgroundVideoUpload = useBackgroundVideoUpload();
 
   const selectedSlide = slides[selectedIndex] || null;
   const deckHasRequiredSlides = slides.some((slide) => slide.is_required);
@@ -412,13 +408,6 @@ export default function SlideEditor({
       return () => clearTimeout(timeout);
     }
   }, [recorderState, recordedBlob]);
-
-  // When upload completes, notify parent
-  useEffect(() => {
-    if (bunnyUpload.state === 'ready' && bunnyUpload.videoUrls && onVideoReady) {
-      onVideoReady(bunnyUpload.videoUrls);
-    }
-  }, [bunnyUpload.state, bunnyUpload.videoUrls, onVideoReady]);
 
   // Keyboard navigation for present mode
   useEffect(() => {
@@ -617,24 +606,32 @@ export default function SlideEditor({
 
   function handleRetake() {
     setShowReviewModal(false);
-    bunnyUpload.reset();
     startRecord();
   }
 
   function handleDiscard() {
     setShowReviewModal(false);
-    bunnyUpload.reset();
   }
 
-  function handleUpload(editedBlob?: Blob) {
+  async function handleUpload(editedBlob?: Blob) {
     const blobToUpload = editedBlob || recordedBlob;
-    if (blobToUpload) {
-      bunnyUpload.upload(blobToUpload);
+    if (!blobToUpload || !lessonId) {
+      return;
     }
-  }
 
-  function handleCancelUpload() {
-    bunnyUpload.cancel();
+    const result = await backgroundVideoUpload.startUpload({
+      blob: blobToUpload,
+      lessonId,
+      lessonTitle: lessonTitle || 'Recording',
+      onVideoReady,
+    });
+
+    if (!result.ok) {
+      window.alert(result.error);
+      return;
+    }
+
+    setShowReviewModal(false);
   }
 
   const handlePreviousWhileRecording = useCallback(() => {
@@ -872,13 +869,9 @@ export default function SlideEditor({
       {showReviewModal && recordedBlob && (
         <RecordingReviewModal
           blob={recordedBlob}
-          uploadState={bunnyUpload.state}
-          uploadProgress={bunnyUpload.progress}
-          uploadError={bunnyUpload.errorMessage}
           onUpload={handleUpload}
           onRetake={handleRetake}
           onDiscard={handleDiscard}
-          onCancel={handleCancelUpload}
         />
       )}
     </>
