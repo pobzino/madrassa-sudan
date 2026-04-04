@@ -42,10 +42,12 @@ type LessonRow = {
   subject: Subject | null;
   updated_at: string;
   slide_count: number;
+  creator_name: string | null;
 };
 
 export default function TeacherLessonsPage() {
-  const { loading: authLoading } = useTeacherGuard();
+  const { loading: authLoading, profile } = useTeacherGuard();
+  const isAdmin = profile?.role === "admin";
   const router = useRouter();
   const [lessons, setLessons] = useState<LessonRow[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -97,6 +99,9 @@ export default function TeacherLessonsPage() {
         ),
         lesson_slides (
           slides
+        ),
+        creator:profiles!created_by (
+          full_name
         )
       `
       )
@@ -110,6 +115,7 @@ export default function TeacherLessonsPage() {
         slidesData && slidesData.length > 0 && Array.isArray(slidesData[0]?.slides)
           ? slidesData[0].slides.length
           : 0;
+      const creatorData = row.creator as unknown as { full_name: string } | null;
       return {
         id: row.id,
         title_ar: row.title_ar,
@@ -119,6 +125,7 @@ export default function TeacherLessonsPage() {
         subject: row.subject as Subject | null,
         updated_at: row.updated_at,
         slide_count: slideCount,
+        creator_name: creatorData?.full_name || null,
       } as LessonRow;
     });
 
@@ -376,6 +383,11 @@ export default function TeacherLessonsPage() {
                     {lesson.slide_count > 0 && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-violet-50 text-violet-700">
                         {lesson.slide_count} slide{lesson.slide_count !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {isAdmin && lesson.creator_name && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-indigo-50 text-indigo-700">
+                        {lesson.creator_name}
                       </span>
                     )}
                     <span className="text-[11px] text-gray-400 ml-1">
