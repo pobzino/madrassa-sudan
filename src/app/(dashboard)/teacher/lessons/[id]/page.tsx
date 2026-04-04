@@ -7,6 +7,7 @@ import CurriculumTopicSelector from "@/components/teacher/CurriculumTopicSelecto
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
+import { useBackgroundVideoUpload } from "@/contexts/BackgroundVideoUploadContext";
 import {
   getCurriculumRequirementMessage,
   getCurriculumSelectionForLesson,
@@ -80,6 +81,7 @@ type LessonForm = {
 };
 
 type Tab = "details" | "activities" | "slides" | "results";
+type EditorSaveState = "saved" | "dirty" | "saving" | "error";
 
 type LessonVideoUrls = {
   video_url_1080p: string;
@@ -198,16 +200,45 @@ function getLessonVideoKey(
     .join("|");
 }
 
+function buildEditorSnapshot({
+  form,
+  assignedCohortIds,
+  slides,
+  lessonTasks,
+  slideLanguageMode,
+}: {
+  form: LessonForm;
+  assignedCohortIds: string[];
+  slides: Slide[];
+  lessonTasks: LessonTaskForm[];
+  slideLanguageMode: SlideLanguageMode;
+}) {
+  return JSON.stringify({
+    form,
+    assignedCohortIds: [...assignedCohortIds].sort(),
+    slideLanguageMode,
+    slides,
+    lessonTasks,
+  });
+}
+
 export default function LessonEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const { profile, loading: authLoading } = useTeacherGuard();
+  const {
+    activeLessonId: backgroundUploadLessonId,
+    stage: backgroundUploadStage,
+    statusMessage: backgroundUploadStatusMessage,
+  } = useBackgroundVideoUpload();
   const [deleting, setDeleting] = useState(false);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [availableCohorts, setAvailableCohorts] = useState<CohortOption[]>([]);
   const [assignedCohortIds, setAssignedCohortIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<EditorSaveState>("saved");
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("details");
   const [slides, setSlides] = useState<Slide[]>([]);
@@ -227,6 +258,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const canPublishLesson = profile?.role === "admin";
   const lastPersistedVideoKeyRef = useRef("");
   const lastPersistedPublishedRef = useRef(false);
+  const autosaveTimeoutRef = useRef<number | null>(null);
+  const hasInitializedSnapshotRef = useRef(false);
+  const lastSavedSnapshotRef = useRef("");
+  const [isRetryingVideoProcessing, setIsRetryingVideoProcessing] = useState(false);
 
   const [form, setForm] = useState<LessonForm>({
     title_ar: "",
@@ -510,7 +545,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   }, [id, lessonTasks, slideLanguageMode, slides]);
 
   const processPublishedVideo = useCallback(
-    async (successText: string) => {
+    async (successText: string, options?: { showMessage?: boolean }) => {
       const response = await fetch(`/api/teacher/lessons/${id}/process-video`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -527,8 +562,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           ? `${successText} Transcript and search index updated.`
           : `${successText} Transcript updated.`;
 
-      setSaveMessage({ type: "success", text: processedText });
-      setTimeout(() => setSaveMessage(null), 3000);
+      if (options?.showMessage !== false) {
+        setSaveMessage({ type: "success", text: processedText });
+        setTimeout(() => setSaveMessage(null), 3000);
+      }
     },
     [id]
   );
@@ -548,124 +585,332 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
   const selectedSubject = subjects.find((subject) => subject.id === form.subject_id) ?? null;
   const requiresCurriculum = hasMappedCurriculum(selectedSubject, form.grade_level);
+  const hasLessonVideo = Boolean(getLessonVideoKey(form));
+  const canAutosave =
+    Boolean(form.title_ar.trim() && form.subject_id) &&
+    (!requiresCurriculum || Boolean(form.curriculum_topic));
+  const editorSnapshot = useMemo(
+    () =>
+      buildEditorSnapshot({
+        form,
+        assignedCohortIds,
+        slides,
+        lessonTasks,
+        slideLanguageMode,
+      }),
+    [assignedCohortIds, form, lessonTasks, slideLanguageMode, slides]
+  );
 
-  async function saveAll() {
-    if (!form.title_ar.trim() || !form.subject_id) {
-      setSaveMessage({ type: "error", text: "Title and subject are required." });
-      return;
-    }
-    if (requiresCurriculum && !form.curriculum_topic) {
-      setSaveMessage({ type: "error", text: "Select a curriculum topic before saving." });
-      return;
-    }
-
-    setSaving(true);
-    setSaveMessage(null);
-    const supabase = createClient();
-    const user = await getCachedUser(supabase);
-
-    if (!user) {
-      setSaving(false);
-      setSaveMessage({ type: "error", text: "You must be signed in to save." });
-      return;
-    }
-
-    try {
-      // Save lesson details
-      const { error: lessonError } = await supabase
-        .from("lessons")
-        .update({
-          title_ar: form.title_ar.trim(),
-          title_en: form.title_en.trim(),
-          description_ar: form.description_ar.trim() || null,
-          description_en: form.description_en.trim() || null,
-          subject_id: form.subject_id,
-          grade_level: form.grade_level,
-          curriculum_topic: serializeCurriculumSelection(form.curriculum_topic),
-          is_published: form.is_published,
-          thumbnail_url: form.thumbnail_url.trim() || null,
-          video_url_1080p: form.video_url_1080p.trim() || null,
-          video_url_360p: form.video_url_360p.trim() || null,
-          video_url_480p: form.video_url_480p.trim() || null,
-          video_url_720p: form.video_url_720p.trim() || null,
-          captions_ar_url: form.captions_ar_url.trim() || null,
-          captions_en_url: form.captions_en_url.trim() || null,
-          video_duration_seconds: form.video_duration_seconds ? Number(form.video_duration_seconds) : null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
-
-      if (lessonError) throw new Error("Lesson: " + lessonError.message);
-
-      const uniqueAssignedCohortIds = Array.from(new Set(assignedCohortIds));
-      const { error: deleteAssignmentsError } = await supabase
-        .from("cohort_lessons")
-        .delete()
-        .eq("lesson_id", id);
-
-      if (deleteAssignmentsError) {
-        throw new Error("Class access: " + deleteAssignmentsError.message);
+  const saveAll = useCallback(
+    async (options?: { showSuccessMessage?: boolean }) => {
+      const showSuccessMessage = options?.showSuccessMessage !== false;
+      if (autosaveTimeoutRef.current) {
+        window.clearTimeout(autosaveTimeoutRef.current);
+        autosaveTimeoutRef.current = null;
       }
 
-      if (uniqueAssignedCohortIds.length > 0) {
-        const { error: insertAssignmentsError } = await supabase
+      if (!form.title_ar.trim() || !form.subject_id) {
+        setSaveState("error");
+        setSaveMessage({ type: "error", text: "Title and subject are required." });
+        return;
+      }
+      if (requiresCurriculum && !form.curriculum_topic) {
+        setSaveState("error");
+        setSaveMessage({ type: "error", text: "Select a curriculum topic before saving." });
+        return;
+      }
+
+      setSaving(true);
+      setSaveState("saving");
+      if (showSuccessMessage) {
+        setSaveMessage(null);
+      }
+      const supabase = createClient();
+      const user = await getCachedUser(supabase);
+
+      if (!user) {
+        setSaving(false);
+        setSaveState("error");
+        setSaveMessage({ type: "error", text: "You must be signed in to save." });
+        return;
+      }
+
+      try {
+        const normalizedCohortIds = Array.from(new Set(assignedCohortIds)).sort();
+
+        const { error: lessonError } = await supabase
+          .from("lessons")
+          .update({
+            title_ar: form.title_ar.trim(),
+            title_en: form.title_en.trim(),
+            description_ar: form.description_ar.trim() || null,
+            description_en: form.description_en.trim() || null,
+            subject_id: form.subject_id,
+            grade_level: form.grade_level,
+            curriculum_topic: serializeCurriculumSelection(form.curriculum_topic),
+            is_published: form.is_published,
+            thumbnail_url: form.thumbnail_url.trim() || null,
+            video_url_1080p: form.video_url_1080p.trim() || null,
+            video_url_360p: form.video_url_360p.trim() || null,
+            video_url_480p: form.video_url_480p.trim() || null,
+            video_url_720p: form.video_url_720p.trim() || null,
+            captions_ar_url: form.captions_ar_url.trim() || null,
+            captions_en_url: form.captions_en_url.trim() || null,
+            video_duration_seconds: form.video_duration_seconds ? Number(form.video_duration_seconds) : null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", id);
+
+        if (lessonError) throw new Error("Lesson: " + lessonError.message);
+
+        const { error: deleteAssignmentsError } = await supabase
           .from("cohort_lessons")
-          .insert(
-            uniqueAssignedCohortIds.map((cohortId) => ({
-              cohort_id: cohortId,
-              lesson_id: id,
-              assigned_by: user.id,
-              is_active: true,
-            }))
-          );
+          .delete()
+          .eq("lesson_id", id);
 
-        if (insertAssignmentsError) {
-          throw new Error("Class access: " + insertAssignmentsError.message);
+        if (deleteAssignmentsError) {
+          throw new Error("Class access: " + deleteAssignmentsError.message);
         }
-      }
 
-      const slidesWithActivities = ensureSlidesForSupportedTasks(slides, lessonTasks);
-      const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, lessonTasks);
-      setSlides(slidesWithActivities);
-      setLessonTasks(syncedTasks);
+        if (normalizedCohortIds.length > 0) {
+          const { error: insertAssignmentsError } = await supabase
+            .from("cohort_lessons")
+            .insert(
+              normalizedCohortIds.map((cohortId) => ({
+                cohort_id: cohortId,
+                lesson_id: id,
+                assigned_by: user.id,
+                is_active: true,
+              }))
+            );
 
-      const slideSaveResponse = await fetch(`/api/teacher/lessons/${id}/slides`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+          if (insertAssignmentsError) {
+            throw new Error("Class access: " + insertAssignmentsError.message);
+          }
+        }
+
+        const slidesWithActivities = ensureSlidesForSupportedTasks(slides, lessonTasks);
+        const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, lessonTasks);
+        setSlides(slidesWithActivities);
+        setLessonTasks(syncedTasks);
+
+        const slideSaveResponse = await fetch(`/api/teacher/lessons/${id}/slides`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slides: slidesWithActivities,
+            language_mode: slideLanguageMode,
+          }),
+        });
+
+        if (!slideSaveResponse.ok) {
+          const data = await slideSaveResponse.json().catch(() => ({}));
+          throw new Error("Slides: " + (data.error || "Failed to save slides"));
+        }
+
+        await syncLessonTasks(supabase, id, syncedTasks);
+        const nextVideoKey = getLessonVideoKey(form);
+        const shouldProcessPublishedVideo =
+          Boolean(form.is_published && nextVideoKey) &&
+          (!lastPersistedPublishedRef.current ||
+            lastPersistedVideoKeyRef.current !== nextVideoKey);
+
+        if (shouldProcessPublishedVideo) {
+          await processPublishedVideo(showSuccessMessage ? "Saved." : "Autosaved.", {
+            showMessage: showSuccessMessage,
+          });
+          lastPersistedPublishedRef.current = true;
+          lastPersistedVideoKeyRef.current = nextVideoKey;
+        } else {
+          lastPersistedPublishedRef.current = form.is_published;
+          lastPersistedVideoKeyRef.current = nextVideoKey;
+          if (showSuccessMessage) {
+            setSaveMessage({ type: "success", text: "Saved" });
+            setTimeout(() => setSaveMessage(null), 2000);
+          }
+        }
+
+        const savedAt = new Date().toLocaleTimeString();
+        lastSavedSnapshotRef.current = buildEditorSnapshot({
+          form,
+          assignedCohortIds: normalizedCohortIds,
           slides: slidesWithActivities,
-          language_mode: slideLanguageMode,
-        }),
-      });
-
-      if (!slideSaveResponse.ok) {
-        const data = await slideSaveResponse.json().catch(() => ({}));
-        throw new Error("Slides: " + (data.error || "Failed to save slides"));
+          lessonTasks: syncedTasks,
+          slideLanguageMode,
+        });
+        setLastSavedAt(savedAt);
+        setSlideLastSaved(savedAt);
+        setSaveState("saved");
+      } catch (err) {
+        setSaveState("error");
+        setSaveMessage({ type: "error", text: err instanceof Error ? err.message : "Save failed" });
+      } finally {
+        setSaving(false);
       }
+    },
+    [
+      assignedCohortIds,
+      form,
+      id,
+      lessonTasks,
+      processPublishedVideo,
+      requiresCurriculum,
+      slideLanguageMode,
+      slides,
+    ]
+  );
 
-      await syncLessonTasks(supabase, id, syncedTasks);
-      const nextVideoKey = getLessonVideoKey(form);
-      const shouldProcessPublishedVideo =
-        Boolean(form.is_published && nextVideoKey) &&
-        (!lastPersistedPublishedRef.current ||
-          lastPersistedVideoKeyRef.current !== nextVideoKey);
-
-      if (shouldProcessPublishedVideo) {
-        await processPublishedVideo("Saved.");
-        lastPersistedPublishedRef.current = true;
-        lastPersistedVideoKeyRef.current = nextVideoKey;
-      } else {
-        lastPersistedPublishedRef.current = form.is_published;
-        lastPersistedVideoKeyRef.current = nextVideoKey;
-        setSaveMessage({ type: "success", text: "Saved" });
-        setTimeout(() => setSaveMessage(null), 2000);
-      }
-    } catch (err) {
-      setSaveMessage({ type: "error", text: err instanceof Error ? err.message : "Save failed" });
-    } finally {
-      setSaving(false);
+  useEffect(() => {
+    if (loading || authLoading) {
+      return;
     }
-  }
+
+    if (!hasInitializedSnapshotRef.current) {
+      hasInitializedSnapshotRef.current = true;
+      lastSavedSnapshotRef.current = editorSnapshot;
+      setSaveState("saved");
+      return;
+    }
+
+    if (editorSnapshot === lastSavedSnapshotRef.current) {
+      if (autosaveTimeoutRef.current) {
+        window.clearTimeout(autosaveTimeoutRef.current);
+        autosaveTimeoutRef.current = null;
+      }
+      if (!saving && saveState !== "error") {
+        setSaveState("saved");
+      }
+      return;
+    }
+
+    if (!saving) {
+      setSaveState("dirty");
+    }
+
+    if (autosaveTimeoutRef.current) {
+      window.clearTimeout(autosaveTimeoutRef.current);
+    }
+
+    if (!canAutosave) {
+      autosaveTimeoutRef.current = null;
+      return;
+    }
+
+    autosaveTimeoutRef.current = window.setTimeout(() => {
+      if (!saving && editorSnapshot !== lastSavedSnapshotRef.current) {
+        void saveAll({ showSuccessMessage: false });
+      }
+    }, 1200);
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        window.clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, [authLoading, canAutosave, editorSnapshot, loading, saveAll, saveState, saving]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        window.clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleRetryVideoProcessing = useCallback(async () => {
+    if (!hasLessonVideo) {
+      return;
+    }
+
+    setIsRetryingVideoProcessing(true);
+    try {
+      await processPublishedVideo("Video processed.");
+    } catch (error) {
+      setSaveMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Video processing failed",
+      });
+    } finally {
+      setIsRetryingVideoProcessing(false);
+    }
+  }, [hasLessonVideo, processPublishedVideo]);
+
+  const isBackgroundUploadForLesson =
+    backgroundUploadLessonId === id &&
+    ["uploading", "processing", "saving", "error"].includes(backgroundUploadStage);
+  const videoStatus = useMemo(() => {
+    if (isBackgroundUploadForLesson) {
+      if (backgroundUploadStage === "error") {
+        return {
+          tone: "red" as const,
+          title: "Video upload needs attention",
+          description: backgroundUploadStatusMessage || "The background upload failed before it could finish.",
+          actionLabel: null,
+        };
+      }
+
+      if (backgroundUploadStage === "uploading") {
+        return {
+          tone: "amber" as const,
+          title: "Uploading video in the background",
+          description:
+            backgroundUploadStatusMessage ||
+            "You can keep working in the dashboard while the recording uploads. Keep this tab open.",
+          actionLabel: null,
+        };
+      }
+
+      return {
+        tone: "amber" as const,
+        title: "Preparing video in the background",
+        description:
+          backgroundUploadStatusMessage ||
+          "The recording is uploaded and the lesson is finishing video processing in the background.",
+        actionLabel: null,
+      };
+    }
+
+    if (hasLessonVideo) {
+      return {
+        tone: form.is_published ? ("emerald" as const) : ("gray" as const),
+        title: form.is_published ? "Published lesson video ready" : "Lesson video attached",
+        description: form.is_published
+          ? "Transcript and search indexing run automatically when the lesson video changes. You can re-run processing if needed."
+          : "A lesson video is already attached. Publish the lesson or process the transcript and search index manually.",
+        actionLabel: form.is_published ? "Retry transcript + search" : "Process video now",
+      };
+    }
+
+    return {
+      tone: "gray" as const,
+      title: "No lesson video yet",
+      description:
+        "Record or upload a video from the slide editor. Once saved, transcript and search indexing can run automatically for published lessons.",
+      actionLabel: null,
+    };
+  }, [
+    backgroundUploadStage,
+    backgroundUploadStatusMessage,
+    form.is_published,
+    hasLessonVideo,
+    isBackgroundUploadForLesson,
+  ]);
+
+  const saveStateMeta = useMemo(() => {
+    if (saveState === "saving") {
+      return { text: "Saving changes...", className: "text-emerald-600" };
+    }
+    if (saveState === "dirty") {
+      return { text: "Unsaved changes", className: "text-amber-600" };
+    }
+    if (saveState === "error") {
+      return { text: "Save needs attention", className: "text-red-600" };
+    }
+    return {
+      text: lastSavedAt ? `All changes saved • ${lastSavedAt}` : "All changes saved",
+      className: "text-gray-500",
+    };
+  }, [lastSavedAt, saveState]);
 
   if (authLoading || loading) {
     return (
@@ -720,11 +965,18 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              {saveMessage && (
-                <span className={`text-xs font-medium ${saveMessage.type === "success" ? "text-emerald-600" : "text-red-600"}`}>
-                  {saveMessage.text}
-                </span>
-              )}
+              <div className="hidden min-w-[220px] text-right sm:block">
+                <p className={`text-xs font-semibold ${saveStateMeta.className}`}>{saveStateMeta.text}</p>
+                {saveMessage && (
+                  <p
+                    className={`mt-1 text-[11px] ${
+                      saveMessage.type === "success" ? "text-emerald-600" : "text-red-600"
+                    }`}
+                  >
+                    {saveMessage.text}
+                  </p>
+                )}
+              </div>
               <button
                 onClick={async () => {
                   if (!window.confirm("Delete this lesson and all its content? This cannot be undone.")) return;
@@ -797,6 +1049,9 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           assignedCohortIds={assignedCohortIds}
           setAssignedCohortIds={setAssignedCohortIds}
           canPublishLesson={canPublishLesson}
+          videoStatus={videoStatus}
+          onRetryVideoProcessing={hasLessonVideo ? handleRetryVideoProcessing : null}
+          isRetryingVideoProcessing={isRetryingVideoProcessing}
         />
         )}
 
@@ -963,6 +1218,9 @@ function DetailsTab({
   assignedCohortIds,
   setAssignedCohortIds,
   canPublishLesson,
+  videoStatus,
+  onRetryVideoProcessing,
+  isRetryingVideoProcessing,
 }: {
   form: LessonForm;
   setForm: (f: LessonForm | ((prev: LessonForm) => LessonForm)) => void;
@@ -972,7 +1230,22 @@ function DetailsTab({
   assignedCohortIds: string[];
   setAssignedCohortIds: (value: string[] | ((prev: string[]) => string[])) => void;
   canPublishLesson: boolean;
+  videoStatus: {
+    tone: "gray" | "amber" | "emerald" | "red";
+    title: string;
+    description: string;
+    actionLabel: string | null;
+  };
+  onRetryVideoProcessing: (() => void) | null;
+  isRetryingVideoProcessing: boolean;
 }) {
+  const videoToneClasses = {
+    gray: "border-gray-200 bg-gray-50/70 text-gray-700",
+    amber: "border-amber-200 bg-amber-50/70 text-amber-800",
+    emerald: "border-emerald-200 bg-emerald-50/70 text-emerald-800",
+    red: "border-red-200 bg-red-50/70 text-red-800",
+  } as const;
+
   return (
     <div className="space-y-6">
       {/* Titles */}
@@ -1072,6 +1345,32 @@ function DetailsTab({
               className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             />
           </div>
+        </div>
+      </section>
+
+      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Lesson Video</h2>
+            <p className="mt-2 text-sm text-gray-500">
+              Recordings upload in the background and lesson video processing can be retried here if transcript or search indexing needs another pass.
+            </p>
+          </div>
+          {videoStatus.actionLabel && onRetryVideoProcessing && (
+            <button
+              type="button"
+              onClick={onRetryVideoProcessing}
+              disabled={isRetryingVideoProcessing}
+              className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isRetryingVideoProcessing ? "Processing..." : videoStatus.actionLabel}
+            </button>
+          )}
+        </div>
+
+        <div className={`rounded-2xl border px-4 py-4 ${videoToneClasses[videoStatus.tone]}`}>
+          <p className="text-sm font-semibold">{videoStatus.title}</p>
+          <p className="mt-1 text-sm opacity-90">{videoStatus.description}</p>
         </div>
       </section>
 

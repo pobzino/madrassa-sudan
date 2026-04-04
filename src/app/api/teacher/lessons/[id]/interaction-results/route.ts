@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { readAnswerFromTaskResponse } from "@/lib/lesson-activities";
 import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
+
+type TeacherReviewStatus = "pending_review" | "accepted" | "needs_retry";
 
 type StudentBreakdown = {
   student_id: string;
@@ -10,6 +13,11 @@ type StudentBreakdown = {
   time_spent_seconds: number;
   attempts: number;
   completed_at: string;
+  response_id?: string;
+  answer_text?: string | null;
+  review_status?: TeacherReviewStatus | null;
+  review_feedback?: string | null;
+  reviewed_at?: string | null;
 };
 
 type QuizAggregate = {
@@ -37,8 +45,13 @@ type ActivityAggregate = {
   completed_count: number;
   skipped_count: number;
   timed_out_count: number;
+  review_pending_count: number;
+  accepted_count: number;
+  needs_retry_count: number;
   avg_score: number;
   avg_time_seconds: number;
+  model_answer_ar: string;
+  model_answer_en: string;
   students: StudentBreakdown[];
 };
 
@@ -58,6 +71,47 @@ type SlideAggregate = {
 
 function average(total: number, count: number) {
   return count > 0 ? Math.round((total / count) * 100) / 100 : 0;
+}
+
+function toResponsePayload(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readFreeResponseAnswer(responseData: unknown) {
+  const answer = readAnswerFromTaskResponse(toResponsePayload(responseData));
+
+  if (typeof answer === "string") {
+    return answer.trim() || null;
+  }
+
+  if (typeof answer === "number" || typeof answer === "boolean") {
+    return String(answer);
+  }
+
+  if (Array.isArray(answer)) {
+    const values = answer.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+    return values.length > 0 ? values.join(", ") : null;
+  }
+
+  return null;
+}
+
+function readTeacherReview(responseData: unknown) {
+  const payload = toResponsePayload(responseData);
+  const review = toResponsePayload(payload.teacher_review);
+  const rawStatus = review.status;
+  const status: TeacherReviewStatus | null =
+    rawStatus === "accepted" || rawStatus === "needs_retry" || rawStatus === "pending_review"
+      ? rawStatus
+      : null;
+
+  return {
+    status,
+    feedback: typeof review.feedback === "string" ? review.feedback : null,
+    reviewed_at: typeof review.reviewed_at === "string" ? review.reviewed_at : null,
+  };
 }
 
 export async function GET(
@@ -122,12 +176,12 @@ export async function GET(
       ),
     supabase
       .from("lesson_tasks")
-      .select("id, task_type, title_ar, title_en, required")
+      .select("id, task_type, title_ar, title_en, required, task_data")
       .eq("lesson_id", lessonId)
       .order("timestamp_seconds", { ascending: true }),
     supabase
       .from("lesson_task_responses")
-      .select("task_id, student_id, status, completion_score, time_spent_seconds, attempts, updated_at")
+      .select("id, task_id, student_id, status, completion_score, time_spent_seconds, attempts, updated_at, response_data")
       .in(
         "task_id",
         (
@@ -226,6 +280,43 @@ export async function GET(
     const timedOutCount = responses.filter((response) => response.status === "timed_out").length;
     const totalScore = responses.reduce((sum, response) => sum + (response.completion_score || 0), 0);
     const totalTime = responses.reduce((sum, response) => sum + (response.time_spent_seconds || 0), 0);
+    const modelAnswerAr =
+      task.task_type === "free_response" && typeof task.task_data?.expected_answer_ar === "string"
+        ? task.task_data.expected_answer_ar
+        : "";
+    const modelAnswerEn =
+      task.task_type === "free_response" && typeof task.task_data?.expected_answer_en === "string"
+        ? task.task_data.expected_answer_en
+        : "";
+    const students = responses.map((response) => {
+      const review = readTeacherReview(response.response_data);
+      const isFreeResponse = task.task_type === "free_response";
+      const reviewStatus =
+        isFreeResponse && response.status === "completed"
+          ? review.status || "pending_review"
+          : null;
+
+      return {
+        student_id: response.student_id,
+        student_name: studentMap.get(response.student_id) || null,
+        status:
+          response.status === "skipped" || response.status === "timed_out"
+            ? response.status
+            : "completed",
+        score: response.completion_score || 0,
+        time_spent_seconds: response.time_spent_seconds || 0,
+        attempts: response.attempts || 1,
+        completed_at: response.updated_at,
+        response_id: response.id,
+        answer_text: isFreeResponse ? readFreeResponseAnswer(response.response_data) : null,
+        review_status: reviewStatus,
+        review_feedback: review.feedback,
+        reviewed_at: review.reviewed_at,
+      } satisfies StudentBreakdown;
+    });
+    const reviewPendingCount = students.filter((student) => student.review_status === "pending_review").length;
+    const acceptedCount = students.filter((student) => student.review_status === "accepted").length;
+    const needsRetryCount = students.filter((student) => student.review_status === "needs_retry").length;
 
     return {
       task_id: task.id,
@@ -239,20 +330,14 @@ export async function GET(
       completed_count: completedCount,
       skipped_count: skippedCount,
       timed_out_count: timedOutCount,
+      review_pending_count: reviewPendingCount,
+      accepted_count: acceptedCount,
+      needs_retry_count: needsRetryCount,
       avg_score: average(totalScore, responses.length),
       avg_time_seconds: average(totalTime, responses.length),
-      students: responses.map((response) => ({
-        student_id: response.student_id,
-        student_name: studentMap.get(response.student_id) || null,
-        status:
-          response.status === "skipped" || response.status === "timed_out"
-            ? response.status
-            : "completed",
-        score: response.completion_score || 0,
-        time_spent_seconds: response.time_spent_seconds || 0,
-        attempts: response.attempts || 1,
-        completed_at: response.updated_at,
-      })),
+      model_answer_ar: modelAnswerAr,
+      model_answer_en: modelAnswerEn,
+      students,
     };
   });
 

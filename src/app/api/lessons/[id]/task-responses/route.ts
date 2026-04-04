@@ -3,11 +3,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
   computeActivityScore,
+  normalizeTaskType,
   normalizeLessonTaskForm,
   readAnswerFromTaskResponse,
   toStoredActivityResponse,
 } from '@/lib/lesson-activities'
 import type { Database } from '@/lib/database.types'
+import { recalculateLessonTaskProgress } from '@/lib/server/lesson-task-progress'
 
 const TaskResponseSchema = z.object({
   task_id: z.string().uuid(),
@@ -27,68 +29,6 @@ function getAnswerFromPayload(payload: z.infer<typeof TaskResponseSchema>) {
   }
 
   return null
-}
-
-async function updateLessonTaskProgress(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  lessonId: string,
-  studentId: string
-) {
-  const { data: tasks, error: tasksError } = await supabase
-    .from('lesson_tasks')
-    .select('id, required')
-    .eq('lesson_id', lessonId)
-
-  if (tasksError) {
-    throw tasksError
-  }
-
-  const taskIds = (tasks || []).map((task) => task.id)
-  if (taskIds.length === 0) {
-    return
-  }
-
-  const { data: responses, error: responsesError } = await supabase
-    .from('lesson_task_responses')
-    .select('task_id, completion_score, status')
-    .eq('student_id', studentId)
-    .in('task_id', taskIds)
-
-  if (responsesError) {
-    throw responsesError
-  }
-
-  const requiredTaskIds = new Set(
-    (tasks || []).filter((task) => task.required !== false).map((task) => task.id)
-  )
-
-  const taskResponses = responses || []
-  const tasksCompleted = taskResponses.filter((response) => response.status === 'completed').length
-  const requiredTasksCompleted = taskResponses.filter(
-    (response) => response.status === 'completed' && requiredTaskIds.has(response.task_id)
-  ).length
-  const tasksSkipped = taskResponses.filter((response) => response.status === 'skipped').length
-  const tasksTotalScore = taskResponses.reduce(
-    (sum, response) => sum + (response.status === 'completed' ? response.completion_score || 0 : 0),
-    0
-  )
-
-  const updatePayload: Database['public']['Tables']['lesson_progress']['Insert'] = {
-    student_id: studentId,
-    lesson_id: lessonId,
-    tasks_completed: tasksCompleted,
-    required_tasks_completed: requiredTasksCompleted,
-    tasks_skipped: tasksSkipped,
-    tasks_total_score: tasksTotalScore,
-  }
-
-  const { error: progressError } = await supabase
-    .from('lesson_progress')
-    .upsert(updatePayload, { onConflict: 'student_id,lesson_id' })
-
-  if (progressError) {
-    throw progressError
-  }
 }
 
 export async function POST(
@@ -138,9 +78,12 @@ export async function POST(
   })
   const answer = getAnswerFromPayload(validation.data)
   const responseData = toStoredActivityResponse(answer)
+  const normalizedTaskType = normalizeTaskType(task.task_type)
   const completionScore =
     status === 'completed'
-      ? computeActivityScore(task.task_type, task.task_data, answer)
+      ? normalizedTaskType === 'free_response'
+        ? 0
+        : computeActivityScore(task.task_type, task.task_data, answer)
       : 0
 
   const { data: existing } = await supabase
@@ -194,7 +137,7 @@ export async function POST(
   }
 
   try {
-    await updateLessonTaskProgress(supabase, lessonId, user.id)
+    await recalculateLessonTaskProgress(supabase, lessonId, user.id)
   } catch (progressError) {
     console.error('Update task progress error:', progressError)
     return NextResponse.json({ error: 'Failed to update lesson progress' }, { status: 500 })

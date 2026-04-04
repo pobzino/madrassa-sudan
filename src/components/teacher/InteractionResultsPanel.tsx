@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+type TeacherReviewStatus = "pending_review" | "accepted" | "needs_retry";
+
 interface StudentResult {
   student_id: string;
   student_name: string | null;
@@ -10,6 +12,11 @@ interface StudentResult {
   time_spent_seconds: number;
   attempts: number;
   completed_at: string;
+  response_id?: string;
+  answer_text?: string | null;
+  review_status?: TeacherReviewStatus | null;
+  review_feedback?: string | null;
+  reviewed_at?: string | null;
 }
 
 interface QuizResult {
@@ -37,8 +44,13 @@ interface ActivityResult {
   completed_count: number;
   skipped_count: number;
   timed_out_count: number;
+  review_pending_count: number;
+  accepted_count: number;
+  needs_retry_count: number;
   avg_score: number;
   avg_time_seconds: number;
+  model_answer_ar: string;
+  model_answer_en: string;
   students: StudentResult[];
 }
 
@@ -91,6 +103,12 @@ const STATUS_STYLES: Record<StudentResult["status"], string> = {
   timed_out: "bg-gray-100 text-gray-700",
 };
 
+const REVIEW_STATUS_STYLES: Record<TeacherReviewStatus, string> = {
+  pending_review: "bg-amber-100 text-amber-700",
+  accepted: "bg-emerald-100 text-emerald-700",
+  needs_retry: "bg-rose-100 text-rose-700",
+};
+
 type SectionKey = "activities" | "quizzes" | "legacySlides";
 
 export default function InteractionResultsPanel({ lessonId }: Props) {
@@ -101,6 +119,9 @@ export default function InteractionResultsPanel({ lessonId }: Props) {
   const [legacySlides, setLegacySlides] = useState<LegacySlideResult[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reviewSubmittingId, setReviewSubmittingId] = useState<string | null>(null);
+  const [reviewFeedbackDrafts, setReviewFeedbackDrafts] = useState<Record<string, string>>({});
+  const [reviewScoreDrafts, setReviewScoreDrafts] = useState<Record<string, string>>({});
 
   const fetchResults = useCallback(async () => {
     setLoading(true);
@@ -125,6 +146,53 @@ export default function InteractionResultsPanel({ lessonId }: Props) {
       setLoading(false);
     }
   }, [lessonId]);
+
+  const submitFreeResponseReview = useCallback(
+    async (student: StudentResult, reviewStatus: TeacherReviewStatus) => {
+      if (!student.response_id) {
+        return;
+      }
+
+      setReviewSubmittingId(student.response_id);
+      setError(null);
+
+      const feedback =
+        (reviewFeedbackDrafts[student.response_id] ?? student.review_feedback ?? "").trim() || null;
+      const defaultScore = student.review_status === "accepted" && student.score > 0 ? student.score * 100 : 100;
+      const scoreInput = reviewScoreDrafts[student.response_id] ?? String(Math.round(defaultScore));
+      const parsedScore = Number.isFinite(Number(scoreInput))
+        ? Math.max(0, Math.min(100, Number(scoreInput))) / 100
+        : 1;
+
+      try {
+        const response = await fetch(
+          `/api/teacher/lessons/${lessonId}/task-responses/${student.response_id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              review_status: reviewStatus,
+              feedback,
+              ...(reviewStatus === "accepted" ? { score: parsedScore } : {}),
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          setError(data.error || "Failed to save review");
+          return;
+        }
+
+        await fetchResults();
+      } catch {
+        setError("Failed to save review");
+      } finally {
+        setReviewSubmittingId(null);
+      }
+    },
+    [fetchResults, lessonId, reviewFeedbackDrafts, reviewScoreDrafts]
+  );
 
   useEffect(() => {
     fetchResults();
@@ -237,33 +305,54 @@ export default function InteractionResultsPanel({ lessonId }: Props) {
                       <div className="mb-3 flex flex-wrap gap-2 text-xs text-gray-600">
                         {renderDetailChips(item, section.key)}
                       </div>
-
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-xs uppercase tracking-wider text-gray-500">
-                            <th className="pb-2 text-left font-medium">Student</th>
-                            <th className="pb-2 text-center font-medium">Status</th>
-                            <th className="pb-2 text-center font-medium">Score</th>
-                            <th className="pb-2 text-center font-medium">Time</th>
-                            <th className="pb-2 text-center font-medium">Attempts</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {item.students.map((student) => (
-                            <tr key={`${itemKey}:${student.student_id}`} className="border-t border-gray-100">
-                              <td className="py-2 text-gray-700">{student.student_name || "Unknown"}</td>
-                              <td className="py-2 text-center">
-                                <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${STATUS_STYLES[student.status]}`}>
-                                  {student.status.replace("_", " ")}
-                                </span>
-                              </td>
-                              <td className="py-2 text-center text-gray-600">{student.score.toFixed(2)}</td>
-                              <td className="py-2 text-center text-gray-500">{student.time_spent_seconds}s</td>
-                              <td className="py-2 text-center text-gray-500">{student.attempts}</td>
+                      {item.kind === "activity" && item.task_type === "free_response" ? (
+                        <FreeResponseReviewList
+                          activity={item}
+                          reviewSubmittingId={reviewSubmittingId}
+                          reviewFeedbackDrafts={reviewFeedbackDrafts}
+                          reviewScoreDrafts={reviewScoreDrafts}
+                          onFeedbackChange={(responseId, value) =>
+                            setReviewFeedbackDrafts((current) => ({
+                              ...current,
+                              [responseId]: value,
+                            }))
+                          }
+                          onScoreChange={(responseId, value) =>
+                            setReviewScoreDrafts((current) => ({
+                              ...current,
+                              [responseId]: value,
+                            }))
+                          }
+                          onSubmitReview={submitFreeResponseReview}
+                        />
+                      ) : (
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-xs uppercase tracking-wider text-gray-500">
+                              <th className="pb-2 text-left font-medium">Student</th>
+                              <th className="pb-2 text-center font-medium">Status</th>
+                              <th className="pb-2 text-center font-medium">Score</th>
+                              <th className="pb-2 text-center font-medium">Time</th>
+                              <th className="pb-2 text-center font-medium">Attempts</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {item.students.map((student) => (
+                              <tr key={`${itemKey}:${student.student_id}`} className="border-t border-gray-100">
+                                <td className="py-2 text-gray-700">{student.student_name || "Unknown"}</td>
+                                <td className="py-2 text-center">
+                                  <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${STATUS_STYLES[student.status]}`}>
+                                    {student.status.replace("_", " ")}
+                                  </span>
+                                </td>
+                                <td className="py-2 text-center text-gray-600">{student.score.toFixed(2)}</td>
+                                <td className="py-2 text-center text-gray-500">{student.time_spent_seconds}s</td>
+                                <td className="py-2 text-center text-gray-500">{student.attempts}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
                     </div>
                   )}
                 </div>
@@ -324,6 +413,9 @@ function getHeadlineMetric(item: QuizResult | ActivityResult | LegacySlideResult
   }
 
   if (item.kind === "activity") {
+    if (item.task_type === "free_response") {
+      return `${item.review_pending_count} pending`;
+    }
     return `${item.avg_score.toFixed(2)} score`;
   }
 
@@ -332,12 +424,20 @@ function getHeadlineMetric(item: QuizResult | ActivityResult | LegacySlideResult
 
 function renderDetailChips(item: QuizResult | ActivityResult | LegacySlideResult, sectionKey: SectionKey) {
   if (sectionKey === "activities" && item.kind === "activity") {
-    return [
+    const chips = [
       <DetailChip key="completed" label="Completed" value={item.completed_count} />,
       <DetailChip key="skipped" label="Skipped" value={item.skipped_count} />,
       <DetailChip key="timedOut" label="Timed Out" value={item.timed_out_count} />,
       <DetailChip key="avgTime" label="Avg Time" value={`${item.avg_time_seconds}s`} />,
     ];
+
+    if (item.task_type === "free_response") {
+      chips.push(<DetailChip key="pendingReview" label="Pending Review" value={item.review_pending_count} />);
+      chips.push(<DetailChip key="accepted" label="Accepted" value={item.accepted_count} />);
+      chips.push(<DetailChip key="needsRetry" label="Needs Retry" value={item.needs_retry_count} />);
+    }
+
+    return chips;
   }
 
   if (sectionKey === "quizzes" && item.kind === "quiz_question") {
@@ -362,6 +462,164 @@ function DetailChip({ label, value }: { label: string; value: string | number })
     <span className="rounded-full bg-white px-3 py-1 font-medium text-gray-600 ring-1 ring-gray-200">
       {label}: {value}
     </span>
+  );
+}
+
+function FreeResponseReviewList({
+  activity,
+  reviewSubmittingId,
+  reviewFeedbackDrafts,
+  reviewScoreDrafts,
+  onFeedbackChange,
+  onScoreChange,
+  onSubmitReview,
+}: {
+  activity: ActivityResult;
+  reviewSubmittingId: string | null;
+  reviewFeedbackDrafts: Record<string, string>;
+  reviewScoreDrafts: Record<string, string>;
+  onFeedbackChange: (responseId: string, value: string) => void;
+  onScoreChange: (responseId: string, value: string) => void;
+  onSubmitReview: (student: StudentResult, reviewStatus: TeacherReviewStatus) => Promise<void>;
+}) {
+  return (
+    <div className="space-y-4">
+      {(activity.model_answer_en || activity.model_answer_ar) && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
+            Model Answer
+          </p>
+          {activity.model_answer_en && (
+            <p className="mt-2 text-sm font-medium text-gray-900">{activity.model_answer_en}</p>
+          )}
+          {activity.model_answer_ar && (
+            <p className="mt-2 text-sm text-gray-700" dir="rtl">
+              {activity.model_answer_ar}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="grid gap-4">
+        {activity.students.map((student) => {
+          const responseId = student.response_id || `${activity.task_id}:${student.student_id}`;
+          const feedbackValue = reviewFeedbackDrafts[responseId] ?? student.review_feedback ?? "";
+          const scoreValue =
+            reviewScoreDrafts[responseId] ??
+            String(
+              Math.round(
+                (student.review_status === "accepted" && student.score > 0 ? student.score : 1) * 100
+              )
+            );
+          const isBusy = reviewSubmittingId === student.response_id;
+
+          return (
+            <div key={responseId} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {student.student_name || "Unknown student"}
+                    </p>
+                    <span
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${STATUS_STYLES[student.status]}`}
+                    >
+                      {student.status.replace("_", " ")}
+                    </span>
+                    {student.review_status && (
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${REVIEW_STATUS_STYLES[student.review_status]}`}
+                      >
+                        {student.review_status.replace("_", " ")}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Attempts: {student.attempts} • Time: {student.time_spent_seconds}s
+                  </p>
+                </div>
+                <div className="rounded-xl bg-gray-50 px-3 py-2 text-right text-xs text-gray-500">
+                  <p>Current score</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-900">
+                    {Math.round(student.score * 100)}%
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                      Student Answer
+                    </p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-gray-800">
+                      {student.answer_text || "No written answer was saved for this response."}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                      Teacher Feedback
+                    </label>
+                    <textarea
+                      value={feedbackValue}
+                      onChange={(event) => onFeedbackChange(responseId, event.target.value)}
+                      rows={3}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                      placeholder="Add feedback for the student"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                      Score (%)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={scoreValue}
+                      onChange={(event) => onScoreChange(responseId, event.target.value)}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <button
+                      type="button"
+                      disabled={!student.response_id || isBusy}
+                      onClick={() => void onSubmitReview(student, "accepted")}
+                      className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isBusy ? "Saving..." : "Accept"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!student.response_id || isBusy}
+                      onClick={() => void onSubmitReview(student, "needs_retry")}
+                      className="rounded-xl border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Needs Retry
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!student.response_id || isBusy}
+                      onClick={() => void onSubmitReview(student, "pending_review")}
+                      className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Mark Pending
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
