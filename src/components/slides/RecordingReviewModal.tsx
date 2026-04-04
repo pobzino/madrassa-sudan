@@ -59,23 +59,67 @@ export default function RecordingReviewModal({
     }
   }, []);
 
+  // Preview-aware timeupdate: skip cut regions and clamp to trim bounds
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current;
-    if (video) {
-      setCurrentTime(video.currentTime);
-    }
-  }, []);
+    if (!video) return;
 
-  const handlePlay = useCallback(() => setIsPlaying(true), []);
+    const t = video.currentTime;
+    setCurrentTime(t);
+
+    // Only enforce bounds while playing
+    if (video.paused) return;
+
+    // Stop at trim end
+    if (t >= editor.trimEnd - 0.05) {
+      video.pause();
+      video.currentTime = editor.trimEnd;
+      return;
+    }
+
+    // Jump past trim start if somehow before it
+    if (t < editor.trimStart) {
+      video.currentTime = editor.trimStart;
+      return;
+    }
+
+    // Skip over cut regions
+    for (const cut of editor.cutRegions) {
+      const cutStart = Math.max(cut.start, editor.trimStart);
+      const cutEnd = Math.min(cut.end, editor.trimEnd);
+      if (t >= cutStart - 0.05 && t < cutEnd) {
+        video.currentTime = cutEnd;
+        return;
+      }
+    }
+  }, [editor.trimStart, editor.trimEnd, editor.cutRegions]);
+
+  const handlePlay = useCallback(() => {
+    const video = videoRef.current;
+    if (video) {
+      // If at or past trimEnd, restart from trimStart
+      if (video.currentTime >= editor.trimEnd - 0.1) {
+        video.currentTime = editor.trimStart;
+      }
+      // If before trimStart, jump to it
+      if (video.currentTime < editor.trimStart) {
+        video.currentTime = editor.trimStart;
+      }
+    }
+    setIsPlaying(true);
+  }, [editor.trimStart, editor.trimEnd]);
+
   const handlePause = useCallback(() => setIsPlaying(false), []);
 
   const handleSeek = useCallback((time: number) => {
     const video = videoRef.current;
     if (video) {
-      video.currentTime = time;
-      setCurrentTime(time);
+      // Clamp seek to trim bounds
+      const clamped = Math.max(editor.trimStart, Math.min(time, editor.trimEnd));
+      video.currentTime = clamped;
+      setCurrentTime(clamped);
     }
-  }, []);
+  }, [editor.trimStart, editor.trimEnd]);
 
   const togglePlayPause = useCallback(() => {
     const video = videoRef.current;
