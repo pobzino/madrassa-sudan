@@ -169,7 +169,7 @@ export default function Home() {
         titleHighlight2: "play",
         title2: "for Sudanese kids",
         subtitle: "A free fun learning platform with interactive lessons, AI tutor, and certified Sudanese curriculum",
-        cta1: "Start Free",
+        cta1: "Start Now",
         cta2: "See How It Works",
         stats: { students: "Active Students", lessons: "Lessons Available", teachers: "Volunteer Teachers" },
       },

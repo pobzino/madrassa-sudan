@@ -670,27 +670,28 @@ export default function LessonPlayerPage() {
             },
           },
         }));
-      } catch {
-        setTaskResponses((prev) => ({
-          ...prev,
-          [task.id]: {
-            status: payload.status,
-            completionScore: payload.status === "completed" ? 1 : 0,
-            responseData:
-              payload.answer !== undefined && payload.answer !== null
-                ? { answer: payload.answer }
-                : {},
-            timeSpentSeconds,
-            attempts: (prev[task.id]?.attempts ?? 0) + 1,
-            answer: payload.answer ?? null,
-            teacherReview: {
-              status: null,
-              feedback: null,
-              score: null,
-              reviewedAt: null,
+      } catch (err) {
+        console.error("Failed to save task response:", err);
+        // Only update local state for skip/timeout — don't show false "completed" on API failure
+        if (payload.status !== "completed") {
+          setTaskResponses((prev) => ({
+            ...prev,
+            [task.id]: {
+              status: payload.status,
+              completionScore: 0,
+              responseData: {},
+              timeSpentSeconds,
+              attempts: (prev[task.id]?.attempts ?? 0) + 1,
+              answer: payload.answer ?? null,
+              teacherReview: {
+                status: null,
+                feedback: null,
+                score: null,
+                reviewedAt: null,
+              },
             },
-          },
-        }));
+          }));
+        }
       }
     },
     [lessonId]

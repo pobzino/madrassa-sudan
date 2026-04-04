@@ -79,12 +79,14 @@ export async function POST(
   const answer = getAnswerFromPayload(validation.data)
   const responseData = toStoredActivityResponse(answer)
   const normalizedTaskType = normalizeTaskType(task.task_type)
-  const completionScore =
-    status === 'completed'
-      ? normalizedTaskType === 'free_response'
-        ? 0
-        : computeActivityScore(task.task_type, task.task_data, answer)
-      : 0
+  let completionScore = 0
+  if (status === 'completed' && normalizedTaskType !== 'free_response') {
+    try {
+      completionScore = computeActivityScore(task.task_type, task.task_data, answer)
+    } catch (scoreError) {
+      console.error('computeActivityScore error:', scoreError, { taskType: task.task_type, answer })
+    }
+  }
 
   const { data: existing } = await supabase
     .from('lesson_task_responses')
@@ -136,11 +138,11 @@ export async function POST(
     responseRow = inserted
   }
 
+  // Recalculate progress in the background — don't fail the response if this errors
   try {
     await recalculateLessonTaskProgress(supabase, lessonId, user.id)
   } catch (progressError) {
     console.error('Update task progress error:', progressError)
-    return NextResponse.json({ error: 'Failed to update lesson progress' }, { status: 500 })
   }
 
   return NextResponse.json({
