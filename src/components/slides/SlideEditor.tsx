@@ -328,8 +328,6 @@ export default function SlideEditor({
   const backgroundVideoUpload = useBackgroundVideoUpload();
 
   const selectedSlide = slides[selectedIndex] || null;
-  const deckHasRequiredSlides = slides.some((slide) => slide.is_required);
-  const allowReorder = !deckHasRequiredSlides;
 
   // Get reveal item count for current presentation slide
   const presentSlide = slides[presentIndex];
@@ -571,16 +569,10 @@ export default function SlideEditor({
 
   // Drag and drop reorder
   const handleDragStart = useCallback((index: number) => {
-    if (!allowReorder) {
-      return;
-    }
     setDragIndex(index);
-  }, [allowReorder]);
+  }, []);
 
   const handleDragOver = useCallback((index: number) => {
-    if (!allowReorder) {
-      return;
-    }
     if (dragIndex === null || dragIndex === index) return;
     const next = [...slides];
     const [moved] = next.splice(dragIndex, 1);
@@ -588,7 +580,7 @@ export default function SlideEditor({
     onChange(next.map((s, i) => ({ ...s, sequence: i })));
     setDragIndex(index);
     if (selectedIndex === dragIndex) setSelectedIndex(index);
-  }, [allowReorder, dragIndex, slides, selectedIndex, onChange]);
+  }, [dragIndex, slides, selectedIndex, onChange]);
 
   const handleDrop = useCallback(() => {
     setDragIndex(null);
@@ -824,7 +816,7 @@ export default function SlideEditor({
                 slide={slide}
                 language={language}
                 index={index}
-                draggable={allowReorder}
+                draggable
                 isSelected={index === selectedIndex}
                 onSelect={() => setSelectedIndex(index)}
                 onDragStart={() => handleDragStart(index)}

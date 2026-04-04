@@ -1,4 +1,5 @@
 import type { Slide } from '@/lib/slides.types';
+import { GripVertical } from 'lucide-react';
 import SlideCard from './SlideCard';
 
 interface SlideThumbnailProps {
@@ -44,6 +45,12 @@ export default function SlideThumbnail({
         <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-black/50 text-white text-[10px] font-bold flex items-center justify-center">
           {index + 1}
         </div>
+        {/* Drag handle — visible on hover */}
+        {draggable && (
+          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-full px-1.5 py-0.5 flex items-center gap-0.5 cursor-grab active:cursor-grabbing">
+            <GripVertical className="w-3 h-3 text-white" />
+          </div>
+        )}
         {slide.is_required && (
           <div className="absolute top-1 right-1 rounded-full bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-semibold text-white">
             Locked
