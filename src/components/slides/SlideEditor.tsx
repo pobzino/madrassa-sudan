@@ -595,9 +595,10 @@ export default function SlideEditor({
     bunnyUpload.reset();
   }
 
-  function handleUpload() {
-    if (recordedBlob) {
-      bunnyUpload.upload(recordedBlob);
+  function handleUpload(editedBlob?: Blob) {
+    const blobToUpload = editedBlob || recordedBlob;
+    if (blobToUpload) {
+      bunnyUpload.upload(blobToUpload);
     }
   }
 
