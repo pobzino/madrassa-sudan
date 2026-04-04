@@ -33,7 +33,6 @@ export default function RecordingReviewModal({
   onCancel,
 }: RecordingReviewModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [editing, setEditing] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -50,6 +49,8 @@ export default function RecordingReviewModal({
 
   const isUploading = uploadState === 'uploading' || uploadState === 'uploaded' || uploadState === 'transcoding';
   const isSuccess = uploadState === 'ready';
+  // Timeline is interactive only before uploading/processing
+  const showTimeline = videoDuration > 0 && !isUploading && !isSuccess && !editor.isProcessing;
 
   const handleLoadedMetadata = useCallback(() => {
     const video = videoRef.current;
@@ -86,22 +87,11 @@ export default function RecordingReviewModal({
     }
   }, []);
 
-  const handleEnterEdit = useCallback(() => {
-    setEditing(true);
-    // Pause video when entering edit mode
-    videoRef.current?.pause();
-  }, []);
-
-  const handleCancelEdit = useCallback(() => {
-    editor.reset();
-    setEditing(false);
-  }, [editor]);
-
   const handleApplyEdits = useCallback(async () => {
+    videoRef.current?.pause();
     const result = await editor.process();
     if (result) {
       setEditedBlob(result);
-      setEditing(false);
       editor.reset();
     }
   }, [editor]);
@@ -120,9 +110,7 @@ export default function RecordingReviewModal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className={`bg-white rounded-2xl shadow-2xl w-full overflow-hidden transition-all ${
-        editing ? 'max-w-4xl' : 'max-w-2xl'
-      }`}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">
@@ -132,11 +120,9 @@ export default function RecordingReviewModal({
                 ? 'Video Saved!'
                 : isUploading
                   ? 'Uploading...'
-                  : editing
-                    ? 'Edit Recording'
-                    : 'Review Recording'}
+                  : 'Review Recording'}
           </h3>
-          {editedBlob && !editing && !isUploading && !isSuccess && (
+          {editedBlob && !isUploading && !isSuccess && (
             <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">
               Edited
             </span>
@@ -144,90 +130,100 @@ export default function RecordingReviewModal({
         </div>
 
         {/* Video player */}
-        <div className="px-6 py-4">
+        <div className="px-6 pt-4">
           {blobUrl && (
             <video
               ref={videoRef}
               src={blobUrl}
-              controls={!editing}
+              controls={!showTimeline}
               className="w-full rounded-xl bg-black aspect-video"
               onLoadedMetadata={handleLoadedMetadata}
-              onTimeUpdate={editing ? handleTimeUpdate : undefined}
-              onPlay={editing ? handlePlay : undefined}
-              onPause={editing ? handlePause : undefined}
+              onTimeUpdate={handleTimeUpdate}
+              onPlay={handlePlay}
+              onPause={handlePause}
             />
           )}
+        </div>
 
-          {/* Edit mode controls */}
-          {editing && !editor.isProcessing && (
-            <div className="mt-4 space-y-4">
-              {/* Play controls + Add Cut */}
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={togglePlayPause}
-                  className="flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-                >
-                  {isPlaying ? (
-                    <svg className="w-4 h-4 text-gray-700" fill="currentColor" viewBox="0 0 24 24">
-                      <rect x="6" y="4" width="4" height="16" rx="1" />
-                      <rect x="14" y="4" width="4" height="16" rx="1" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4 text-gray-700 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  )}
-                </button>
-
-                <button
-                  onClick={handleAddCut}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
+        {/* Always-visible timeline + editing tools */}
+        {showTimeline && (
+          <div className="px-6 pt-3 pb-4 space-y-3">
+            {/* Play controls + Cut + Duration */}
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={togglePlayPause}
+                className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                {isPlaying ? (
+                  <svg className="w-3.5 h-3.5 text-gray-700" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="6" y="4" width="4" height="16" rx="1" />
+                    <rect x="14" y="4" width="4" height="16" rx="1" />
                   </svg>
-                  Cut Here
-                </button>
+                ) : (
+                  <svg className="w-3.5 h-3.5 text-gray-700 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                )}
+              </button>
 
-                <div className="flex-1" />
+              <button
+                onClick={handleAddCut}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                title="Mark a section to remove"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
+                </svg>
+                Cut
+              </button>
 
-                <div className="text-sm text-gray-500">
-                  <span className="font-mono">{formatDuration(videoDuration)}</span>
-                  {editor.hasEdits && (
-                    <>
-                      <span className="mx-1.5 text-gray-300">&rarr;</span>
-                      <span className="font-mono font-medium text-emerald-600">
-                        {formatDuration(editor.keptDuration)}
-                      </span>
-                      <span className="ml-1 text-gray-400 text-xs">
-                        ({formatDuration(videoDuration - editor.keptDuration)} removed)
-                      </span>
-                    </>
-                  )}
-                </div>
+              <div className="flex-1" />
+
+              <div className="text-xs text-gray-500">
+                <span className="font-mono">{formatDuration(videoDuration)}</span>
+                {editor.hasEdits && (
+                  <>
+                    <span className="mx-1 text-gray-300">&rarr;</span>
+                    <span className="font-mono font-medium text-emerald-600">
+                      {formatDuration(editor.keptDuration)}
+                    </span>
+                  </>
+                )}
               </div>
 
-              {/* Timeline */}
-              <VideoTimeline
-                duration={videoDuration}
-                currentTime={currentTime}
-                trimStart={editor.trimStart}
-                trimEnd={editor.trimEnd}
-                cutRegions={editor.cutRegions}
-                onSeek={handleSeek}
-                onTrimStartChange={editor.setTrimStart}
-                onTrimEndChange={editor.setTrimEnd}
-                onCutRegionUpdate={editor.updateCutRegion}
-                onCutRegionRemove={editor.removeCutRegion}
-              />
-
-              {/* Help text */}
-              <p className="text-xs text-gray-400">
-                Drag the amber handles to trim start/end. Click &quot;Cut Here&quot; to mark a section to remove, then drag the red edges to adjust.
-              </p>
+              {editor.hasEdits && (
+                <button
+                  onClick={handleApplyEdits}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Apply
+                </button>
+              )}
             </div>
-          )}
-        </div>
+
+            {/* Timeline */}
+            <VideoTimeline
+              duration={videoDuration}
+              currentTime={currentTime}
+              trimStart={editor.trimStart}
+              trimEnd={editor.trimEnd}
+              cutRegions={editor.cutRegions}
+              onSeek={handleSeek}
+              onTrimStartChange={editor.setTrimStart}
+              onTrimEndChange={editor.setTrimEnd}
+              onCutRegionUpdate={editor.updateCutRegion}
+              onCutRegionRemove={editor.removeCutRegion}
+            />
+
+            {/* Contextual help */}
+            <p className="text-[11px] text-gray-400 leading-tight">
+              Drag amber handles to trim. Click &quot;Cut&quot; to mark a section to remove, then drag its red edges.
+            </p>
+          </div>
+        )}
 
         {/* Processing progress */}
         {editor.isProcessing && (
@@ -320,7 +316,7 @@ export default function RecordingReviewModal({
         <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
           {editor.isProcessing ? (
             <button
-              onClick={handleCancelEdit}
+              onClick={() => editor.reset()}
               className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
             >
               Cancel
@@ -339,25 +335,6 @@ export default function RecordingReviewModal({
             >
               Cancel Upload
             </button>
-          ) : editing ? (
-            <>
-              <button
-                onClick={handleCancelEdit}
-                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleApplyEdits}
-                disabled={!editor.hasEdits}
-                className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:hover:bg-emerald-600 flex items-center gap-1.5"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                Apply Edits
-              </button>
-            </>
           ) : (
             <>
               <button
@@ -371,15 +348,6 @@ export default function RecordingReviewModal({
                 className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
               >
                 Retake
-              </button>
-              <button
-                onClick={handleEnterEdit}
-                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex items-center gap-1.5"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
-                </svg>
-                Edit
               </button>
               <button
                 onClick={handleUpload}
