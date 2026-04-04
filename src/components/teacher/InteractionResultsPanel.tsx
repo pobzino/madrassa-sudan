@@ -122,6 +122,9 @@ export default function InteractionResultsPanel({ lessonId }: Props) {
   const [reviewSubmittingId, setReviewSubmittingId] = useState<string | null>(null);
   const [reviewFeedbackDrafts, setReviewFeedbackDrafts] = useState<Record<string, string>>({});
   const [reviewScoreDrafts, setReviewScoreDrafts] = useState<Record<string, string>>({});
+  const [aiGradingId, setAiGradingId] = useState<string | null>(null);
+  const [aiGradingAll, setAiGradingAll] = useState(false);
+  const [aiSuggestedIds, setAiSuggestedIds] = useState<Set<string>>(new Set());
 
   const fetchResults = useCallback(async () => {
     setLoading(true);
@@ -192,6 +195,63 @@ export default function InteractionResultsPanel({ lessonId }: Props) {
       }
     },
     [fetchResults, lessonId, reviewFeedbackDrafts, reviewScoreDrafts]
+  );
+
+  const handleAiGrade = useCallback(
+    async (responseIds: string[]) => {
+      if (responseIds.length === 0) return;
+
+      const isBatch = responseIds.length > 1;
+      if (isBatch) setAiGradingAll(true);
+      else setAiGradingId(responseIds[0]);
+
+      setError(null);
+
+      try {
+        const response = await fetch(
+          `/api/teacher/lessons/${lessonId}/task-responses/ai-grade`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ response_ids: responseIds }),
+          }
+        );
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          setError(data.error || "AI grading failed");
+          return;
+        }
+
+        const data = await response.json();
+        const suggestions = data.suggestions as Array<{
+          response_id: string;
+          review_status: string;
+          feedback: string;
+          score: number;
+        }>;
+
+        const nextFeedback = { ...reviewFeedbackDrafts };
+        const nextScores = { ...reviewScoreDrafts };
+        const nextSuggested = new Set(aiSuggestedIds);
+
+        for (const s of suggestions) {
+          nextFeedback[s.response_id] = s.feedback;
+          nextScores[s.response_id] = String(Math.round(s.score * 100));
+          nextSuggested.add(s.response_id);
+        }
+
+        setReviewFeedbackDrafts(nextFeedback);
+        setReviewScoreDrafts(nextScores);
+        setAiSuggestedIds(nextSuggested);
+      } catch {
+        setError("AI grading failed");
+      } finally {
+        setAiGradingId(null);
+        setAiGradingAll(false);
+      }
+    },
+    [lessonId, reviewFeedbackDrafts, reviewScoreDrafts, aiSuggestedIds]
   );
 
   useEffect(() => {
@@ -311,19 +371,34 @@ export default function InteractionResultsPanel({ lessonId }: Props) {
                           reviewSubmittingId={reviewSubmittingId}
                           reviewFeedbackDrafts={reviewFeedbackDrafts}
                           reviewScoreDrafts={reviewScoreDrafts}
-                          onFeedbackChange={(responseId, value) =>
+                          onFeedbackChange={(responseId, value) => {
                             setReviewFeedbackDrafts((current) => ({
                               ...current,
                               [responseId]: value,
-                            }))
-                          }
-                          onScoreChange={(responseId, value) =>
+                            }));
+                            setAiSuggestedIds((current) => {
+                              const next = new Set(current);
+                              next.delete(responseId);
+                              return next;
+                            });
+                          }}
+                          onScoreChange={(responseId, value) => {
                             setReviewScoreDrafts((current) => ({
                               ...current,
                               [responseId]: value,
-                            }))
-                          }
+                            }));
+                            setAiSuggestedIds((current) => {
+                              const next = new Set(current);
+                              next.delete(responseId);
+                              return next;
+                            });
+                          }}
                           onSubmitReview={submitFreeResponseReview}
+                          onAiGrade={(responseId) => void handleAiGrade([responseId])}
+                          onAiGradeAll={(responseIds) => void handleAiGrade(responseIds)}
+                          aiGradingId={aiGradingId}
+                          aiGradingAll={aiGradingAll}
+                          aiSuggestedIds={aiSuggestedIds}
                         />
                       ) : (
                         <table className="w-full text-sm">
@@ -473,6 +548,11 @@ function FreeResponseReviewList({
   onFeedbackChange,
   onScoreChange,
   onSubmitReview,
+  onAiGrade,
+  onAiGradeAll,
+  aiGradingId,
+  aiGradingAll,
+  aiSuggestedIds,
 }: {
   activity: ActivityResult;
   reviewSubmittingId: string | null;
@@ -481,24 +561,54 @@ function FreeResponseReviewList({
   onFeedbackChange: (responseId: string, value: string) => void;
   onScoreChange: (responseId: string, value: string) => void;
   onSubmitReview: (student: StudentResult, reviewStatus: TeacherReviewStatus) => Promise<void>;
+  onAiGrade: (responseId: string) => void;
+  onAiGradeAll: (responseIds: string[]) => void;
+  aiGradingId: string | null;
+  aiGradingAll: boolean;
+  aiSuggestedIds: Set<string>;
 }) {
+  const pendingStudents = activity.students.filter(
+    (s) => s.response_id && (!s.review_status || s.review_status === "pending_review")
+  );
+
   return (
     <div className="space-y-4">
-      {(activity.model_answer_en || activity.model_answer_ar) && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-            Model Answer
-          </p>
-          {activity.model_answer_en && (
-            <p className="mt-2 text-sm font-medium text-gray-900">{activity.model_answer_en}</p>
-          )}
-          {activity.model_answer_ar && (
-            <p className="mt-2 text-sm text-gray-700" dir="rtl">
-              {activity.model_answer_ar}
+      {/* AI Grade All + Model Answer */}
+      <div className="flex flex-wrap items-center gap-3">
+        {(activity.model_answer_en || activity.model_answer_ar) && (
+          <div className="flex-1 min-w-0 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
+              Model Answer
             </p>
-          )}
-        </div>
-      )}
+            {activity.model_answer_en && (
+              <p className="mt-2 text-sm font-medium text-gray-900">{activity.model_answer_en}</p>
+            )}
+            {activity.model_answer_ar && (
+              <p className="mt-2 text-sm text-gray-700" dir="rtl">
+                {activity.model_answer_ar}
+              </p>
+            )}
+          </div>
+        )}
+        {pendingStudents.length > 0 && (
+          <button
+            type="button"
+            onClick={() =>
+              onAiGradeAll(
+                pendingStudents
+                  .map((s) => s.response_id)
+                  .filter((id): id is string => !!id)
+              )
+            }
+            disabled={aiGradingAll}
+            className="shrink-0 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {aiGradingAll
+              ? `Grading ${pendingStudents.length}...`
+              : `AI Grade All (${pendingStudents.length} pending)`}
+          </button>
+        )}
+      </div>
 
       <div className="grid gap-4">
         {activity.students.map((student) => {
@@ -558,9 +668,16 @@ function FreeResponseReviewList({
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                      Teacher Feedback
-                    </label>
+                    <div className="mb-2 flex items-center gap-2">
+                      <label className="block text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                        Teacher Feedback
+                      </label>
+                      {aiSuggestedIds.has(responseId) && (
+                        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-600">
+                          AI suggested
+                        </span>
+                      )}
+                    </div>
                     <textarea
                       value={feedbackValue}
                       onChange={(event) => onFeedbackChange(responseId, event.target.value)}
@@ -588,6 +705,14 @@ function FreeResponseReviewList({
                   </div>
 
                   <div className="grid gap-2">
+                    <button
+                      type="button"
+                      disabled={!student.response_id || isBusy || aiGradingId === student.response_id}
+                      onClick={() => student.response_id && onAiGrade(student.response_id)}
+                      className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {aiGradingId === student.response_id ? "Grading..." : "AI Grade"}
+                    </button>
                     <button
                       type="button"
                       disabled={!student.response_id || isBusy}

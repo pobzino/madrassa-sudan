@@ -12,6 +12,11 @@ import {
   type SlideInteractionResult,
 } from '@/lib/slide-interactions';
 import { getIncorrectFeedback, getCorrectFeedback } from '@/lib/feedback-messages';
+import { useActivitySounds } from '@/hooks/useActivitySounds';
+import { ConfettiBurst } from '@/components/illustrations';
+import MatchPairsDnD from '@/components/lessons/interactions/MatchPairsDnD';
+import SequenceOrderDnD from '@/components/lessons/interactions/SequenceOrderDnD';
+import SortGroupsDnD from '@/components/lessons/interactions/SortGroupsDnD';
 
 interface SlideInteractionOverlayProps {
   slide: Slide;
@@ -37,13 +42,25 @@ export default function SlideInteractionOverlay({
   reviewFeedback,
 }: SlideInteractionOverlayProps) {
   const isAr = language === 'ar';
+  const { playCorrect, playIncorrect, playComplete, playTap } = useActivitySounds();
   const startedAtRef = useRef(0);
   const [selectedChoiceIndex, setSelectedChoiceIndex] = useState<number | null>(null);
   const [selectedTrueFalse, setSelectedTrueFalse] = useState<boolean | null>(null);
   const [freeResponseAnswer, setFreeResponseAnswer] = useState(initialFreeResponseAnswer || '');
   const [tappedIndexes, setTappedIndexes] = useState<number[]>([]);
   const [matchSelections, setMatchSelections] = useState<Record<number, number>>({});
-  const [sequenceSelection, setSequenceSelection] = useState<string[]>([]);
+  const [sequenceSelection, setSequenceSelection] = useState<string[]>(() => {
+    // Pre-fill with shuffled order so DnD starts with all items placed
+    if (slide.interaction_type === 'sequence_order') {
+      const items = getSlideInteractionItems(slide, language);
+      const order = getStableInteractionOrder(
+        items.map((label, index) => ({ label, index })),
+        slide.id
+      );
+      return order.map((i) => String(i.index));
+    }
+    return [];
+  });
   const [sortSelections, setSortSelections] = useState<Record<number, number>>({});
   const [result, setResult] = useState<SlideInteractionResult | null>(null);
 
@@ -165,6 +182,12 @@ export default function SlideInteractionOverlay({
       ...nextResult,
       timeSpentSeconds: elapsedSeconds,
     });
+
+    if (nextResult.isCorrect) {
+      playCorrect();
+    } else {
+      playIncorrect();
+    }
   }
 
   function retryInteraction() {
@@ -229,6 +252,7 @@ export default function SlideInteractionOverlay({
       return;
     }
 
+    playTap();
     const nextTapped = [...tappedIndexes, index];
     setTappedIndexes(nextTapped);
 
@@ -473,33 +497,14 @@ export default function SlideInteractionOverlay({
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
             {text.matchLabel}
           </p>
-          <div className="space-y-3">
-            {interactionItems.map((item, index) => (
-              <div key={index} className="grid grid-cols-[minmax(0,1fr)_180px] gap-3 items-center">
-                <div className={`rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm ${isAr ? 'font-cairo' : 'font-inter'}`}>
-                  {item}
-                </div>
-                <select
-                  value={matchSelections[index] ?? ''}
-                  onChange={(event) =>
-                    setMatchSelections((current) => ({
-                      ...current,
-                      [index]: Number(event.target.value),
-                    }))
-                  }
-                  disabled={!!result}
-                  className="rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-700 focus:border-[#007229] focus:outline-none"
-                >
-                  <option value="">{text.selectGroup}</option>
-                  {interactionTargets.map((target, targetIndex) => (
-                    <option key={targetIndex} value={targetIndex}>
-                      {target}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
+          <MatchPairsDnD
+            items={interactionItems}
+            targets={interactionTargets}
+            selections={matchSelections}
+            onSelectionsChange={setMatchSelections}
+            disabled={!!result}
+            isAr={isAr}
+          />
           {!result && (
             <button
               onClick={(event) => submitMatchPairs(event.timeStamp)}
@@ -519,58 +524,15 @@ export default function SlideInteractionOverlay({
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
             {text.sequenceLabel}
           </p>
-          <p className="mb-3 text-xs text-gray-500">{text.tapToBuild}</p>
-
-          <div className="mb-3 flex flex-wrap gap-2">
-            {sequenceChoices.map((choice) => {
-              const selected = sequenceSelection.includes(String(choice.index));
-
-              return (
-                <button
-                  key={choice.index}
-                  onClick={() => toggleSequenceItem(choice.index)}
-                  disabled={selected || !!result}
-                  className={`rounded-2xl border px-3 py-2 text-sm transition-colors ${
-                    selected
-                      ? 'border-gray-200 bg-gray-100 text-gray-400'
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-[#007229]/35'
-                  } ${isAr ? 'font-cairo' : 'font-inter'}`}
-                >
-                  {choice.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="rounded-2xl border border-dashed border-[#007229]/30 bg-white p-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-              {text.sequenceChosen}
-            </p>
-            <div className="space-y-2">
-              {sequenceSelection.map((value, orderIndex) => {
-                const itemIndex = Number(value);
-                return (
-                  <div
-                    key={`${value}-${orderIndex}`}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2"
-                  >
-                    <span className={`text-sm ${isAr ? 'font-cairo' : 'font-inter'}`}>
-                      {orderIndex + 1}. {interactionItems[itemIndex]}
-                    </span>
-                    {!result && (
-                      <button
-                        onClick={() => removeSequenceItem(itemIndex)}
-                        className="text-xs font-semibold text-red-500"
-                      >
-                        {text.remove}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
+          <p className="mb-3 text-xs text-gray-500">
+            {isAr ? 'اسحب العناصر لترتيبها' : 'Drag items to reorder'}
+          </p>
+          <SequenceOrderDnD
+            items={sequenceChoices}
+            onOrderChange={setSequenceSelection}
+            disabled={!!result}
+            isAr={isAr}
+          />
           {!result && (
             <button
               onClick={(event) => submitSequence(event.timeStamp)}
@@ -590,36 +552,14 @@ export default function SlideInteractionOverlay({
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
             {text.sortLabel}
           </p>
-          <div className="space-y-4">
-            {interactionItems.map((item, index) => (
-              <div key={index} className="space-y-2 rounded-2xl border border-gray-200 bg-white p-3">
-                <p className={`text-sm font-medium text-gray-800 ${isAr ? 'font-cairo' : 'font-inter'}`}>
-                  {item}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {interactionTargets.map((target, targetIndex) => (
-                    <button
-                      key={targetIndex}
-                      onClick={() =>
-                        setSortSelections((current) => ({
-                          ...current,
-                          [index]: targetIndex,
-                        }))
-                      }
-                      disabled={!!result}
-                      className={`rounded-2xl border px-3 py-2 text-sm transition-colors ${
-                        sortSelections[index] === targetIndex
-                          ? 'border-[#007229] bg-[#007229]/8 text-[#007229]'
-                          : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-[#007229]/35'
-                      } ${isAr ? 'font-cairo' : 'font-inter'}`}
-                    >
-                      {target}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <SortGroupsDnD
+            items={interactionItems}
+            groups={interactionTargets}
+            selections={sortSelections}
+            onSelectionsChange={setSortSelections}
+            disabled={!!result}
+            isAr={isAr}
+          />
           {!result && (
             <button
               onClick={(event) => submitSortGroups(event.timeStamp)}
@@ -675,7 +615,17 @@ export default function SlideInteractionOverlay({
               {!result && secondaryAction}
 
               {result && (
-                <div className={`mt-4 rounded-2xl border p-4 ${result.isCorrect ? 'border-green-300 bg-green-50' : 'border-amber-300 bg-amber-50'}`}>
+                <div
+                  key={result.isCorrect ? 'correct' : `incorrect-${Date.now()}`}
+                  className={`relative mt-4 overflow-hidden rounded-2xl border p-4 ${
+                    result.isCorrect
+                      ? 'border-green-300 bg-green-50'
+                      : 'border-amber-300 bg-amber-50 animate-shake'
+                  }`}
+                >
+                  {result.isCorrect && (
+                    <ConfettiBurst className="absolute -top-2 -right-2 h-16 w-16 opacity-90 pointer-events-none" />
+                  )}
                   <p className={`text-sm font-semibold ${result.isCorrect ? 'text-green-700' : 'text-amber-700'}`}>
                     {slide.interaction_type === 'free_response'
                       ? text.answerSaved
@@ -685,7 +635,7 @@ export default function SlideInteractionOverlay({
                   </p>
                   {result.isCorrect ? (
                     <button
-                      onClick={() => onComplete(result)}
+                      onClick={() => { playComplete(); onComplete(result); }}
                       className="mt-3 w-full rounded-2xl bg-[#007229] px-4 py-3 text-sm font-semibold text-white"
                     >
                       {text.continue}
