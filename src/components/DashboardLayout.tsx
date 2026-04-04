@@ -8,6 +8,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import type { Profile } from "@/lib/database.types";
 import { clearAuthCache, getCachedProfile, getCachedUser } from "@/lib/supabase/auth-cache";
 import FeedbackModal from "@/components/FeedbackModal";
+import NavigationProgress from "@/components/NavigationProgress";
 import {
   FloatingRocket,
   GraduationCapIcon,
@@ -126,6 +127,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const { language, setLanguage } = useLanguage();
@@ -207,6 +209,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const navItems = isInTeacherView ? teacherNavItems : studentNavItems;
 
+  // Clear navigating state when route changes
+  useEffect(() => {
+    setNavigatingTo(null);
+  }, [pathname]);
+
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
     return pathname.startsWith(href);
@@ -246,18 +253,28 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <nav className="flex-1 px-3 py-2 overflow-y-auto">
         {navItems.map((item) => {
           const active = isActive(item.href);
+          const isNavigating = navigatingTo === item.href;
           return (
             <Link
               key={item.href}
               href={item.href}
-              onClick={() => mobile && setSidebarOpen(false)}
+              onClick={() => {
+                if (!active) setNavigatingTo(item.href);
+                if (mobile) setSidebarOpen(false);
+              }}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-[15px] font-semibold transition-all ${
                 active
                   ? "bg-[#007229]/10 text-[#007229] shadow-sm"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  : isNavigating
+                    ? "bg-gray-100 text-[#007229]"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
               }`}
             >
-              {item.icon}
+              {isNavigating ? (
+                <div className="w-5 h-5 animate-spin rounded-full border-2 border-gray-200 border-t-[#007229]" />
+              ) : (
+                item.icon
+              )}
               {item.label}
             </Link>
           );
@@ -320,6 +337,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#007229]/5 via-white to-[#D21034]/5" dir={isRtl ? "rtl" : "ltr"}>
+      <NavigationProgress />
+
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-lg border-b border-gray-100 z-40 flex items-center justify-between px-4">
         <Link href="/">
