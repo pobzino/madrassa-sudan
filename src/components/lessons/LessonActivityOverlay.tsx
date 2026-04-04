@@ -11,8 +11,12 @@ interface LessonActivityOverlayProps {
   task: LessonTask;
   sourceSlide?: Slide | null;
   language: 'ar' | 'en';
+  initialFreeResponseAnswer?: string;
+  reviewStatus?: 'pending_review' | 'accepted' | 'needs_retry' | null;
+  reviewFeedback?: string | null;
   onComplete: (result: SlideInteractionResult) => void;
   onSkip?: () => void;
+  onDismiss?: () => void;
 }
 
 const BADGE_LABELS: Record<string, { ar: string; en: string }> = {
@@ -30,8 +34,12 @@ export default function LessonActivityOverlay({
   task,
   sourceSlide,
   language,
+  initialFreeResponseAnswer,
+  reviewStatus,
+  reviewFeedback,
   onComplete,
   onSkip,
+  onDismiss,
 }: LessonActivityOverlayProps) {
   const slide = useMemo(
     () => buildActivityInteractionSlide(task, sourceSlide ?? null),
@@ -68,8 +76,19 @@ export default function LessonActivityOverlay({
           >
             {skipLabel}
           </button>
+        ) : onDismiss && (reviewStatus === 'accepted' || reviewStatus === 'pending_review') ? (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+          >
+            {language === 'ar' ? 'إغلاق' : 'Close'}
+          </button>
         ) : null
       }
+      initialFreeResponseAnswer={initialFreeResponseAnswer}
+      reviewStatus={reviewStatus}
+      reviewFeedback={reviewFeedback}
       onComplete={onComplete}
     />
   );

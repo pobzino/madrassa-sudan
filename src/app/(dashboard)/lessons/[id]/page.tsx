@@ -26,6 +26,7 @@ import {
   getEffectiveActivityTimings,
   isCanonicalActivityTask,
   normalizeLessonTaskForm,
+  readAnswerFromTaskResponse,
 } from "@/lib/lesson-activities";
 import {
   getInteractiveSlides,
@@ -247,7 +248,45 @@ type StoredTaskResponseState = {
   responseData: Record<string, unknown>;
   timeSpentSeconds: number;
   attempts: number;
+  answer: boolean | number | string | string[] | null;
+  teacherReview: {
+    status: "pending_review" | "accepted" | "needs_retry" | null;
+    feedback: string | null;
+    score: number | null;
+    reviewedAt: string | null;
+  };
 };
+
+type ActivityMarkerStatus =
+  | "pending"
+  | "completed"
+  | "skipped"
+  | "accepted"
+  | "pending_review"
+  | "needs_retry";
+
+function toResponsePayload(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readTeacherReviewState(responseData: unknown) {
+  const payload = toResponsePayload(responseData);
+  const teacherReview = toResponsePayload(payload.teacher_review);
+  const rawStatus = teacherReview.status;
+  const status =
+    rawStatus === "pending_review" || rawStatus === "accepted" || rawStatus === "needs_retry"
+      ? rawStatus
+      : null;
+
+  return {
+    status,
+    feedback: typeof teacherReview.feedback === "string" ? teacherReview.feedback : null,
+    score: typeof teacherReview.score === "number" ? teacherReview.score : null,
+    reviewedAt: typeof teacherReview.reviewed_at === "string" ? teacherReview.reviewed_at : null,
+  };
+}
 
 function mapTaskResponsesToState(
   responses:
@@ -281,6 +320,8 @@ function mapTaskResponsesToState(
       responseData: payload,
       timeSpentSeconds: response.time_spent_seconds ?? 0,
       attempts: response.attempts ?? 1,
+      answer: readAnswerFromTaskResponse(payload),
+      teacherReview: readTeacherReviewState(payload),
     };
 
     return acc;
@@ -340,6 +381,25 @@ export default function LessonPlayerPage() {
   // Celebration state
   const [showConfetti, setShowConfetti] = useState(false);
   const lastPlaybackSecondRef = useRef(0);
+
+  const isTaskResolvedForCompletion = useCallback(
+    (task: LessonTask, response?: StoredTaskResponseState | null) => {
+      if (!isCanonicalActivityTask(task.task_type) || !response) {
+        return false;
+      }
+
+      if (response.status !== "completed") {
+        return false;
+      }
+
+      if (task.task_type === "free_response" && response.teacherReview.status === "needs_retry") {
+        return false;
+      }
+
+      return true;
+    },
+    []
+  );
 
   // Load lesson data
   useEffect(() => {
@@ -601,6 +661,13 @@ export default function LessonPlayerPage() {
                 : {},
             timeSpentSeconds,
             attempts: (prev[task.id]?.attempts ?? 0) + 1,
+            answer: payload.answer ?? null,
+            teacherReview: {
+              status: null,
+              feedback: null,
+              score: null,
+              reviewedAt: null,
+            },
           },
         }));
       } catch {
@@ -615,6 +682,13 @@ export default function LessonPlayerPage() {
                 : {},
             timeSpentSeconds,
             attempts: (prev[task.id]?.attempts ?? 0) + 1,
+            answer: payload.answer ?? null,
+            teacherReview: {
+              status: null,
+              feedback: null,
+              score: null,
+              reviewedAt: null,
+            },
           },
         }));
       }
@@ -707,7 +781,9 @@ export default function LessonPlayerPage() {
           ({ task, effectiveTimestampSeconds }) =>
             effectiveTimestampSeconds > lowerBound &&
             effectiveTimestampSeconds <= upperBound &&
-            !taskResponses[task.id]
+            (!taskResponses[task.id] ||
+              (task.task_type === "free_response" &&
+                taskResponses[task.id]?.teacherReview.status === "needs_retry"))
         )?.task || null
       );
     },
@@ -720,9 +796,9 @@ export default function LessonPlayerPage() {
         (task) =>
           isCanonicalActivityTask(task.task_type) &&
           task.required !== false &&
-          taskResponses[task.id]?.status !== "completed"
+          !isTaskResolvedForCompletion(task, taskResponses[task.id])
       ) || null,
-    [taskResponses, tasks]
+    [isTaskResolvedForCompletion, taskResponses, tasks]
   );
 
   const availableVideoSources = useMemo(() => getLessonVideoSources(lesson), [lesson]);
@@ -1081,16 +1157,7 @@ export default function LessonPlayerPage() {
   ).length;
   const canonicalActivityCount = tasks.filter((task) => isCanonicalActivityTask(task.task_type)).length;
   const completedActivityCount = tasks.filter(
-    (task) => isCanonicalActivityTask(task.task_type) && taskResponses[task.id]?.status === "completed"
-  ).length;
-  const requiredActivityCount = tasks.filter(
-    (task) => isCanonicalActivityTask(task.task_type) && task.required !== false
-  ).length;
-  const completedRequiredActivityCount = tasks.filter(
-    (task) =>
-      isCanonicalActivityTask(task.task_type) &&
-      task.required !== false &&
-      taskResponses[task.id]?.status === "completed"
+    (task) => isCanonicalActivityTask(task.task_type) && isTaskResolvedForCompletion(task, taskResponses[task.id])
   ).length;
   const activityMarkers = timedActivities.map((timing) => ({
     id: timing.task.id,
@@ -1100,8 +1167,44 @@ export default function LessonPlayerPage() {
       timing.task.title_en ||
       timing.task.title_ar ||
       `Activity ${timing.task.display_order + 1}`,
-    status: taskResponses[timing.task.id]?.status ?? "pending",
+    status: (() => {
+      const response = taskResponses[timing.task.id];
+      if (!response) {
+        return "pending" as ActivityMarkerStatus;
+      }
+      if (response.status === "skipped") {
+        return "skipped" as ActivityMarkerStatus;
+      }
+      if (response.status === "timed_out") {
+        return "pending" as ActivityMarkerStatus;
+      }
+      if (response.teacherReview.status === "needs_retry") {
+        return "needs_retry" as ActivityMarkerStatus;
+      }
+      if (response.teacherReview.status === "accepted") {
+        return "accepted" as ActivityMarkerStatus;
+      }
+      if (response.teacherReview.status === "pending_review") {
+        return "pending_review" as ActivityMarkerStatus;
+      }
+      return "completed" as ActivityMarkerStatus;
+    })(),
   }));
+  const reviewedFreeResponseActivities = tasks
+    .filter(
+      (task) =>
+        task.task_type === "free_response" &&
+        taskResponses[task.id]?.teacherReview.status
+    )
+    .map((task) => {
+      const response = taskResponses[task.id];
+      const timing = timedActivities.find((candidate) => candidate.task.id === task.id);
+      return {
+        task,
+        response,
+        timing,
+      };
+    });
 
   return (
     <div className="min-h-screen bg-[#FCFCFC]" dir={isRtl ? "rtl" : "ltr"}>
@@ -1219,6 +1322,19 @@ export default function LessonPlayerPage() {
                   ) || null
                 }
                 language={language}
+                initialFreeResponseAnswer={
+                  activeActivity.task_type === "free_response" &&
+                  typeof taskResponses[activeActivity.id]?.answer === "string"
+                    ? (taskResponses[activeActivity.id]?.answer as string)
+                    : ""
+                }
+                reviewStatus={taskResponses[activeActivity.id]?.teacherReview.status ?? null}
+                reviewFeedback={taskResponses[activeActivity.id]?.teacherReview.feedback ?? null}
+                onDismiss={() => {
+                  setActiveActivity(null);
+                  videoRef.current?.play();
+                  setIsPlaying(true);
+                }}
                 onComplete={async (result) => {
                   await persistTaskResponse(activeActivity, {
                     answer: result.answer,
@@ -1285,8 +1401,12 @@ export default function LessonPlayerPage() {
                     <div className="pointer-events-none absolute inset-x-0 top-1/2 z-20 -translate-y-1/2">
                       {activityMarkers.map((marker) => {
                         const markerClassName =
-                          marker.status === "completed"
+                          marker.status === "completed" || marker.status === "accepted"
                             ? "bg-emerald-400 ring-emerald-100"
+                            : marker.status === "pending_review"
+                              ? "bg-sky-400 ring-white/60"
+                              : marker.status === "needs_retry"
+                                ? "bg-rose-400 ring-rose-100"
                             : marker.status === "skipped"
                               ? "bg-gray-300 ring-white/30"
                               : "bg-amber-400 ring-white/60";
@@ -1320,6 +1440,14 @@ export default function LessonPlayerPage() {
                   <span className="flex items-center gap-1.5">
                     <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
                     Completed
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
+                    Awaiting review
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
+                    Needs retry
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="h-2.5 w-2.5 rounded-full bg-gray-300" />
@@ -1541,6 +1669,100 @@ export default function LessonPlayerPage() {
               </p>
             )}
           </div>
+
+          {reviewedFreeResponseActivities.length > 0 && (
+            <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                    {language === "ar" ? "مراجعة المعلم" : "Teacher Review"}
+                  </p>
+                  <h3 className="mt-1 text-sm font-semibold text-gray-900">
+                    {language === "ar"
+                      ? "تحقق من ملاحظات المعلم على الإجابات الحرة"
+                      : "Check feedback on your free response activities"}
+                  </h3>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {reviewedFreeResponseActivities.map(({ task, response, timing }) => {
+                  const reviewStatus = response?.teacherReview.status;
+                  const reviewTone =
+                    reviewStatus === "accepted"
+                      ? "border-emerald-200 bg-emerald-50/60"
+                      : reviewStatus === "needs_retry"
+                        ? "border-rose-200 bg-rose-50/70"
+                        : "border-sky-200 bg-sky-50/70";
+                  const reviewLabel =
+                    reviewStatus === "accepted"
+                      ? language === "ar"
+                        ? "تم قبول الإجابة"
+                        : "Accepted"
+                      : reviewStatus === "needs_retry"
+                        ? language === "ar"
+                          ? "تحتاج إلى إعادة المحاولة"
+                          : "Needs retry"
+                        : language === "ar"
+                          ? "بانتظار المراجعة"
+                          : "Pending review";
+
+                  return (
+                    <div key={task.id} className={`rounded-2xl border p-4 ${reviewTone}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {(language === "ar" ? task.title_ar : task.title_en) ||
+                              task.title_en ||
+                              task.title_ar}
+                          </p>
+                          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                            {reviewLabel}
+                          </p>
+                        </div>
+                        {timing && (
+                          <button
+                            type="button"
+                            onClick={() => handleActivityMarkerClick(task.id, timing.effectiveTimestampSeconds)}
+                            className="rounded-xl border border-white/70 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-white"
+                          >
+                            {reviewStatus === "needs_retry"
+                              ? language === "ar"
+                                ? "أعد المحاولة"
+                                : "Retry now"
+                              : language === "ar"
+                                ? "افتح النشاط"
+                                : "Open activity"}
+                          </button>
+                        )}
+                      </div>
+
+                      {typeof response?.answer === "string" && response.answer.trim() && (
+                        <div className="mt-3 rounded-xl border border-white/80 bg-white/80 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
+                            {language === "ar" ? "إجابتك" : "Your answer"}
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
+                            {response.answer}
+                          </p>
+                        </div>
+                      )}
+
+                      {response?.teacherReview.feedback && (
+                        <div className="mt-3 rounded-xl border border-white/80 bg-white/90 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
+                            {language === "ar" ? "ملاحظات المعلم" : "Teacher feedback"}
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
+                            {response.teacherReview.feedback}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Navigation */}
           {(adjacentLessons.prev || adjacentLessons.next) && (

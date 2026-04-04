@@ -20,6 +20,9 @@ interface SlideInteractionOverlayProps {
   badgeLabel?: string;
   headerMeta?: ReactNode;
   secondaryAction?: ReactNode;
+  initialFreeResponseAnswer?: string;
+  reviewStatus?: 'pending_review' | 'accepted' | 'needs_retry' | null;
+  reviewFeedback?: string | null;
 }
 
 export default function SlideInteractionOverlay({
@@ -29,12 +32,15 @@ export default function SlideInteractionOverlay({
   badgeLabel,
   headerMeta,
   secondaryAction,
+  initialFreeResponseAnswer,
+  reviewStatus,
+  reviewFeedback,
 }: SlideInteractionOverlayProps) {
   const isAr = language === 'ar';
   const startedAtRef = useRef(0);
   const [selectedChoiceIndex, setSelectedChoiceIndex] = useState<number | null>(null);
   const [selectedTrueFalse, setSelectedTrueFalse] = useState<boolean | null>(null);
-  const [freeResponseAnswer, setFreeResponseAnswer] = useState('');
+  const [freeResponseAnswer, setFreeResponseAnswer] = useState(initialFreeResponseAnswer || '');
   const [tappedIndexes, setTappedIndexes] = useState<number[]>([]);
   const [matchSelections, setMatchSelections] = useState<Record<number, number>>({});
   const [sequenceSelection, setSequenceSelection] = useState<string[]>([]);
@@ -117,6 +123,30 @@ export default function SlideInteractionOverlay({
   );
   const countTarget = Math.max(1, slide.interaction_count_target ?? 5);
   const countToken = slide.interaction_visual_emoji?.trim() || '🍎';
+  const freeResponseLocked = reviewStatus === 'accepted' || reviewStatus === 'pending_review';
+  const reviewBanner =
+    slide.interaction_type === 'free_response' && (reviewStatus || reviewFeedback)
+      ? {
+          title:
+            reviewStatus === 'accepted'
+              ? isAr
+                ? 'تم قبول إجابتك'
+                : 'Your answer was accepted'
+              : reviewStatus === 'needs_retry'
+                ? isAr
+                  ? 'يرجى إعادة المحاولة بناءً على ملاحظات المعلم'
+                  : 'Please try again using your teacher feedback'
+                : isAr
+                  ? 'إجابتك بانتظار مراجعة المعلم'
+                  : 'Your answer is waiting for teacher review',
+          className:
+            reviewStatus === 'accepted'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : reviewStatus === 'needs_retry'
+                ? 'border-rose-200 bg-rose-50 text-rose-800'
+                : 'border-sky-200 bg-sky-50 text-sky-800',
+        }
+      : null;
 
   useEffect(() => {
     startedAtRef.current = window.performance.now();
@@ -294,6 +324,14 @@ export default function SlideInteractionOverlay({
     if (slide.interaction_type === 'free_response') {
       return (
         <>
+          {reviewBanner && (
+            <div className={`mb-4 rounded-2xl border px-4 py-3 ${reviewBanner.className}`}>
+              <p className="text-sm font-semibold">{reviewBanner.title}</p>
+              {reviewFeedback && (
+                <p className="mt-2 whitespace-pre-wrap text-sm opacity-90">{reviewFeedback}</p>
+              )}
+            </div>
+          )}
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
             {text.freeResponseLabel}
           </p>
@@ -301,12 +339,12 @@ export default function SlideInteractionOverlay({
             dir={isAr ? 'rtl' : 'ltr'}
             value={freeResponseAnswer}
             onChange={(event) => setFreeResponseAnswer(event.target.value)}
-            disabled={!!result}
+            disabled={!!result || freeResponseLocked}
             rows={6}
             placeholder={text.freeResponsePlaceholder}
             className={`w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 focus:border-[#007229] focus:outline-none ${isAr ? 'font-cairo text-right' : 'font-inter'}`}
           />
-          {!result && (
+          {!result && !freeResponseLocked && (
             <button
               onClick={(event) => submitFreeResponse(event.timeStamp)}
               disabled={!freeResponseAnswer.trim()}
@@ -622,10 +660,12 @@ export default function SlideInteractionOverlay({
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]">
-            <div className="overflow-hidden rounded-2xl bg-gray-100">
-              <SlideCard slide={slide} language={language} />
-            </div>
+          <div className={`grid gap-4 ${slide.type !== 'activity' ? 'lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]' : ''}`}>
+            {slide.type !== 'activity' && (
+              <div className="overflow-hidden rounded-2xl bg-gray-100">
+                <SlideCard slide={slide} language={language} />
+              </div>
+            )}
 
             <div className="flex flex-col rounded-2xl border border-gray-200 bg-gray-50 p-4">
               <p className={`mb-4 text-sm text-gray-700 ${isAr ? 'font-cairo' : 'font-inter'}`}>
