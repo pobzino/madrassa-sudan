@@ -164,21 +164,23 @@ export default function MatchPairsDnD({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="space-y-4">
-        {/* Unplaced items pool */}
-        <div className="flex flex-wrap gap-2">
-          {items.map((item, index) =>
-            placedItemIndexes.has(index) ? null : (
-              <DraggableItem
-                key={index}
-                id={`item-${index}`}
-                label={item}
-                isAr={isAr}
-                disabled={disabled}
-              />
-            )
-          )}
-        </div>
+      <div className="space-y-3">
+        {/* Unplaced items pool — hidden when all placed */}
+        {placedItemIndexes.size < items.length && (
+          <div className="flex flex-wrap gap-2">
+            {items.map((item, index) =>
+              placedItemIndexes.has(index) ? null : (
+                <DraggableItem
+                  key={index}
+                  id={`item-${index}`}
+                  label={item}
+                  isAr={isAr}
+                  disabled={disabled}
+                />
+              )
+            )}
+          </div>
+        )}
 
         {/* Drop zones */}
         <div className="space-y-2">
