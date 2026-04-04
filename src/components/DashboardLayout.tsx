@@ -176,23 +176,23 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const isInTeacherView = pathname.startsWith("/teacher");
 
   // Different nav items for teachers vs students
+  // Student nav: 4 primary items with colored icon backgrounds for kids
   const studentNavItems = [
-    { href: "/dashboard", label: t.dashboard, icon: <HomeNavIcon className="w-5 h-5" /> },
-    { href: "/lessons", label: t.lessons, icon: <BookNavIcon className="w-5 h-5" /> },
-    { href: "/homework", label: t.homework, icon: <ClipboardNavIcon className="w-5 h-5" /> },
-    { href: "/diagnostic", label: language === 'ar' ? 'التقييم' : 'Assessment', icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-      </svg>
-    )},
-    { href: "/tutor", label: t.aiTutor, icon: <OwlTutorIcon className="w-5 h-5" /> },
+    { href: "/dashboard", label: t.dashboard, icon: <HomeNavIcon className="w-6 h-6" />, color: "bg-emerald-100 text-emerald-600" },
+    { href: "/lessons", label: t.lessons, icon: <BookNavIcon className="w-6 h-6" />, color: "bg-violet-100 text-violet-600" },
+    { href: "/homework", label: t.homework, icon: <ClipboardNavIcon className="w-6 h-6" />, color: "bg-amber-100 text-amber-600" },
+    { href: "/progress", label: t.progress, icon: <ChartNavIcon className="w-6 h-6" />, color: "bg-cyan-100 text-cyan-600" },
+  ];
+
+  // Secondary student nav (smaller, below primary)
+  const studentSecondaryNavItems = [
     { href: "/cohorts", label: t.myClasses, icon: <UsersNavIcon className="w-5 h-5" /> },
-    { href: "/progress", label: t.progress, icon: <ChartNavIcon className="w-5 h-5" /> },
+    { href: "/tutor", label: t.aiTutor, icon: <OwlTutorIcon className="w-5 h-5" /> },
   ];
 
   // Add teacher link for teachers/admins when in student view
   if (isTeacherOrAdmin && !isInTeacherView) {
-    studentNavItems.push({
+    studentSecondaryNavItems.push({
       href: "/teacher",
       label: t.teacherDashboard,
       icon: <GraduationCapIcon className="w-5 h-5" />,
@@ -208,6 +208,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   ];
 
   const navItems = isInTeacherView ? teacherNavItems : studentNavItems;
+  const isStudentView = !isInTeacherView;
 
   // Clear navigating state when route changes
   useEffect(() => {
@@ -233,7 +234,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <Link
           href={isInTeacherView ? "/teacher/homework/create" : "/lessons"}
           onClick={() => mobile && setSidebarOpen(false)}
-          className="group flex items-center justify-center gap-2 w-full py-3 px-4 bg-[#007229] hover:bg-[#005C22] text-white font-bold rounded-xl transition-all shadow-lg shadow-[#007229]/30 hover:shadow-xl hover:shadow-[#007229]/40 hover:-translate-y-0.5"
+          className={`group flex items-center justify-center gap-2 w-full px-4 bg-[#007229] hover:bg-[#005C22] text-white font-bold rounded-xl transition-all shadow-lg shadow-[#007229]/30 hover:shadow-xl hover:shadow-[#007229]/40 hover:-translate-y-0.5 ${
+            isStudentView ? "py-4 text-base font-fredoka" : "py-3"
+          }`}
         >
           {isInTeacherView ? (
             <>
@@ -254,6 +257,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {navItems.map((item) => {
           const active = isActive(item.href);
           const isNavigating = navigatingTo === item.href;
+          const itemColor = "color" in item ? (item as { color: string }).color : null;
           return (
             <Link
               key={item.href}
@@ -262,16 +266,30 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 if (!active) setNavigatingTo(item.href);
                 if (mobile) setSidebarOpen(false);
               }}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-[15px] font-semibold transition-all ${
-                active
-                  ? "bg-[#007229]/10 text-[#007229] shadow-sm"
-                  : isNavigating
-                    ? "bg-gray-100 text-[#007229]"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+              className={`flex items-center gap-3 rounded-xl transition-all ${
+                isStudentView
+                  ? `px-4 py-4 mb-2 text-base font-semibold font-fredoka ${
+                      active
+                        ? "bg-[#007229]/10 text-[#007229] shadow-sm"
+                        : isNavigating
+                          ? "bg-gray-100 text-[#007229]"
+                          : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                    }`
+                  : `px-4 py-3 mb-1 text-[15px] font-semibold ${
+                      active
+                        ? "bg-[#007229]/10 text-[#007229] shadow-sm"
+                        : isNavigating
+                          ? "bg-gray-100 text-[#007229]"
+                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    }`
               }`}
             >
               {isNavigating ? (
-                <div className="w-5 h-5 animate-spin rounded-full border-2 border-gray-200 border-t-[#007229]" />
+                <div className={`${isStudentView ? "w-6 h-6" : "w-5 h-5"} animate-spin rounded-full border-2 border-gray-200 border-t-[#007229]`} />
+              ) : isStudentView && itemColor ? (
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${itemColor}`}>
+                  {item.icon}
+                </div>
               ) : (
                 item.icon
               )}
@@ -279,6 +297,41 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </Link>
           );
         })}
+
+        {/* Secondary nav items for students (smaller, separated) */}
+        {isStudentView && studentSecondaryNavItems.length > 0 && (
+          <>
+            <div className="my-2 border-t border-gray-100" />
+            {studentSecondaryNavItems.map((item) => {
+              const active = isActive(item.href);
+              const isNavigating = navigatingTo === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => {
+                    if (!active) setNavigatingTo(item.href);
+                    if (mobile) setSidebarOpen(false);
+                  }}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-medium transition-all ${
+                    active
+                      ? "bg-[#007229]/10 text-[#007229] shadow-sm"
+                      : isNavigating
+                        ? "bg-gray-100 text-[#007229]"
+                        : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                  }`}
+                >
+                  {isNavigating ? (
+                    <div className="w-5 h-5 animate-spin rounded-full border-2 border-gray-200 border-t-[#007229]" />
+                  ) : (
+                    item.icon
+                  )}
+                  {item.label}
+                </Link>
+              );
+            })}
+          </>
+        )}
       </nav>
 
       {/* Bottom Section */}

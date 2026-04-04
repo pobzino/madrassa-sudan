@@ -229,7 +229,7 @@ export default function LessonsPage() {
       <div className="flex gap-2 overflow-x-auto pb-4 -mx-4 px-4 scrollbar-hide">
         <button
           onClick={() => { setSelectedSubject("all"); setSearchQuery(""); }}
-          className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+          className={`flex-shrink-0 px-5 py-2.5 rounded-full text-base font-semibold font-fredoka transition-all ${
             selectedSubject === "all" && !searchQuery
               ? "bg-gray-900 text-white shadow-sm"
               : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -244,7 +244,7 @@ export default function LessonsPage() {
             <button
               key={subject.id}
               onClick={() => { setSelectedSubject(subject.id); setSearchQuery(""); }}
-              className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+              className={`flex-shrink-0 px-5 py-2.5 rounded-full text-base font-semibold font-fredoka transition-all ${
                 active
                   ? `${colors.chip} ring-1`
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -266,7 +266,7 @@ export default function LessonsPage() {
               <p className="text-sm text-gray-500">{t.tryAdjusting}</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {displayList.map((lesson) => (
                 <LessonCard
                   key={lesson.id}
@@ -291,7 +291,7 @@ export default function LessonsPage() {
           {/* Continue Watching */}
           {inProgressLessons.length > 0 && (
             <section>
-              <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+              <h2 className="text-lg font-bold font-fredoka text-gray-900 mb-3 flex items-center gap-2">
                 <span className="w-1 h-5 bg-amber-400 rounded-full" />
                 {t.continueWatching}
               </h2>
@@ -320,7 +320,7 @@ export default function LessonsPage() {
             return (
               <section key={subject.id}>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <h2 className="text-lg font-bold font-fredoka text-gray-900 flex items-center gap-2">
                     <span className={`w-1 h-5 ${color.bg} rounded-full`} />
                     {language === "ar" ? subject.name_ar : subject.name_en}
                     <span className="text-sm font-normal text-gray-400 ml-1">
@@ -467,12 +467,12 @@ function LessonCard({
   return (
     <Link
       href={`/lessons/${lesson.id}`}
-      className={`group bg-white rounded-xl overflow-hidden border border-gray-100 hover:shadow-lg hover:border-gray-200 transition-all flex-shrink-0 ${
-        compact ? "w-56 sm:w-64" : ""
+      className={`group bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-lg hover:border-gray-200 transition-all flex-shrink-0 ${
+        compact ? "w-64 sm:w-72" : ""
       }`}
     >
       {/* Thumbnail */}
-      <div className={`relative ${compact ? "h-32" : "h-36 sm:h-40"} bg-gradient-to-br from-gray-100 to-gray-200`}>
+      <div className={`relative ${compact ? "h-40" : "h-44 sm:h-48"} bg-gradient-to-br from-gray-100 to-gray-200`}>
         {lesson.thumbnail_url ? (
           <Image
             src={lesson.thumbnail_url}
@@ -491,15 +491,15 @@ function LessonCard({
 
         {/* Duration pill */}
         {duration && (
-          <span className={`absolute bottom-2 ${isRtl ? "left-2" : "right-2"} px-1.5 py-0.5 bg-black/70 text-white text-[10px] font-medium rounded`}>
+          <span className={`absolute bottom-2 ${isRtl ? "left-2" : "right-2"} px-2 py-1 bg-black/70 text-white text-xs font-semibold rounded-lg`}>
             {duration}
           </span>
         )}
 
         {/* Completed badge */}
         {completed && (
-          <span className={`absolute top-2 ${isRtl ? "left-2" : "right-2"} flex items-center gap-0.5 px-1.5 py-0.5 bg-emerald-600 text-white text-[10px] font-bold rounded`}>
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <span className={`absolute top-2 ${isRtl ? "left-2" : "right-2"} flex items-center gap-1 px-2 py-1 bg-emerald-600 text-white text-xs font-bold rounded-lg`}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
           </span>
@@ -514,8 +514,8 @@ function LessonCard({
 
         {/* Hover play */}
         <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="w-11 h-11 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
-            <svg className="w-5 h-5 text-gray-900 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+          <div className="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+            <svg className="w-7 h-7 text-gray-900 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5.14v14l11-7-11-7z" />
             </svg>
           </div>
@@ -523,17 +523,17 @@ function LessonCard({
       </div>
 
       {/* Info */}
-      <div className="p-3">
-        <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug group-hover:text-emerald-700 transition-colors mb-1.5">
+      <div className="p-4">
+        <h3 className="text-base font-semibold font-fredoka text-gray-900 line-clamp-2 leading-snug group-hover:text-emerald-700 transition-colors mb-2">
           {title}
         </h3>
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           {subjectName && (
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${color.light}`}>
+            <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${color.light}`}>
               {subjectName}
             </span>
           )}
-          <span className="text-[10px] text-gray-400 font-medium">
+          <span className="text-xs text-gray-400 font-medium">
             {t.grade} {lesson.grade_level}
           </span>
         </div>

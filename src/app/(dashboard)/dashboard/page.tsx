@@ -17,6 +17,9 @@ import {
   OwlTutorIcon,
   OwlWaving,
   OwlThinking,
+  OwlMath,
+  OwlScience,
+  OwlEnglish,
   MadrassaLogo,
   HomeNavIcon,
   BookNavIcon,
@@ -93,13 +96,13 @@ const translations = {
   },
 };
 
-// Subject icon mapping based on subject name
-const getSubjectIcon = (subject: Subject, className: string = "w-12 h-12") => {
+// Subject icon mapping — kid-friendly owl variants
+const getSubjectIcon = (subject: Subject, className: string = "w-20 h-20") => {
   const name = subject.name_en?.toLowerCase() || "";
 
-  if (name.includes("math")) return <MathIcon className={className} />;
-  if (name.includes("science")) return <ScienceIcon className={className} />;
-  if (name.includes("english")) return <GlobeIcon className={className} />;
+  if (name.includes("math")) return <OwlMath className={className} />;
+  if (name.includes("science")) return <OwlScience className={className} />;
+  if (name.includes("english")) return <OwlEnglish className={className} />;
 
   // Default fallback
   return <BookOpenIcon className={className} />;
@@ -413,8 +416,8 @@ export default function DashboardPage() {
             </div>
 
             <div className="relative">
-              <h1 className="text-2xl sm:text-3xl font-bold mb-2">{t.welcomeBack}, {firstName}!</h1>
-              <p className="text-green-100 text-lg">{t.welcomeSubtitle}</p>
+              <h1 className="text-3xl sm:text-4xl font-bold mb-2 font-fredoka">{t.welcomeBack}, {firstName}!</h1>
+              <p className="text-green-100 text-lg font-fredoka">{t.welcomeSubtitle}</p>
 
               {/* Quick stats in banner */}
               <div className="flex flex-wrap gap-4 mt-6">
@@ -436,43 +439,43 @@ export default function DashboardPage() {
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/30">
                 <TrophyIcon className="w-7 h-7" />
               </div>
-              <h2 className="text-xl font-bold text-gray-900">{t.yourProgress}</h2>
+              <h2 className="text-xl font-bold text-gray-900 font-fredoka">{t.yourProgress}</h2>
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="relative overflow-hidden bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl p-5 text-white shadow-lg shadow-violet-500/30">
-                <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="relative overflow-hidden bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg shadow-violet-500/30 animate-pop-in">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
                 <div className="relative">
                   <div className="text-violet-200 mb-1">{Icons.book}</div>
-                  <p className="text-4xl font-bold">{stats.lessons}</p>
-                  <p className="text-violet-200 text-sm font-medium">{t.lessonsCompleted}</p>
+                  <p className="text-5xl font-bold font-fredoka">{stats.lessons}</p>
+                  <p className="text-violet-200 text-base font-medium font-fredoka">{t.lessonsCompleted}</p>
                 </div>
               </div>
 
-              <div className="relative overflow-hidden bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl p-5 text-white shadow-lg shadow-orange-500/30">
-                <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="relative overflow-hidden bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl p-6 text-white shadow-lg shadow-orange-500/30 animate-pop-in" style={{ animationDelay: "0.1s" }}>
+                <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
                 <div className="relative">
                   <div className="text-orange-200 mb-1">{Icons.fire}</div>
-                  <p className="text-4xl font-bold">{stats.streak}</p>
-                  <p className="text-orange-200 text-sm font-medium">{t.dayStreak}</p>
+                  <p className="text-5xl font-bold font-fredoka">{stats.streak}</p>
+                  <p className="text-orange-200 text-base font-medium font-fredoka">{t.dayStreak}</p>
                 </div>
               </div>
 
-              <div className="relative overflow-hidden bg-gradient-to-br from-[#007229] to-[#00913D] rounded-2xl p-5 text-white shadow-lg shadow-[#007229]/30">
-                <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="relative overflow-hidden bg-gradient-to-br from-[#007229] to-[#00913D] rounded-2xl p-6 text-white shadow-lg shadow-[#007229]/30 animate-pop-in" style={{ animationDelay: "0.2s" }}>
+                <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
                 <div className="relative">
                   <div className="text-green-200 mb-1">{Icons.clipboard}</div>
-                  <p className="text-4xl font-bold">{stats.homework}</p>
-                  <p className="text-green-200 text-sm font-medium">{t.homeworkDone}</p>
+                  <p className="text-5xl font-bold font-fredoka">{stats.homework}</p>
+                  <p className="text-green-200 text-base font-medium font-fredoka">{t.homeworkDone}</p>
                 </div>
               </div>
 
-              <div className="relative overflow-hidden bg-gradient-to-br from-amber-500 to-yellow-500 rounded-2xl p-5 text-white shadow-lg shadow-amber-500/30">
-                <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="relative overflow-hidden bg-gradient-to-br from-amber-500 to-yellow-500 rounded-2xl p-6 text-white shadow-lg shadow-amber-500/30 animate-pop-in" style={{ animationDelay: "0.3s" }}>
+                <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
                 <div className="relative">
                   <div className="text-amber-200 mb-1">{Icons.star}</div>
-                  <p className="text-4xl font-bold">{stats.points}</p>
-                  <p className="text-amber-200 text-sm font-medium">{t.totalPoints}</p>
+                  <p className="text-5xl font-bold font-fredoka">{stats.points}</p>
+                  <p className="text-amber-200 text-base font-medium font-fredoka">{t.totalPoints}</p>
                 </div>
               </div>
             </div>
@@ -484,25 +487,26 @@ export default function DashboardPage() {
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#007229] to-[#00913D] flex items-center justify-center shadow-lg shadow-[#007229]/30">
                 <BookOpenIcon className="w-7 h-7 text-white" />
               </div>
-              <h2 className="text-xl font-bold text-gray-900">{t.subjects}</h2>
+              <h2 className="text-xl font-bold text-gray-900 font-fredoka">{t.subjects}</h2>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
               {subjects.map((subject, index) => (
                 <Link
                   key={subject.id}
                   href={`/lessons?subject=${subject.id}`}
-                  className="group relative overflow-hidden rounded-2xl p-8 text-white transition-all hover:-translate-y-1 hover:shadow-xl"
+                  className="group relative overflow-hidden rounded-3xl p-10 text-white transition-all hover:-translate-y-1 hover:shadow-xl animate-pop-in"
+                  style={{ animationDelay: `${index * 0.1}s` }}
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${subjectColors[index % subjectColors.length]}`} />
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                  <div className="absolute bottom-0 left-0 w-12 h-12 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                  <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
 
                   <div className="relative text-center flex flex-col items-center">
-                    <div className="mb-3 drop-shadow-lg">
-                      {getSubjectIcon(subject, "w-14 h-14")}
+                    <div className="mb-4 drop-shadow-lg group-hover:animate-wiggle">
+                      {getSubjectIcon(subject, "w-20 h-20")}
                     </div>
-                    <span className="font-bold text-white/90 group-hover:text-white transition-colors">
+                    <span className="font-bold text-xl text-white/90 group-hover:text-white transition-colors font-fredoka">
                       {language === "ar" ? subject.name_ar : subject.name_en}
                     </span>
                   </div>
@@ -520,16 +524,13 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Invite Guardian Button */}
+      {/* Invite Guardian — small link for parents to find */}
       {profile?.role === "student" && (
-        <div className="mt-8 text-center">
+        <div className="mt-6 text-center">
           <button
             onClick={openInviteModal}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all"
+            className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
             {t.inviteGuardian}
           </button>
         </div>

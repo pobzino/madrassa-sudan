@@ -203,8 +203,8 @@ export function StudentHomeworkList({ homework, isLoading }: StudentHomeworkList
       case "graded":
       case "returned":
         return (
-          <span className="flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 text-sm font-medium rounded-full">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+          <span className="flex items-center gap-1 px-3 py-1.5 bg-emerald-100 text-emerald-700 text-base font-semibold font-fredoka rounded-full">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
             </svg>
             {score}/{totalPoints}
@@ -212,7 +212,7 @@ export function StudentHomeworkList({ homework, isLoading }: StudentHomeworkList
         );
       case "submitted":
         return (
-          <span className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
+          <span className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 text-blue-700 text-base font-semibold font-fredoka rounded-full">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
@@ -221,7 +221,7 @@ export function StudentHomeworkList({ homework, isLoading }: StudentHomeworkList
         );
       case "in_progress":
         return (
-          <span className="flex items-center gap-1 px-3 py-1 bg-amber-100 text-amber-700 text-sm font-medium rounded-full">
+          <span className="flex items-center gap-1 px-3 py-1.5 bg-amber-100 text-amber-700 text-base font-semibold font-fredoka rounded-full">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -230,7 +230,7 @@ export function StudentHomeworkList({ homework, isLoading }: StudentHomeworkList
         );
       default:
         return (
-          <span className="flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded-full">
+          <span className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-600 text-base font-semibold font-fredoka rounded-full">
             Not Started
           </span>
         );
@@ -247,12 +247,12 @@ export function StudentHomeworkList({ homework, isLoading }: StudentHomeworkList
           <Link
             key={item.id}
             href={`/homework/${item.id}`}
-            className="block bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md hover:-translate-y-0.5 transition-all"
+            className="block bg-white rounded-2xl border border-gray-100 shadow-sm p-6 hover:shadow-md hover:-translate-y-0.5 transition-all"
           >
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-start gap-3">
-                  <h3 className="font-semibold text-gray-900 text-lg">
+                  <h3 className="font-semibold font-fredoka text-gray-900 text-lg">
                     {item.title_en || item.title_ar}
                   </h3>
                   {getStatusBadge(item.status, item.score, item.total_points)}

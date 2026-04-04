@@ -305,80 +305,80 @@ export default function ProgressPage() {
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
               {Icons.chart}
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">{t.progress}</h1>
+            <h1 className="text-3xl font-bold font-fredoka text-gray-900">{t.progress}</h1>
           </div>
         </div>
 
         {/* Overview Stats */}
         <div className="mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t.overview}</h2>
+          <h2 className="text-xl font-semibold font-fredoka text-gray-900 mb-4">{t.overview}</h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center">
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm animate-pop-in">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center">
                   {Icons.book}
                 </div>
-                <span className="text-sm text-gray-500">{t.lessonsCompleted}</span>
+                <span className="text-base text-gray-500">{t.lessonsCompleted}</span>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{stats.lessons}</p>
+              <p className="text-5xl font-bold font-fredoka text-gray-900">{stats.lessons}</p>
             </div>
 
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-[#007229] flex items-center justify-center">
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm animate-pop-in" style={{ animationDelay: "0.1s" }}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-xl bg-emerald-100 text-[#007229] flex items-center justify-center">
                   {Icons.clipboard}
                 </div>
-                <span className="text-sm text-gray-500">{t.homeworkCompleted}</span>
+                <span className="text-base text-gray-500">{t.homeworkCompleted}</span>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{stats.homework}</p>
+              <p className="text-5xl font-bold font-fredoka text-gray-900">{stats.homework}</p>
             </div>
 
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm animate-pop-in" style={{ animationDelay: "0.2s" }}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
                   {Icons.fire}
                 </div>
-                <span className="text-sm text-gray-500">{t.currentStreak}</span>
+                <span className="text-base text-gray-500">{t.currentStreak}</span>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{stats.streak}</p>
+              <p className="text-5xl font-bold font-fredoka text-gray-900">{stats.streak}</p>
             </div>
 
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm animate-pop-in" style={{ animationDelay: "0.3s" }}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
                   {Icons.star}
                 </div>
-                <span className="text-sm text-gray-500">{t.totalPoints}</span>
+                <span className="text-base text-gray-500">{t.totalPoints}</span>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{stats.points}</p>
+              <p className="text-5xl font-bold font-fredoka text-gray-900">{stats.points}</p>
             </div>
           </div>
         </div>
 
         {/* Parent Summary */}
         <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t.parentSummary}</h2>
+          <h2 className="text-xl font-semibold font-fredoka text-gray-900 mb-4">{t.parentSummary}</h2>
           <div className="grid sm:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100">
-              <p className="text-xs text-emerald-700">{t.sessionsThisWeek}</p>
-              <p className="text-2xl font-bold text-emerald-700 mt-1">{parentSummary.weeklyTotal}</p>
+            <div className="p-5 rounded-xl bg-emerald-50 border border-emerald-100">
+              <p className="text-sm text-emerald-700">{t.sessionsThisWeek}</p>
+              <p className="text-3xl font-bold font-fredoka text-emerald-700 mt-1">{parentSummary.weeklyTotal}</p>
             </div>
-            <div className="p-4 rounded-xl bg-amber-50 border border-amber-100">
-              <p className="text-xs text-amber-700">{t.focusNext}</p>
-              <p className="text-lg font-semibold text-amber-700 mt-1">
+            <div className="p-5 rounded-xl bg-amber-50 border border-amber-100">
+              <p className="text-sm text-amber-700">{t.focusNext}</p>
+              <p className="text-lg font-semibold font-fredoka text-amber-700 mt-1">
                 {parentSummary.focusSubjectName || t.noFocus}
               </p>
             </div>
-            <div className="p-4 rounded-xl bg-cyan-50 border border-cyan-100">
-              <p className="text-xs text-cyan-700">{t.currentStreakLabel}</p>
-              <p className="text-2xl font-bold text-cyan-700 mt-1">{parentSummary.streak}</p>
+            <div className="p-5 rounded-xl bg-cyan-50 border border-cyan-100">
+              <p className="text-sm text-cyan-700">{t.currentStreakLabel}</p>
+              <p className="text-3xl font-bold font-fredoka text-cyan-700 mt-1">{parentSummary.streak}</p>
             </div>
           </div>
         </div>
 
         {/* Weekly Activity */}
         <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t.weeklyActivity}</h2>
+          <h2 className="text-xl font-semibold font-fredoka text-gray-900 mb-4">{t.weeklyActivity}</h2>
           <div className="flex items-end justify-between gap-2 h-32">
             {weeklyActivity.map((count, idx) => {
               const maxCount = Math.max(...weeklyActivity, 1);
@@ -392,7 +392,7 @@ export default function ProgressPage() {
                     }`}
                     style={{ height: `${height}%` }}
                   />
-                  <span className="text-xs text-gray-400 font-medium">{weekDays[idx]}</span>
+                  <span className="text-sm text-gray-400 font-semibold font-fredoka">{weekDays[idx]}</span>
                 </div>
               );
             })}
@@ -401,7 +401,7 @@ export default function ProgressPage() {
 
         {/* Progress by Subject */}
         <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t.bySubject}</h2>
+          <h2 className="text-xl font-semibold font-fredoka text-gray-900 mb-4">{t.bySubject}</h2>
           <div className="space-y-4">
             {subjectProgress.map((sp, idx) => {
               const percentage = sp.total > 0 ? Math.round((sp.completed / sp.total) * 100) : 0;
@@ -411,16 +411,16 @@ export default function ProgressPage() {
                 <div key={sp.subject.id}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-xl">{sp.subject.icon}</span>
-                      <span className="font-medium text-gray-900">
+                      <span className="text-2xl">{sp.subject.icon}</span>
+                      <span className="font-semibold font-fredoka text-gray-900">
                         {language === "ar" ? sp.subject.name_ar : sp.subject.name_en}
                       </span>
                     </div>
-                    <span className="text-sm text-gray-500">
+                    <span className="text-base font-fredoka text-gray-500">
                       {sp.completed}/{sp.total} {t.lessons}
                     </span>
                   </div>
-                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className={`h-full ${colors.bar} transition-all duration-500`}
                       style={{ width: `${percentage}%` }}
@@ -435,8 +435,8 @@ export default function ProgressPage() {
         {/* Achievements */}
         <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">{t.achievements}</h2>
-            <span className="text-sm text-gray-500">
+            <h2 className="text-xl font-semibold font-fredoka text-gray-900">{t.achievements}</h2>
+            <span className="text-base font-fredoka text-gray-500">
               {unlockedAchievements.length}/{achievements.length} {t.unlocked}
             </span>
           </div>
@@ -448,9 +448,9 @@ export default function ProgressPage() {
               return (
                 <div
                   key={achievement.id}
-                  className={`relative p-4 rounded-xl text-center transition-all ${
+                  className={`relative p-5 rounded-2xl text-center transition-all ${
                     isUnlocked
-                      ? "bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-200"
+                      ? "bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-200 animate-pop-in"
                       : "bg-gray-50 border border-gray-200 opacity-60"
                   }`}
                 >
@@ -459,13 +459,13 @@ export default function ProgressPage() {
                       {Icons.lock}
                     </div>
                   )}
-                  <span className="text-3xl mb-2 block filter" style={{ filter: isUnlocked ? "none" : "grayscale(100%)" }}>
+                  <span className="text-4xl mb-2 block filter" style={{ filter: isUnlocked ? "none" : "grayscale(100%)" }}>
                     {achievement.icon}
                   </span>
-                  <p className={`text-sm font-medium ${isUnlocked ? "text-gray-900" : "text-gray-500"}`}>
+                  <p className={`text-base font-semibold font-fredoka ${isUnlocked ? "text-gray-900" : "text-gray-500"}`}>
                     {language === "ar" ? achievement.titleAr : achievement.titleEn}
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-sm text-gray-400 mt-1">
                     {language === "ar" ? achievement.descAr : achievement.descEn}
                   </p>
                 </div>
@@ -474,8 +474,8 @@ export default function ProgressPage() {
           </div>
 
           <div className="text-center mt-6 flex items-center justify-center gap-3">
-            <OwlCelebrating className="w-12 h-12" />
-            <p className="text-gray-500 text-sm">{t.keepLearning}</p>
+            <OwlCelebrating className="w-16 h-16" />
+            <p className="text-gray-500 text-base font-fredoka">{t.keepLearning}</p>
           </div>
         </div>
         </>

@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { OwlCelebrating, Confetti } from "@/components/illustrations";
+import { OwlCelebrating, OwlEncouraging, OwlCorrect, OwlWrong, Confetti } from "@/components/illustrations";
 import type { HomeworkAssignment, HomeworkQuestion, HomeworkSubmission, HomeworkResponse, Subject } from "@/lib/database.types";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import {
@@ -586,7 +586,7 @@ export default function HomeworkAssignmentPage() {
         )}
 
         {/* Progress indicators */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+        <div className="flex gap-2.5 mb-6 overflow-x-auto pb-2">
           {questions.map((q, idx) => {
             const response = getResponse(q.id);
             const hasAnswer = Boolean(answers[q.id]?.trim() || fileAnswers[q.id]?.length);
@@ -596,9 +596,9 @@ export default function HomeworkAssignmentPage() {
               <button
                 key={q.id}
                 onClick={() => setCurrentQuestion(idx)}
-                className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-medium transition-all ${
+                className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold font-fredoka transition-all ${
                   idx === currentQuestion
-                    ? "bg-emerald-600 text-white shadow-lg"
+                    ? "bg-emerald-600 text-white shadow-lg scale-110"
                     : isGraded
                       ? isCorrect
                         ? "bg-emerald-100 text-[#007229]"
@@ -620,10 +620,10 @@ export default function HomeworkAssignmentPage() {
             {/* Question header */}
             <div className="p-5 border-b border-gray-100 bg-gray-50">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-500">
+                <span className="text-base font-semibold font-fredoka text-gray-500">
                   {t.question} {currentQuestion + 1} {t.of} {questions.length}
                 </span>
-                <span className="text-sm font-medium text-[#007229]">
+                <span className="text-base font-semibold font-fredoka text-[#007229]">
                   {currentQ.points} {t.points}
                 </span>
               </div>
@@ -631,7 +631,7 @@ export default function HomeworkAssignmentPage() {
 
             {/* Question content */}
             <div className="p-6">
-              <p className="text-lg font-medium text-gray-900 mb-6">
+              <p className="text-xl font-semibold font-fredoka text-gray-900 mb-6">
                 {language === "ar" ? currentQ.question_text_ar : currentQ.question_text_en || currentQ.question_text_ar}
               </p>
 
@@ -648,7 +648,7 @@ export default function HomeworkAssignmentPage() {
                         key={idx}
                         onClick={() => !isSubmitted && handleAnswerChange(currentQ.id, option)}
                         disabled={isSubmitted}
-                        className={`w-full p-4 rounded-xl border text-left transition-all ${
+                        className={`w-full p-5 rounded-2xl border-2 text-left transition-all ${
                           isGraded
                             ? isCorrectOption
                               ? "bg-emerald-100 border-emerald-500 text-emerald-800"
@@ -656,12 +656,12 @@ export default function HomeworkAssignmentPage() {
                                 ? "bg-red-100 border-red-500 text-red-800"
                                 : "bg-gray-50 border-gray-200 text-gray-600"
                             : isSelected
-                              ? "bg-[#007229]/10 border-emerald-500"
+                              ? "bg-[#007229]/10 border-emerald-500 shadow-sm"
                               : "bg-gray-50 border-gray-200 hover:bg-gray-100"
                         } ${isSubmitted ? "cursor-default" : "cursor-pointer"}`}
                       >
                         <div className="flex items-center gap-3">
-                          <span className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                          <span className={`w-8 h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 text-base font-fredoka ${
                             isGraded
                               ? isCorrectOption
                                 ? "border-emerald-500 bg-[#007229]/100 text-white"
@@ -675,7 +675,7 @@ export default function HomeworkAssignmentPage() {
                             {isGraded && isCorrectOption && Icons.check}
                             {isGraded && isWrongSelection && Icons.x}
                           </span>
-                          <span>{option}</span>
+                          <span className="text-base font-medium">{option}</span>
                         </div>
                       </button>
                     );
@@ -684,7 +684,7 @@ export default function HomeworkAssignmentPage() {
               )}
 
               {currentQ.question_type === "true_false" && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                   {[
                     { value: "true", label: t.trueLabel },
                     { value: "false", label: t.falseLabel },
@@ -698,7 +698,7 @@ export default function HomeworkAssignmentPage() {
                         key={option.value}
                         onClick={() => !isSubmitted && handleAnswerChange(currentQ.id, option.value)}
                         disabled={isSubmitted}
-                        className={`w-full p-4 rounded-xl border text-center transition-all ${
+                        className={`w-full p-6 rounded-2xl border-2 text-center transition-all ${
                           isGraded
                             ? isCorrectOption
                               ? "bg-emerald-100 border-emerald-500 text-emerald-800"
@@ -706,11 +706,11 @@ export default function HomeworkAssignmentPage() {
                                 ? "bg-red-100 border-red-500 text-red-800"
                                 : "bg-gray-50 border-gray-200 text-gray-600"
                             : isSelected
-                              ? "bg-[#007229]/10 border-emerald-500"
+                              ? "bg-[#007229]/10 border-emerald-500 shadow-sm"
                               : "bg-gray-50 border-gray-200 hover:bg-gray-100"
                         } ${isSubmitted ? "cursor-default" : "cursor-pointer"}`}
                       >
-                        <span className="font-medium">{option.label}</span>
+                        <span className="text-lg font-bold font-fredoka">{option.label}</span>
                       </button>
                     );
                   })}
@@ -725,7 +725,7 @@ export default function HomeworkAssignmentPage() {
                     onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
                     disabled={isSubmitted}
                     placeholder={t.typeAnswer}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    className="w-full px-5 py-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                   {isGraded && currentQ.correct_answer && (
                     <div className="mt-3 p-3 bg-[#007229]/10 rounded-xl">
@@ -745,7 +745,7 @@ export default function HomeworkAssignmentPage() {
                     disabled={isSubmitted}
                     placeholder={t.typeAnswer}
                     rows={6}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    className="w-full px-5 py-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                 </div>
               )}
@@ -819,10 +819,27 @@ export default function HomeworkAssignmentPage() {
                 </div>
               )}
 
+              {/* Owl celebration for graded answers */}
+              {isGraded && currentResponse && (
+                <div className="mt-4 flex items-center gap-3">
+                  {currentResponse.points_earned != null && currentResponse.points_earned > 0 ? (
+                    <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-2xl animate-pop-in">
+                      <OwlCorrect className="w-12 h-12 flex-shrink-0" />
+                      <span className="text-base font-semibold font-fredoka text-emerald-700">{t.correct}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-2xl animate-pop-in">
+                      <OwlEncouraging className="w-12 h-12 flex-shrink-0" />
+                      <span className="text-base font-semibold font-fredoka text-amber-700">{t.incorrect}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Teacher comment on this question */}
               {isGraded && currentResponse?.teacher_comment && (
-                <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                  <p className="text-sm font-medium text-amber-800 mb-1">{t.teacherComment}</p>
+                <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                  <p className="text-base font-semibold text-amber-800 mb-1">{t.teacherComment}</p>
                   <p className="text-amber-700">{currentResponse.teacher_comment}</p>
                 </div>
               )}
@@ -833,7 +850,7 @@ export default function HomeworkAssignmentPage() {
               <button
                 onClick={() => setCurrentQuestion((prev) => Math.max(0, prev - 1))}
                 disabled={currentQuestion === 0}
-                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-2 px-5 py-3 text-gray-600 hover:bg-gray-200 rounded-xl text-base font-semibold font-fredoka disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isRtl ? Icons.chevronRight : Icons.chevronLeft}
                 <span>{t.prev}</span>
@@ -842,7 +859,7 @@ export default function HomeworkAssignmentPage() {
               <button
                 onClick={() => setCurrentQuestion((prev) => Math.min(questions.length - 1, prev + 1))}
                 disabled={currentQuestion === questions.length - 1}
-                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-2 px-5 py-3 text-gray-600 hover:bg-gray-200 rounded-xl text-base font-semibold font-fredoka disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <span>{t.next}</span>
                 {isRtl ? Icons.chevronLeft : Icons.chevronRight}
