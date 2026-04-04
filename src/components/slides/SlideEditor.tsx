@@ -19,6 +19,8 @@ interface InteractivePlaceholders {
   body_en: string;
   prompt_ar: string;
   prompt_en: string;
+  expected_answer_ar: string | null;
+  expected_answer_en: string | null;
   options_ar: string[] | null;
   options_en: string[] | null;
   correct_index: number | null;
@@ -36,7 +38,7 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-const CHOOSE_CORRECT_VARIANTS: Omit<InteractivePlaceholders, 'true_false_answer' | 'count_target' | 'visual_emoji' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
+const CHOOSE_CORRECT_VARIANTS: Omit<InteractivePlaceholders, 'expected_answer_ar' | 'expected_answer_en' | 'true_false_answer' | 'count_target' | 'visual_emoji' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
   {
     title_ar: 'ما عاصمة السودان؟', title_en: 'What is the capital of Sudan?',
     body_ar: 'اختر الإجابة الصحيحة من الخيارات التالية', body_en: 'Choose the correct answer from the options below',
@@ -63,7 +65,30 @@ const CHOOSE_CORRECT_VARIANTS: Omit<InteractivePlaceholders, 'true_false_answer'
   },
 ];
 
-const TRUE_FALSE_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_en' | 'correct_index' | 'count_target' | 'visual_emoji' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
+const FREE_RESPONSE_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'count_target' | 'visual_emoji' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
+  {
+    title_ar: 'سؤال مفتوح',
+    title_en: 'Open Question',
+    body_ar: 'فكّر ثم اكتب إجابتك بطريقتك الخاصة.',
+    body_en: 'Think and write your answer in your own words.',
+    prompt_ar: 'لماذا نحتاج إلى الماء كل يوم؟',
+    prompt_en: 'Why do we need water every day?',
+    expected_answer_ar: 'لأن الماء يساعد أجسامنا على البقاء بصحة جيدة.',
+    expected_answer_en: 'Because water helps our bodies stay healthy.',
+  },
+  {
+    title_ar: 'اشرح فكرتك',
+    title_en: 'Explain Your Thinking',
+    body_ar: 'اكتب كيف عرفت الإجابة.',
+    body_en: 'Write how you knew the answer.',
+    prompt_ar: 'كيف عرفت أن 7 أكبر من 5؟',
+    prompt_en: 'How did you know that 7 is greater than 5?',
+    expected_answer_ar: 'لأن 7 يأتي بعد 5 ويمكن تمثيله بعدد أكبر من العناصر.',
+    expected_answer_en: 'Because 7 comes after 5 and can be shown with more objects.',
+  },
+];
+
+const TRUE_FALSE_VARIANTS: Omit<InteractivePlaceholders, 'expected_answer_ar' | 'expected_answer_en' | 'options_ar' | 'options_en' | 'correct_index' | 'count_target' | 'visual_emoji' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
   {
     title_ar: 'صح أم خطأ؟', title_en: 'True or False?',
     body_ar: 'الشمس تدور حول الأرض', body_en: 'The Sun revolves around the Earth',
@@ -84,7 +109,7 @@ const TRUE_FALSE_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options
   },
 ];
 
-const FILL_BLANK_VARIANTS: Omit<InteractivePlaceholders, 'true_false_answer' | 'count_target' | 'visual_emoji' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
+const FILL_BLANK_VARIANTS: Omit<InteractivePlaceholders, 'expected_answer_ar' | 'expected_answer_en' | 'true_false_answer' | 'count_target' | 'visual_emoji' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
   {
     title_ar: 'أكمل الجملة', title_en: 'Complete the sentence',
     body_ar: 'اختر الكلمة المناسبة لملء الفراغ', body_en: 'Pick the right word to fill the gap',
@@ -103,7 +128,7 @@ const FILL_BLANK_VARIANTS: Omit<InteractivePlaceholders, 'true_false_answer' | '
   },
 ];
 
-const TAP_COUNT_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
+const TAP_COUNT_VARIANTS: Omit<InteractivePlaceholders, 'expected_answer_ar' | 'expected_answer_en' | 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'items_ar' | 'items_en' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
   {
     title_ar: 'عدّ التفاح!', title_en: 'Count the apples!',
     body_ar: 'اضغط على كل تفاحة تراها', body_en: 'Tap each apple you see',
@@ -124,7 +149,7 @@ const TAP_COUNT_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_
   },
 ];
 
-const MATCH_PAIRS_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'count_target' | 'visual_emoji' | 'solution_map'>[] = [
+const MATCH_PAIRS_VARIANTS: Omit<InteractivePlaceholders, 'expected_answer_ar' | 'expected_answer_en' | 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'count_target' | 'visual_emoji' | 'solution_map'>[] = [
   {
     title_ar: 'طابق الحيوان بصوته', title_en: 'Match the animal to its sound',
     body_ar: 'صل كل حيوان بالصوت الذي يصدره', body_en: 'Connect each animal to the sound it makes',
@@ -145,7 +170,7 @@ const MATCH_PAIRS_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'option
   },
 ];
 
-const SEQUENCE_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'count_target' | 'visual_emoji' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
+const SEQUENCE_VARIANTS: Omit<InteractivePlaceholders, 'expected_answer_ar' | 'expected_answer_en' | 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'count_target' | 'visual_emoji' | 'targets_ar' | 'targets_en' | 'solution_map'>[] = [
   {
     title_ar: 'رتب دورة حياة الفراشة', title_en: 'Order the butterfly life cycle',
     body_ar: 'رتب المراحل من الأولى إلى الأخيرة', body_en: 'Arrange the stages from first to last',
@@ -162,7 +187,7 @@ const SEQUENCE_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_e
   },
 ];
 
-const SORT_GROUPS_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'count_target' | 'visual_emoji'>[] = [
+const SORT_GROUPS_VARIANTS: Omit<InteractivePlaceholders, 'expected_answer_ar' | 'expected_answer_en' | 'options_ar' | 'options_en' | 'correct_index' | 'true_false_answer' | 'count_target' | 'visual_emoji'>[] = [
   {
     title_ar: 'صنّف: فواكه أم خضروات؟', title_en: 'Sort: Fruits or Vegetables?',
     body_ar: 'ضع كل عنصر في المجموعة المناسبة', body_en: 'Place each item in the correct group',
@@ -187,6 +212,7 @@ const SORT_GROUPS_VARIANTS: Omit<InteractivePlaceholders, 'options_ar' | 'option
 
 function getVariantPool(type: string): Partial<InteractivePlaceholders>[] {
   switch (type) {
+    case 'free_response': return FREE_RESPONSE_VARIANTS;
     case 'choose_correct': return CHOOSE_CORRECT_VARIANTS;
     case 'true_false': return TRUE_FALSE_VARIANTS;
     case 'fill_missing_word': return FILL_BLANK_VARIANTS;
@@ -202,6 +228,7 @@ function getInteractiveSlidePlaceholders(type: string, existingSlides: Slide[]):
   const base: InteractivePlaceholders = {
     title_ar: '', title_en: '', body_ar: '', body_en: '',
     prompt_ar: '', prompt_en: '',
+    expected_answer_ar: null, expected_answer_en: null,
     options_ar: null, options_en: null, correct_index: null,
     true_false_answer: null, count_target: null, visual_emoji: null,
     items_ar: null, items_en: null, targets_ar: null, targets_en: null,
@@ -469,6 +496,8 @@ export default function SlideEditor({
         interaction_type: null,
         interaction_prompt_ar: null,
         interaction_prompt_en: null,
+        interaction_expected_answer_ar: null,
+        interaction_expected_answer_en: null,
         interaction_options_ar: null,
         interaction_options_en: null,
         interaction_correct_index: null,
@@ -527,6 +556,8 @@ export default function SlideEditor({
         interaction_type: interactionType,
         interaction_prompt_ar: placeholders.prompt_ar,
         interaction_prompt_en: placeholders.prompt_en,
+        interaction_expected_answer_ar: placeholders.expected_answer_ar,
+        interaction_expected_answer_en: placeholders.expected_answer_en,
         interaction_options_ar: placeholders.options_ar,
         interaction_options_en: placeholders.options_en,
         interaction_correct_index: placeholders.correct_index,

@@ -13,6 +13,7 @@ export type SlideTextSize = 'sm' | 'md' | 'lg' | 'xl';
 export type SlideLessonPhase = 'title' | 'objectives' | 'core_teaching' | 'practice' | 'summary_goodbye';
 export type MathRepresentationStage = 'concrete_visual' | 'abstract' | 'not_applicable';
 export type SlideInteractionType =
+  | 'free_response'
   | 'choose_correct'
   | 'true_false'
   | 'tap_to_count'
@@ -53,6 +54,8 @@ export interface Slide {
   interaction_type?: SlideInteractionType | null;
   interaction_prompt_ar?: string | null;
   interaction_prompt_en?: string | null;
+  interaction_expected_answer_ar?: string | null;
+  interaction_expected_answer_en?: string | null;
   interaction_options_ar?: string[] | null;
   interaction_options_en?: string[] | null;
   interaction_correct_index?: number | null;

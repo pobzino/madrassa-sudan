@@ -1,4 +1,5 @@
 export type SupportedTaskType =
+  | 'free_response'
   | 'choose_correct'
   | 'true_false'
   | 'fill_missing_word'
@@ -23,6 +24,11 @@ export interface ChooseCorrectData {
   options_ar: string[];
   options_en: string[];
   correct_index: number;
+}
+
+export interface FreeResponseData {
+  expected_answer_ar: string;
+  expected_answer_en?: string;
 }
 
 export interface TrueFalseData {
@@ -118,6 +124,7 @@ export interface AudioRecordingData {
 }
 
 export type TaskData =
+  | FreeResponseData
   | ChooseCorrectData
   | TrueFalseData
   | FillMissingWordData
@@ -207,6 +214,7 @@ export interface LessonTaskResponse {
 }
 
 export const SUPPORTED_TASK_TYPES: SupportedTaskType[] = [
+  'free_response',
   'choose_correct',
   'true_false',
   'fill_missing_word',

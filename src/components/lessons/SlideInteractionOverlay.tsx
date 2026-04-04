@@ -34,6 +34,7 @@ export default function SlideInteractionOverlay({
   const startedAtRef = useRef(0);
   const [selectedChoiceIndex, setSelectedChoiceIndex] = useState<number | null>(null);
   const [selectedTrueFalse, setSelectedTrueFalse] = useState<boolean | null>(null);
+  const [freeResponseAnswer, setFreeResponseAnswer] = useState('');
   const [tappedIndexes, setTappedIndexes] = useState<number[]>([]);
   const [matchSelections, setMatchSelections] = useState<Record<number, number>>({});
   const [sequenceSelection, setSequenceSelection] = useState<string[]>([]);
@@ -53,6 +54,9 @@ export default function SlideInteractionOverlay({
       trueLabel: 'صح',
       falseLabel: 'خطأ',
       choiceLabel: 'اختر الإجابة الصحيحة',
+      freeResponseLabel: 'اكتب إجابتك',
+      freeResponsePlaceholder: 'اكتب إجابتك هنا...',
+      answerSaved: 'تم حفظ الإجابة',
       countProgress: 'تم الضغط',
       matchLabel: 'صل كل عنصر بما يناسبه',
       sequenceLabel: 'رتب العناصر بالترتيب الصحيح',
@@ -75,6 +79,9 @@ export default function SlideInteractionOverlay({
       trueLabel: 'True',
       falseLabel: 'False',
       choiceLabel: 'Choose the correct answer',
+      freeResponseLabel: 'Write your answer',
+      freeResponsePlaceholder: 'Write your answer here...',
+      answerSaved: 'Answer saved',
       countProgress: 'Tapped',
       matchLabel: 'Match each item to its pair',
       sequenceLabel: 'Put the items in the correct order',
@@ -134,6 +141,7 @@ export default function SlideInteractionOverlay({
     setResult(null);
     setSelectedChoiceIndex(null);
     setSelectedTrueFalse(null);
+    setFreeResponseAnswer('');
     setTappedIndexes([]);
     setMatchSelections({});
     setSequenceSelection([]);
@@ -165,6 +173,22 @@ export default function SlideInteractionOverlay({
         answer: selectedTrueFalse,
         completedAt: new Date().toISOString(),
         isCorrect: selectedTrueFalse === slide.interaction_true_false_answer,
+      },
+      eventTimeStamp
+    );
+  }
+
+  function submitFreeResponse(eventTimeStamp?: number) {
+    const answer = freeResponseAnswer.trim();
+    if (!answer) {
+      return;
+    }
+
+    completeInteraction(
+      {
+        answer,
+        completedAt: new Date().toISOString(),
+        isCorrect: true,
       },
       eventTimeStamp
     );
@@ -267,6 +291,34 @@ export default function SlideInteractionOverlay({
   }
 
   function renderInteractionControls() {
+    if (slide.interaction_type === 'free_response') {
+      return (
+        <>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+            {text.freeResponseLabel}
+          </p>
+          <textarea
+            dir={isAr ? 'rtl' : 'ltr'}
+            value={freeResponseAnswer}
+            onChange={(event) => setFreeResponseAnswer(event.target.value)}
+            disabled={!!result}
+            rows={6}
+            placeholder={text.freeResponsePlaceholder}
+            className={`w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 focus:border-[#007229] focus:outline-none ${isAr ? 'font-cairo text-right' : 'font-inter'}`}
+          />
+          {!result && (
+            <button
+              onClick={(event) => submitFreeResponse(event.timeStamp)}
+              disabled={!freeResponseAnswer.trim()}
+              className="mt-4 w-full rounded-2xl bg-[#007229] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+            >
+              {text.submit}
+            </button>
+          )}
+        </>
+      );
+    }
+
     if (slide.interaction_type === 'choose_correct' || slide.interaction_type === 'fill_missing_word') {
       return (
         <>
@@ -587,7 +639,11 @@ export default function SlideInteractionOverlay({
               {result && (
                 <div className={`mt-4 rounded-2xl border p-4 ${result.isCorrect ? 'border-green-300 bg-green-50' : 'border-amber-300 bg-amber-50'}`}>
                   <p className={`text-sm font-semibold ${result.isCorrect ? 'text-green-700' : 'text-amber-700'}`}>
-                    {result.isCorrect ? getCorrectFeedback(language) : getIncorrectFeedback(language)}
+                    {slide.interaction_type === 'free_response'
+                      ? text.answerSaved
+                      : result.isCorrect
+                        ? getCorrectFeedback(language)
+                        : getIncorrectFeedback(language)}
                   </p>
                   {result.isCorrect ? (
                     <button

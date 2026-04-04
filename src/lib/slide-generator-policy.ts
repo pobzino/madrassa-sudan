@@ -205,6 +205,7 @@ export function getSlideGeneratorPolicyPrompt({
     "- Every practice slide must include a student interaction via `interaction_type`.",
     "- Activity slides may include a student interaction via `interaction_type` when it improves participation.",
     "- When `interaction_type` is set, all companion fields for that type must be filled.",
+    "- `free_response`: requires `interaction_prompt_ar`/`interaction_prompt_en` and `interaction_expected_answer_ar`/`interaction_expected_answer_en` so the teacher can model a strong answer.",
     "- `choose_correct`: requires `interaction_options_ar` and `interaction_options_en` (2-4 items each), `interaction_correct_index` within range, and `interaction_prompt_ar`/`interaction_prompt_en`.",
     "- `fill_missing_word`: requires `interaction_options_ar` and `interaction_options_en` (2-4 items each), `interaction_correct_index`, and `interaction_prompt_ar`/`interaction_prompt_en`.",
     "- `true_false`: requires `interaction_true_false_answer` (boolean) and `interaction_prompt_ar`/`interaction_prompt_en`.",
@@ -358,6 +359,12 @@ export function validateGeneratedSlides(
 
       if (!slide.interaction_prompt_ar?.trim() || !slide.interaction_prompt_en?.trim()) {
         issues.push(`Slide ${index + 1} has interaction_type but missing interaction prompt.`);
+      }
+
+      if (slide.interaction_type === "free_response") {
+        if (!slide.interaction_expected_answer_ar?.trim() || !slide.interaction_expected_answer_en?.trim()) {
+          issues.push(`Slide ${index + 1} free_response must include model answers in both languages.`);
+        }
       }
 
       if (slide.interaction_type === "choose_correct" || slide.interaction_type === "fill_missing_word") {

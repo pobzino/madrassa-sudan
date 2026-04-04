@@ -310,8 +310,9 @@ ${validationSchemaNotes}
 ## Student Interactions
 - Every practice slide (type "quiz_preview" or "question_answer") MUST include a student interaction
 - Activity slides (type "activity") MAY include a student interaction when it helps participation
-- Set interaction_type to one of: "choose_correct", "true_false", "tap_to_count", "match_pairs", "sequence_order", "sort_groups", or "fill_missing_word"
+- Set interaction_type to one of: "free_response", "choose_correct", "true_false", "tap_to_count", "match_pairs", "sequence_order", "sort_groups", or "fill_missing_word"
 - Every practice slide must set interaction_type to one of those values; it cannot be null
+- For free_response: set interaction_expected_answer_ar and interaction_expected_answer_en to a short model answer the teacher can reveal later
 - For choose_correct: provide 3-4 options in interaction_options_ar/interaction_options_en, set interaction_correct_index to the 0-based index of the correct answer
 - For fill_missing_word: provide 2-4 options in interaction_options_ar/interaction_options_en, set interaction_correct_index to the 0-based index of the correct word, and make the visible slide text clearly contain a blank to fill
 - For true_false: set interaction_true_false_answer to true or false
@@ -393,6 +394,7 @@ ${validationSchemaNotes}
                 {
                   type: "string",
                   enum: [
+                    "free_response",
                     "choose_correct",
                     "true_false",
                     "tap_to_count",
@@ -409,6 +411,12 @@ ${validationSchemaNotes}
               anyOf: [{ type: "string" }, { type: "null" }],
             },
             interaction_prompt_en: {
+              anyOf: [{ type: "string" }, { type: "null" }],
+            },
+            interaction_expected_answer_ar: {
+              anyOf: [{ type: "string" }, { type: "null" }],
+            },
+            interaction_expected_answer_en: {
               anyOf: [{ type: "string" }, { type: "null" }],
             },
             interaction_options_ar: {
@@ -469,6 +477,8 @@ ${validationSchemaNotes}
             "interaction_type",
             "interaction_prompt_ar",
             "interaction_prompt_en",
+            "interaction_expected_answer_ar",
+            "interaction_expected_answer_en",
             "interaction_options_ar",
             "interaction_options_en",
             "interaction_correct_index",
@@ -680,6 +690,8 @@ ${JSON.stringify(
       interaction_type: slide.interaction_type,
       interaction_prompt_ar: slide.interaction_prompt_ar,
       interaction_prompt_en: slide.interaction_prompt_en,
+      interaction_expected_answer_ar: slide.interaction_expected_answer_ar,
+      interaction_expected_answer_en: slide.interaction_expected_answer_en,
       interaction_options_ar: slide.interaction_options_ar,
       interaction_options_en: slide.interaction_options_en,
       interaction_correct_index: slide.interaction_correct_index,

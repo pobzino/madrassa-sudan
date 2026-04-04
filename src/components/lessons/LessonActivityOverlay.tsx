@@ -16,6 +16,7 @@ interface LessonActivityOverlayProps {
 }
 
 const BADGE_LABELS: Record<string, { ar: string; en: string }> = {
+  free_response: { ar: 'إجابة حرة', en: 'Free Response' },
   choose_correct: { ar: 'اختيار', en: 'Choose' },
   true_false: { ar: 'صح / خطأ', en: 'True / False' },
   fill_missing_word: { ar: 'أكمل', en: 'Fill Blank' },

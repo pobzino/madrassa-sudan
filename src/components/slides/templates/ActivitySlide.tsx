@@ -34,6 +34,22 @@ interface InteractionTheme {
 }
 
 const INTERACTION_THEMES: Record<string, InteractionTheme> = {
+  free_response: {
+    emoji: '💬',
+    label_ar: 'إجابة حرة',
+    label_en: 'Free Response',
+    gradient: 'from-slate-50 via-white to-emerald-50',
+    badgeGradient: 'from-slate-600 to-emerald-600',
+    cardBorder: 'border-slate-300',
+    cardShadow: 'shadow-slate-100',
+    previewBorder: 'border-slate-300/60',
+    previewBg: 'bg-slate-50/50',
+    accentColor: 'text-slate-700',
+    accentBg: 'bg-slate-600',
+    decorCircle1: 'bg-slate-200/30',
+    decorCircle2: 'bg-emerald-300/15',
+    decorStar: 'text-slate-400/50',
+  },
   choose_correct: {
     emoji: '🅰️',
     label_ar: 'اختيار من متعدد',
@@ -190,6 +206,29 @@ function InteractionPreview({ slide, language, showAnswer = false }: Props) {
         <p className={`text-xs text-gray-500 mb-2 ${isAr ? 'font-cairo' : 'font-inter'}`}>
           {prompt}
         </p>
+      )}
+
+      {type === 'free_response' && (
+        <div className="space-y-2">
+          <div
+            className={`min-h-[84px] rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-400 ${isAr ? 'font-cairo text-right' : 'font-inter'}`}
+          >
+            {isAr ? 'اكتب إجابتك هنا...' : 'Write your answer here...'}
+          </div>
+          {showAnswer && (
+            <div className="rounded-2xl border border-slate-300/60 bg-slate-100/70 px-4 py-3">
+              <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${theme.accentColor} ${isAr ? 'font-cairo' : 'font-inter'}`}>
+                {isAr ? 'الإجابة النموذجية' : 'Model Answer'}
+              </p>
+              <p className={`mt-2 text-sm text-gray-700 ${isAr ? 'font-cairo text-right' : 'font-inter'}`}>
+                {(isAr
+                  ? slide.interaction_expected_answer_ar || slide.interaction_expected_answer_en
+                  : slide.interaction_expected_answer_en || slide.interaction_expected_answer_ar) ||
+                  (isAr ? 'أضف إجابة نموذجية من لوحة التحرير.' : 'Add a model answer in the edit panel.')}
+              </p>
+            </div>
+          )}
+        </div>
       )}
 
       {(type === 'choose_correct' || type === 'fill_missing_word') && (

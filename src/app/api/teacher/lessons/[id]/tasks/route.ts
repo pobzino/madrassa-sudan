@@ -7,7 +7,7 @@ import { normalizeTaskType } from '@/lib/lesson-activities'
 const TaskSchema = z.object({
   id: z.string().uuid().optional(),
   task_type: z.enum([
-    'choose_correct', 'true_false', 'fill_missing_word', 'tap_to_count',
+    'free_response', 'choose_correct', 'true_false', 'fill_missing_word', 'tap_to_count',
     'match_pairs', 'sequence_order', 'sort_groups',
     'matching_pairs', 'sorting_order', 'fill_in_blank_enhanced',
     'drag_drop_label', 'drawing_tracing', 'audio_recording'

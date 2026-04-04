@@ -127,6 +127,10 @@ export function computeSlideInteractionCorrectness(
     return false;
   }
 
+  if (slide.interaction_type === 'free_response') {
+    return typeof answer === 'string' && answer.trim().length > 0;
+  }
+
   if (slide.interaction_type === 'choose_correct' || slide.interaction_type === 'fill_missing_word') {
     if (typeof answer === 'number') {
       return answer === slide.interaction_correct_index;

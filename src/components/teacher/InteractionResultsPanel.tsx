@@ -73,6 +73,7 @@ interface Props {
 }
 
 const ACTIVITY_LABELS: Record<string, string> = {
+  free_response: "Free Response",
   choose_correct: "Choose Correct",
   true_false: "True / False",
   fill_missing_word: "Fill Missing Word",

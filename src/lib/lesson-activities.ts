@@ -1,6 +1,7 @@
 import type { Json } from '@/lib/database.types';
 import type { Slide, SlideInteractionType, SlideType } from '@/lib/slides.types';
 import type {
+  FreeResponseData,
   ChooseCorrectData,
   FillMissingWordData,
   LessonTask,
@@ -42,6 +43,7 @@ export const ACTIVITY_TYPE_OPTIONS: Array<{
   icon: string;
   hint: string;
 }> = [
+  { type: 'free_response', label: 'Free Response', icon: '💬', hint: 'Best for open questions and written reflection' },
   { type: 'choose_correct', label: 'Multiple Choice', icon: '🔘', hint: 'Best for vocabulary & comprehension checks' },
   { type: 'true_false', label: 'True / False', icon: '✅', hint: 'Best for quick fact review' },
   { type: 'fill_missing_word', label: 'Fill the Blank', icon: '✏️', hint: 'Best for sentence completion & grammar' },
@@ -115,6 +117,11 @@ export function getActivityInstructionFromSlide(slide: Slide, language: 'ar' | '
 
 export function buildTaskDataFromSlide(slide: Slide): Record<string, unknown> | null {
   switch (slide.interaction_type) {
+    case 'free_response':
+      return {
+        expected_answer_ar: slide.interaction_expected_answer_ar || '',
+        expected_answer_en: slide.interaction_expected_answer_en || '',
+      } satisfies FreeResponseData as unknown as Record<string, unknown>;
     case 'choose_correct':
       return {
         options_ar: slide.interaction_options_ar || [],
@@ -175,6 +182,17 @@ export function buildTaskDataFromSlide(slide: Slide): Record<string, unknown> | 
 
 function getDraftActivityContent(interactionType: SlideInteractionType) {
   switch (interactionType) {
+    case 'free_response':
+      return {
+        title_ar: 'نشاط إجابة حرة',
+        title_en: 'Free Response Activity',
+        body_ar: 'اكتب إجابتك في المربع.',
+        body_en: 'Write your answer in the box.',
+        prompt_ar: 'أجب بطريقتك الخاصة.',
+        prompt_en: 'Answer in your own words.',
+        expected_answer_ar: 'إجابة نموذجية',
+        expected_answer_en: 'Model answer',
+      };
     case 'choose_correct':
       return {
         title_ar: 'نشاط اختيار من متعدد',
@@ -301,6 +319,10 @@ export function createDraftActivitySlide(
     interaction_type: interactionType,
     interaction_prompt_ar: content.prompt_ar,
     interaction_prompt_en: content.prompt_en,
+    interaction_expected_answer_ar:
+      'expected_answer_ar' in content ? content.expected_answer_ar : null,
+    interaction_expected_answer_en:
+      'expected_answer_en' in content ? content.expected_answer_en : null,
     interaction_options_ar: 'options_ar' in content ? content.options_ar : null,
     interaction_options_en: 'options_en' in content ? content.options_en : null,
     interaction_correct_index: 'correct_index' in content ? content.correct_index : null,
@@ -381,6 +403,8 @@ export function buildSlideUpdatesFromTask(task: Pick<
     interaction_type: taskTypeToInteractionType(normalizedType),
     interaction_prompt_ar: task.instruction_ar,
     interaction_prompt_en: task.instruction_en,
+    interaction_expected_answer_ar: null,
+    interaction_expected_answer_en: null,
     interaction_options_ar: null,
     interaction_options_en: null,
     interaction_correct_index: null,
@@ -395,6 +419,14 @@ export function buildSlideUpdatesFromTask(task: Pick<
   };
 
   switch (normalizedType) {
+    case 'free_response':
+      updates.interaction_expected_answer_ar = String(
+        task.task_data.expected_answer_ar || ''
+      );
+      updates.interaction_expected_answer_en = String(
+        task.task_data.expected_answer_en || ''
+      );
+      break;
     case 'choose_correct':
     case 'fill_missing_word':
       updates.interaction_options_ar = getOptionsFromTaskData(task.task_data, 'ar');

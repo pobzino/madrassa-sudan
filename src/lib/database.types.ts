@@ -1721,6 +1721,7 @@ export type Database = {
       task_type:
         | "matching_pairs"
         | "sorting_order"
+        | "free_response"
         | "choose_correct"
         | "true_false"
         | "fill_missing_word"

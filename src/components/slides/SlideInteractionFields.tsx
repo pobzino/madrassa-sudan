@@ -9,6 +9,7 @@ interface SlideInteractionFieldsProps {
 }
 
 const INTERACTION_TYPES: Array<{ value: SlideInteractionType; label: string; hint: string }> = [
+  { value: 'free_response', label: 'Free Response', hint: 'Open questions answered in the student’s own words' },
   { value: 'choose_correct', label: 'Multiple Choice', hint: 'Vocabulary & comprehension checks' },
   { value: 'true_false', label: 'True / False', hint: 'Quick fact review' },
   { value: 'fill_missing_word', label: 'Fill the Blank', hint: 'Sentence completion & grammar' },
@@ -71,6 +72,8 @@ export default function SlideInteractionFields({
         interaction_type: null,
         interaction_prompt_ar: null,
         interaction_prompt_en: null,
+        interaction_expected_answer_ar: null,
+        interaction_expected_answer_en: null,
         interaction_options_ar: null,
         interaction_options_en: null,
         interaction_correct_index: null,
@@ -91,6 +94,8 @@ export default function SlideInteractionFields({
       interaction_type: nextType,
       interaction_prompt_ar: slide.interaction_prompt_ar ?? slide.body_ar ?? '',
       interaction_prompt_en: slide.interaction_prompt_en ?? slide.body_en ?? '',
+      interaction_expected_answer_ar: null,
+      interaction_expected_answer_en: null,
       interaction_options_ar: null,
       interaction_options_en: null,
       interaction_correct_index: null,
@@ -103,6 +108,13 @@ export default function SlideInteractionFields({
       interaction_targets_en: null,
       interaction_solution_map: null,
     };
+
+    if (nextType === 'free_response') {
+      baseUpdates.interaction_expected_answer_ar =
+        slide.interaction_expected_answer_ar ?? '';
+      baseUpdates.interaction_expected_answer_en =
+        slide.interaction_expected_answer_en ?? '';
+    }
 
     if (nextType === 'choose_correct' || nextType === 'fill_missing_word') {
       baseUpdates.interaction_options_ar = slide.interaction_options_ar?.length
@@ -479,6 +491,37 @@ export default function SlideInteractionFields({
               placeholder="Defaults to slide body if left blank"
             />
           </div>
+
+          {slide.interaction_type === 'free_response' && (
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className={labelClass}>Model Answer (Arabic)</label>
+                <textarea
+                  dir="rtl"
+                  value={slide.interaction_expected_answer_ar || ''}
+                  onChange={(e) =>
+                    onUpdate({ interaction_expected_answer_ar: e.target.value })
+                  }
+                  rows={3}
+                  className={`${inputClass} font-cairo`}
+                  placeholder="Used for presenter answer reveal"
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Model Answer (English)</label>
+                <textarea
+                  value={slide.interaction_expected_answer_en || ''}
+                  onChange={(e) =>
+                    onUpdate({ interaction_expected_answer_en: e.target.value })
+                  }
+                  rows={3}
+                  className={inputClass}
+                  placeholder="Used for presenter answer reveal"
+                />
+              </div>
+            </div>
+          )}
 
           {(slide.interaction_type === 'choose_correct' ||
             slide.interaction_type === 'fill_missing_word') && (
