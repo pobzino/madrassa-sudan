@@ -6,7 +6,8 @@ export type SlideType =
   | 'activity'
   | 'quiz_preview'
   | 'question_answer'
-  | 'summary';
+  | 'summary'
+  | 'whiteboard';
 
 export type SlideLayout = 'default' | 'image_left' | 'image_right' | 'image_top' | 'full_image';
 export type SlideTextSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -20,7 +21,20 @@ export type SlideInteractionType =
   | 'match_pairs'
   | 'sequence_order'
   | 'sort_groups'
-  | 'fill_missing_word';
+  | 'fill_missing_word'
+  | 'draw_answer'
+  | 'drag_drop_label';
+
+/**
+ * A named drop target placed on top of the slide image for the
+ * `drag_drop_label` interaction. Coordinates are in 0–100 percent of the image
+ * so they stay resolution-independent. The correct label for this hotspot is
+ * the entry at the same index in `interaction_items_ar`/`interaction_items_en`.
+ */
+export interface SlideInteractionHotspot {
+  x_percent: number;
+  y_percent: number;
+}
 
 export interface Slide {
   id: string;
@@ -67,7 +81,19 @@ export interface Slide {
   interaction_targets_ar?: string[] | null;
   interaction_targets_en?: string[] | null;
   interaction_solution_map?: number[] | null;
+  /**
+   * When set on a `fill_missing_word` interaction, switches from multiple-choice options
+   * to a typed answer. The correct answer is taken from
+   * `interaction_expected_answer_ar`/`interaction_expected_answer_en`.
+   */
+  interaction_free_entry?: boolean | null;
+  /**
+   * Drop targets placed on the slide image for `drag_drop_label` interactions.
+   * The hotspot at index i matches `interaction_items_*[i]`.
+   */
+  interaction_hotspots?: SlideInteractionHotspot[] | null;
   activity_id?: string | null;
+  annotations?: string | null;
 }
 
 export interface SlideDeck {

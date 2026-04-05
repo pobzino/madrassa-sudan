@@ -16,6 +16,8 @@ import type {
 } from "@/lib/database.types";
 import type { LessonTask } from "@/lib/tasks.types";
 import type { Slide } from "@/lib/slides.types";
+import type { SimPayload } from "@/lib/sim.types";
+import SimPlayer from "@/components/slides/SimPlayer";
 import { Confetti } from "@/components/illustrations";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import EnhancedQuizOverlay from "@/components/lessons/EnhancedQuizOverlay";
@@ -346,6 +348,11 @@ export default function LessonPlayerPage() {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
 
+  // Lesson sim (event-sourced recording). Replaces the Bunny CDN video on
+  // the student page — if a sim exists we render SimPlayer; otherwise the
+  // player area shows an empty state.
+  const [lessonSim, setLessonSim] = useState<SimPayload | null>(null);
+
   // Video state
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -433,11 +440,14 @@ export default function LessonPlayerPage() {
       setLesson(lessonData);
       setQuizSettings(resolveQuizSettings(lessonData.quiz_settings));
 
-      const [slidesRes, slideResponsesRes] = await Promise.all([
+      const [slidesRes, slideResponsesRes, simRes] = await Promise.all([
         fetch(`/api/lessons/${lessonId}/slides`)
           .then((response) => (response.ok ? response.json() : null))
           .catch(() => null),
         fetch(`/api/lessons/${lessonId}/slide-responses`)
+          .then((response) => (response.ok ? response.json() : null))
+          .catch(() => null),
+        fetch(`/api/lessons/${lessonId}/sim`)
           .then((response) => (response.ok ? response.json() : null))
           .catch(() => null),
       ]);
@@ -453,6 +463,8 @@ export default function LessonPlayerPage() {
         setSlideInteractionResponses(mappedResponses);
         window.localStorage.setItem(storageKey, JSON.stringify(mappedResponses));
       }
+
+      setLessonSim((simRes?.sim as SimPayload | null) ?? null);
 
       // Fetch subject
       if (lessonData.subject_id) {
@@ -1251,330 +1263,23 @@ export default function LessonPlayerPage() {
         </div>
       </div>
 
-      {/* Video Player */}
-      <div className="relative bg-black aspect-video max-h-[70vh] mx-auto">
-        {videoUrl ? (
-          <>
-            <video
-              ref={videoRef}
-              src={videoUrl}
-              className="w-full h-full"
-              playsInline
-              onTimeUpdate={handleTimeUpdate}
-              onLoadedMetadata={handleLoadedMetadata}
-              onEnded={handleVideoEnded}
-              onPlay={() => {
-                setIsPlaying(true);
-                setVideoErrorMessage(null);
-              }}
-              onPause={() => setIsPlaying(false)}
-              onError={handleVideoError}
-              onClick={togglePlay}
-            >
-              {captionLang === "ar" && lesson.captions_ar_url && (
-                <track kind="subtitles" src={lesson.captions_ar_url} srcLang="ar" label="Arabic" default />
-              )}
-              {captionLang === "en" && lesson.captions_en_url && (
-                <track kind="subtitles" src={lesson.captions_en_url} srcLang="en" label="English" default />
-              )}
-            </video>
+      {/* Lesson recording — sim-based playback. Replaces the legacy Bunny
+          video for the student view. If the lesson has no sim yet, show an
+          empty state. */}
+      {lessonSim ? (
+        <div className="bg-black mx-auto max-w-6xl px-4 py-4">
+          <SimPlayer payload={lessonSim} language={language} />
+        </div>
+      ) : (
+        <div className="relative bg-black aspect-video max-h-[70vh] mx-auto flex items-center justify-center">
+          <p className="text-gray-400 text-sm">
+            {language === "ar"
+              ? "لا يوجد تسجيل لهذا الدرس بعد."
+              : "This lesson does not have a recording yet."}
+          </p>
+        </div>
+      )}
 
-            {/* Play button overlay when paused */}
-            {!isPlaying && !activeQuestion && !activeActivity && !activeSlideInteraction && (
-              <div
-                className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer"
-                onClick={togglePlay}
-              >
-                <div className="w-20 h-20 rounded-full bg-white/90 flex items-center justify-center text-[#007229] shadow-xl">
-                  {Icons.play}
-                </div>
-              </div>
-            )}
-
-            {videoErrorMessage && (
-              <div className="absolute top-4 left-1/2 z-20 -translate-x-1/2 rounded-xl bg-amber-500/90 px-4 py-2 text-sm font-medium text-white shadow-lg">
-                {videoErrorMessage}
-              </div>
-            )}
-
-            {/* Question Overlay */}
-            {activeQuestion && (
-              <EnhancedQuizOverlay
-                question={activeQuestion}
-                settings={quizSettings}
-                onComplete={() => {
-                  setActiveQuestion(null);
-                  videoRef.current?.play();
-                  setIsPlaying(true);
-                }}
-                onResponse={handleQuizResponse}
-              />
-            )}
-
-            {/* Task Overlay */}
-            {activeActivity && (
-              <LessonActivityOverlay
-                task={activeActivity}
-                sourceSlide={
-                  slideDeck.find(
-                    (slide) =>
-                      slide.id === activeActivity.linked_slide_id ||
-                      slide.activity_id === activeActivity.id
-                  ) || null
-                }
-                language={language}
-                initialFreeResponseAnswer={
-                  activeActivity.task_type === "free_response" &&
-                  typeof taskResponses[activeActivity.id]?.answer === "string"
-                    ? (taskResponses[activeActivity.id]?.answer as string)
-                    : ""
-                }
-                reviewStatus={taskResponses[activeActivity.id]?.teacherReview.status ?? null}
-                reviewFeedback={taskResponses[activeActivity.id]?.teacherReview.feedback ?? null}
-                onDismiss={() => {
-                  setActiveActivity(null);
-                  videoRef.current?.play();
-                  setIsPlaying(true);
-                }}
-                onComplete={async (result) => {
-                  await persistTaskResponse(activeActivity, {
-                    answer: result.answer,
-                    status: "completed",
-                    timeSpentSeconds: result.timeSpentSeconds,
-                  });
-                  if (result.isCorrect) {
-                    setShowConfetti(true);
-                    setTimeout(() => setShowConfetti(false), 3000);
-                  }
-                  setActiveActivity(null);
-                  videoRef.current?.play();
-                  setIsPlaying(true);
-                }}
-                onSkip={
-                  activeActivity.is_skippable
-                    ? async () => {
-                        await persistTaskResponse(activeActivity, {
-                          status: "skipped",
-                        });
-                        setActiveActivity(null);
-                        videoRef.current?.play();
-                        setIsPlaying(true);
-                      }
-                    : undefined
-                }
-              />
-            )}
-
-            {/* Slide Interaction Overlay */}
-            {activeSlideInteraction && (
-              <SlideInteractionOverlay
-                key={activeSlideInteraction.id}
-                slide={activeSlideInteraction}
-                language={language}
-                onComplete={(result) => {
-                  persistSlideInteractionResponse(activeSlideInteraction.id, result);
-                  if (result.isCorrect) {
-                    setShowConfetti(true);
-                    setTimeout(() => setShowConfetti(false), 3000);
-                  }
-                  setActiveSlideInteraction(null);
-                  videoRef.current?.play();
-                  setIsPlaying(true);
-                }}
-              />
-            )}
-
-            {/* Video Controls */}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
-              {/* Progress bar */}
-              <div className="flex items-center gap-3 mb-3">
-                <span className="text-white text-sm font-mono">{formatTime(currentTime)}</span>
-                <div className="relative flex-1">
-                  <input
-                    type="range"
-                    min={0}
-                    max={duration || 100}
-                    value={currentTime}
-                    onChange={handleSeek}
-                    className="relative z-10 w-full h-1 bg-gray-600 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#007229]/100"
-                  />
-                  {activityMarkers.length > 0 && (
-                    <div className="pointer-events-none absolute inset-x-0 top-1/2 z-20 -translate-y-1/2">
-                      {activityMarkers.map((marker) => {
-                        const markerClassName =
-                          marker.status === "completed" || marker.status === "accepted"
-                            ? "bg-emerald-400 ring-emerald-100"
-                            : marker.status === "pending_review"
-                              ? "bg-sky-400 ring-white/60"
-                              : marker.status === "needs_retry"
-                                ? "bg-rose-400 ring-rose-100"
-                            : marker.status === "skipped"
-                              ? "bg-gray-300 ring-white/30"
-                              : "bg-amber-400 ring-white/60";
-
-                        return (
-                          <button
-                            key={marker.id}
-                            type="button"
-                            onClick={() => handleActivityMarkerClick(marker.id, marker.time)}
-                            title={`${marker.label} · ${formatTime(marker.time)}`}
-                            className={`pointer-events-auto absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 transition hover:scale-110 ${markerClassName}`}
-                            style={{ left: `${marker.position * 100}%` }}
-                            aria-label={`${marker.label} at ${formatTime(marker.time)}`}
-                          />
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                <span className="text-white text-sm font-mono">{formatTime(duration)}</span>
-              </div>
-              {activityMarkers.length > 0 && (
-                <div className="mb-3 flex flex-wrap items-center gap-3 text-[11px] text-white/75">
-                  <span className="font-semibold uppercase tracking-[0.16em] text-white/60">
-                    Activities
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-                    Upcoming
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                    Completed
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
-                    Awaiting review
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
-                    Needs retry
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-gray-300" />
-                    Skipped
-                  </span>
-                </div>
-              )}
-
-              {/* Control buttons */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={togglePlay}
-                    className="p-2 text-white hover:bg-white/20 rounded-lg transition-colors"
-                  >
-                    {isPlaying ? Icons.pause : <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>}
-                  </button>
-
-                  {/* Volume */}
-                  <div className="flex items-center gap-1">
-                    <button className="p-2 text-white hover:bg-white/20 rounded-lg transition-colors">
-                      {Icons.volume}
-                    </button>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.1}
-                      value={volume}
-                      onChange={(e) => {
-                        const vol = parseFloat(e.target.value);
-                        setVolume(vol);
-                        if (videoRef.current) videoRef.current.volume = vol;
-                      }}
-                      className="w-20 h-1 bg-gray-600 rounded-full appearance-none cursor-pointer"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {/* Quality */}
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowQualityMenu(!showQualityMenu)}
-                      className="p-2 text-white hover:bg-white/20 rounded-lg transition-colors text-sm font-medium"
-                    >
-                      {resolvedVideoSource?.quality || quality}
-                    </button>
-                    {showQualityMenu && (
-                      <div className="absolute bottom-full right-0 mb-2 bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-                        {VIDEO_QUALITIES.map((q) => (
-                          <button
-                            key={q}
-                            onClick={() => {
-                              setFailedQualities([]);
-                              setVideoErrorMessage(null);
-                              setQuality(q);
-                              setShowQualityMenu(false);
-                            }}
-                            disabled={!availableQualities.includes(q)}
-                            className={`block w-full px-4 py-2 text-sm text-left ${
-                              availableQualities.includes(q)
-                                ? "hover:bg-gray-700"
-                                : "cursor-not-allowed text-gray-500"
-                            } ${
-                              (resolvedVideoSource?.quality || quality) === q ? "text-emerald-400" : "text-white"
-                            }`}
-                          >
-                            {q}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Captions */}
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowCaptionMenu(!showCaptionMenu)}
-                      className={`p-2 rounded-lg transition-colors ${
-                        captionLang !== "off" ? "text-emerald-400 bg-emerald-400/20" : "text-white hover:bg-white/20"
-                      }`}
-                    >
-                      {Icons.caption}
-                    </button>
-                    {showCaptionMenu && (
-                      <div className="absolute bottom-full right-0 mb-2 bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-                        {[
-                          { value: "ar", label: t.captionsAr },
-                          { value: "en", label: t.captionsEn },
-                          { value: "off", label: t.captionsOff },
-                        ].map((opt) => (
-                          <button
-                            key={opt.value}
-                            onClick={() => {
-                              setCaptionLang(opt.value as "ar" | "en" | "off");
-                              setShowCaptionMenu(false);
-                            }}
-                            className={`block w-full px-4 py-2 text-sm text-left hover:bg-gray-700 ${
-                              captionLang === opt.value ? "text-emerald-400" : "text-white"
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Fullscreen */}
-                  <button
-                    onClick={() => videoRef.current?.requestFullscreen()}
-                    className="p-2 text-white hover:bg-white/20 rounded-lg transition-colors"
-                  >
-                    {Icons.fullscreen}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-            <p>No video available</p>
-          </div>
-        )}
-      </div>
 
       {/* Bottom section */}
       <div className="bg-white border-t border-gray-200">

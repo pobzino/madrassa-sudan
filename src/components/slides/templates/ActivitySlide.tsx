@@ -7,6 +7,9 @@ import {
   getSlideInteractionOptions,
   getSlideInteractionTargets,
 } from '@/lib/slide-interactions';
+import InteractionRenderer from '@/components/interactions/InteractionRenderer';
+import { slideToInteraction } from '@/lib/interactions/adapters';
+import type { InteractionAnswer } from '@/lib/interactions/types';
 import {
   MessageSquare,
   CircleCheck,
@@ -24,7 +27,30 @@ interface Props {
   slide: Slide;
   language: 'ar' | 'en';
   showAnswer?: boolean;
+  /**
+   * When true and the slide's interaction_type is a drag-and-drop primitive
+   * (match_pairs / sequence_order / sort_groups / drag_drop_label), the
+   * template renders the real `InteractionRenderer` inside the slide canvas
+   * so the viewer can actually drag items. Falls back to the static
+   * `InteractionPreview` for every other type and whenever `interactive` is
+   * false (editor thumbnails, reviews, etc.).
+   */
+  interactive?: boolean;
+  /** Current draft answer for the interactive widget. */
+  interactiveAnswer?: InteractionAnswer | null;
+  /** Fired on every draft change from the interactive widget. */
+  onInteractiveAnswerChange?: (answer: InteractionAnswer) => void;
+  /** Lock the widget (used for sim replay — students watch, not touch). */
+  interactiveDisabled?: boolean;
 }
+
+/**
+ * Interaction types that are NOT rendered live in-slide and must fall back to
+ * the static `InteractionPreview`. Empty today — every type supported by
+ * `InteractionRenderer` (DnD, text input, MCQ, true/false, tap-to-count,
+ * draw_answer) works as a draft input inside the slide canvas.
+ */
+const NON_INLINE_INTERACTION_TYPES: ReadonlySet<SlideInteractionType> = new Set();
 
 /* ─── Theme config per interaction type ─── */
 
@@ -430,15 +456,80 @@ function InteractionPreview({ slide, language, showAnswer = false }: Props) {
   );
 }
 
+/* ─── Interactive drop-in ─── */
+
+/**
+ * Renders the real `InteractionRenderer` inside the slide canvas when the
+ * caller has enabled `interactive` and the slide's interaction_type is a
+ * drag-and-drop primitive. Otherwise returns the static `InteractionPreview`
+ * so thumbnails, editor-mode canvases and review surfaces stay untouched.
+ */
+function ActivityInteractionArea({
+  slide,
+  language,
+  showAnswer,
+  interactive,
+  interactiveAnswer,
+  onInteractiveAnswerChange,
+  interactiveDisabled,
+}: Props) {
+  const type = slide.interaction_type;
+  const shouldInteract =
+    !!interactive && !!type && !NON_INLINE_INTERACTION_TYPES.has(type);
+  if (!shouldInteract) {
+    return (
+      <InteractionPreview slide={slide} language={language} showAnswer={showAnswer} />
+    );
+  }
+  const interaction = slideToInteraction(slide);
+  if (!interaction) {
+    return (
+      <InteractionPreview slide={slide} language={language} showAnswer={showAnswer} />
+    );
+  }
+  return (
+    <div className="relative z-10 w-full max-w-[90%] mt-3">
+      <InteractionRenderer
+        interaction={interaction}
+        mode="answer"
+        language={language}
+        answer={interactiveAnswer ?? null}
+        onAnswerChange={onInteractiveAnswerChange}
+        disabled={!!interactiveDisabled}
+      />
+    </div>
+  );
+}
+
 /* ─── Main ActivitySlide ─── */
 
-export default function ActivitySlide({ slide, language, showAnswer = false }: Props) {
+export default function ActivitySlide({
+  slide,
+  language,
+  showAnswer = false,
+  interactive = false,
+  interactiveAnswer,
+  onInteractiveAnswerChange,
+  interactiveDisabled,
+}: Props) {
   const isAr = language === 'ar';
   const title = isAr ? slide.title_ar : slide.title_en;
   const body = isAr ? slide.body_ar : slide.body_en;
   const hasImage = !!slide.image_url;
   const theme = getTheme(slide.interaction_type);
   const answerLabel = isAr ? 'الإجابة الصحيحة' : 'Correct Answer';
+
+  const interactionArea = (
+    <ActivityInteractionArea
+      slide={slide}
+      language={language}
+      showAnswer={showAnswer}
+      interactive={interactive}
+      interactiveAnswer={interactiveAnswer}
+      onInteractiveAnswerChange={onInteractiveAnswerChange}
+      interactiveDisabled={interactiveDisabled}
+    />
+  );
 
   if (slide.layout === 'full_image' && hasImage) {
     return (
@@ -460,7 +551,7 @@ export default function ActivitySlide({ slide, language, showAnswer = false }: P
             {answerLabel}
           </span>
         )}
-        <InteractionPreview slide={slide} language={language} showAnswer={showAnswer} />
+        {interactionArea}
       </div>
     );
   }
@@ -512,7 +603,7 @@ export default function ActivitySlide({ slide, language, showAnswer = false }: P
         </span>
       )}
 
-      <InteractionPreview slide={slide} language={language} showAnswer={showAnswer} />
+      {interactionArea}
     </div>
   );
 }

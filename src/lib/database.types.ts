@@ -1127,6 +1127,7 @@ export type Database = {
           video_url_360p: string | null
           video_url_480p: string | null
           video_url_720p: string | null
+          playback_mode: string
         }
         Insert: {
           ai_generated_at?: string | null
@@ -1156,6 +1157,7 @@ export type Database = {
           video_url_360p?: string | null
           video_url_480p?: string | null
           video_url_720p?: string | null
+          playback_mode?: string
         }
         Update: {
           ai_generated_at?: string | null
@@ -1185,6 +1187,7 @@ export type Database = {
           video_url_360p?: string | null
           video_url_480p?: string | null
           video_url_720p?: string | null
+          playback_mode?: string
         }
         Relationships: [
           {
@@ -1237,6 +1240,75 @@ export type Database = {
             columns: ["lesson_id"]
             isOneToOne: true
             referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lesson_sims: {
+        Row: {
+          id: string
+          lesson_id: string
+          version: number
+          duration_ms: number
+          deck_snapshot: Json
+          events: Json
+          audio_path: string | null
+          audio_duration_ms: number | null
+          audio_mime: string | null
+          recorded_by: string | null
+          recorded_at: string
+          published: boolean
+          clip_segments: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          lesson_id: string
+          version?: number
+          duration_ms: number
+          deck_snapshot: Json
+          events?: Json
+          audio_path?: string | null
+          audio_duration_ms?: number | null
+          audio_mime?: string | null
+          recorded_by?: string | null
+          recorded_at?: string
+          published?: boolean
+          clip_segments?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          lesson_id?: string
+          version?: number
+          duration_ms?: number
+          deck_snapshot?: Json
+          events?: Json
+          audio_path?: string | null
+          audio_duration_ms?: number | null
+          audio_mime?: string | null
+          recorded_by?: string | null
+          recorded_at?: string
+          published?: boolean
+          clip_segments?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_sims_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_sims_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1785,6 +1857,7 @@ export type AIMessage = Tables<"ai_messages">
 export type LessonTask = Tables<"lesson_tasks">
 export type LessonTaskResponse = Tables<"lesson_task_responses">
 export type LessonSlideResponse = Tables<"lesson_slide_responses">
+export type LessonSim = Tables<"lesson_sims">
 
 export type UserRole = Enums<"user_role">
 export type QuestionType = Enums<"question_type">

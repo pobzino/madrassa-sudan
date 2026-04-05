@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import type { Slide, SlideType, SlideLayout, SlideTextSize } from '@/lib/slides.types';
 import { createClient } from '@/lib/supabase/client';
 import SlideInteractionFields from './SlideInteractionFields';
+import SlideImageGenerator from './SlideImageGenerator';
 import { OWL_OPTIONS, OWL_PREFIX, isOwlImage, getOwlKey } from '@/lib/owl-illustrations';
 import OwlImage from './OwlImage';
 
@@ -13,6 +14,7 @@ interface SlideEditPanelProps {
   onDelete: () => void;
   canDelete?: boolean;
   canEditType?: boolean;
+  lessonId?: string;
 }
 
 const SLIDE_TYPES: { value: SlideType; label: string }[] = [
@@ -56,6 +58,7 @@ export default function SlideEditPanel({
   onDelete,
   canDelete = true,
   canEditType = true,
+  lessonId,
 }: SlideEditPanelProps) {
   const supabase = createClient();
   const [bulletLang, setBulletLang] = useState<'ar' | 'en'>('ar');
@@ -315,6 +318,11 @@ export default function SlideEditPanel({
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
               {imageUploadError}
             </div>
+          )}
+
+          {/* AI image generator */}
+          {lessonId && (
+            <SlideImageGenerator slide={slide} lessonId={lessonId} onUpdate={onUpdate} />
           )}
 
           {/* Image preview */}
