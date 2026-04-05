@@ -18,6 +18,12 @@ interface SlideToolbarProps {
   onSave: () => void;
   onPresent: () => void;
   onRecord?: () => void;
+  /** Sim (event-sourced) recording — parallel test flow alongside the video Record button. */
+  onRecordSim?: () => void;
+  /** Open the lesson's single sim for review/edit/view. Only shown when `hasSim` is true. */
+  onOpenSim?: () => void;
+  /** Whether the lesson already has a recorded sim. Gates the Sim button visibility. */
+  hasSim?: boolean;
   saving: boolean;
 }
 
@@ -29,6 +35,9 @@ export default function SlideToolbar({
   onSave,
   onPresent,
   onRecord,
+  onRecordSim,
+  onOpenSim,
+  hasSim,
   saving,
 }: SlideToolbarProps) {
   const [showInteractivePicker, setShowInteractivePicker] = useState(false);
@@ -74,6 +83,7 @@ export default function SlideToolbar({
                 { type: 'quiz_preview' as SlideType, label: 'Quiz Preview' },
                 { type: 'question_answer' as SlideType, label: 'Q&A Reveal' },
                 { type: 'summary' as SlideType, label: 'Summary' },
+                { type: 'whiteboard' as SlideType, label: 'Whiteboard' },
               ].map((item) => (
                 <button
                   key={item.type}
@@ -107,6 +117,44 @@ export default function SlideToolbar({
                 <circle cx="12" cy="12" r="8" />
               </svg>
               Record
+            </button>
+          )}
+
+          {/* Sim record (beta) — event-sourced recording */}
+          {onRecordSim && (
+            <button
+              onClick={onRecordSim}
+              title="Record an event-sourced sim (beta)"
+              className="px-3 py-1.5 text-xs font-medium text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50 transition-colors flex items-center gap-1.5"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="12" r="8" />
+              </svg>
+              Sim β
+            </button>
+          )}
+
+          {/* Sim — review/edit/view the lesson's single recorded sim */}
+          {onOpenSim && hasSim && (
+            <button
+              onClick={onOpenSim}
+              title="Review the recorded sim for this lesson"
+              className="px-3 py-1.5 text-xs font-medium text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50 transition-colors flex items-center gap-1.5"
+            >
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+              Sim
             </button>
           )}
 

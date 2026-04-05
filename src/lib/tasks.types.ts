@@ -39,6 +39,11 @@ export interface FillMissingWordData {
   options_ar: string[];
   options_en: string[];
   correct_index: number;
+  /** When true, students type their answer instead of picking an option. */
+  free_entry?: boolean;
+  /** Expected answer used for exact-match + AI fallback when free_entry is on. */
+  expected_answer_ar?: string;
+  expected_answer_en?: string;
 }
 
 export interface TapToCountData {

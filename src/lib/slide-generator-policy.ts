@@ -207,13 +207,16 @@ export function getSlideGeneratorPolicyPrompt({
     "- When `interaction_type` is set, all companion fields for that type must be filled.",
     "- `free_response`: requires `interaction_prompt_ar`/`interaction_prompt_en` and `interaction_expected_answer_ar`/`interaction_expected_answer_en` so the teacher can model a strong answer.",
     "- `choose_correct`: requires `interaction_options_ar` and `interaction_options_en` (2-4 items each), `interaction_correct_index` within range, and `interaction_prompt_ar`/`interaction_prompt_en`.",
-    "- `fill_missing_word`: requires `interaction_options_ar` and `interaction_options_en` (2-4 items each), `interaction_correct_index`, and `interaction_prompt_ar`/`interaction_prompt_en`.",
+    "- `fill_missing_word`: by default set `interaction_free_entry=false` and supply `interaction_options_ar`/`interaction_options_en` (2-4 each) plus `interaction_correct_index`. If the target word is short and unambiguous you may instead set `interaction_free_entry=true` with `interaction_expected_answer_ar` and `interaction_expected_answer_en` (no options needed) so students type the answer.",
     "- `true_false`: requires `interaction_true_false_answer` (boolean) and `interaction_prompt_ar`/`interaction_prompt_en`.",
     "- `tap_to_count`: requires `interaction_count_target` (1-12), `interaction_visual_emoji`, and `interaction_prompt_ar`/`interaction_prompt_en`.",
     "- `match_pairs`: requires `interaction_items_ar/en` and `interaction_targets_ar/en` with 2-4 entries each; matching is by aligned index.",
     "- `sequence_order`: requires `interaction_items_ar/en` with 3-5 entries in the correct order.",
     "- `sort_groups`: requires `interaction_items_ar/en`, `interaction_targets_ar/en`, and `interaction_solution_map` where each item maps to a target index.",
-    "- Non-activity/non-practice slides must set all interaction fields to null.",
+    "- `draw_answer`: requires `interaction_prompt_ar`/`interaction_prompt_en` and a plain-language description of what a correct drawing contains in `interaction_expected_answer_ar` and/or `interaction_expected_answer_en` so the vision grader can judge the student's drawing.",
+    "- `drag_drop_label`: reserved for teacher-authored slides that pin labels to an image. Do not emit this interaction type during generation; teachers add hotspots manually after the deck is created.",
+    "- Explanation slides (`content` or `diagram_description`) may optionally include an `interaction_type` when a quick check-for-understanding deepens the teaching moment; leave all interaction fields null when no check is needed.",
+    "- Title, objectives, and summary slides must set all interaction fields to null.",
     "- Keep interaction prompts short and grade-appropriate.",
   ];
 
@@ -352,9 +355,13 @@ export function validateGeneratedSlides(
 
     // Interaction validation
     if (slide.interaction_type) {
-      const isInteractiveSlideType = slide.type === "activity" || isPracticeType(slide);
+      const isInteractiveSlideType =
+        slide.type === "activity" ||
+        slide.type === "content" ||
+        slide.type === "diagram_description" ||
+        isPracticeType(slide);
       if (!isInteractiveSlideType) {
-        issues.push(`Slide ${index + 1} has interaction_type set but is not an activity or practice slide.`);
+        issues.push(`Slide ${index + 1} has interaction_type set but is not an explanation, activity, or practice slide.`);
       }
 
       if (!slide.interaction_prompt_ar?.trim() || !slide.interaction_prompt_en?.trim()) {
@@ -367,7 +374,7 @@ export function validateGeneratedSlides(
         }
       }
 
-      if (slide.interaction_type === "choose_correct" || slide.interaction_type === "fill_missing_word") {
+      if (slide.interaction_type === "choose_correct") {
         const arLen = slide.interaction_options_ar?.length ?? 0;
         const enLen = slide.interaction_options_en?.length ?? 0;
         if (arLen < 2 || arLen > 4 || enLen < 2 || enLen > 4) {
@@ -375,6 +382,33 @@ export function validateGeneratedSlides(
         }
         if (typeof slide.interaction_correct_index !== "number" || slide.interaction_correct_index < 0 || slide.interaction_correct_index >= Math.max(arLen, enLen)) {
           issues.push(`Slide ${index + 1} ${slide.interaction_type} must have a valid interaction_correct_index.`);
+        }
+      }
+
+      if (slide.interaction_type === "fill_missing_word") {
+        if (slide.interaction_free_entry === true) {
+          // Free-entry mode: must have an expected answer in at least one language.
+          if (
+            !slide.interaction_expected_answer_ar?.trim() &&
+            !slide.interaction_expected_answer_en?.trim()
+          ) {
+            issues.push(
+              `Slide ${index + 1} fill_missing_word with free_entry must include an expected answer.`
+            );
+          }
+        } else {
+          const arLen = slide.interaction_options_ar?.length ?? 0;
+          const enLen = slide.interaction_options_en?.length ?? 0;
+          if (arLen < 2 || arLen > 4 || enLen < 2 || enLen > 4) {
+            issues.push(`Slide ${index + 1} fill_missing_word must have 2-4 options in both languages.`);
+          }
+          if (
+            typeof slide.interaction_correct_index !== "number" ||
+            slide.interaction_correct_index < 0 ||
+            slide.interaction_correct_index >= Math.max(arLen, enLen)
+          ) {
+            issues.push(`Slide ${index + 1} fill_missing_word must have a valid interaction_correct_index.`);
+          }
         }
       }
 
@@ -424,6 +458,23 @@ export function validateGeneratedSlides(
         ) {
           issues.push(`Slide ${index + 1} sequence_order must have 3-5 ordered items in both languages.`);
         }
+      }
+
+      if (slide.interaction_type === "draw_answer") {
+        if (
+          !slide.interaction_expected_answer_ar?.trim() &&
+          !slide.interaction_expected_answer_en?.trim()
+        ) {
+          issues.push(
+            `Slide ${index + 1} draw_answer must include an expected answer description in at least one language so the vision grader knows what to accept.`
+          );
+        }
+      }
+
+      if (slide.interaction_type === "drag_drop_label") {
+        issues.push(
+          `Slide ${index + 1} drag_drop_label is reserved for teacher authoring and must not be produced by the generator.`
+        );
       }
 
       if (slide.interaction_type === "sort_groups") {

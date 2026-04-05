@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Slide } from '@/lib/slides.types';
+import type { InteractionAnswer } from '@/lib/interactions/types';
 import TitleSlide from './templates/TitleSlide';
 import ContentSlide from './templates/ContentSlide';
 import KeyPointsSlide from './templates/KeyPointsSlide';
@@ -8,6 +9,7 @@ import ActivitySlide from './templates/ActivitySlide';
 import QuizPreviewSlide from './templates/QuizPreviewSlide';
 import QuestionAnswerSlide from './templates/QuestionAnswerSlide';
 import SummarySlide from './templates/SummarySlide';
+import WhiteboardSlide from './templates/WhiteboardSlide';
 
 interface SlideCardProps {
   slide: Slide;
@@ -17,6 +19,15 @@ interface SlideCardProps {
   onReveal?: () => void;
   renderMode?: 'default' | 'thumbnail';
   showActivityAnswer?: boolean;
+  /**
+   * Turn the activity slide's DnD widget on (teacher present mode, sim
+   * recording, sim replay). When false, the static `InteractionPreview` is
+   * rendered so editor canvases and thumbnails stay non-interactive.
+   */
+  activityInteractive?: boolean;
+  activityAnswer?: InteractionAnswer | null;
+  onActivityAnswerChange?: (answer: InteractionAnswer) => void;
+  activityInteractiveDisabled?: boolean;
 }
 
 const DESIGN_WIDTH = 1280;
@@ -32,6 +43,10 @@ export default function SlideCard({
   onReveal,
   renderMode = 'default',
   showActivityAnswer = false,
+  activityInteractive = false,
+  activityAnswer,
+  onActivityAnswerChange,
+  activityInteractiveDisabled = false,
 }: SlideCardProps) {
   let renderedContent: ReactNode;
 
@@ -64,11 +79,18 @@ export default function SlideCard({
           slide={slide}
           language={language}
           showAnswer={showActivityAnswer}
+          interactive={activityInteractive && renderMode !== 'thumbnail'}
+          interactiveAnswer={activityAnswer}
+          onInteractiveAnswerChange={onActivityAnswerChange}
+          interactiveDisabled={activityInteractiveDisabled}
         />
       );
       break;
     case 'quiz_preview':
       renderedContent = <QuizPreviewSlide slide={slide} language={language} />;
+      break;
+    case 'whiteboard':
+      renderedContent = <WhiteboardSlide slide={slide} language={language} />;
       break;
     case 'summary':
     default:

@@ -51,6 +51,8 @@ export const ACTIVITY_TYPE_OPTIONS: Array<{
   { type: 'match_pairs', label: 'Match Pairs', icon: 'link-2', hint: 'Best for linking terms to definitions' },
   { type: 'sequence_order', label: 'Put in Order', icon: 'arrow-up-down', hint: 'Best for steps, timelines & processes' },
   { type: 'sort_groups', label: 'Sort into Groups', icon: 'folder-input', hint: 'Best for classification & categorization' },
+  { type: 'draw_answer', label: 'Draw the Answer', icon: 'pen-line', hint: 'Best for open drawing answers graded by vision AI' },
+  { type: 'drag_drop_label', label: 'Label an Image', icon: 'link-2', hint: 'Drag labels onto spots on a picture' },
 ];
 
 export function normalizeTaskType(taskType: string): TaskType {
@@ -64,7 +66,7 @@ export function normalizeTaskType(taskType: string): TaskType {
   }
 }
 
-export function interactionTypeToTaskType(interactionType: SlideInteractionType): SupportedTaskType {
+export function interactionTypeToTaskType(interactionType: SupportedTaskType): SupportedTaskType {
   return interactionType;
 }
 
@@ -133,6 +135,9 @@ export function buildTaskDataFromSlide(slide: Slide): Record<string, unknown> | 
         options_ar: slide.interaction_options_ar || [],
         options_en: slide.interaction_options_en || [],
         correct_index: slide.interaction_correct_index ?? 0,
+        free_entry: slide.interaction_free_entry === true,
+        expected_answer_ar: slide.interaction_expected_answer_ar || '',
+        expected_answer_en: slide.interaction_expected_answer_en || '',
       } satisfies FillMissingWordData as unknown as Record<string, unknown>;
     case 'true_false':
       return {
@@ -276,6 +281,28 @@ function getDraftActivityContent(interactionType: SlideInteractionType) {
         targets_en: ['Fruit', 'Vegetable'],
         solution_map: [0, 1],
       };
+    case 'draw_answer':
+      return {
+        title_ar: 'ارسم الإجابة',
+        title_en: 'Draw the Answer',
+        body_ar: 'استخدم اللوحة لترسم إجابتك.',
+        body_en: 'Use the whiteboard to draw your answer.',
+        prompt_ar: 'ارسم ما يصف إجابتك.',
+        prompt_en: 'Draw what describes your answer.',
+        expected_answer_ar: 'مثال: رسم يوضح الفكرة المطلوبة.',
+        expected_answer_en: 'e.g. a drawing that shows the required idea.',
+      };
+    case 'drag_drop_label':
+      return {
+        title_ar: 'سمّ الأجزاء',
+        title_en: 'Label the Parts',
+        body_ar: 'اسحب كل كلمة إلى مكانها الصحيح على الصورة.',
+        body_en: 'Drag each label onto the correct spot on the image.',
+        prompt_ar: 'ضع كل تسمية في مكانها المناسب.',
+        prompt_en: 'Place each label on the matching spot.',
+        items_ar: ['التسمية الأولى', 'التسمية الثانية'],
+        items_en: ['First label', 'Second label'],
+      };
   }
 }
 
@@ -338,6 +365,8 @@ export function createDraftActivitySlide(
     interaction_targets_ar: 'targets_ar' in content ? content.targets_ar : null,
     interaction_targets_en: 'targets_en' in content ? content.targets_en : null,
     interaction_solution_map: 'solution_map' in content ? content.solution_map : null,
+    interaction_free_entry: null,
+    interaction_hotspots: null,
   };
 }
 
@@ -446,6 +475,7 @@ export function buildSlideUpdatesFromTask(task: Pick<
     interaction_targets_ar: null,
     interaction_targets_en: null,
     interaction_solution_map: null,
+    interaction_free_entry: null,
   };
 
   switch (normalizedType) {
@@ -458,11 +488,27 @@ export function buildSlideUpdatesFromTask(task: Pick<
       );
       break;
     case 'choose_correct':
-    case 'fill_missing_word':
       updates.interaction_options_ar = getOptionsFromTaskData(task.task_data, 'ar');
       updates.interaction_options_en = getOptionsFromTaskData(task.task_data, 'en');
       updates.interaction_correct_index = Number(task.task_data.correct_index ?? 0);
       break;
+    case 'fill_missing_word': {
+      const freeEntry = task.task_data.free_entry === true;
+      updates.interaction_free_entry = freeEntry;
+      if (freeEntry) {
+        updates.interaction_expected_answer_ar = String(
+          task.task_data.expected_answer_ar || ''
+        );
+        updates.interaction_expected_answer_en = String(
+          task.task_data.expected_answer_en || ''
+        );
+      } else {
+        updates.interaction_options_ar = getOptionsFromTaskData(task.task_data, 'ar');
+        updates.interaction_options_en = getOptionsFromTaskData(task.task_data, 'en');
+        updates.interaction_correct_index = Number(task.task_data.correct_index ?? 0);
+      }
+      break;
+    }
     case 'true_false':
       updates.interaction_true_false_answer = Boolean(task.task_data.correct_answer);
       break;

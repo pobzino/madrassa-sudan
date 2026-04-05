@@ -131,7 +131,35 @@ export function computeSlideInteractionCorrectness(
     return typeof answer === 'string' && answer.trim().length > 0;
   }
 
+  if (slide.interaction_type === 'draw_answer') {
+    // Drawings are graded by the vision API at submission time and the
+    // resulting correctness is stored on the interaction result, so here we
+    // only confirm that a drawing was submitted.
+    return typeof answer === 'string' && answer.trim().length > 0;
+  }
+
   if (slide.interaction_type === 'choose_correct' || slide.interaction_type === 'fill_missing_word') {
+    // Free-entry fill-the-blank: compare normalized typed answer to expected.
+    if (
+      slide.interaction_type === 'fill_missing_word' &&
+      slide.interaction_free_entry === true &&
+      typeof answer === 'string'
+    ) {
+      const normalize = (value: string) =>
+        value
+          .trim()
+          .toLowerCase()
+          .replace(/[\s\p{P}]+/gu, ' ')
+          .trim();
+      const normalizedAnswer = normalize(answer);
+      const expectedAr = slide.interaction_expected_answer_ar?.trim() || '';
+      const expectedEn = slide.interaction_expected_answer_en?.trim() || '';
+      return (
+        (expectedAr.length > 0 && normalize(expectedAr) === normalizedAnswer) ||
+        (expectedEn.length > 0 && normalize(expectedEn) === normalizedAnswer)
+      );
+    }
+
     if (typeof answer === 'number') {
       return answer === slide.interaction_correct_index;
     }
@@ -185,6 +213,24 @@ export function computeSlideInteractionCorrectness(
     }
 
     return answer.every((value, index) => value === String(index));
+  }
+
+  if (slide.interaction_type === 'drag_drop_label') {
+    const itemsLength = Math.max(
+      slide.interaction_items_ar?.length ?? 0,
+      slide.interaction_items_en?.length ?? 0
+    );
+    const hotspots = slide.interaction_hotspots || [];
+    const mapping = parseMappedAnswer(answer);
+
+    if (itemsLength === 0 || hotspots.length !== itemsLength || mapping.size !== itemsLength) {
+      return false;
+    }
+
+    // Each hotspot index should be matched with the label at the same index.
+    return Array.from({ length: itemsLength }).every(
+      (_, hotspotIndex) => mapping.get(hotspotIndex) === hotspotIndex
+    );
   }
 
   if (slide.interaction_type === 'sort_groups') {

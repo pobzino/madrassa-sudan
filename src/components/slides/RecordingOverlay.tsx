@@ -10,11 +10,14 @@ interface RecordingOverlayProps {
   canGoNext?: boolean;
   canRevealAnswer?: boolean;
   isAnswerRevealed?: boolean;
+  isWhiteboardActive?: boolean;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   webcamVideoRef?: React.RefObject<HTMLVideoElement | null>;
   onPrevious?: () => void;
   onNext?: () => void;
   onToggleAnswer?: () => void;
+  onToggleWhiteboard?: () => void;
+  onInsertWhiteboardSlide?: () => void;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
@@ -34,10 +37,13 @@ export default function RecordingOverlay({
   canGoNext = false,
   canRevealAnswer = false,
   isAnswerRevealed = false,
+  isWhiteboardActive = false,
   canvasRef,
   onPrevious,
   onNext,
   onToggleAnswer,
+  onToggleWhiteboard,
+  onInsertWhiteboardSlide,
   onPause,
   onResume,
   onStop,
@@ -78,6 +84,35 @@ export default function RecordingOverlay({
 
         {/* Recording controls — integrated into bottom bar */}
         <div className="fixed bottom-6 right-6 z-[60] flex items-center gap-2">
+          {onInsertWhiteboardSlide && (
+            <button
+              onClick={onInsertWhiteboardSlide}
+              title="Insert a blank whiteboard slide and start drawing"
+              className="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors bg-white/20 text-white backdrop-blur-sm hover:bg-white/30"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="3" y="4" width="18" height="14" rx="2" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 20h8M12 18v2" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 11h6M12 8v6" />
+              </svg>
+              Blank Board
+            </button>
+          )}
+          {onToggleWhiteboard && (
+            <button
+              onClick={onToggleWhiteboard}
+              className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                isWhiteboardActive
+                  ? 'bg-violet-500 text-white hover:bg-violet-600'
+                  : 'bg-white/20 text-white backdrop-blur-sm hover:bg-white/30'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+              </svg>
+              {isWhiteboardActive ? 'Drawing' : 'Draw'}
+            </button>
+          )}
           {canRevealAnswer && onToggleAnswer && (
             <button
               onClick={onToggleAnswer}

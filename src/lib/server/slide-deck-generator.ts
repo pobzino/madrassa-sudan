@@ -310,16 +310,17 @@ ${validationSchemaNotes}
 ## Student Interactions
 - Every practice slide (type "quiz_preview" or "question_answer") MUST include a student interaction
 - Activity slides (type "activity") MAY include a student interaction when it helps participation
-- Set interaction_type to one of: "free_response", "choose_correct", "true_false", "tap_to_count", "match_pairs", "sequence_order", "sort_groups", or "fill_missing_word"
+- Set interaction_type to one of: "free_response", "choose_correct", "true_false", "tap_to_count", "match_pairs", "sequence_order", "sort_groups", "fill_missing_word", or "draw_answer"
 - Every practice slide must set interaction_type to one of those values; it cannot be null
 - For free_response: set interaction_expected_answer_ar and interaction_expected_answer_en to a short model answer the teacher can reveal later
 - For choose_correct: provide 3-4 options in interaction_options_ar/interaction_options_en, set interaction_correct_index to the 0-based index of the correct answer
-- For fill_missing_word: provide 2-4 options in interaction_options_ar/interaction_options_en, set interaction_correct_index to the 0-based index of the correct word, and make the visible slide text clearly contain a blank to fill
+- For fill_missing_word: default to multiple choice (interaction_free_entry=false) with 2-4 options in interaction_options_ar/interaction_options_en and set interaction_correct_index to the 0-based index of the correct word. If the answer is a short, unambiguous single word, you may instead set interaction_free_entry=true and provide interaction_expected_answer_ar/interaction_expected_answer_en (options can be null). Either way, make the visible slide text clearly contain a blank to fill.
 - For true_false: set interaction_true_false_answer to true or false
 - For tap_to_count: set interaction_count_target (1-12) and interaction_visual_emoji (a single emoji)
 - For match_pairs: provide 2-4 aligned pairs using interaction_items_ar/en and interaction_targets_ar/en. The correct match is item 0 to target 0, item 1 to target 1, and so on
 - For sequence_order: provide 3-5 ordered entries in interaction_items_ar/en. The listed order is the correct answer
 - For sort_groups: provide 2-6 items in interaction_items_ar/en, 2-4 group labels in interaction_targets_ar/en, and interaction_solution_map as the 0-based target index for each item
+- For draw_answer: fill interaction_expected_answer_ar and/or interaction_expected_answer_en with a short plain-language description of what a correct student drawing must contain (shapes, labels, relationships). This description is used by a vision grader to judge the submitted drawing.
 - Set interaction_prompt_ar/interaction_prompt_en: a short question or instruction for the student
 - Non-interactive slides (title, content, key_points, diagram_description, summary): set ALL interaction fields to null, including interaction_items_ar/en, interaction_targets_ar/en, and interaction_solution_map
 - Keep interaction prompts short and grade-appropriate for Grade ${lessonRow.grade_level || 1}`;
@@ -402,6 +403,7 @@ ${validationSchemaNotes}
                     "sequence_order",
                     "sort_groups",
                     "fill_missing_word",
+                    "draw_answer",
                   ],
                 },
                 { type: "null" },
@@ -452,6 +454,9 @@ ${validationSchemaNotes}
             interaction_solution_map: {
               anyOf: [{ type: "array", items: { type: "integer" } }, { type: "null" }],
             },
+            interaction_free_entry: {
+              anyOf: [{ type: "boolean" }, { type: "null" }],
+            },
           },
           required: [
             "type",
@@ -490,6 +495,7 @@ ${validationSchemaNotes}
             "interaction_targets_ar",
             "interaction_targets_en",
             "interaction_solution_map",
+            "interaction_free_entry",
           ],
           additionalProperties: false,
         },
@@ -703,6 +709,7 @@ ${JSON.stringify(
       interaction_targets_ar: slide.interaction_targets_ar,
       interaction_targets_en: slide.interaction_targets_en,
       interaction_solution_map: slide.interaction_solution_map,
+      interaction_free_entry: slide.interaction_free_entry,
     })),
   },
   null,

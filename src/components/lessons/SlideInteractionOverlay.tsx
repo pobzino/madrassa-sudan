@@ -4,19 +4,67 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import SlideCard from '@/components/slides/SlideCard';
 import type { Slide } from '@/lib/slides.types';
 import {
-  getSlideInteractionItems,
-  getSlideInteractionOptions,
   getSlideInteractionPrompt,
-  getSlideInteractionTargets,
-  getStableInteractionOrder,
   type SlideInteractionResult,
 } from '@/lib/slide-interactions';
 import { getIncorrectFeedback, getCorrectFeedback } from '@/lib/feedback-messages';
 import { useActivitySounds } from '@/hooks/useActivitySounds';
 import { ConfettiBurst } from '@/components/illustrations';
-import MatchPairsDnD from '@/components/lessons/interactions/MatchPairsDnD';
-import SequenceOrderDnD from '@/components/lessons/interactions/SequenceOrderDnD';
-import SortGroupsDnD from '@/components/lessons/interactions/SortGroupsDnD';
+import InteractionRenderer from '@/components/interactions/InteractionRenderer';
+import { slideToInteraction, answerToLegacy } from '@/lib/interactions/adapters';
+import { gradeInteraction } from '@/lib/interactions/grader';
+import type { Interaction, InteractionAnswer } from '@/lib/interactions/types';
+
+/**
+ * Can the current draft answer be submitted? Guards the submit button so the
+ * student can't confirm an empty or partially-filled response for types that
+ * require a complete placement.
+ */
+function draftAnswerIsReady(
+  interaction: Interaction,
+  answer: InteractionAnswer | null
+): boolean {
+  if (!answer || answer.type !== interaction.type) return false;
+  switch (answer.type) {
+    case 'free_response':
+      return answer.text.trim().length > 0;
+    case 'choose_correct':
+      return typeof answer.selected_index === 'number';
+    case 'fill_missing_word':
+      return (
+        typeof answer.selected_index === 'number' ||
+        (typeof answer.text === 'string' && answer.text.trim().length > 0)
+      );
+    case 'true_false':
+      return typeof answer.value === 'boolean';
+    case 'tap_to_count':
+      return typeof answer.count === 'number';
+    case 'match_pairs': {
+      if (interaction.type !== 'match_pairs') return false;
+      const len = Math.max(interaction.items.ar.length, interaction.items.en.length);
+      return len > 0 && answer.placements.length === len;
+    }
+    case 'sequence_order': {
+      if (interaction.type !== 'sequence_order') return false;
+      const len = Math.max(interaction.items.ar.length, interaction.items.en.length);
+      return len > 0 && answer.order.length === len;
+    }
+    case 'sort_groups': {
+      if (interaction.type !== 'sort_groups') return false;
+      return (
+        interaction.solution_map.length > 0 &&
+        answer.placements.length === interaction.solution_map.length
+      );
+    }
+    case 'drag_drop_label': {
+      if (interaction.type !== 'drag_drop_label') return false;
+      const len = interaction.hotspots.length;
+      return len > 0 && answer.placements.length === len;
+    }
+    case 'draw_answer':
+      return answer.image_data_url.trim().length > 0;
+  }
+}
 
 interface SlideInteractionOverlayProps {
   slide: Slide;
@@ -44,24 +92,21 @@ export default function SlideInteractionOverlay({
   const isAr = language === 'ar';
   const { playCorrect, playIncorrect, playComplete, playTap } = useActivitySounds();
   const startedAtRef = useRef(0);
-  const [selectedChoiceIndex, setSelectedChoiceIndex] = useState<number | null>(null);
-  const [selectedTrueFalse, setSelectedTrueFalse] = useState<boolean | null>(null);
-  const [freeResponseAnswer, setFreeResponseAnswer] = useState(initialFreeResponseAnswer || '');
+  // The typed interaction primitive — drives the renderer and the grader.
+  const interaction = useMemo(() => slideToInteraction(slide), [slide]);
+  const [draftAnswer, setDraftAnswer] = useState<InteractionAnswer | null>(() =>
+    initialFreeResponseAnswer
+      ? { type: 'free_response', text: initialFreeResponseAnswer }
+      : null
+  );
+  // Locally-owned UI state for types the renderer doesn't handle yet.
+  const [fillBlankAnswer, setFillBlankAnswer] = useState('');
+  const [fillBlankChecking, setFillBlankChecking] = useState(false);
   const [tappedIndexes, setTappedIndexes] = useState<number[]>([]);
-  const [matchSelections, setMatchSelections] = useState<Record<number, number>>({});
-  const [sequenceSelection, setSequenceSelection] = useState<string[]>(() => {
-    // Pre-fill with shuffled order so DnD starts with all items placed
-    if (slide.interaction_type === 'sequence_order') {
-      const items = getSlideInteractionItems(slide, language);
-      const order = getStableInteractionOrder(
-        items.map((label, index) => ({ label, index })),
-        slide.id
-      );
-      return order.map((i) => String(i.index));
-    }
-    return [];
-  });
-  const [sortSelections, setSortSelections] = useState<Record<number, number>>({});
+  const [drawChecking, setDrawChecking] = useState(false);
+  // Bumped on retry to force-remount the interaction renderer so widgets with
+  // internal state (notably the draw-answer whiteboard) start fresh.
+  const [retryKey, setRetryKey] = useState(0);
   const [result, setResult] = useState<SlideInteractionResult | null>(null);
 
   const text = {
@@ -86,9 +131,13 @@ export default function SlideInteractionOverlay({
       sequenceChosen: 'الترتيب الذي اخترته',
       sortLabel: 'ضع كل عنصر في المجموعة الصحيحة',
       fillBlankLabel: 'اختر الكلمة المناسبة للفراغ',
+      fillBlankTypeLabel: 'اكتب الكلمة المناسبة',
+      fillBlankPlaceholder: 'اكتب إجابتك هنا...',
+      checkingAnswer: 'جارٍ التحقق...',
       selectGroup: 'اختر المجموعة',
       tapToBuild: 'اضغط على العناصر لبناء الترتيب',
       remove: 'إزالة',
+      labelImageLabel: 'اسحب كل تسمية إلى المكان الصحيح على الصورة',
     },
     en: {
       activity: 'Interactive Activity',
@@ -111,33 +160,17 @@ export default function SlideInteractionOverlay({
       sequenceChosen: 'Chosen order',
       sortLabel: 'Place each item in the correct group',
       fillBlankLabel: 'Choose the missing word',
+      fillBlankTypeLabel: 'Type the missing word',
+      fillBlankPlaceholder: 'Type your answer here...',
+      checkingAnswer: 'Checking...',
       selectGroup: 'Choose group',
       tapToBuild: 'Tap items to build the order',
       remove: 'Remove',
+      labelImageLabel: 'Drag each label to the correct spot on the image',
     },
   }[language];
 
   const prompt = getSlideInteractionPrompt(slide, language);
-  const choiceOptions = useMemo(
-    () => getSlideInteractionOptions(slide, language),
-    [slide, language]
-  );
-  const interactionItems = useMemo(
-    () => getSlideInteractionItems(slide, language),
-    [slide, language]
-  );
-  const interactionTargets = useMemo(
-    () => getSlideInteractionTargets(slide, language),
-    [slide, language]
-  );
-  const sequenceChoices = useMemo(
-    () =>
-      getStableInteractionOrder(
-        interactionItems.map((label, index) => ({ label, index })),
-        slide.id
-      ),
-    [interactionItems, slide.id]
-  );
   const countTarget = Math.max(1, slide.interaction_count_target ?? 5);
   const countToken = slide.interaction_visual_emoji?.trim() || '🍎';
   const freeResponseLocked = reviewStatus === 'accepted' || reviewStatus === 'pending_review';
@@ -192,59 +225,149 @@ export default function SlideInteractionOverlay({
 
   function retryInteraction() {
     setResult(null);
-    setSelectedChoiceIndex(null);
-    setSelectedTrueFalse(null);
-    setFreeResponseAnswer('');
+    setDraftAnswer(null);
+    setFillBlankAnswer('');
+    setFillBlankChecking(false);
     setTappedIndexes([]);
-    setMatchSelections({});
-    setSequenceSelection([]);
-    setSortSelections({});
+    setDrawChecking(false);
+    setRetryKey((k) => k + 1);
   }
 
-  function submitChoice(eventTimeStamp?: number) {
-    if (selectedChoiceIndex === null) {
-      return;
-    }
-
+  /**
+   * Grade a typed answer via the shared grader, then translate it back to the
+   * legacy `SlideInteractionResult` shape that existing callers still use.
+   */
+  function submitDraftAnswer(
+    answer: InteractionAnswer | null,
+    eventTimeStamp?: number
+  ) {
+    if (!interaction || !answer) return;
+    const graded = gradeInteraction(interaction, answer);
+    const legacy = answerToLegacy(graded.answer);
     completeInteraction(
       {
-        answer: selectedChoiceIndex,
+        answer: legacy,
         completedAt: new Date().toISOString(),
-        isCorrect: selectedChoiceIndex === slide.interaction_correct_index,
+        isCorrect: graded.is_correct,
       },
       eventTimeStamp
     );
   }
 
-  function submitTrueFalse(eventTimeStamp?: number) {
-    if (selectedTrueFalse === null) {
-      return;
-    }
-
-    completeInteraction(
-      {
-        answer: selectedTrueFalse,
-        completedAt: new Date().toISOString(),
-        isCorrect: selectedTrueFalse === slide.interaction_true_false_answer,
-      },
-      eventTimeStamp
-    );
+  function normalizeFillBlank(value: string) {
+    return value
+      .trim()
+      .toLocaleLowerCase(language === 'ar' ? 'ar' : 'en')
+      .replace(/[\s\p{P}]+/gu, ' ')
+      .trim();
   }
 
-  function submitFreeResponse(eventTimeStamp?: number) {
-    const answer = freeResponseAnswer.trim();
-    if (!answer) {
+  async function submitFillBlankFreeEntry(eventTimeStamp?: number) {
+    const answer = fillBlankAnswer.trim();
+    if (!answer || fillBlankChecking) {
       return;
     }
 
-    completeInteraction(
-      {
-        answer,
-        completedAt: new Date().toISOString(),
-        isCorrect: true,
-      },
-      eventTimeStamp
-    );
+    const expectedAr = slide.interaction_expected_answer_ar?.trim() || '';
+    const expectedEn = slide.interaction_expected_answer_en?.trim() || '';
+    const expected = (language === 'ar' ? expectedAr : expectedEn) || expectedAr || expectedEn;
+
+    // Exact (normalized) match first — no server round-trip.
+    if (
+      expected &&
+      normalizeFillBlank(answer) === normalizeFillBlank(expected)
+    ) {
+      completeInteraction(
+        {
+          answer,
+          completedAt: new Date().toISOString(),
+          isCorrect: true,
+        },
+        eventTimeStamp
+      );
+      return;
+    }
+
+    // AI fallback for close-but-not-exact answers.
+    setFillBlankChecking(true);
+    try {
+      const response = await fetch('/api/lesson-progress/fill-blank-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          answer,
+          expected_ar: expectedAr || undefined,
+          expected_en: expectedEn || undefined,
+          language,
+          prompt_hint: prompt || undefined,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as
+        | { isCorrect?: boolean }
+        | null;
+      completeInteraction(
+        {
+          answer,
+          completedAt: new Date().toISOString(),
+          isCorrect: data?.isCorrect === true,
+        },
+        eventTimeStamp
+      );
+    } catch {
+      completeInteraction(
+        {
+          answer,
+          completedAt: new Date().toISOString(),
+          isCorrect: false,
+        },
+        eventTimeStamp
+      );
+    } finally {
+      setFillBlankChecking(false);
+    }
+  }
+
+  async function submitDrawAnswer(dataUrl: string, eventTimeStamp?: number) {
+    if (drawChecking || !dataUrl) {
+      return;
+    }
+
+    setDrawChecking(true);
+    try {
+      const response = await fetch('/api/lesson-progress/draw-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_data_url: dataUrl,
+          expected_ar: slide.interaction_expected_answer_ar?.trim() || undefined,
+          expected_en: slide.interaction_expected_answer_en?.trim() || undefined,
+          language,
+          prompt_hint: prompt || undefined,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as
+        | { isCorrect?: boolean; feedback?: string }
+        | null;
+      completeInteraction(
+        {
+          answer: 'drawing_submitted',
+          completedAt: new Date().toISOString(),
+          isCorrect: data?.isCorrect === true,
+        },
+        eventTimeStamp
+      );
+    } catch {
+      completeInteraction(
+        {
+          answer: 'drawing_submitted',
+          completedAt: new Date().toISOString(),
+          isCorrect: false,
+        },
+        eventTimeStamp
+      );
+    } finally {
+      setDrawChecking(false);
+    }
   }
 
   function handleTapCount(index: number, eventTimeStamp?: number) {
@@ -268,87 +391,27 @@ export default function SlideInteractionOverlay({
     }
   }
 
-  function submitMatchPairs(eventTimeStamp?: number) {
-    if (interactionItems.some((_, index) => matchSelections[index] == null)) {
-      return;
-    }
-
-    const answer = interactionItems.map(
-      (_, index) => `${index}:${matchSelections[index]}`
-    );
-    const isCorrect = interactionItems.every(
-      (_, index) => matchSelections[index] === index
-    );
-
-    completeInteraction(
-      {
-        answer,
-        completedAt: new Date().toISOString(),
-        isCorrect,
-      },
-      eventTimeStamp
-    );
-  }
-
-  function submitSequence(eventTimeStamp?: number) {
-    if (sequenceSelection.length !== interactionItems.length) {
-      return;
-    }
-
-    const isCorrect = sequenceSelection.every(
-      (value, index) => value === String(index)
-    );
-
-    completeInteraction(
-      {
-        answer: sequenceSelection,
-        completedAt: new Date().toISOString(),
-        isCorrect,
-      },
-      eventTimeStamp
-    );
-  }
-
-  function submitSortGroups(eventTimeStamp?: number) {
-    if (interactionItems.some((_, index) => sortSelections[index] == null)) {
-      return;
-    }
-
-    const answer = interactionItems.map(
-      (_, index) => `${index}:${sortSelections[index]}`
-    );
-    const isCorrect = interactionItems.every(
-      (_, index) =>
-        sortSelections[index] === (slide.interaction_solution_map || [])[index]
-    );
-
-    completeInteraction(
-      {
-        answer,
-        completedAt: new Date().toISOString(),
-        isCorrect,
-      },
-      eventTimeStamp
-    );
-  }
-
-  function toggleSequenceItem(index: number) {
-    const key = String(index);
-    if (sequenceSelection.includes(key)) {
-      return;
-    }
-    setSequenceSelection((current) => [...current, key]);
-  }
-
-  function removeSequenceItem(index: number) {
-    setSequenceSelection((current) => current.filter((value) => value !== String(index)));
-  }
-
   function renderInteractionControls() {
-    if (slide.interaction_type === 'free_response') {
+    // Types handled by the shared InteractionRenderer. The renderer owns the
+    // input UI and emits typed answers via onAnswerChange; the overlay owns the
+    // submit button so we can keep the existing "select then confirm" UX.
+    if (
+      interaction &&
+      (interaction.type === 'free_response' ||
+        interaction.type === 'choose_correct' ||
+        interaction.type === 'true_false' ||
+        interaction.type === 'match_pairs' ||
+        interaction.type === 'sort_groups' ||
+        interaction.type === 'sequence_order' ||
+        interaction.type === 'drag_drop_label' ||
+        interaction.type === 'draw_answer' ||
+        (interaction.type === 'fill_missing_word' && interaction.free_entry === false))
+    ) {
+      const isAnswerReady = draftAnswerIsReady(interaction, draftAnswer);
+      const isDraw = interaction.type === 'draw_answer';
       return (
         <>
-          {reviewBanner && (
+          {interaction.type === 'free_response' && reviewBanner && (
             <div className={`mb-4 rounded-2xl border px-4 py-3 ${reviewBanner.className}`}>
               <p className="text-sm font-semibold">{reviewBanner.title}</p>
               {reviewFeedback && (
@@ -356,102 +419,66 @@ export default function SlideInteractionOverlay({
               )}
             </div>
           )}
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-            {text.freeResponseLabel}
-          </p>
-          <textarea
-            dir={isAr ? 'rtl' : 'ltr'}
-            value={freeResponseAnswer}
-            onChange={(event) => setFreeResponseAnswer(event.target.value)}
-            disabled={!!result || freeResponseLocked}
-            rows={6}
-            placeholder={text.freeResponsePlaceholder}
-            className={`w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 focus:border-[#007229] focus:outline-none ${isAr ? 'font-cairo text-right' : 'font-inter'}`}
+          <InteractionRenderer
+            key={retryKey}
+            interaction={interaction}
+            mode="answer"
+            language={language}
+            answer={draftAnswer}
+            onAnswerChange={setDraftAnswer}
+            disabled={!!result || freeResponseLocked || drawChecking}
           />
           {!result && !freeResponseLocked && (
             <button
-              onClick={(event) => submitFreeResponse(event.timeStamp)}
-              disabled={!freeResponseAnswer.trim()}
+              onClick={(event) => {
+                if (isDraw) {
+                  const dataUrl =
+                    draftAnswer?.type === 'draw_answer' ? draftAnswer.image_data_url : '';
+                  submitDrawAnswer(dataUrl, event.timeStamp);
+                } else {
+                  submitDraftAnswer(draftAnswer, event.timeStamp);
+                }
+              }}
+              disabled={!isAnswerReady || drawChecking}
               className="mt-4 w-full rounded-2xl bg-[#007229] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
             >
-              {text.submit}
+              {isDraw && drawChecking ? text.checkingAnswer : text.submit}
             </button>
           )}
         </>
       );
     }
-
-    if (slide.interaction_type === 'choose_correct' || slide.interaction_type === 'fill_missing_word') {
+    if (
+      slide.interaction_type === 'fill_missing_word' &&
+      slide.interaction_free_entry === true
+    ) {
       return (
         <>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-            {slide.interaction_type === 'fill_missing_word'
-              ? text.fillBlankLabel
-              : text.choiceLabel}
+            {text.fillBlankTypeLabel}
           </p>
-          <div className="space-y-2">
-            {choiceOptions.map((option, index) => (
-              <button
-                key={`${slide.id}-choice-${index}`}
-                onClick={() => setSelectedChoiceIndex(index)}
-                disabled={!!result}
-                className={`w-full rounded-2xl border-2 px-4 py-3 text-left text-sm font-medium transition-colors ${
-                  selectedChoiceIndex === index
-                    ? 'border-[#007229] bg-[#007229]/8 text-[#007229]'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-[#007229]/35'
-                } ${isAr ? 'font-cairo' : 'font-inter'}`}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
+          <input
+            type="text"
+            dir={isAr ? 'rtl' : 'ltr'}
+            value={fillBlankAnswer}
+            onChange={(event) => setFillBlankAnswer(event.target.value)}
+            disabled={!!result || fillBlankChecking}
+            placeholder={text.fillBlankPlaceholder}
+            className={`w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-base text-gray-800 focus:border-[#007229] focus:outline-none ${isAr ? 'font-cairo text-right' : 'font-inter'}`}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                submitFillBlankFreeEntry(event.timeStamp);
+              }
+            }}
+          />
           {!result && (
             <button
-              onClick={(event) => submitChoice(event.timeStamp)}
-              disabled={selectedChoiceIndex === null}
+              onClick={(event) => submitFillBlankFreeEntry(event.timeStamp)}
+              disabled={!fillBlankAnswer.trim() || fillBlankChecking}
               className="mt-4 w-full rounded-2xl bg-[#007229] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
             >
-              {text.submit}
-            </button>
-          )}
-        </>
-      );
-    }
-
-    if (slide.interaction_type === 'true_false') {
-      return (
-        <>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => setSelectedTrueFalse(true)}
-              disabled={!!result}
-              className={`rounded-2xl border-2 px-4 py-5 text-sm font-bold transition-colors ${
-                selectedTrueFalse === true
-                  ? 'border-[#007229] bg-[#007229]/8 text-[#007229]'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-[#007229]/35'
-              }`}
-            >
-              {text.trueLabel}
-            </button>
-            <button
-              onClick={() => setSelectedTrueFalse(false)}
-              disabled={!!result}
-              className={`rounded-2xl border-2 px-4 py-5 text-sm font-bold transition-colors ${
-                selectedTrueFalse === false
-                  ? 'border-[#D21034] bg-[#D21034]/8 text-[#D21034]'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-[#D21034]/35'
-              }`}
-            >
-              {text.falseLabel}
-            </button>
-          </div>
-          {!result && (
-            <button
-              onClick={(event) => submitTrueFalse(event.timeStamp)}
-              disabled={selectedTrueFalse === null}
-              className="mt-4 w-full rounded-2xl bg-[#007229] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
-            >
-              {text.submit}
+              {fillBlankChecking ? text.checkingAnswer : text.submit}
             </button>
           )}
         </>
@@ -487,88 +514,6 @@ export default function SlideInteractionOverlay({
           <p className="mt-3 text-sm text-gray-600">
             {text.countProgress}: {tappedIndexes.length} / {countTarget}
           </p>
-        </>
-      );
-    }
-
-    if (slide.interaction_type === 'match_pairs') {
-      return (
-        <>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-            {text.matchLabel}
-          </p>
-          <MatchPairsDnD
-            items={interactionItems}
-            targets={interactionTargets}
-            selections={matchSelections}
-            onSelectionsChange={setMatchSelections}
-            disabled={!!result}
-            isAr={isAr}
-          />
-          {!result && (
-            <button
-              onClick={(event) => submitMatchPairs(event.timeStamp)}
-              disabled={interactionItems.some((_, index) => matchSelections[index] == null)}
-              className="mt-4 w-full rounded-2xl bg-[#007229] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
-            >
-              {text.submit}
-            </button>
-          )}
-        </>
-      );
-    }
-
-    if (slide.interaction_type === 'sequence_order') {
-      return (
-        <>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-            {text.sequenceLabel}
-          </p>
-          <p className="mb-3 text-xs text-gray-500">
-            {isAr ? 'اسحب العناصر لترتيبها' : 'Drag items to reorder'}
-          </p>
-          <SequenceOrderDnD
-            items={sequenceChoices}
-            onOrderChange={setSequenceSelection}
-            disabled={!!result}
-            isAr={isAr}
-          />
-          {!result && (
-            <button
-              onClick={(event) => submitSequence(event.timeStamp)}
-              disabled={sequenceSelection.length !== interactionItems.length}
-              className="mt-4 w-full rounded-2xl bg-[#007229] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
-            >
-              {text.submit}
-            </button>
-          )}
-        </>
-      );
-    }
-
-    if (slide.interaction_type === 'sort_groups') {
-      return (
-        <>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-            {text.sortLabel}
-          </p>
-          <SortGroupsDnD
-            items={interactionItems}
-            groups={interactionTargets}
-            selections={sortSelections}
-            onSelectionsChange={setSortSelections}
-            disabled={!!result}
-            isAr={isAr}
-          />
-          {!result && (
-            <button
-              onClick={(event) => submitSortGroups(event.timeStamp)}
-              disabled={interactionItems.some((_, index) => sortSelections[index] == null)}
-              className="mt-4 w-full rounded-2xl bg-[#007229] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
-            >
-              {text.submit}
-            </button>
-          )}
         </>
       );
     }

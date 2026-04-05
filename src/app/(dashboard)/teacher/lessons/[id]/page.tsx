@@ -21,6 +21,8 @@ import InteractionResultsPanel from "@/components/teacher/InteractionResultsPane
 import SlideEditor from "@/components/slides/SlideEditor";
 import SlideGenerateButton from "@/components/slides/SlideGenerateButton";
 import SlideCard from "@/components/slides/SlideCard";
+import SimPlayer from "@/components/slides/SimPlayer";
+import type { SimPayload } from "@/lib/sim.types";
 import type { Slide, SlideInteractionType } from "@/lib/slides.types";
 import {
   ACTIVITY_TYPE_OPTIONS,
@@ -93,7 +95,7 @@ type LessonForm = {
   video_processed_at: string;
 };
 
-type Tab = "details" | "activities" | "slides" | "results";
+type Tab = "details" | "activities" | "slides" | "sim" | "results";
 type EditorSaveState = "saved" | "dirty" | "saving" | "error";
 
 type LessonVideoUrls = {
@@ -273,6 +275,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const hasInitializedSnapshotRef = useRef(false);
   const lastSavedSnapshotRef = useRef("");
   const [isRetryingVideoProcessing, setIsRetryingVideoProcessing] = useState(false);
+  const [lessonSim, setLessonSim] = useState<SimPayload | null>(null);
 
   const [form, setForm] = useState<LessonForm>({
     title_ar: "",
@@ -338,7 +341,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             `)
             .eq("teacher_id", user.id);
 
-    const [{ data: lesson }, cohortResult, { data: existingAssignments }, slidesRes] = await Promise.all([
+    const [{ data: lesson }, cohortResult, { data: existingAssignments }, slidesRes, simRes] = await Promise.all([
       supabase
         .from("lessons")
         .select("*")
@@ -351,7 +354,12 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         .eq("lesson_id", id)
         .eq("is_active", true),
       fetch(`/api/teacher/lessons/${id}/slides`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/teacher/lessons/${id}/sims`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
     ]);
+
+    setLessonSim((simRes?.sim as SimPayload | null) ?? null);
 
     const loadedSlides = Array.isArray(slidesRes?.slideDeck?.slides)
       ? (slidesRes.slideDeck.slides as Slide[])
@@ -1147,6 +1155,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       ).length,
     },
     { key: "slides", label: "Slides", count: slides.length },
+    { key: "sim", label: "Sim" },
     { key: "results", label: "Results" },
   ];
 
@@ -1426,6 +1435,25 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             onRemoveActivity={handleRemoveActivity}
             onEditSlide={handleEditActivitySlide}
           />
+        )}
+
+        {activeTab === "sim" && (
+          <div className="space-y-4">
+            {lessonSim ? (
+              <div className="bg-black rounded-lg overflow-hidden">
+                <SimPlayer payload={lessonSim} language="ar" />
+              </div>
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-lg p-10 text-center">
+                <p className="text-sm text-gray-500">
+                  No sim has been recorded for this lesson yet.
+                </p>
+                <p className="mt-2 text-xs text-gray-400">
+                  Open the Slides tab and press <span className="font-semibold">Sim β</span> in the editor toolbar to record one.
+                </p>
+              </div>
+            )}
+          </div>
         )}
 
         {activeTab === "results" && (
