@@ -1405,6 +1405,14 @@ export default function SlideEditor({
                 <div className="w-px h-5 bg-white/20" />
 
                 <button
+                  onClick={insertWhiteboardSlideDuringRecording}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors"
+                  title="Insert a blank whiteboard slide"
+                >
+                  Whiteboard
+                </button>
+
+                <button
                   data-tour="draw-btn"
                   onClick={() => setWhiteboardActive((v) => !v)}
                   className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
