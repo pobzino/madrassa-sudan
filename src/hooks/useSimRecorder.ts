@@ -62,6 +62,9 @@ function pickAudioMimeType(): string | null {
   return null;
 }
 
+/** Maximum recording duration in milliseconds (45 minutes). */
+export const SIM_MAX_DURATION_MS = 45 * 60 * 1000;
+
 export function useSimRecorder(): UseSimRecorderReturn {
   const [state, setState] = useState<SimRecorderState>('idle');
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
