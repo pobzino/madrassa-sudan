@@ -6,12 +6,9 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useOffline } from "@/contexts/OfflineContext";
 import { OwlThinking, OwlSad } from "@/components/illustrations";
 import type { Lesson, Subject, LessonProgress } from "@/lib/database.types";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
-import { getAllOfflineLessons } from "@/lib/offline/db";
-import DownloadButton from "@/components/lessons/DownloadButton";
 
 const translations = {
   ar: {
@@ -71,7 +68,6 @@ export default function LessonsPage() {
   const searchParams = useSearchParams();
   const supabase = createClient();
   const { language } = useLanguage();
-  const { isOnline, downloadedLessonIds } = useOffline();
   const t = translations[language];
   const isRtl = language === "ar";
   const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
@@ -84,44 +80,6 @@ export default function LessonsPage() {
 
   useEffect(() => {
     async function loadData() {
-      // Offline mode: load from IndexedDB
-      if (!navigator.onLine) {
-        try {
-          const offlineLessons = await getAllOfflineLessons();
-          const mapped = offlineLessons.map((ol) => ({
-            id: ol.id,
-            title_ar: ol.title_ar,
-            title_en: ol.title_en,
-            description_ar: null,
-            description_en: null,
-            subject_id: "",
-            grade_level: ol.grade_level,
-            video_duration_seconds: null,
-            thumbnail_url: ol.thumbnailUrl,
-            is_published: true,
-            created_at: ol.downloadedAt,
-            updated_at: ol.downloadedAt,
-            video_url: null,
-            bunny_video_id: null,
-            display_order: 0,
-            subject: ol.subject_name_ar ? {
-              id: "",
-              name_ar: ol.subject_name_ar,
-              name_en: ol.subject_name_en || "",
-              display_order: 0,
-              created_at: "",
-              icon_url: null,
-            } : null,
-            progress: null,
-          })) as unknown as LessonWithProgress[];
-          setLessons(mapped);
-        } catch {
-          // No offline data
-        }
-        setLoading(false);
-        return;
-      }
-
       const user = await getCachedUser(supabase);
       if (!user) {
         router.push("/auth/login");
@@ -239,16 +197,6 @@ export default function LessonsPage() {
 
   return (
     <div className={`max-w-7xl mx-auto px-4 sm:px-6 py-6 ${isRtl ? "text-right" : ""}`}>
-      {/* Offline mode badge */}
-      {!isOnline && (
-        <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-          </svg>
-          <span>{language === "ar" ? "وضع عدم الاتصال — عرض الدروس المحملة فقط" : "Offline mode — showing downloaded lessons only"}</span>
-        </div>
-      )}
-
       {/* Search bar */}
       <div className="mb-5">
         <div className="relative max-w-xl">
@@ -576,12 +524,9 @@ function LessonCard({
 
       {/* Info */}
       <div className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="text-base font-semibold font-fredoka text-gray-900 line-clamp-2 leading-snug group-hover:text-emerald-700 transition-colors mb-2 flex-1">
-            {title}
-          </h3>
-          <DownloadButton lessonId={lesson.id} size="sm" />
-        </div>
+        <h3 className="text-base font-semibold font-fredoka text-gray-900 line-clamp-2 leading-snug group-hover:text-emerald-700 transition-colors mb-2">
+          {title}
+        </h3>
         <div className="flex items-center gap-2 flex-wrap">
           {subjectName && (
             <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${color.light}`}>
