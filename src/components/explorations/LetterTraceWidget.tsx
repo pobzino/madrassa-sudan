@@ -292,32 +292,28 @@ export default function LetterTraceWidget({
     if (!drawing || completedRef.current) return;
     setDrawing(false);
 
+    // Tracing is practice — always accept the attempt, just vary the star rating
     if (hasVectorPaths && config.stroke_paths) {
-      const accuracy = computeAccuracy(drawnPoints, config.stroke_paths);
       const coverage = computeCoverage(drawnPoints, config.stroke_paths, tolerance);
       setCoverageProgress(coverage);
 
-      if (accuracy <= tolerance && coverage >= 0.6) {
+      if (drawnPoints.length > 5) {
         completedRef.current = true;
         setCompleted(true);
         setFeedback('good');
-        setStarRating(coverage >= 0.85 ? 3 : coverage >= 0.7 ? 2 : 1);
+        setStarRating(coverage >= 0.85 ? 3 : coverage >= 0.6 ? 2 : 1);
         setTimeout(() => onComplete(), 500);
-      } else if (drawnPoints.length > 5) {
-        setFeedback('try_again');
       }
     } else if (textMaskRef.current) {
       const coverage = computeTextCoverage(drawnPoints, textMaskRef.current, CANVAS_SIZE, 5);
       setCoverageProgress(coverage);
 
-      if (coverage >= 0.4) {
+      if (drawnPoints.length > 5) {
         completedRef.current = true;
         setCompleted(true);
         setFeedback('good');
-        setStarRating(coverage >= 0.7 ? 3 : coverage >= 0.55 ? 2 : 1);
+        setStarRating(coverage >= 0.7 ? 3 : coverage >= 0.4 ? 2 : 1);
         setTimeout(() => onComplete(), 500);
-      } else if (drawnPoints.length > 5) {
-        setFeedback('try_again');
       }
     }
   }, [drawing, drawnPoints, config.stroke_paths, hasVectorPaths, tolerance, onComplete]);
