@@ -18,7 +18,8 @@ export function useSimAccess() {
         return;
       }
       const profile = await getCachedProfile(supabase, user.id);
-      setCanAccessSims(profile?.can_access_sims ?? false);
+      const isDev = process.env.NODE_ENV === "development";
+      setCanAccessSims(profile?.can_access_sims ?? isDev);
       setLoading(false);
     }
 

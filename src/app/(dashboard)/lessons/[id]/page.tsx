@@ -15,7 +15,6 @@ import type {
   QuizSettings,
   Subject,
 } from "@/lib/database.types";
-import type { LessonTask } from "@/lib/tasks.types";
 import type { Slide } from "@/lib/slides.types";
 import type { SimPayload } from "@/lib/sim.types";
 import dynamic from "next/dynamic";
@@ -27,17 +26,8 @@ import { Confetti } from "@/components/illustrations";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { getOfflineLesson, getCachedSimAudio, queueProgressUpdate } from "@/lib/offline/db";
 import EnhancedQuizOverlay from "@/components/lessons/EnhancedQuizOverlay";
-import LessonActivityOverlay from "@/components/lessons/LessonActivityOverlay";
 import ProgressGateModal from "@/components/lessons/ProgressGateModal";
-import SlideInteractionOverlay from "@/components/lessons/SlideInteractionOverlay";
 import {
-  getEffectiveActivityTimings,
-  isCanonicalActivityTask,
-  normalizeLessonTaskForm,
-  readAnswerFromTaskResponse,
-} from "@/lib/lesson-activities";
-import {
-  getInteractiveSlides,
   getSlideInteractionStorageKey,
   readStoredSlideInteractionResponses,
   type SlideInteractionResult,
@@ -250,92 +240,6 @@ function mapSlideResponsesToStoredState(
   }, {});
 }
 
-type StoredTaskResponseState = {
-  status: "completed" | "skipped" | "timed_out";
-  completionScore: number;
-  responseData: Record<string, unknown>;
-  timeSpentSeconds: number;
-  attempts: number;
-  answer: boolean | number | string | string[] | null;
-  teacherReview: {
-    status: "pending_review" | "accepted" | "needs_retry" | null;
-    feedback: string | null;
-    score: number | null;
-    reviewedAt: string | null;
-  };
-};
-
-type ActivityMarkerStatus =
-  | "pending"
-  | "completed"
-  | "skipped"
-  | "accepted"
-  | "pending_review"
-  | "needs_retry";
-
-function toResponsePayload(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function readTeacherReviewState(responseData: unknown) {
-  const payload = toResponsePayload(responseData);
-  const teacherReview = toResponsePayload(payload.teacher_review);
-  const rawStatus = teacherReview.status;
-  const status =
-    rawStatus === "pending_review" || rawStatus === "accepted" || rawStatus === "needs_retry"
-      ? rawStatus
-      : null;
-
-  return {
-    status,
-    feedback: typeof teacherReview.feedback === "string" ? teacherReview.feedback : null,
-    score: typeof teacherReview.score === "number" ? teacherReview.score : null,
-    reviewedAt: typeof teacherReview.reviewed_at === "string" ? teacherReview.reviewed_at : null,
-  };
-}
-
-function mapTaskResponsesToState(
-  responses:
-    | Array<{
-        task_id: string;
-        status: string;
-        completion_score: number | null;
-        response_data: unknown;
-        time_spent_seconds: number | null;
-        attempts: number | null;
-      }>
-    | null
-    | undefined
-): Record<string, StoredTaskResponseState> {
-  if (!responses || responses.length === 0) {
-    return {};
-  }
-
-  return responses.reduce<Record<string, StoredTaskResponseState>>((acc, response) => {
-    const payload =
-      response.response_data && typeof response.response_data === "object" && !Array.isArray(response.response_data)
-        ? (response.response_data as Record<string, unknown>)
-        : {};
-
-    acc[response.task_id] = {
-      status:
-        response.status === "skipped" || response.status === "timed_out"
-          ? response.status
-          : "completed",
-      completionScore: response.completion_score ?? 0,
-      responseData: payload,
-      timeSpentSeconds: response.time_spent_seconds ?? 0,
-      attempts: response.attempts ?? 1,
-      answer: readAnswerFromTaskResponse(payload),
-      teacherReview: readTeacherReviewState(payload),
-    };
-
-    return acc;
-  }, {});
-}
-
 export default function LessonPlayerPage() {
   const params = useParams();
   const lessonId = params.id as string;
@@ -378,14 +282,8 @@ export default function LessonPlayerPage() {
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
   const [correctQuestions, setCorrectQuestions] = useState<Set<string>>(new Set());
 
-  // Task overlay state
-  const [tasks, setTasks] = useState<LessonTask[]>([]);
-  const [taskResponses, setTaskResponses] = useState<Record<string, StoredTaskResponseState>>({});
-  const [activeActivity, setActiveActivity] = useState<LessonTask | null>(null);
-
-  // Slide interaction state
+  // Slide interaction state (used by SimPlayer for savedResponses)
   const [slideDeck, setSlideDeck] = useState<Slide[]>([]);
-  const [activeSlideInteraction, setActiveSlideInteraction] = useState<Slide | null>(null);
   const [slideInteractionResponses, setSlideInteractionResponses] = useState<StoredSlideInteractionResponses>({});
 
   // Progress gate state
@@ -398,25 +296,6 @@ export default function LessonPlayerPage() {
   // Celebration state
   const [showConfetti, setShowConfetti] = useState(false);
   const lastPlaybackSecondRef = useRef(0);
-
-  const isTaskResolvedForCompletion = useCallback(
-    (task: LessonTask, response?: StoredTaskResponseState | null) => {
-      if (!isCanonicalActivityTask(task.task_type) || !response) {
-        return false;
-      }
-
-      if (response.status !== "completed") {
-        return false;
-      }
-
-      if (task.task_type === "free_response" && response.teacherReview.status === "needs_retry") {
-        return false;
-      }
-
-      return true;
-    },
-    []
-  );
 
   // Load lesson data
   useEffect(() => {
@@ -464,7 +343,6 @@ export default function LessonPlayerPage() {
             }
 
             setQuestions(offlineLesson.questions as LessonQuestion[]);
-            setTasks(offlineLesson.tasks as LessonTask[]);
             setLoading(false);
             return;
           }
@@ -570,59 +448,6 @@ export default function LessonPlayerPage() {
         }
       }
 
-      // Fetch tasks
-      const { data: tasksData } = await supabase
-        .from("lesson_tasks")
-        .select("*")
-        .eq("lesson_id", lessonId)
-        .order("timestamp_seconds");
-      if (tasksData) {
-        const normalizedTasks = tasksData.map((task) => {
-          const normalized = normalizeLessonTaskForm({
-            ...(task as unknown as Partial<LessonTask>),
-            id: task.id,
-            task_type: task.task_type,
-            required: task.required ?? true,
-            linked_slide_id: task.linked_slide_id ?? null,
-          });
-
-          return {
-            ...(task as unknown as LessonTask),
-            ...normalized,
-            lesson_id: task.lesson_id,
-            created_at: task.created_at,
-            updated_at: task.updated_at,
-            title_en: normalized.title_en || null,
-            instruction_en: normalized.instruction_en || null,
-          } satisfies LessonTask;
-        });
-
-        setTasks(normalizedTasks);
-
-        if (normalizedTasks.length > 0) {
-          const { data: taskResponseData } = await supabase
-            .from("lesson_task_responses")
-            .select("task_id, status, completion_score, response_data, time_spent_seconds, attempts")
-            .eq("student_id", user.id)
-            .in("task_id", normalizedTasks.map((task) => task.id));
-
-          if (taskResponseData) {
-            setTaskResponses(
-              mapTaskResponsesToState(
-                taskResponseData as Array<{
-                  task_id: string;
-                  status: string;
-                  completion_score: number | null;
-                  response_data: unknown;
-                  time_spent_seconds: number | null;
-                  attempts: number | null;
-                }>
-              )
-            );
-          }
-        }
-      }
-
       // Fetch progress
       const { data: progressData } = await supabase
         .from("lesson_progress")
@@ -699,138 +524,6 @@ export default function LessonPlayerPage() {
     [lessonId, userId]
   );
 
-  const persistTaskResponse = useCallback(
-    async (
-      task: LessonTask,
-      payload: {
-        answer?: boolean | number | string | string[] | null;
-        status: "completed" | "skipped" | "timed_out";
-        timeSpentSeconds?: number;
-      }
-    ) => {
-      const timeSpentSeconds = payload.timeSpentSeconds ?? 0;
-
-      const localUpdate = (status: string, score: number) => {
-        setTaskResponses((prev) => ({
-          ...prev,
-          [task.id]: {
-            status: status as "completed" | "skipped" | "timed_out",
-            completionScore: score,
-            responseData:
-              payload.answer !== undefined && payload.answer !== null
-                ? { answer: payload.answer }
-                : {},
-            timeSpentSeconds,
-            attempts: (prev[task.id]?.attempts ?? 0) + 1,
-            answer: payload.answer ?? null,
-            teacherReview: { status: null, feedback: null, score: null, reviewedAt: null },
-          },
-        }));
-      };
-
-      // Offline: queue and update locally
-      if (!navigator.onLine) {
-        await queueProgressUpdate({
-          lessonId,
-          table: "lesson_task_responses",
-          data: {
-            task_id: task.id,
-            answer: payload.answer ?? null,
-            status: payload.status,
-            time_spent_seconds: timeSpentSeconds,
-          },
-          timestamp: new Date().toISOString(),
-        });
-        localUpdate(payload.status, payload.status === "completed" ? 100 : 0);
-        return;
-      }
-
-      try {
-        const response = await fetch(`/api/lessons/${lessonId}/task-responses`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            task_id: task.id,
-            answer: payload.answer ?? null,
-            status: payload.status,
-            time_spent_seconds: timeSpentSeconds,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to save activity response");
-        }
-
-        const json = await response.json();
-        localUpdate(json.status ?? payload.status, json.score ?? 0);
-      } catch (err) {
-        console.error("Failed to save task response:", err);
-        if (payload.status !== "completed") {
-          localUpdate(payload.status, 0);
-        }
-      }
-    },
-    [lessonId]
-  );
-
-  const linkedTaskIds = useMemo(
-    () => new Set(tasks.filter((task) => task.linked_slide_id).map((task) => task.id)),
-    [tasks]
-  );
-
-  const timedActivities = useMemo(
-    () =>
-      getEffectiveActivityTimings(
-        slideDeck,
-        tasks,
-        duration || lesson?.video_duration_seconds || null
-      ),
-    [duration, lesson?.video_duration_seconds, slideDeck, tasks]
-  );
-
-  const taskByLinkedSlideId = useMemo(
-    () =>
-      new Map(
-        tasks
-          .filter((task) => task.linked_slide_id)
-          .map((task) => [task.linked_slide_id as string, task])
-      ),
-    [tasks]
-  );
-
-  const findDueLegacyInteractiveSlide = useCallback(
-    (fromSecond: number, toSecond: number) => {
-      const lowerBound = Math.floor(Math.min(fromSecond, toSecond));
-      const upperBound = Math.floor(Math.max(fromSecond, toSecond));
-      const interactiveSlides = getInteractiveSlides(
-        slideDeck,
-        duration || lesson?.video_duration_seconds || null
-      );
-
-      return (
-        interactiveSlides.find(({ slide, triggerSecond }) => {
-          if (taskByLinkedSlideId.has(slide.id) || (slide.activity_id && linkedTaskIds.has(slide.activity_id))) {
-            return false;
-          }
-
-          return (
-            triggerSecond > lowerBound &&
-            triggerSecond <= upperBound &&
-            !slideInteractionResponses[slide.id]
-          );
-        })?.slide || null
-      );
-    },
-    [
-      duration,
-      lesson?.video_duration_seconds,
-      linkedTaskIds,
-      slideDeck,
-      slideInteractionResponses,
-      taskByLinkedSlideId,
-    ]
-  );
-
   const findDueQuestion = useCallback(
     (fromSecond: number, toSecond: number) => {
       const lowerBound = Math.floor(Math.min(fromSecond, toSecond));
@@ -846,36 +539,6 @@ export default function LessonPlayerPage() {
       );
     },
     [answeredQuestions, questions]
-  );
-
-  const findDueTask = useCallback(
-    (fromSecond: number, toSecond: number) => {
-      const lowerBound = Math.floor(Math.min(fromSecond, toSecond));
-      const upperBound = Math.floor(Math.max(fromSecond, toSecond));
-
-      return (
-        timedActivities.find(
-          ({ task, effectiveTimestampSeconds }) =>
-            effectiveTimestampSeconds > lowerBound &&
-            effectiveTimestampSeconds <= upperBound &&
-            (!taskResponses[task.id] ||
-              (task.task_type === "free_response" &&
-                taskResponses[task.id]?.teacherReview.status === "needs_retry"))
-        )?.task || null
-      );
-    },
-    [taskResponses, timedActivities]
-  );
-
-  const findPendingRequiredTask = useCallback(
-    () =>
-      tasks.find(
-        (task) =>
-          isCanonicalActivityTask(task.task_type) &&
-          task.required !== false &&
-          !isTaskResolvedForCompletion(task, taskResponses[task.id])
-      ) || null,
-    [isTaskResolvedForCompletion, taskResponses, tasks]
   );
 
   const availableVideoSources = useMemo(() => getLessonVideoSources(lesson), [lesson]);
@@ -1011,25 +674,9 @@ export default function LessonPlayerPage() {
         return true;
       }
 
-      const taskAtTime = findDueTask(fromSecond, toSecond);
-      if (taskAtTime) {
-        videoRef.current.pause();
-        setIsPlaying(false);
-        setActiveActivity(taskAtTime);
-        return true;
-      }
-
-      const interactiveSlideAtTime = findDueLegacyInteractiveSlide(fromSecond, toSecond);
-      if (interactiveSlideAtTime) {
-        videoRef.current.pause();
-        setIsPlaying(false);
-        setActiveSlideInteraction(interactiveSlideAtTime);
-        return true;
-      }
-
       return false;
     },
-    [findDueLegacyInteractiveSlide, findDueQuestion, findDueTask]
+    [findDueQuestion]
   );
 
   // Handle video time update
@@ -1041,7 +688,7 @@ export default function LessonPlayerPage() {
     lastPlaybackSecondRef.current = nextTime;
     setCurrentTime(nextTime);
 
-    if (!isPlaying || activeQuestion || activeActivity || activeSlideInteraction) {
+    if (!isPlaying || activeQuestion) {
       return;
     }
 
@@ -1065,7 +712,7 @@ export default function LessonPlayerPage() {
 
   // Toggle play/pause
   const togglePlay = () => {
-    if (!videoRef.current || activeQuestion || activeActivity || activeSlideInteraction) return;
+    if (!videoRef.current || activeQuestion) return;
     if (isPlaying) {
       videoRef.current.pause();
     } else {
@@ -1087,37 +734,17 @@ export default function LessonPlayerPage() {
       if (
         options?.activateDueInteractions !== false &&
         !activeQuestion &&
-        !activeActivity &&
-        !activeSlideInteraction &&
         time > previousTime
       ) {
         maybeActivateDueInteraction(previousTime, time);
       }
     },
-    [activeActivity, activeQuestion, activeSlideInteraction, currentTime, maybeActivateDueInteraction]
+    [activeQuestion, currentTime, maybeActivateDueInteraction]
   );
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     seekToTime(parseFloat(e.target.value));
   };
-
-  const handleActivityMarkerClick = useCallback(
-    (taskId: string, time: number) => {
-      const task = tasks.find((candidate) => candidate.id === taskId);
-      if (!task) {
-        seekToTime(time, { activateDueInteractions: false });
-        return;
-      }
-
-      videoRef.current?.pause();
-      setIsPlaying(false);
-      setActiveQuestion(null);
-      setActiveSlideInteraction(null);
-      seekToTime(time, { activateDueInteractions: false });
-      setActiveActivity(task);
-    },
-    [seekToTime, tasks]
-  );
 
   // Format time
   const formatTime = (seconds: number) => {
@@ -1171,44 +798,14 @@ export default function LessonPlayerPage() {
   }, [correctQuestions, questions]);
 
   const handleVideoEnded = useCallback(() => {
-    const pendingRequiredTask = findPendingRequiredTask();
-
-    if (pendingRequiredTask) {
-      setActiveActivity(pendingRequiredTask);
-      setIsPlaying(false);
-      return;
-    }
-
-    const pendingInteractiveSlide = findDueLegacyInteractiveSlide(0, Math.floor(duration || 0));
-
-    if (pendingInteractiveSlide) {
-      setActiveSlideInteraction(pendingInteractiveSlide);
-      setIsPlaying(false);
-      return;
-    }
-
     if (quizSettings.require_pass_to_continue && correctQuestions.size < quizSettings.min_pass_questions) {
       setShowProgressGate(true);
     }
-  }, [correctQuestions, duration, findDueLegacyInteractiveSlide, findPendingRequiredTask, quizSettings]);
+  }, [correctQuestions, quizSettings]);
 
   // Mark lesson as complete
   const handleMarkComplete = async () => {
     if (!userId || !lessonId) return;
-
-    const pendingRequiredTask = findPendingRequiredTask();
-
-    if (pendingRequiredTask) {
-      setActiveActivity(pendingRequiredTask);
-      return;
-    }
-
-    const pendingInteractiveSlide = findDueLegacyInteractiveSlide(0, Math.floor(duration || 0));
-
-    if (pendingInteractiveSlide) {
-      setActiveSlideInteraction(pendingInteractiveSlide);
-      return;
-    }
 
     if (quizSettings.require_pass_to_continue && correctQuestions.size < quizSettings.min_pass_questions) {
       setShowProgressGate(true);
@@ -1272,67 +869,6 @@ export default function LessonPlayerPage() {
   }
 
   const videoUrl = resolvedVideoSource?.url || "";
-  const timedInteractiveSlides = getInteractiveSlides(
-    slideDeck,
-    duration || lesson.video_duration_seconds || null
-  ).filter(
-    ({ slide }) =>
-      !taskByLinkedSlideId.has(slide.id) &&
-      !(slide.activity_id && linkedTaskIds.has(slide.activity_id))
-  );
-  const completedInteractiveSlideCount = timedInteractiveSlides.filter(
-    ({ slide }) => slideInteractionResponses[slide.id]
-  ).length;
-  const canonicalActivityCount = tasks.filter((task) => isCanonicalActivityTask(task.task_type)).length;
-  const completedActivityCount = tasks.filter(
-    (task) => isCanonicalActivityTask(task.task_type) && isTaskResolvedForCompletion(task, taskResponses[task.id])
-  ).length;
-  const activityMarkers = timedActivities.map((timing) => ({
-    id: timing.task.id,
-    position: timing.timelinePosition,
-    time: timing.effectiveTimestampSeconds,
-    label:
-      timing.task.title_en ||
-      timing.task.title_ar ||
-      `Activity ${timing.task.display_order + 1}`,
-    status: (() => {
-      const response = taskResponses[timing.task.id];
-      if (!response) {
-        return "pending" as ActivityMarkerStatus;
-      }
-      if (response.status === "skipped") {
-        return "skipped" as ActivityMarkerStatus;
-      }
-      if (response.status === "timed_out") {
-        return "pending" as ActivityMarkerStatus;
-      }
-      if (response.teacherReview.status === "needs_retry") {
-        return "needs_retry" as ActivityMarkerStatus;
-      }
-      if (response.teacherReview.status === "accepted") {
-        return "accepted" as ActivityMarkerStatus;
-      }
-      if (response.teacherReview.status === "pending_review") {
-        return "pending_review" as ActivityMarkerStatus;
-      }
-      return "completed" as ActivityMarkerStatus;
-    })(),
-  }));
-  const reviewedFreeResponseActivities = tasks
-    .filter(
-      (task) =>
-        task.task_type === "free_response" &&
-        taskResponses[task.id]?.teacherReview.status
-    )
-    .map((task) => {
-      const response = taskResponses[task.id];
-      const timing = timedActivities.find((candidate) => candidate.task.id === task.id);
-      return {
-        task,
-        response,
-        timing,
-      };
-    });
 
   return (
     <div className="min-h-screen bg-[#FCFCFC]" dir={isRtl ? "rtl" : "ltr"}>
@@ -1403,9 +939,9 @@ export default function LessonPlayerPage() {
           {/* Progress + Description row */}
           <div className="flex flex-col sm:flex-row gap-4">
             {/* Progress pills */}
-            {(questions.length > 0 || canonicalActivityCount > 0 || timedInteractiveSlides.length > 0) && (
+            {questions.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {questions.length > 0 && (() => {
+                {(() => {
                   const pct = Math.round((answeredQuestions.size / questions.length) * 100);
                   const done = answeredQuestions.size === questions.length;
                   return (
@@ -1430,56 +966,6 @@ export default function LessonPlayerPage() {
                     </div>
                   );
                 })()}
-                {canonicalActivityCount > 0 && (() => {
-                  const pct = Math.round((completedActivityCount / canonicalActivityCount) * 100);
-                  const done = completedActivityCount === canonicalActivityCount;
-                  return (
-                    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium ${done ? "bg-amber-100 text-amber-700" : "bg-amber-50 text-amber-600"}`}>
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59" />
-                      </svg>
-                      <span>{language === "ar" ? "الأنشطة" : "Activities"}</span>
-                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${done ? "bg-amber-200" : "bg-amber-100"}`}>
-                        {completedActivityCount}/{canonicalActivityCount}
-                      </span>
-                      {pct > 0 && pct < 100 && (
-                        <div className="w-12 h-1.5 bg-amber-200 rounded-full overflow-hidden">
-                          <div className="h-full bg-amber-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
-                        </div>
-                      )}
-                      {done && (
-                        <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
-                      )}
-                    </div>
-                  );
-                })()}
-                {timedInteractiveSlides.length > 0 && (() => {
-                  const pct = Math.round((completedInteractiveSlideCount / timedInteractiveSlides.length) * 100);
-                  const done = completedInteractiveSlideCount === timedInteractiveSlides.length;
-                  return (
-                    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium ${done ? "bg-cyan-100 text-cyan-700" : "bg-cyan-50 text-cyan-600"}`}>
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 20.25h12m-7.5-3v3m3-3v3m-10.125-3h17.25c.621 0 1.125-.504 1.125-1.125V4.875c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125z" />
-                      </svg>
-                      <span>{language === "ar" ? "تفاعلية" : "Interactive"}</span>
-                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${done ? "bg-cyan-200" : "bg-cyan-100"}`}>
-                        {completedInteractiveSlideCount}/{timedInteractiveSlides.length}
-                      </span>
-                      {pct > 0 && pct < 100 && (
-                        <div className="w-12 h-1.5 bg-cyan-200 rounded-full overflow-hidden">
-                          <div className="h-full bg-cyan-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
-                        </div>
-                      )}
-                      {done && (
-                        <svg className="w-4 h-4 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
-                      )}
-                    </div>
-                  );
-                })()}
               </div>
             )}
 
@@ -1490,100 +976,6 @@ export default function LessonPlayerPage() {
               </p>
             )}
           </div>
-
-          {reviewedFreeResponseActivities.length > 0 && (
-            <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                    {language === "ar" ? "مراجعة المعلم" : "Teacher Review"}
-                  </p>
-                  <h3 className="mt-1 text-sm font-semibold text-gray-900">
-                    {language === "ar"
-                      ? "تحقق من ملاحظات المعلم على الإجابات الحرة"
-                      : "Check feedback on your free response activities"}
-                  </h3>
-                </div>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                {reviewedFreeResponseActivities.map(({ task, response, timing }) => {
-                  const reviewStatus = response?.teacherReview.status;
-                  const reviewTone =
-                    reviewStatus === "accepted"
-                      ? "border-emerald-200 bg-emerald-50/60"
-                      : reviewStatus === "needs_retry"
-                        ? "border-rose-200 bg-rose-50/70"
-                        : "border-sky-200 bg-sky-50/70";
-                  const reviewLabel =
-                    reviewStatus === "accepted"
-                      ? language === "ar"
-                        ? "تم قبول الإجابة"
-                        : "Accepted"
-                      : reviewStatus === "needs_retry"
-                        ? language === "ar"
-                          ? "تحتاج إلى إعادة المحاولة"
-                          : "Needs retry"
-                        : language === "ar"
-                          ? "بانتظار المراجعة"
-                          : "Pending review";
-
-                  return (
-                    <div key={task.id} className={`rounded-2xl border p-4 ${reviewTone}`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">
-                            {(language === "ar" ? task.title_ar : task.title_en) ||
-                              task.title_en ||
-                              task.title_ar}
-                          </p>
-                          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-                            {reviewLabel}
-                          </p>
-                        </div>
-                        {timing && (
-                          <button
-                            type="button"
-                            onClick={() => handleActivityMarkerClick(task.id, timing.effectiveTimestampSeconds)}
-                            className="rounded-xl border border-white/70 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-white"
-                          >
-                            {reviewStatus === "needs_retry"
-                              ? language === "ar"
-                                ? "أعد المحاولة"
-                                : "Retry now"
-                              : language === "ar"
-                                ? "افتح النشاط"
-                                : "Open activity"}
-                          </button>
-                        )}
-                      </div>
-
-                      {typeof response?.answer === "string" && response.answer.trim() && (
-                        <div className="mt-3 rounded-xl border border-white/80 bg-white/80 p-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
-                            {language === "ar" ? "إجابتك" : "Your answer"}
-                          </p>
-                          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
-                            {response.answer}
-                          </p>
-                        </div>
-                      )}
-
-                      {response?.teacherReview.feedback && (
-                        <div className="mt-3 rounded-xl border border-white/80 bg-white/90 p-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
-                            {language === "ar" ? "ملاحظات المعلم" : "Teacher feedback"}
-                          </p>
-                          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
-                            {response.teacherReview.feedback}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Navigation */}
           {(adjacentLessons.prev || adjacentLessons.next) && (
