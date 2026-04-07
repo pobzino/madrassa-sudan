@@ -5,8 +5,10 @@
 
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+
+export const dynamic = 'force-dynamic';
 import { ResultsDisplay } from '@/components/diagnostic/ResultsDisplay';
 import { createClient } from '@/lib/supabase/client';
 
