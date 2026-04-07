@@ -28,9 +28,6 @@ const translations = {
     newPassword: "كلمة المرور الجديدة",
     confirmPassword: "تأكيد كلمة المرور",
     updatePassword: "تحديث كلمة المرور",
-    dangerZone: "منطقة الخطر",
-    deleteAccount: "حذف الحساب",
-    deleteWarning: "سيتم حذف جميع بياناتك بشكل دائم. هذا الإجراء لا يمكن التراجع عنه.",
     save: "حفظ التغييرات",
     saving: "جاري الحفظ...",
     saved: "تم الحفظ بنجاح!",
@@ -46,6 +43,24 @@ const translations = {
     parent: "ولي أمر",
     admin: "مدير",
     memberSince: "عضو منذ",
+    privacyData: "الخصوصية والبيانات",
+    exportData: "تصدير بياناتي",
+    exportDesc: "تحميل جميع بياناتك بصيغة JSON",
+    exporting: "جاري التصدير...",
+    deleteAccount: "حذف الحساب",
+    deleteDesc: "سيتم حذف جميع بياناتك نهائياً ولا يمكن التراجع عن ذلك.",
+    deleteConfirmTitle: "هل أنت متأكد؟",
+    deleteConfirmText: "اكتب \"حذف\" للتأكيد",
+    deleteConfirmWord: "حذف",
+    cancel: "إلغاء",
+    deleting: "جاري الحذف...",
+    privacyPolicy: "سياسة الخصوصية",
+    termsOfService: "شروط الخدمة",
+    featureFlags: "إدارة الميزات",
+    simAccess: "الوصول للحصص التفاعلية",
+    enabled: "مفعّل",
+    disabled: "معطّل",
+    noUsers: "لا يوجد مستخدمون",
   },
   en: {
     settings: "Settings",
@@ -66,9 +81,6 @@ const translations = {
     newPassword: "New Password",
     confirmPassword: "Confirm Password",
     updatePassword: "Update Password",
-    dangerZone: "Danger Zone",
-    deleteAccount: "Delete Account",
-    deleteWarning: "All your data will be permanently deleted. This action cannot be undone.",
     save: "Save Changes",
     saving: "Saving...",
     saved: "Saved successfully!",
@@ -84,6 +96,24 @@ const translations = {
     parent: "Parent",
     admin: "Admin",
     memberSince: "Member since",
+    privacyData: "Privacy & Data",
+    exportData: "Export My Data",
+    exportDesc: "Download all your data as a JSON file",
+    exporting: "Exporting...",
+    deleteAccount: "Delete Account",
+    deleteDesc: "All your data will be permanently deleted. This action cannot be undone.",
+    deleteConfirmTitle: "Are you sure?",
+    deleteConfirmText: "Type \"delete\" to confirm",
+    deleteConfirmWord: "delete",
+    cancel: "Cancel",
+    deleting: "Deleting...",
+    privacyPolicy: "Privacy Policy",
+    termsOfService: "Terms of Service",
+    featureFlags: "Feature Flags",
+    simAccess: "Sim Access",
+    enabled: "Enabled",
+    disabled: "Disabled",
+    noUsers: "No users found",
   },
 };
 
@@ -115,11 +145,6 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
     </svg>
   ),
-  trash: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-    </svg>
-  ),
   check: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -146,6 +171,16 @@ export default function SettingsPage() {
   const [passwordMessage, setPasswordMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [updatingPassword, setUpdatingPassword] = useState(false);
 
+  // Feature flags state (admin only)
+  const [flagUsers, setFlagUsers] = useState<{ id: string; full_name: string; role: string; can_access_sims: boolean }[]>([]);
+  const [togglingUser, setTogglingUser] = useState<string | null>(null);
+
+  // Privacy & Data state
+  const [exporting, setExporting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteInput, setDeleteInput] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
   const router = useRouter();
   const supabase = createClient();
   const { language, setLanguage } = useLanguage();
@@ -168,6 +203,15 @@ export default function SettingsPage() {
         setFullName(profileData.full_name);
         setPhone(profileData.phone || "");
         setGradeLevel(profileData.grade_level);
+
+        // Load feature flag data for admins
+        if (profileData.role === "admin") {
+          const { data: users } = await supabase
+            .from("profiles")
+            .select("id, full_name, role, can_access_sims")
+            .order("created_at");
+          if (users) setFlagUsers(users);
+        }
       }
 
       setLoading(false);
@@ -238,6 +282,50 @@ export default function SettingsPage() {
       setConfirmPassword("");
       setTimeout(() => setPasswordMessage(null), 3000);
     }
+  };
+
+  const handleExportData = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/account/export");
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `amal-school-data-export-${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setSaveMessage({ type: "error", text: t.error });
+    }
+    setExporting(false);
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/account/delete", { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      router.push("/");
+    } catch {
+      setSaveMessage({ type: "error", text: t.error });
+      setDeleting(false);
+    }
+  };
+
+  const handleToggleSimAccess = async (userId: string, currentValue: boolean) => {
+    setTogglingUser(userId);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ can_access_sims: !currentValue })
+      .eq("id", userId);
+    if (!error) {
+      setFlagUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, can_access_sims: !currentValue } : u))
+      );
+    }
+    setTogglingUser(null);
   };
 
   const getRoleLabel = (role: string) => {
@@ -521,30 +609,159 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Danger Zone */}
-          <div className="bg-white rounded-2xl shadow-sm border border-red-200 overflow-hidden">
-            <div className="p-6 border-b border-red-100 bg-red-50/50">
+          {/* Privacy & Data Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="p-6 border-b border-gray-100">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
-                  {Icons.trash}
+                <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                  </svg>
                 </div>
-                <h2 className="text-lg font-semibold text-red-900">{t.dangerZone}</h2>
+                <h2 className="text-lg font-semibold text-gray-900">{t.privacyData}</h2>
               </div>
             </div>
 
-            <div className="p-6">
-              <p className="text-sm text-gray-600 mb-4">{t.deleteWarning}</p>
-              <button
-                className="px-6 py-3 bg-red-600 text-white font-semibold rounded-xl hover:bg-red-700 transition-colors"
-                onClick={() => {
-                  // Would implement delete account flow
-                  alert("This feature is not yet implemented");
-                }}
-              >
-                {t.deleteAccount}
-              </button>
+            <div className="p-6 space-y-5">
+              {/* Legal links */}
+              <div className="flex gap-3">
+                <Link
+                  href="/privacy"
+                  target="_blank"
+                  className="flex-1 py-3 px-4 rounded-xl border border-gray-200 text-center text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  {t.privacyPolicy}
+                </Link>
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  className="flex-1 py-3 px-4 rounded-xl border border-gray-200 text-center text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  {t.termsOfService}
+                </Link>
+              </div>
+
+              {/* Export Data */}
+              <div className="pt-2">
+                <p className="text-sm text-gray-500 mb-3">{t.exportDesc}</p>
+                <button
+                  onClick={handleExportData}
+                  disabled={exporting}
+                  className="w-full py-3 bg-purple-600 text-white font-semibold rounded-xl hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                >
+                  {exporting ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <span>{t.exporting}</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                      </svg>
+                      <span>{t.exportData}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Delete Account */}
+              <div className="pt-4 border-t border-gray-100">
+                <p className="text-sm text-red-600 mb-3">{t.deleteDesc}</p>
+
+                {!showDeleteConfirm ? (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="w-full py-3 bg-white text-red-600 font-semibold rounded-xl border-2 border-red-200 hover:bg-red-50 transition-colors"
+                  >
+                    {t.deleteAccount}
+                  </button>
+                ) : (
+                  <div className="space-y-3 bg-red-50 p-4 rounded-xl border border-red-200">
+                    <p className="text-sm font-semibold text-red-700">{t.deleteConfirmTitle}</p>
+                    <p className="text-sm text-red-600">{t.deleteConfirmText}</p>
+                    <input
+                      type="text"
+                      value={deleteInput}
+                      onChange={(e) => setDeleteInput(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-white border border-red-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                      dir="auto"
+                    />
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => { setShowDeleteConfirm(false); setDeleteInput(""); }}
+                        className="flex-1 py-2.5 bg-white text-gray-700 font-medium rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors text-sm"
+                      >
+                        {t.cancel}
+                      </button>
+                      <button
+                        onClick={handleDeleteAccount}
+                        disabled={deleting || deleteInput.toLowerCase() !== t.deleteConfirmWord}
+                        className="flex-1 py-2.5 bg-red-600 text-white font-medium rounded-xl hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                      >
+                        {deleting ? t.deleting : t.deleteAccount}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+
+          {/* Admin: Feature Flags */}
+          {profile?.role === "admin" && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="p-6 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5" />
+                    </svg>
+                  </div>
+                  <h2 className="text-lg font-semibold text-gray-900">{t.featureFlags}</h2>
+                </div>
+              </div>
+
+              <div className="p-6">
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">{t.simAccess}</h3>
+                {flagUsers.length === 0 ? (
+                  <p className="text-sm text-gray-400">{t.noUsers}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {flagUsers.map((user) => (
+                      <div key={user.id} className="flex items-center justify-between py-3 px-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white font-bold text-sm">
+                            {user.full_name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{user.full_name}</p>
+                            <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">{user.role}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleToggleSimAccess(user.id, user.can_access_sims)}
+                          disabled={togglingUser === user.id}
+                          className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50"
+                          style={{ backgroundColor: user.can_access_sims ? "#007229" : "#d1d5db" }}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              user.can_access_sims ? "translate-x-6" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
         </div>
         </>
         )}

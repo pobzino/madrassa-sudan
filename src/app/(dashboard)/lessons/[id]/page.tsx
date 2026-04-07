@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useSimAccess } from "@/lib/hooks/useSimAccess";
 import type {
   Lesson,
   LessonProgress,
@@ -17,9 +18,15 @@ import type {
 import type { LessonTask } from "@/lib/tasks.types";
 import type { Slide } from "@/lib/slides.types";
 import type { SimPayload } from "@/lib/sim.types";
-import SimPlayer from "@/components/slides/SimPlayer";
+import dynamic from "next/dynamic";
+
+const SimPlayer = dynamic(() => import("@/components/slides/SimPlayer"), {
+  loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
+});
 import { Confetti } from "@/components/illustrations";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
+import { getOfflineLesson, getCachedSimAudio, queueProgressUpdate } from "@/lib/offline/db";
+import DownloadButton from "@/components/lessons/DownloadButton";
 import EnhancedQuizOverlay from "@/components/lessons/EnhancedQuizOverlay";
 import LessonActivityOverlay from "@/components/lessons/LessonActivityOverlay";
 import ProgressGateModal from "@/components/lessons/ProgressGateModal";
@@ -336,6 +343,7 @@ export default function LessonPlayerPage() {
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
+  const { canAccessSims } = useSimAccess();
   const t = translations[language];
   const isRtl = language === "ar";
 
@@ -385,6 +393,9 @@ export default function LessonPlayerPage() {
   const [showProgressGate, setShowProgressGate] = useState(false);
   const [quizSettings, setQuizSettings] = useState<QuizSettings>(DEFAULT_QUIZ_SETTINGS);
 
+  // Offline state
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+
   // Celebration state
   const [showConfetti, setShowConfetti] = useState(false);
   const lastPlaybackSecondRef = useRef(0);
@@ -411,6 +422,61 @@ export default function LessonPlayerPage() {
   // Load lesson data
   useEffect(() => {
     async function loadData() {
+      // Offline mode: load from IndexedDB
+      if (!navigator.onLine) {
+        try {
+          const offlineLesson = await getOfflineLesson(lessonId);
+          if (offlineLesson) {
+            setIsOfflineMode(true);
+            setLesson({
+              id: offlineLesson.id,
+              title_ar: offlineLesson.title_ar,
+              title_en: offlineLesson.title_en,
+              grade_level: offlineLesson.grade_level,
+              thumbnail_url: offlineLesson.thumbnailUrl,
+              subject_id: "",
+              is_published: true,
+            } as Lesson);
+
+            if (offlineLesson.subject_name_ar) {
+              setSubject({
+                id: "",
+                name_ar: offlineLesson.subject_name_ar,
+                name_en: offlineLesson.subject_name_en || "",
+                display_order: 0,
+                created_at: "",
+                icon: null,
+                description: null,
+              });
+            }
+
+            // Load sim with offline audio
+            if (offlineLesson.sim) {
+              const audioBlob = await getCachedSimAudio(lessonId);
+              const sim = { ...offlineLesson.sim };
+              if (audioBlob) {
+                sim.audio_url = URL.createObjectURL(audioBlob);
+              }
+              setLessonSim(sim);
+            }
+
+            if (Array.isArray(offlineLesson.slides)) {
+              setSlideDeck(offlineLesson.slides as Slide[]);
+            }
+
+            setQuestions(offlineLesson.questions as LessonQuestion[]);
+            setTasks(offlineLesson.tasks as LessonTask[]);
+            setLoading(false);
+            return;
+          }
+        } catch {
+          // Fall through to online loading
+        }
+        // Not downloaded — show not found
+        setLoading(false);
+        return;
+      }
+
       const user = await getCachedUser(supabase);
       if (!user) {
         router.push("/auth/login");
@@ -564,7 +630,7 @@ export default function LessonPlayerPage() {
         .select("*")
         .eq("lesson_id", lessonId)
         .eq("student_id", user.id)
-        .single();
+        .maybeSingle();
       if (progressData) {
         setProgress(progressData);
       }
@@ -645,6 +711,41 @@ export default function LessonPlayerPage() {
     ) => {
       const timeSpentSeconds = payload.timeSpentSeconds ?? 0;
 
+      const localUpdate = (status: string, score: number) => {
+        setTaskResponses((prev) => ({
+          ...prev,
+          [task.id]: {
+            status: status as "completed" | "skipped" | "timed_out",
+            completionScore: score,
+            responseData:
+              payload.answer !== undefined && payload.answer !== null
+                ? { answer: payload.answer }
+                : {},
+            timeSpentSeconds,
+            attempts: (prev[task.id]?.attempts ?? 0) + 1,
+            answer: payload.answer ?? null,
+            teacherReview: { status: null, feedback: null, score: null, reviewedAt: null },
+          },
+        }));
+      };
+
+      // Offline: queue and update locally
+      if (!navigator.onLine) {
+        await queueProgressUpdate({
+          lessonId,
+          table: "lesson_task_responses",
+          data: {
+            task_id: task.id,
+            answer: payload.answer ?? null,
+            status: payload.status,
+            time_spent_seconds: timeSpentSeconds,
+          },
+          timestamp: new Date().toISOString(),
+        });
+        localUpdate(payload.status, payload.status === "completed" ? 100 : 0);
+        return;
+      }
+
       try {
         const response = await fetch(`/api/lessons/${lessonId}/task-responses`, {
           method: "POST",
@@ -662,47 +763,11 @@ export default function LessonPlayerPage() {
         }
 
         const json = await response.json();
-        setTaskResponses((prev) => ({
-          ...prev,
-          [task.id]: {
-            status: json.status ?? payload.status,
-            completionScore: json.score ?? 0,
-            responseData:
-              payload.answer !== undefined && payload.answer !== null
-                ? { answer: payload.answer }
-                : {},
-            timeSpentSeconds,
-            attempts: (prev[task.id]?.attempts ?? 0) + 1,
-            answer: payload.answer ?? null,
-            teacherReview: {
-              status: null,
-              feedback: null,
-              score: null,
-              reviewedAt: null,
-            },
-          },
-        }));
+        localUpdate(json.status ?? payload.status, json.score ?? 0);
       } catch (err) {
         console.error("Failed to save task response:", err);
-        // Only update local state for skip/timeout — don't show false "completed" on API failure
         if (payload.status !== "completed") {
-          setTaskResponses((prev) => ({
-            ...prev,
-            [task.id]: {
-              status: payload.status,
-              completionScore: 0,
-              responseData: {},
-              timeSpentSeconds,
-              attempts: (prev[task.id]?.attempts ?? 0) + 1,
-              answer: payload.answer ?? null,
-              teacherReview: {
-                status: null,
-                feedback: null,
-                score: null,
-                reviewedAt: null,
-              },
-            },
-          }));
+          localUpdate(payload.status, 0);
         }
       }
     },
@@ -859,17 +924,29 @@ export default function LessonPlayerPage() {
     const isCompleted = duration > 0 && currentPosition / duration >= 0.9;
     const questionsCorrect = correctQuestions.size;
 
-    const { data: updatedProgress } = await supabase.from("lesson_progress").upsert({
+    const progressData = {
       student_id: userId,
       lesson_id: lessonId,
       last_position_seconds: currentPosition,
-      total_watch_time_seconds: totalWatchTime + 5, // Approximate 5 seconds since last save
+      total_watch_time_seconds: totalWatchTime + 5,
       completed: isCompleted,
       completed_at: isCompleted ? new Date().toISOString() : null,
       questions_answered: answeredQuestions.size,
       questions_correct: questionsCorrect,
       quiz_passed: questionsCorrect >= quizSettings.min_pass_questions,
-    }, {
+    };
+
+    if (!navigator.onLine) {
+      await queueProgressUpdate({
+        lessonId,
+        table: "lesson_progress",
+        data: progressData,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const { data: updatedProgress } = await supabase.from("lesson_progress").upsert(progressData, {
       onConflict: "student_id,lesson_id",
     }).select().single();
 
@@ -885,6 +962,41 @@ export default function LessonPlayerPage() {
     }, 10000);
     return () => clearInterval(interval);
   }, [isPlaying, saveProgress]);
+
+  // Sim progress tracking — debounced upsert on playback percentage changes.
+  const lastSimPctRef = useRef(0);
+  const handleSimProgress = useCallback(async (pct: number) => {
+    if (!userId || !lessonId) return;
+    // Only save when progress crosses a 10% threshold
+    const bucket = Math.floor(pct / 10) * 10;
+    if (bucket <= lastSimPctRef.current) return;
+    lastSimPctRef.current = bucket;
+    const isCompleted = pct >= 80;
+
+    const progressData = {
+      student_id: userId,
+      lesson_id: lessonId,
+      last_position_seconds: Math.floor((pct / 100) * 600),
+      total_watch_time_seconds: Math.floor((pct / 100) * 600),
+      completed: isCompleted,
+      completed_at: isCompleted ? new Date().toISOString() : null,
+      questions_answered: answeredQuestions.size,
+      questions_correct: correctQuestions.size,
+    };
+
+    if (!navigator.onLine) {
+      await queueProgressUpdate({
+        lessonId,
+        table: "lesson_progress",
+        data: progressData,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const { data: updatedProgress } = await supabase.from("lesson_progress").upsert(progressData, { onConflict: "student_id,lesson_id" }).select().single();
+    if (updatedProgress) setProgress(updatedProgress);
+  }, [userId, lessonId, supabase, answeredQuestions.size, correctQuestions]);
 
   const maybeActivateDueInteraction = useCallback(
     (fromSecond: number, toSecond: number) => {
@@ -1144,7 +1256,11 @@ export default function LessonPlayerPage() {
     return (
       <div className="min-h-screen bg-[#FCFCFC] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-500 text-lg mb-4">{t.lessonNotFound}</p>
+          <p className="text-gray-500 text-lg mb-4">
+            {isOfflineMode || !navigator.onLine
+              ? (language === "ar" ? "هذا الدرس غير متاح بدون إنترنت" : "This lesson is not available offline")
+              : t.lessonNotFound}
+          </p>
           <Link
             href="/lessons"
             className="px-6 py-3 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-lg shadow-[#007229]/30"
@@ -1234,7 +1350,7 @@ export default function LessonPlayerPage() {
             >
               <span className={isRtl ? "rotate-180 inline-block" : ""}>{Icons.back}</span>
             </Link>
-            <div>
+            <div className="flex-1">
               <h1 className="text-gray-900 font-semibold">
                 {language === "ar" ? lesson.title_ar : lesson.title_en}
               </h1>
@@ -1244,6 +1360,7 @@ export default function LessonPlayerPage() {
                 <span>{t.grade} {lesson.grade_level}</span>
               </div>
             </div>
+            <DownloadButton lessonId={lessonId} size="sm" />
           </div>
 
           {/* Completion status */}
@@ -1266,9 +1383,9 @@ export default function LessonPlayerPage() {
       {/* Lesson recording — sim-based playback. Replaces the legacy Bunny
           video for the student view. If the lesson has no sim yet, show an
           empty state. */}
-      {lessonSim ? (
-        <div className="bg-black mx-auto max-w-6xl px-4 py-4">
-          <SimPlayer payload={lessonSim} language={language} />
+      {lessonSim && canAccessSims ? (
+        <div className="mx-auto max-w-6xl px-3 py-2">
+          <SimPlayer payload={lessonSim} language={language} lessonId={lessonId} savedResponses={slideInteractionResponses} onProgress={handleSimProgress} />
         </div>
       ) : (
         <div className="relative bg-black aspect-video max-h-[70vh] mx-auto flex items-center justify-center">

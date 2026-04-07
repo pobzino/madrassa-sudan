@@ -364,6 +364,7 @@ export type Database = {
           title_ar: string
           title_en: string | null
           total_points: number
+          show_instant_feedback: boolean
           updated_at: string
         }
         Insert: {
@@ -382,6 +383,7 @@ export type Database = {
           title_ar: string
           title_en?: string | null
           total_points?: number
+          show_instant_feedback?: boolean
           updated_at?: string
         }
         Update: {
@@ -400,6 +402,7 @@ export type Database = {
           title_ar?: string
           title_en?: string | null
           total_points?: number
+          show_instant_feedback?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -447,6 +450,7 @@ export type Database = {
           question_text_en: string | null
           question_type: Database["public"]["Enums"]["homework_question_type"]
           rubric: Json | null
+          hints: Json
         }
         Insert: {
           assignment_id: string
@@ -461,6 +465,7 @@ export type Database = {
           question_text_en?: string | null
           question_type: Database["public"]["Enums"]["homework_question_type"]
           rubric?: Json | null
+          hints?: Json
         }
         Update: {
           assignment_id?: string
@@ -475,6 +480,7 @@ export type Database = {
           question_text_en?: string | null
           question_type?: Database["public"]["Enums"]["homework_question_type"]
           rubric?: Json | null
+          hints?: Json
         }
         Relationships: [
           {
@@ -1467,6 +1473,7 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          can_access_sims: boolean
           created_at: string
           date_of_birth: string | null
           full_name: string
@@ -1474,11 +1481,14 @@ export type Database = {
           id: string
           phone: string | null
           preferred_language: string
+          privacy_consent_at: string | null
+          privacy_consent_version: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
         }
         Insert: {
           avatar_url?: string | null
+          can_access_sims?: boolean
           created_at?: string
           date_of_birth?: string | null
           full_name: string
@@ -1486,11 +1496,14 @@ export type Database = {
           id: string
           phone?: string | null
           preferred_language?: string
+          privacy_consent_at?: string | null
+          privacy_consent_version?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
         Update: {
           avatar_url?: string | null
+          can_access_sims?: boolean
           created_at?: string
           date_of_birth?: string | null
           full_name?: string
@@ -1498,6 +1511,8 @@ export type Database = {
           id?: string
           phone?: string | null
           preferred_language?: string
+          privacy_consent_at?: string | null
+          privacy_consent_version?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }

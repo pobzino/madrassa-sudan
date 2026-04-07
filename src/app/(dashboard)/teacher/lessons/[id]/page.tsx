@@ -7,6 +7,7 @@ import CurriculumTopicSelector from "@/components/teacher/CurriculumTopicSelecto
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
+import { useSimAccess } from "@/lib/hooks/useSimAccess";
 import { useBackgroundVideoUpload } from "@/contexts/BackgroundVideoUploadContext";
 import {
   getCurriculumRequirementMessage,
@@ -17,11 +18,20 @@ import {
   type CurriculumSelection,
 } from "@/lib/curriculum";
 import type { Database } from "@/lib/database.types";
-import InteractionResultsPanel from "@/components/teacher/InteractionResultsPanel";
-import SlideEditor from "@/components/slides/SlideEditor";
+import dynamic from "next/dynamic";
+import SimOnboardingTour from "@/components/teacher/SimOnboardingTour";
 import SlideGenerateButton from "@/components/slides/SlideGenerateButton";
 import SlideCard from "@/components/slides/SlideCard";
-import SimPlayer from "@/components/slides/SimPlayer";
+
+const SlideEditor = dynamic(() => import("@/components/slides/SlideEditor"), {
+  loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
+});
+const SimPlayer = dynamic(() => import("@/components/slides/SimPlayer"), {
+  loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
+});
+const InteractionResultsPanel = dynamic(() => import("@/components/teacher/InteractionResultsPanel"), {
+  loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
+});
 import type { SimPayload } from "@/lib/sim.types";
 import type { Slide, SlideInteractionType } from "@/lib/slides.types";
 import {
@@ -39,6 +49,7 @@ import ActivityTypeIcon from "@/components/ActivityTypeIcon";
 import type { LessonTaskForm } from "@/lib/tasks.types";
 import { toPlayableVideoUrl } from "@/lib/bunny-playback";
 import { getLessonPublishReadiness } from "@/lib/lessons/publish-readiness";
+import { toast } from "sonner";
 import {
   getLessonVideoKey,
   type LessonVideoProcessingStatus,
@@ -239,6 +250,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const router = useRouter();
   const { profile, loading: authLoading } = useTeacherGuard();
+  const { canAccessSims } = useSimAccess();
   const {
     activeLessonId: backgroundUploadLessonId,
     stage: backgroundUploadStage,
@@ -673,11 +685,11 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       });
       if (!res.ok) {
         const data = await res.json();
-        alert("Save failed: " + (data.error || "Unknown error"));
+        toast.error("Save failed: " + (data.error || "Unknown error"));
       } else {
         setSlideLastSaved(new Date().toLocaleTimeString());
       }
-    } catch { alert("Save failed"); }
+    } catch { toast.error("Save failed"); }
     finally { setSlideSaving(false); }
   }, [id, lessonTasks, slideLanguageMode, slides]);
 
@@ -741,10 +753,12 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         video: form,
         videoProcessingStatus: form.video_processing_status,
         videoProcessingError: form.video_processing_error,
+        hasSim: !!lessonSim,
       }),
     [
       form,
       lessonTasks,
+      lessonSim,
       selectedSubject,
       slides,
     ]
@@ -1147,15 +1161,21 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "details", label: "Details" },
-    {
-      key: "activities",
-      label: "Activities",
-      count: lessonTasks.filter(
-        (task) => task.linked_slide_id && isCanonicalActivityTask(task.task_type)
-      ).length,
-    },
+    // Hide Activities tab when the lesson has a sim — activities are embedded
+    // in slides and triggered via activity_gate events during sim playback.
+    ...(!lessonSim
+      ? [
+          {
+            key: "activities" as Tab,
+            label: "Activities",
+            count: lessonTasks.filter(
+              (task) => task.linked_slide_id && isCanonicalActivityTask(task.task_type)
+            ).length,
+          },
+        ]
+      : []),
     { key: "slides", label: "Slides", count: slides.length },
-    { key: "sim", label: "Sim" },
+    ...(canAccessSims ? [{ key: "sim" as Tab, label: "Sim" }] : []),
     { key: "results", label: "Results" },
   ];
 
@@ -1174,6 +1194,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                   {form.title_en || form.title_ar || "Untitled Lesson"}
                 </h1>
                 <button
+                  data-tour="publish-badge"
                   onClick={() => {
                     if (!canPublishLesson) return;
                     if (!form.is_published && !publishReadiness.canPublish) {
@@ -1222,18 +1243,19 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                     const res = await fetch(`/api/teacher/lessons/${id}`, { method: "DELETE" });
                     if (!res.ok) {
                       const data = await res.json().catch(() => ({}));
-                      alert(data.error || "Failed to delete lesson");
+                      toast.error(data.error || "Failed to delete lesson");
                       return;
                     }
                     router.push("/teacher/lessons");
                   } catch {
-                    alert("Failed to delete lesson");
+                    toast.error("Failed to delete lesson");
                   } finally {
                     setDeleting(false);
                   }
                 }}
-                disabled={deleting || saving}
+                disabled={deleting || saving || (form.is_published && !canPublishLesson)}
                 className="px-3 py-1.5 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-60"
+                title={form.is_published && !canPublishLesson ? "Published lessons can only be deleted by an admin." : undefined}
               >
                 {deleting ? "Deleting..." : "Delete"}
               </button>
@@ -1252,6 +1274,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             {tabs.map((tab) => (
               <button
                 key={tab.key}
+                data-tour={tab.key === "slides" ? "slides-tab" : tab.key === "sim" ? "sim-tab" : undefined}
                 onClick={() => setActiveTab(tab.key)}
                 className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors relative ${
                   activeTab === tab.key
@@ -1415,6 +1438,8 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                 lessonTitle={form.title_ar || form.title_en || ""}
                 onVideoReady={handleSlideVideoReady}
                 focusedSlideId={slideEditorFocusId}
+                onSimChange={setLessonSim}
+                simEnabled={canAccessSims}
               />
             )}
           </div>
@@ -1440,9 +1465,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         {activeTab === "sim" && (
           <div className="space-y-4">
             {lessonSim ? (
-              <div className="bg-black rounded-lg overflow-hidden">
-                <SimPlayer payload={lessonSim} language="ar" />
-              </div>
+              <>
+                <SimPlayer payload={lessonSim} language="ar" showTeacherNotes />
+                <GenerateHomeworkButton lessonId={id} subjectId={form.subject_id} />
+              </>
             ) : (
               <div className="bg-white border border-gray-200 rounded-lg p-10 text-center">
                 <p className="text-sm text-gray-500">
@@ -1461,6 +1487,85 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             <InteractionResultsPanel lessonId={id} />
           </div>
         )}
+      </div>
+
+      <SimOnboardingTour segments={["lesson-editor", "sim-recording", "post-recording"]} />
+    </div>
+  );
+}
+
+/* ─── Generate Homework Button ─── */
+
+function GenerateHomeworkButton({ lessonId, subjectId }: { lessonId: string; subjectId: string }) {
+  const router = useRouter();
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/teacher/lessons/${lessonId}/generate-homework`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const text = await res.text();
+      // The streaming route sends keep-alive spaces then "\n" + JSON
+      const jsonStr = text.includes("\n") ? text.slice(text.lastIndexOf("\n") + 1) : text;
+      const data = JSON.parse(jsonStr);
+
+      if (data.error) {
+        setError(data.error);
+        return;
+      }
+
+      // Store prefill data in sessionStorage
+      sessionStorage.setItem(
+        `hw-prefill-${lessonId}`,
+        JSON.stringify({
+          questions: data.questions,
+          title_ar: data.title_ar,
+          title_en: data.title_en,
+          subject_id: subjectId,
+          lesson_id: lessonId,
+        })
+      );
+
+      router.push(`/teacher/homework/create?lesson=${lessonId}&prefill=1`);
+    } catch (err) {
+      console.error("generate-homework error:", err);
+      setError("Failed to generate homework. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-900">Generate Homework</p>
+        <p className="text-xs text-gray-500">
+          Auto-create homework questions from this lesson&apos;s slide content using AI
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        {error && <p className="text-xs text-red-600 max-w-xs">{error}</p>}
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+        >
+          {generating ? (
+            <>
+              <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+              Generating...
+            </>
+          ) : (
+            "Generate Homework"
+          )}
+        </button>
       </div>
     </div>
   );
