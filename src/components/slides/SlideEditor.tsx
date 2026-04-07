@@ -2,23 +2,38 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
+import { toast } from 'sonner';
 import type { Slide, SlideType } from '@/lib/slides.types';
 import type { LessonVideoProcessingStatus } from '@/lib/lessons/video-processing';
 import SlideCard from './SlideCard';
 import SlideThumbnail from './SlideThumbnail';
 import SlideEditPanel from './SlideEditPanel';
 import SlideToolbar, { type InteractiveSlideRequest } from './SlideToolbar';
-import RecordingOverlay from './RecordingOverlay';
-import RecordingReviewModal from './RecordingReviewModal';
+import dynamic from 'next/dynamic';
 import { useBackgroundVideoUpload } from '@/contexts/BackgroundVideoUploadContext';
 import { useSlideRecorder } from '@/hooks/useSlideRecorder';
 import { useWhiteboard, type WhiteboardEvent } from '@/hooks/useWhiteboard';
-import WhiteboardCanvas from './WhiteboardCanvas';
 import WhiteboardToolbar from './WhiteboardToolbar';
-import { useSimRecorder, type SimRecording } from '@/hooks/useSimRecorder';
-import SimReviewModal from './SimReviewModal';
+import { useSimRecorder, SIM_MAX_DURATION_MS, type SimRecording } from '@/hooks/useSimRecorder';
 import type { SimPayload } from '@/lib/sim.types';
 import type { InteractionAnswer } from '@/lib/interactions/types';
+import type { ExplorationWidgetType, ExplorationWidgetConfig } from '@/lib/explorations/types';
+
+const RecordingOverlay = dynamic(() => import('./RecordingOverlay'), {
+  loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
+});
+const RecordingReviewModal = dynamic(() => import('./RecordingReviewModal'), {
+  loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
+});
+const SimReviewModal = dynamic(() => import('./SimReviewModal'), {
+  loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
+});
+const WhiteboardCanvas = dynamic(() => import('./WhiteboardCanvas'), {
+  loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
+});
+const ExplorationPicker = dynamic(() => import('@/components/explorations/ExplorationPicker'), {
+  loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
+});
 
 function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
@@ -26,6 +41,8 @@ function formatDuration(ms: number): string {
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
+
+// ExplorationPicker is now imported from @/components/explorations/ExplorationPicker
 
 interface InteractivePlaceholders {
   title_ar: string;
@@ -344,6 +361,10 @@ interface SlideEditorProps {
     video_processing_error?: string | null;
     video_processed_at?: string | null;
   }) => void;
+  /** Fires when a sim is saved or deleted, so the parent can sync its state. */
+  onSimChange?: (sim: SimPayload | null) => void;
+  /** When false, hides sim recording/review buttons. */
+  simEnabled?: boolean;
 }
 
 export default function SlideEditor({
@@ -356,6 +377,8 @@ export default function SlideEditor({
   lessonId,
   lessonTitle,
   onVideoReady,
+  onSimChange,
+  simEnabled,
 }: SlideEditorProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [language, setLanguage] = useState<'ar' | 'en'>(preferredLanguage);
@@ -710,6 +733,61 @@ export default function SlideEditor({
     };
   }, []);
 
+  // ── Exploration gate insertion ──────────────────────────────────────────
+  const [explorationPickerOpen, setExplorationPickerOpen] = useState(false);
+  const [explorationFlash, setExplorationFlash] = useState(false);
+  const explorationFlashTimerRef = useRef<number | null>(null);
+
+  const handleInsertExploration = useCallback(
+    (widgetType: ExplorationWidgetType, config: ExplorationWidgetConfig) => {
+      if (!simRecording) return;
+      if (simState !== 'recording' && simState !== 'paused') return;
+      const slide = slides[presentIndex];
+      if (!slide) return;
+      recordSimEvent({
+        type: 'exploration_gate',
+        slide_id: slide.id,
+        widget_type: widgetType,
+        config,
+      });
+      setExplorationPickerOpen(false);
+      setExplorationFlash(true);
+      if (explorationFlashTimerRef.current) window.clearTimeout(explorationFlashTimerRef.current);
+      explorationFlashTimerRef.current = window.setTimeout(() => setExplorationFlash(false), 1200);
+    },
+    [simRecording, simState, slides, presentIndex, recordSimEvent]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (explorationFlashTimerRef.current) window.clearTimeout(explorationFlashTimerRef.current);
+    };
+  }, []);
+
+  // ── Teacher notes panel during sim recording ────────────────────────────
+  const [notesExpanded, setNotesExpanded] = useState(true);
+  const [noteText, setNoteText] = useState('');
+  const [noteFlash, setNoteFlash] = useState(false);
+  const noteFlashTimerRef = useRef<number | null>(null);
+
+  const handleAddNote = useCallback(() => {
+    if (!noteText.trim() || !simRecording) return;
+    if (simState !== 'recording' && simState !== 'paused') return;
+    const slide = slides[presentIndex];
+    if (!slide) return;
+    recordSimEvent({ type: 'teacher_note', slide_id: slide.id, text: noteText.trim() });
+    setNoteText('');
+    setNoteFlash(true);
+    if (noteFlashTimerRef.current) window.clearTimeout(noteFlashTimerRef.current);
+    noteFlashTimerRef.current = window.setTimeout(() => setNoteFlash(false), 1200);
+  }, [noteText, simRecording, simState, slides, presentIndex, recordSimEvent]);
+
+  useEffect(() => {
+    return () => {
+      if (noteFlashTimerRef.current) window.clearTimeout(noteFlashTimerRef.current);
+    };
+  }, []);
+
   // Emit `reveal_answer` when the teacher flips the activity answer on.
   const prevAnswerRevealedRef = useRef(false);
   useEffect(() => {
@@ -848,6 +926,21 @@ export default function SlideEditor({
     [slides, onChange]
   );
 
+  const addExplorationSlide = useCallback(
+    (widgetType: ExplorationWidgetType, config: ExplorationWidgetConfig) => {
+      const newSlide: Slide = {
+        ...createBlankSlide('exploration', slides.length),
+        title_ar: '',
+        title_en: '',
+        exploration_widget_type: widgetType,
+        exploration_config: config,
+      };
+      onChange([...slides, newSlide]);
+      setSelectedIndex(slides.length);
+    },
+    [slides, onChange]
+  );
+
   // Insert a blank whiteboard slide immediately after the current slide and
   // jump to it — used from the recording overlay so the teacher can pop a
   // fresh drawing surface mid-lesson without leaving record mode.
@@ -968,7 +1061,7 @@ export default function SlideEditor({
   const startSimRecord = useCallback(async () => {
     if (!lessonId) return;
     if (lessonPublished) {
-      window.alert('Unpublish the lesson before recording a new sim.');
+      toast.error('Unpublish the lesson before recording a new sim.');
       return;
     }
     if (existingSim) {
@@ -997,8 +1090,9 @@ export default function SlideEditor({
       setSimReviewMode(null);
       simReviewOpenedRef.current = null;
       simCancelRecording();
+      onSimChange?.(payload);
     },
-    [simCancelRecording]
+    [simCancelRecording, onSimChange]
   );
 
   // Teacher chose Discard — drop the in-memory recording and reset.
@@ -1021,13 +1115,15 @@ export default function SlideEditor({
   const handleSimEditSaved = useCallback((payload: SimPayload) => {
     setExistingSim(payload);
     setSimReviewMode(null);
-  }, []);
+    onSimChange?.(payload);
+  }, [onSimChange]);
 
   // Edit-mode delete — clear the cache and close.
   const handleSimDeleted = useCallback(() => {
     setExistingSim(null);
     setSimReviewMode(null);
-  }, []);
+    onSimChange?.(null);
+  }, [onSimChange]);
 
   // Sim toolbar button — pick edit or view mode based on publish state.
   const handleOpenSim = useCallback(() => {
@@ -1061,7 +1157,7 @@ export default function SlideEditor({
     });
 
     if (!result.ok) {
-      window.alert(result.error);
+      toast.error(result.error);
       return;
     }
 
@@ -1185,7 +1281,7 @@ export default function SlideEditor({
 
             {/* REC indicator + controls */}
             {(simState === 'recording' || simState === 'paused' || simState === 'preparing') && (
-              <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-black/80 backdrop-blur-sm rounded-full px-5 py-2.5 shadow-2xl">
+              <div data-tour="rec-indicator" className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-black/80 backdrop-blur-sm rounded-full px-5 py-2.5 shadow-2xl">
                 <span className="flex items-center gap-2 text-white text-sm font-semibold">
                   <span
                     className={`inline-block w-2.5 h-2.5 rounded-full ${
@@ -1194,7 +1290,7 @@ export default function SlideEditor({
                   />
                   {simState === 'paused' ? 'PAUSED' : 'REC'}
                 </span>
-                <span className="text-white/80 text-sm tabular-nums min-w-[48px] text-center">
+                <span className={`text-sm tabular-nums min-w-[48px] text-center ${simDurationMs >= SIM_MAX_DURATION_MS - 120_000 ? 'text-red-400 font-bold' : 'text-white/80'}`}>
                   {formatDuration(simDurationMs)}
                 </span>
                 <span className="text-[10px] uppercase tracking-widest text-amber-300 font-bold">
@@ -1203,9 +1299,85 @@ export default function SlideEditor({
               </div>
             )}
 
+            {/* Teacher notes panel */}
+            {(simState === 'recording' || simState === 'paused') && (
+              notesExpanded ? (
+                <div data-tour="sim-notes-panel" className="fixed top-4 right-4 z-[60] w-72 bg-black/80 backdrop-blur-sm rounded-2xl shadow-2xl overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                    <span className="text-white/80 text-xs font-semibold flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                      </svg>
+                      Notes
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setNotesExpanded(false)}
+                      className="text-white/50 hover:text-white/80 transition-colors"
+                      aria-label="Collapse notes"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15" />
+                      </svg>
+                    </button>
+                  </div>
+                  {/* Speaker notes */}
+                  {(() => {
+                    const slide = slides[presentIndex];
+                    const notes = slide
+                      ? (language === 'ar' ? slide.speaker_notes_ar : slide.speaker_notes_en)
+                      : '';
+                    return notes ? (
+                      <div className="px-3 py-2 max-h-32 overflow-y-auto text-white/70 text-xs leading-relaxed border-b border-white/10">
+                        {notes}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2 text-white/30 text-xs italic border-b border-white/10">
+                        No speaker notes for this slide
+                      </div>
+                    );
+                  })()}
+                  {/* Quick note input */}
+                  <div className="flex items-center gap-1.5 px-2 py-2">
+                    <input
+                      type="text"
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAddNote(); }}
+                      placeholder="Add a note..."
+                      className="flex-1 bg-white/10 text-white text-xs rounded-lg px-2.5 py-1.5 placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-white/30"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddNote}
+                      disabled={!noteText.trim()}
+                      className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors ${
+                        noteFlash
+                          ? 'bg-emerald-400 text-black'
+                          : 'bg-white/15 text-white hover:bg-white/25 disabled:text-white/20 disabled:hover:bg-white/15'
+                      }`}
+                    >
+                      {noteFlash ? 'Added!' : 'Add'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setNotesExpanded(true)}
+                  className="fixed top-4 right-4 z-[60] w-10 h-10 bg-black/80 backdrop-blur-sm rounded-full shadow-2xl grid place-items-center text-white/60 hover:text-white/90 transition-colors"
+                  aria-label="Show notes"
+                >
+                  <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                  </svg>
+                </button>
+              )
+            )}
+
             {/* Bottom control bar */}
             {(simState === 'recording' || simState === 'paused') && (
-              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-black/80 backdrop-blur-sm rounded-full px-4 py-2 shadow-2xl">
+              <div data-tour="sim-nav-arrows" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-black/80 backdrop-blur-sm rounded-full px-4 py-2 shadow-2xl">
                 <button
                   onClick={goToPreviousPresentStep}
                   disabled={!canGoPreviousWhileRecording}
@@ -1233,6 +1405,7 @@ export default function SlideEditor({
                 <div className="w-px h-5 bg-white/20" />
 
                 <button
+                  data-tour="draw-btn"
                   onClick={() => setWhiteboardActive((v) => !v)}
                   className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
                     whiteboardActive
@@ -1257,6 +1430,7 @@ export default function SlideEditor({
                 )}
 
                 <button
+                  data-tour="pause-here-btn"
                   onClick={handleInsertSimGate}
                   title="Drop a pause marker at this moment — playback will stop here with a Continue button"
                   className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
@@ -1272,10 +1446,41 @@ export default function SlideEditor({
                   {gateFlash ? 'Pause set' : 'Pause here'}
                 </button>
 
+                {/* Insert Exploration */}
+                <div className="relative">
+                  <button
+                    data-tour="explore-btn"
+                    onClick={() => setExplorationPickerOpen((v) => !v)}
+                    title="Insert an exploration widget — students interact with a hands-on activity"
+                    className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
+                      explorationFlash
+                        ? 'bg-blue-400 text-black'
+                        : explorationPickerOpen
+                          ? 'bg-blue-500/30 text-white'
+                          : 'bg-white/15 text-white hover:bg-white/25'
+                    }`}
+                  >
+                    <span className="text-sm">🔍</span>
+                    {explorationFlash ? 'Added' : 'Explore'}
+                  </button>
+
+                  {explorationPickerOpen && (
+                    <div className="absolute bottom-full mb-2 right-0 z-50 w-72">
+                      <ExplorationPicker
+                        variant="dark"
+                        onInsert={handleInsertExploration}
+                        onClose={() => setExplorationPickerOpen(false)}
+                        currentSlideImageUrl={slides[presentIndex]?.image_url ?? null}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 <div className="w-px h-5 bg-white/20" />
 
                 {simState === 'recording' ? (
                   <button
+                    data-tour="sim-pause-resume"
                     onClick={simPauseRecording}
                     className="text-white/80 hover:text-white p-2 transition-colors"
                     aria-label="Pause"
@@ -1298,6 +1503,7 @@ export default function SlideEditor({
                 )}
 
                 <button
+                  data-tour="sim-stop-btn"
                   onClick={simStopRecording}
                   className="flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-full transition-colors"
                 >
@@ -1411,11 +1617,12 @@ export default function SlideEditor({
           onLanguageChange={setLanguage}
           onAddSlide={addSlide}
           onAddInteractiveSlide={addInteractiveSlide}
+          onAddExplorationSlide={addExplorationSlide}
           onSave={onSave}
           onPresent={startPresent}
           onRecord={lessonId ? startRecord : undefined}
-          onRecordSim={lessonId ? startSimRecord : undefined}
-          onOpenSim={lessonId ? handleOpenSim : undefined}
+          onRecordSim={lessonId && simEnabled ? startSimRecord : undefined}
+          onOpenSim={lessonId && simEnabled ? handleOpenSim : undefined}
           hasSim={existingSim !== null}
           saving={saving}
         />
