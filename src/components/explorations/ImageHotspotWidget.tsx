@@ -114,10 +114,7 @@ export default function ImageHotspotWidget({
               {/* Tooltip with smooth reveal */}
               {isActive && isRevealed && (
                 <div
-                  className="absolute z-10 bottom-full mb-2 left-1/2 -translate-x-1/2
-                    bg-white rounded-2xl shadow-xl border border-slate-200 px-4 py-3
-                    min-w-[130px] max-w-[220px] text-center
-                    animate-[tooltipReveal_0.3s_ease-out]"
+                  className="absolute z-10 bottom-full mb-2 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-xl border border-slate-200 px-4 py-3 min-w-[130px] max-w-[220px] text-center animate-[tooltipReveal_0.3s_ease-out]"
                 >
                   {hotspot.emoji && (
                     <span className="text-2xl block mb-1">{hotspot.emoji}</span>
