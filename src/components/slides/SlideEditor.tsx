@@ -18,6 +18,20 @@ import { useSimRecorder, SIM_MAX_DURATION_MS, type SimRecording } from '@/hooks/
 import type { SimPayload } from '@/lib/sim.types';
 import type { InteractionAnswer } from '@/lib/interactions/types';
 import type { ExplorationWidgetType, ExplorationWidgetConfig } from '@/lib/explorations/types';
+import type { SlideGenerationContext, SlideLengthPreset, SlideLanguageMode } from '@/lib/slides-generation';
+
+export interface RegenerateProps {
+  slideCount: number;
+  slideLengthPreset: SlideLengthPreset;
+  languageMode: SlideLanguageMode;
+  generationContext: SlideGenerationContext | null;
+  isGenerating: boolean;
+  disabledReason: string | null;
+  onSlideLengthPresetChange: (preset: SlideLengthPreset) => void;
+  onSlideCountChange: (count: number) => void;
+  onGenerated: (slides: Slide[]) => void;
+  onGeneratingChange: (generating: boolean, progress: string) => void;
+}
 
 const RecordingOverlay = dynamic(() => import('./RecordingOverlay'), {
   loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
@@ -365,6 +379,8 @@ interface SlideEditorProps {
   onSimChange?: (sim: SimPayload | null) => void;
   /** When false, hides sim recording/review buttons. */
   simEnabled?: boolean;
+  /** Regeneration popover props — passed from the slides page. */
+  regenerateProps?: RegenerateProps;
 }
 
 export default function SlideEditor({
@@ -379,6 +395,7 @@ export default function SlideEditor({
   onVideoReady,
   onSimChange,
   simEnabled,
+  regenerateProps,
 }: SlideEditorProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [language, setLanguage] = useState<'ar' | 'en'>(preferredLanguage);
@@ -733,7 +750,7 @@ export default function SlideEditor({
     };
   }, []);
 
-  // ── Exploration gate insertion ──────────────────────────────────────────
+  // ── Exploration slide insertion during sim recording ─────────────────────
   const [explorationPickerOpen, setExplorationPickerOpen] = useState(false);
   const [explorationFlash, setExplorationFlash] = useState(false);
   const explorationFlashTimerRef = useRef<number | null>(null);
@@ -742,20 +759,36 @@ export default function SlideEditor({
     (widgetType: ExplorationWidgetType, config: ExplorationWidgetConfig) => {
       if (!simRecording) return;
       if (simState !== 'recording' && simState !== 'paused') return;
-      const slide = slides[presentIndex];
-      if (!slide) return;
-      recordSimEvent({
-        type: 'exploration_gate',
-        slide_id: slide.id,
-        widget_type: widgetType,
-        config,
+
+      // Insert an actual exploration slide after the current slide
+      // (same pattern as insertWhiteboardSlideDuringRecording)
+      const insertAt = presentIndex + 1;
+      const newSlide: Slide = {
+        ...createBlankSlide('exploration', insertAt),
+        exploration_widget_type: widgetType,
+        exploration_config: config,
+      };
+      const next = [
+        ...slides.slice(0, insertAt),
+        newSlide,
+        ...slides.slice(insertAt),
+      ].map((s, i) => ({ ...s, sequence: i }));
+
+      flushSync(() => {
+        onChange(next);
+        setPresentIndex(insertAt);
+        setRevealedCount(0);
+        setShowActivityAnswer(false);
       });
+
+      captureAfterNavigation();
+
       setExplorationPickerOpen(false);
       setExplorationFlash(true);
       if (explorationFlashTimerRef.current) window.clearTimeout(explorationFlashTimerRef.current);
       explorationFlashTimerRef.current = window.setTimeout(() => setExplorationFlash(false), 1200);
     },
-    [simRecording, simState, slides, presentIndex, recordSimEvent]
+    [simRecording, simState, slides, presentIndex, onChange, captureAfterNavigation]
   );
 
   useEffect(() => {

@@ -155,31 +155,6 @@ export default function ImageHotspotWidget({
         </p>
       )}
 
-      <style jsx>{`
-        @keyframes ringPulse {
-          0% { transform: scale(1); opacity: 0.7; }
-          50% { transform: scale(1.4); opacity: 0; }
-          100% { transform: scale(1); opacity: 0.7; }
-        }
-        @keyframes revealPop {
-          0% { transform: scale(0); }
-          70% { transform: scale(1.2); }
-          100% { transform: scale(1); }
-        }
-        @keyframes tooltipReveal {
-          0% { opacity: 0; transform: translate(-50%, 4px) scale(0.95); }
-          100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes bounceIn {
-          0% { transform: scale(0); opacity: 0; }
-          60% { transform: scale(1.15); }
-          100% { transform: scale(1); opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 }

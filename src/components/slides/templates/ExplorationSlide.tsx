@@ -123,21 +123,6 @@ export default function ExplorationSlide({
         </Suspense>
       </div>
 
-      <style jsx>{`
-        @keyframes slideEnter {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes widgetEnter {
-          from { opacity: 0; transform: translateY(12px) scale(0.97); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        @keyframes bounceText {
-          0% { transform: translateY(6px); opacity: 0; }
-          60% { transform: translateY(-2px); }
-          100% { transform: translateY(0); opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 }

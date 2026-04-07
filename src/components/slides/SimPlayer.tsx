@@ -1142,6 +1142,26 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
               </div>
             </div>
           )}
+
+          {/* Exploration gate — interactive exploration widget (covers slide) */}
+          {activeGate && activeGate.type === 'exploration_gate' && (
+            <ExplorationOverlay
+              widgetType={activeGate.widget_type}
+              config={activeGate.config}
+              language={language}
+              onContinue={handleContinueGate}
+            />
+          )}
+
+          {/* Exploration slide auto-pause — shows the widget from the slide config */}
+          {activeExplorationSlide && currentSlide?.type === 'exploration' && currentSlide.exploration_widget_type && currentSlide.exploration_config && (
+            <ExplorationOverlay
+              widgetType={currentSlide.exploration_widget_type}
+              config={currentSlide.exploration_config}
+              language={language}
+              onContinue={handleContinueGate}
+            />
+          )}
       </div>
 
       {/* Activity gate — prompt bar between slide and control bar */}
@@ -1212,26 +1232,6 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
             </button>
           </div>
         </div>
-      )}
-
-      {/* Exploration gate — interactive exploration widget */}
-      {activeGate && activeGate.type === 'exploration_gate' && (
-        <ExplorationOverlay
-          widgetType={activeGate.widget_type}
-          config={activeGate.config}
-          language={language}
-          onContinue={handleContinueGate}
-        />
-      )}
-
-      {/* Exploration slide auto-pause — shows the widget from the slide config */}
-      {activeExplorationSlide && currentSlide?.type === 'exploration' && currentSlide.exploration_widget_type && currentSlide.exploration_config && (
-        <ExplorationOverlay
-          widgetType={currentSlide.exploration_widget_type}
-          config={currentSlide.exploration_config}
-          language={language}
-          onContinue={handleContinueGate}
-        />
       )}
 
       {/* Hidden audio element */}

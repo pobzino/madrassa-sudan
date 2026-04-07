@@ -196,72 +196,12 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
             ← Back to Lesson Editor
           </Link>
           <h1 className="text-xl font-bold text-gray-900">Presentation Slides</h1>
-          {lessonTitle && <p className="text-sm text-gray-500">{lessonTitle}</p>}
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-          {!isGenerating && (
-            <>
-              <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
-                <label className="mb-1 block text-xs font-medium text-gray-500">
-                  Lesson Length
-                </label>
-                <select
-                  value={slideLengthPreset}
-                  onChange={(e) =>
-                    handleSlideLengthPresetChange(e.target.value as SlideLengthPreset)
-                  }
-                  className="border-0 bg-transparent p-0 pr-6 text-sm font-semibold text-gray-900 focus:ring-0"
-                >
-                  {SLIDE_LENGTH_PRESET_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
-                <label className="mb-1 block text-xs font-medium text-gray-500">
-                  Slides
-                </label>
-                <input
-                  type="number"
-                  min={MIN_GENERATED_SLIDE_COUNT}
-                  max={MAX_GENERATED_SLIDE_COUNT}
-                  value={slideCount}
-                  onChange={(e) => {
-                    const raw = parseInt(e.target.value, 10);
-                    const clamped = clampSlideCount(raw);
-                    setSlideCount(clamped);
-                    setSlideLengthPreset(getSlideLengthPresetFromCount(clamped));
-                    setGenerationContext((prev) => ({
-                      learningObjective: prev?.learningObjective || '',
-                      keyIdeas: prev?.keyIdeas || [],
-                      sourceNotes: prev?.sourceNotes || '',
-                      lessonDurationMinutes: prev?.lessonDurationMinutes ?? null,
-                      slideGoalMix: prev?.slideGoalMix || 'balanced',
-                      requestedSlideCount: clamped,
-                    }));
-                  }}
-                  className="w-16 border-0 bg-transparent p-0 text-sm font-semibold text-gray-900 focus:ring-0"
-                />
-              </div>
-            </>
-          )}
-          <SlideGenerateButton
-            lessonId={id}
-            hasExistingSlides={slides.length > 0}
-            languageMode={languageMode}
-            generationContext={generationContext}
-            slideCount={slideCount}
-            autoGenerate={autoGenerate}
-            disabledReason={slideGenerationBlockedReason}
-            onGenerated={(newSlides) => setSlides(newSlides)}
-            onGeneratingChange={handleGeneratingChange}
-            compact
-          />
-          {lastSaved && (
-            <p className="text-xs text-gray-400 sm:ml-2">Last saved: {lastSaved}</p>
-          )}
+          <div className="flex items-center gap-3 mt-0.5">
+            {lessonTitle && <p className="text-sm text-gray-500">{lessonTitle}</p>}
+            {lastSaved && (
+              <span className="text-xs text-gray-400">Saved {lastSaved}</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -322,20 +262,39 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
           </div>
         )
       ) : (
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-400">{slides.length} slides</span>
-          </div>
-          <SlideEditor
-            slides={slides}
-            onChange={setSlides}
-            onSave={handleSave}
-            saving={saving}
-            preferredLanguage={languageMode === 'en' ? 'en' : 'ar'}
-            lessonId={id}
-            lessonTitle={lessonTitle}
-          />
-        </div>
+        <SlideEditor
+          slides={slides}
+          onChange={setSlides}
+          onSave={handleSave}
+          saving={saving}
+          preferredLanguage={languageMode === 'en' ? 'en' : 'ar'}
+          lessonId={id}
+          lessonTitle={lessonTitle}
+          regenerateProps={{
+            slideCount,
+            slideLengthPreset,
+            languageMode,
+            generationContext,
+            isGenerating,
+            disabledReason: slideGenerationBlockedReason,
+            onSlideLengthPresetChange: handleSlideLengthPresetChange,
+            onSlideCountChange: (count: number) => {
+              const clamped = clampSlideCount(count);
+              setSlideCount(clamped);
+              setSlideLengthPreset(getSlideLengthPresetFromCount(clamped));
+              setGenerationContext((prev) => ({
+                learningObjective: prev?.learningObjective || '',
+                keyIdeas: prev?.keyIdeas || [],
+                sourceNotes: prev?.sourceNotes || '',
+                lessonDurationMinutes: prev?.lessonDurationMinutes ?? null,
+                slideGoalMix: prev?.slideGoalMix || 'balanced',
+                requestedSlideCount: clamped,
+              }));
+            },
+            onGenerated: (newSlides: Slide[]) => setSlides(newSlides),
+            onGeneratingChange: handleGeneratingChange,
+          }}
+        />
       )}
     </div>
   );
