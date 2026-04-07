@@ -1666,6 +1666,9 @@ export default function SlideEditor({
           onOpenSim={lessonId && simEnabled ? handleOpenSim : undefined}
           hasSim={existingSim !== null}
           saving={saving}
+          slideCount={slides.length}
+          regenerateProps={regenerateProps}
+          lessonId={lessonId}
         />
 
         <div className="flex flex-1 overflow-hidden">
