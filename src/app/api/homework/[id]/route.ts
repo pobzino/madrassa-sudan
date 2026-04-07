@@ -261,6 +261,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         display_order: q.display_order || index + 1,
         rubric: q.rubric || null,
         instructions: q.instructions || null,
+        hints: q.hints || [],
       }));
 
       const { error: questionsError } = await supabase

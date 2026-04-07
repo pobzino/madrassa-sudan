@@ -11,10 +11,16 @@ import {
 } from '@/lib/server/sim-storage';
 import type { SimPayload, SimRow } from '@/lib/sim.types';
 
+/** Server-side max duration: 45 minutes. */
+const SIM_MAX_DURATION_MS = 45 * 60 * 1000;
+
+/** Max audio file size: 100 MB (base64 ≈ 133 MB string). */
+const SIM_AUDIO_MAX_BYTES = 100 * 1024 * 1024;
+
 const CreateSimSchema = z.object({
   deck_snapshot: z.array(z.unknown()),
   events: z.array(z.unknown()),
-  duration_ms: z.number().int().nonnegative(),
+  duration_ms: z.number().int().nonnegative().max(SIM_MAX_DURATION_MS, 'Sim recording exceeds the 45-minute limit.'),
   audio_duration_ms: z.number().int().nonnegative().nullable().optional(),
   audio_mime: z.string().nullable().optional(),
   // Base64-encoded audio body (no data: prefix). Kept inline so we can write
@@ -197,6 +203,15 @@ export async function POST(
         audioBuffer = Buffer.from(body.audio_base64, 'base64');
       } catch {
         return NextResponse.json({ error: 'Invalid base64 audio payload' }, { status: 400 });
+      }
+
+      if (audioBuffer.byteLength > SIM_AUDIO_MAX_BYTES) {
+        // Clean up the just-inserted row since the audio is too large.
+        await supabase.from('lesson_sims').delete().eq('id', row.id);
+        return NextResponse.json(
+          { error: `Audio file too large (${Math.round(audioBuffer.byteLength / 1024 / 1024)}MB). Maximum is 100MB.` },
+          { status: 413 }
+        );
       }
 
       const service = createServiceClient();

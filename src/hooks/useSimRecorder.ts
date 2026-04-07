@@ -250,7 +250,23 @@ export function useSimRecorder(): UseSimRecorderReturn {
       setState('recording');
 
       durationIntervalRef.current = setInterval(() => {
-        setRecordingDurationMs(Math.round(getCurrentTimeMs()));
+        const ms = Math.round(getCurrentTimeMs());
+        setRecordingDurationMs(ms);
+        // Auto-stop at max duration
+        if (ms >= SIM_MAX_DURATION_MS && !stopRequestedRef.current) {
+          const mr = mediaRecorderRef.current;
+          if (mr && mr.state !== 'inactive') {
+            stopRequestedRef.current = true;
+            if (pauseStartedAtRef.current !== null) {
+              accumulatedPausedMsRef.current += performance.now() - pauseStartedAtRef.current;
+              pauseStartedAtRef.current = null;
+            }
+            try { mr.requestData(); } catch { /* ignore */ }
+            setTimeout(() => {
+              try { if (mr.state !== 'inactive') mr.stop(); } catch { stopRequestedRef.current = false; }
+            }, 160);
+          }
+        }
       }, 200);
     } catch (error) {
       cleanup();

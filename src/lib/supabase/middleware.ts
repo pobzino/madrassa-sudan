@@ -36,6 +36,7 @@ export async function updateSession(request: NextRequest) {
 
   // Protect dashboard routes
   const isAuthRoute = request.nextUrl.pathname.startsWith("/auth");
+  const isPendingApprovalRoute = request.nextUrl.pathname === "/auth/pending-approval";
   const isProtectedRoute =
     request.nextUrl.pathname.startsWith("/dashboard") ||
     request.nextUrl.pathname.startsWith("/lessons") ||
@@ -45,7 +46,8 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/progress") ||
     request.nextUrl.pathname.startsWith("/settings") ||
     request.nextUrl.pathname.startsWith("/teacher") ||
-    request.nextUrl.pathname.startsWith("/parent");
+    request.nextUrl.pathname.startsWith("/parent") ||
+    request.nextUrl.pathname.startsWith("/admin");
 
   if (!user && isProtectedRoute) {
     const url = request.nextUrl.clone();
@@ -53,10 +55,26 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthRoute) {
+  if (user && isAuthRoute && !isPendingApprovalRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
+  }
+
+  // Check approval status for protected routes
+  if (user && isProtectedRoute) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_approved, role")
+      .eq("id", user.id)
+      .single();
+
+    // If profile doesn't exist yet (race condition) or is not approved, redirect
+    if (profile && !profile.is_approved && profile.role !== "admin") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/auth/pending-approval";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

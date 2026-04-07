@@ -47,6 +47,10 @@ const translations = {
     parent: "ولي أمر",
     createAccountBtn: "إنشاء حساب",
     creatingAccount: "جاري إنشاء الحساب...",
+    consentLabel: "أوافق على",
+    termsLink: "شروط الخدمة",
+    andText: "و",
+    privacyLink: "سياسة الخصوصية",
     alreadyHaveAccount: "لديك حساب بالفعل؟",
     signIn: "تسجيل الدخول",
     checkEmail: "تحقق من بريدك الإلكتروني",
@@ -70,6 +74,10 @@ const translations = {
     parent: "Parent",
     createAccountBtn: "Create Account",
     creatingAccount: "Creating account...",
+    consentLabel: "I agree to the",
+    termsLink: "Terms of Service",
+    andText: "and",
+    privacyLink: "Privacy Policy",
     alreadyHaveAccount: "Already have an account?",
     signIn: "Sign In",
     checkEmail: "Check your email",
@@ -93,6 +101,7 @@ export default function SignupPage() {
   const [resendLoading, setResendLoading] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
+  const [consentGiven, setConsentGiven] = useState(false);
   const router = useRouter();
   const supabase = createClient();
   const { language, isRtl } = useLanguage();
@@ -125,6 +134,7 @@ export default function SignupPage() {
         data: {
           full_name: fullName,
           role: role,
+          consent_given_at: new Date().toISOString(),
         },
       },
     });
@@ -299,9 +309,29 @@ export default function SignupPage() {
             </div>
           </div>
 
+          {/* Consent Checkbox */}
+          <label className="flex items-start gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={consentGiven}
+              onChange={(e) => setConsentGiven(e.target.checked)}
+              className="mt-0.5 w-5 h-5 rounded border-gray-300 text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer accent-[var(--primary)]"
+            />
+            <span className="text-sm text-gray-600 leading-snug">
+              {t.consentLabel}{" "}
+              <Link href="/terms" target="_blank" className="text-[var(--primary)] font-medium underline hover:text-[var(--primary-light)]">
+                {t.termsLink}
+              </Link>{" "}
+              {t.andText}{" "}
+              <Link href="/privacy" target="_blank" className="text-[var(--primary)] font-medium underline hover:text-[var(--primary-light)]">
+                {t.privacyLink}
+              </Link>
+            </span>
+          </label>
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !consentGiven}
             className="w-full py-3.5 px-4 bg-[var(--primary)] hover:bg-[var(--primary-light)] text-white font-semibold rounded-xl shadow-lg shadow-green-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex justify-center items-center gap-2"
           >
             {loading ? (

@@ -213,30 +213,20 @@ export default function CohortsPage() {
     setMessage(null);
 
     try {
-      // Check if there's an existing enrollment (rejected or inactive)
-      const { data: existing } = await supabase
-        .from("cohort_students")
-        .select("id, status")
-        .eq("cohort_id", cohortId)
-        .eq("student_id", userId)
-        .maybeSingle();
-
-      let error;
-      if (existing) {
-        ({ error } = await supabase
-          .from("cohort_students")
-          .update({ status: "pending", is_active: true })
-          .eq("id", existing.id));
-      } else {
-        ({ error } = await supabase.from("cohort_students").insert({
+      // Upsert handles both fresh join and re-join after rejection/leave
+      // in a single atomic operation, avoiding UNIQUE constraint races.
+      const { error } = await supabase.from("cohort_students").upsert(
+        {
           cohort_id: cohortId,
           student_id: userId,
           status: "pending",
-        }));
-      }
+          is_active: true,
+        },
+        { onConflict: "cohort_id,student_id" }
+      );
 
       if (error) {
-        console.error("Join request failed:", error);
+        console.error("Join request failed:", error.message, error.code, error.details);
         setMessage({ type: "error", text: language === "ar" ? "فشل الطلب. حاول مرة أخرى." : "Request failed. Please try again." });
       } else {
         setMessage({ type: "success", text: t.requestSent });

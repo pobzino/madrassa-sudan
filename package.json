@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "ingest:lessons": "node scripts/ingest-lesson-embeddings.mjs",
-    "inspect:slides": "node scripts/inspect-slides.mjs"
+    "inspect:slides": "node scripts/inspect-slides.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.25",
@@ -42,6 +44,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.3"
   }
 }

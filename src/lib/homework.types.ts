@@ -64,6 +64,7 @@ export interface CreateQuestionInput {
   display_order?: number;
   rubric?: RubricCriterion[] | null;
   instructions?: string | null;
+  hints?: string[];
 }
 
 // For creating assignments

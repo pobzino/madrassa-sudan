@@ -73,6 +73,7 @@ const StepIcon = ({ type, className }: { type: string; className?: string }) => 
 export default function Home() {
   const { language, setLanguage, isRtl } = useLanguage();
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [simPhase, setSimPhase] = useState(0);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const supabase = createClient();
 
@@ -83,6 +84,11 @@ export default function Home() {
     }
     checkAuth();
   }, [supabase]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setSimPhase((p) => (p + 1) % 3), 3000);
+    return () => clearInterval(timer);
+  }, []);
 
   const t = {
     ar: {
@@ -99,7 +105,6 @@ export default function Home() {
         subtitle: "منصة تعليمية مجانية ممتعة مع دروس تفاعلية، معلم ذكي، ومنهج سوداني معتمد",
         cta1: "ابدأ مجاناً",
         cta2: "شاهد كيف يعمل",
-        stats: { students: "طالب نشط", lessons: "درس متوفر", teachers: "معلم متطوع" },
       },
       features: {
         label: "مميزاتنا التفاعلية",
@@ -130,6 +135,22 @@ export default function Home() {
           { num: "3", title: "ابدأ المغامرة", desc: "تعلم، العب، واجمع النقاط والشهادات", iconType: "rocketlaunch" },
         ],
       },
+      sims: {
+        label: "الدروس التفاعلية",
+        title: "كيف تعمل الحصص؟",
+        subtitle: "حصص مسجلة بصوت المعلم مع أنشطة تفاعلية — كأنك في الفصل لكن بتتعلم بسرعتك",
+        steps: [
+          { num: "1", title: "المعلم يشرح", desc: "تسمع صوت المعلم وتشوف الشرائح تتحرك قدامك — زي ما بشرح في الفصل بالظبط" },
+          { num: "2", title: "وقفة للنشاط", desc: "الدرس بيوقف تلقائياً عشان تحل سؤال أو نشاط قبل ما تكمّل — اختبار، سحب وإفلات، أو توصيل" },
+          { num: "3", title: "نتيجة فورية", desc: "تعرف إجابتك صح أو غلط فوراً. والمعلم يشوف أداءك ويتابع تقدمك" },
+        ],
+        features: [
+          { title: "وقّف وارجع", desc: "ما فهمت؟ ارجع وسمع تاني" },
+          { title: "سبورة حية", desc: "رسومات المعلم تظهر وهو بشرح" },
+          { title: "تعلم بسرعتك", desc: "ما في ضغط — خذ وقتك" },
+        ],
+        cta: "جرّب درس تجريبي",
+      },
       teachers: {
         label: "للمعلمين",
         title: "انضم لفريق الأبطال",
@@ -143,12 +164,12 @@ export default function Home() {
           { q: "هل المنصة مجانية حقاً؟", a: "نعم، مجانية ١٠٠٪ لجميع الطلاب. نحن مبادرة غير ربحية." },
           { q: "ما هي المراحل المتوفرة؟", a: "نغطي المرحلة الابتدائية (١-٨)، والثانوية قريباً." },
           { q: "كيف يعمل المعلم الذكي؟", a: "يستخدم الذكاء الاصطناعي ليشرح ويساعدك على الفهم بالعربية." },
-          { q: "هل أحتاج إنترنت دائم؟", a: "نعم لمشاهدة الدروس، ونعمل على ميزة التحميل." },
+          { q: "هل أحتاج إنترنت دائم؟", a: "نعم، تحتاج اتصال بالإنترنت لمشاهدة الدروس." },
         ],
       },
       finalCta: {
         title: "مستعد للمغامرة؟",
-        subtitle: "انضم لآلاف الطلاب السودانيين. مجاناً للأبد!",
+        subtitle: "انضم للطلاب السودانيين. مجاناً للأبد!",
         cta: "ابدأ الآن مجاناً",
       },
       footer: {
@@ -171,7 +192,6 @@ export default function Home() {
         subtitle: "A free fun learning platform with interactive lessons, AI tutor, and certified Sudanese curriculum",
         cta1: "Start Now",
         cta2: "See How It Works",
-        stats: { students: "Active Students", lessons: "Lessons Available", teachers: "Volunteer Teachers" },
       },
       features: {
         label: "Our Interactive Features",
@@ -202,6 +222,22 @@ export default function Home() {
           { num: "3", title: "Start Adventure", desc: "Learn, play, and collect points and certificates", iconType: "rocketlaunch" },
         ],
       },
+      sims: {
+        label: "INTERACTIVE LESSONS",
+        title: "How do lessons work?",
+        subtitle: "Recorded lessons with your teacher's voice and interactive activities — like being in class, but you learn at your own pace",
+        steps: [
+          { num: "1", title: "Teacher explains", desc: "Hear your teacher's voice while slides move in sync — just like a real classroom lesson" },
+          { num: "2", title: "Pause for activity", desc: "The lesson pauses automatically so you can solve a quiz, drag-and-drop, or matching activity before continuing" },
+          { num: "3", title: "Instant feedback", desc: "Know right away if your answer is correct. Your teacher can track your progress and see how you're doing" },
+        ],
+        features: [
+          { title: "Pause & rewind", desc: "Didn't get it? Go back and listen again" },
+          { title: "Live whiteboard", desc: "See your teacher's drawings as they explain" },
+          { title: "Learn at your pace", desc: "No pressure — take your time" },
+        ],
+        cta: "Try a sample lesson",
+      },
       teachers: {
         label: "FOR TEACHERS",
         title: "Join the hero team",
@@ -215,12 +251,12 @@ export default function Home() {
           { q: "Is the platform really free?", a: "Yes, 100% free for all students. We're a non-profit initiative." },
           { q: "What grade levels are available?", a: "We cover primary school (1-8), with secondary coming soon." },
           { q: "How does the AI tutor work?", a: "It uses AI to explain and help you understand in Arabic." },
-          { q: "Do I need constant internet?", a: "Yes for watching lessons, we're working on offline downloads." },
+          { q: "Do I need constant internet?", a: "Yes, you need an internet connection to watch lessons." },
         ],
       },
       finalCta: {
         title: "Ready for the adventure?",
-        subtitle: "Join thousands of Sudanese students. Free forever!",
+        subtitle: "Join Sudanese students learning online. Free forever!",
         cta: "Start Free Now",
       },
       footer: {
@@ -380,27 +416,6 @@ export default function Home() {
                 </a>
               </div>
 
-              {/* Stats */}
-              <div className="flex flex-wrap justify-center gap-6 sm:gap-8 md:gap-16">
-                <div className="text-center min-w-[80px]">
-                  <div className="text-2xl sm:text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-purple-600">
-                    5,000+
-                  </div>
-                  <div className="text-xs sm:text-sm text-gray-600 font-medium mt-1">{txt.hero.stats.students}</div>
-                </div>
-                <div className="text-center min-w-[80px]">
-                  <div className="text-2xl sm:text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#007229] to-[#00913D]">
-                    500+
-                  </div>
-                  <div className="text-xs sm:text-sm text-gray-600 font-medium mt-1">{txt.hero.stats.lessons}</div>
-                </div>
-                <div className="text-center min-w-[80px]">
-                  <div className="text-2xl sm:text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-orange-600">
-                    50+
-                  </div>
-                  <div className="text-xs sm:text-sm text-gray-600 font-medium mt-1">{txt.hero.stats.teachers}</div>
-                </div>
-              </div>
             </div>
           </div>
         </section>
@@ -544,6 +559,224 @@ export default function Home() {
           </div>
         </section>
 
+        {/* How Sims Work */}
+        <section id="sims" className="py-10 sm:py-16 bg-white relative overflow-hidden">
+          <div className="absolute inset-0">
+            <div className="absolute top-20 right-20 w-72 h-72 bg-emerald-100/30 rounded-full blur-3xl hidden sm:block" />
+            <div className="absolute bottom-20 left-10 w-64 h-64 bg-amber-100/30 rounded-full blur-3xl hidden sm:block" />
+          </div>
+
+          <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6">
+            <div className="text-center mb-8 sm:mb-12">
+              <span className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 bg-emerald-100 text-emerald-700 rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-4">
+                {txt.sims.label}
+              </span>
+              <h2 className="font-fredoka text-2xl sm:text-3xl md:text-5xl font-semibold text-gray-900 mb-3 sm:mb-4">
+                {txt.sims.title}
+              </h2>
+              <p className="text-base sm:text-lg text-gray-600 max-w-2xl mx-auto">
+                {txt.sims.subtitle}
+              </p>
+            </div>
+
+            {/* Animated Lesson Mockup */}
+            <div className="max-w-3xl mx-auto mb-10 sm:mb-14">
+              <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl shadow-gray-200/60 border border-gray-200 overflow-hidden">
+                {/* Top bar */}
+                <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-4 sm:px-6 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-white/30" />
+                    <div className="w-3 h-3 rounded-full bg-white/30" />
+                    <div className="w-3 h-3 rounded-full bg-white/30" />
+                  </div>
+                  <span className="text-white/90 text-xs sm:text-sm font-bold">{language === "ar" ? "الكسور — الصف الرابع" : "Fractions — Grade 4"}</span>
+                  <div className="w-16" />
+                </div>
+
+                {/* Slide content area */}
+                <div className="relative p-5 sm:p-8 min-h-[220px] sm:min-h-[280px] bg-gradient-to-br from-gray-50 to-white">
+                  {/* Slide content */}
+                  <div className="flex gap-4 sm:gap-6">
+                    <div className="flex-1 space-y-3 sm:space-y-4">
+                      <h3 className="text-lg sm:text-2xl font-bold text-gray-800">{language === "ar" ? "ما هي الكسور؟" : "What are fractions?"}</h3>
+                      <div className="space-y-2">
+                        <div className="h-3 bg-gray-200 rounded-full w-full" />
+                        <div className="h-3 bg-gray-200 rounded-full w-5/6" />
+                        <div className="h-3 bg-gray-200 rounded-full w-4/6" />
+                      </div>
+                      <div className="flex gap-2 pt-2">
+                        <div className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold">1/2</div>
+                        <div className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold">1/4</div>
+                        <div className="px-3 py-1.5 bg-violet-100 text-violet-700 rounded-lg text-xs font-bold">3/4</div>
+                      </div>
+                    </div>
+                    {/* Illustration circle */}
+                    <div className="hidden sm:flex w-28 h-28 rounded-2xl bg-gradient-to-br from-amber-100 to-amber-200 items-center justify-center flex-shrink-0">
+                      <svg className="w-16 h-16 text-amber-500" viewBox="0 0 64 64" fill="none">
+                        <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="3" />
+                        <line x1="32" y1="4" x2="32" y2="60" stroke="currentColor" strokeWidth="3" />
+                        <path d="M32 4 A28 28 0 0 1 32 60" fill="currentColor" opacity="0.2" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Quiz popup — slides in during phase 1+2 */}
+                  <div className={`absolute bottom-3 ${isRtl ? "left-3 sm:left-5" : "right-3 sm:right-5"} w-56 sm:w-64 bg-white rounded-xl shadow-xl border border-gray-200 p-3 sm:p-4 transition-all duration-700 ease-in-out ${simPhase >= 1 ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"}`}>
+                    <p className="text-xs font-bold text-gray-700 mb-2">{language === "ar" ? "ما هو نصف الكعكة؟" : "What is half of a cake?"}</p>
+                    <div className="space-y-1.5">
+                      {[
+                        { label: "1/2", correct: true },
+                        { label: "1/3", correct: false },
+                        { label: "2/4", correct: false },
+                      ].map((opt, oi) => (
+                        <div key={oi} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-500 ${
+                          opt.correct && simPhase === 2
+                            ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
+                            : "bg-gray-50 text-gray-600 border border-gray-100"
+                        }`}>
+                          <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-500 ${
+                            opt.correct && simPhase === 2 ? "border-emerald-500 bg-emerald-500" : "border-gray-300"
+                          }`}>
+                            {opt.correct && simPhase === 2 && (
+                              <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                              </svg>
+                            )}
+                          </div>
+                          {opt.label}
+                        </div>
+                      ))}
+                    </div>
+                    {simPhase === 2 && (
+                      <div className="mt-2 text-[10px] font-bold text-emerald-600 flex items-center gap-1 animate-bounce">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75" /></svg>
+                        {language === "ar" ? "إجابة صحيحة!" : "Correct!"}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Audio bar */}
+                <div className="px-4 sm:px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center gap-3">
+                  {/* Play/Pause */}
+                  <button className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center flex-shrink-0">
+                    {simPhase === 0 ? (
+                      <svg className="w-3.5 h-3.5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z" /></svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                    )}
+                  </button>
+                  {/* Progress bar */}
+                  <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div className={`h-full bg-emerald-500 rounded-full transition-all ease-linear ${simPhase === 0 ? "w-[60%] duration-[3000ms]" : "w-[45%] duration-0"}`} />
+                  </div>
+                  {/* Waveform */}
+                  <div className="flex items-center gap-[3px]">
+                    {[3, 5, 2, 6, 4, 3, 5, 2, 4, 6].map((h, wi) => (
+                      <div
+                        key={wi}
+                        className={`w-[3px] rounded-full transition-all duration-300 ${simPhase === 0 ? "bg-emerald-400" : "bg-gray-300"}`}
+                        style={{
+                          height: simPhase === 0 ? `${h * 3}px` : "4px",
+                          transitionDelay: `${wi * 30}ms`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-[10px] text-gray-400 font-mono w-12 text-right">04:32</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3-step flow */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
+              {txt.sims.steps.map((step, i) => {
+                const colors = [
+                  { bg: "bg-[#007229]", light: "bg-emerald-50", text: "text-[#007229]", border: "border-emerald-200", ring: "ring-emerald-400" },
+                  { bg: "bg-amber-500", light: "bg-amber-50", text: "text-amber-600", border: "border-amber-200", ring: "ring-amber-400" },
+                  { bg: "bg-[#D21034]", light: "bg-red-50", text: "text-[#D21034]", border: "border-red-200", ring: "ring-red-400" },
+                ][i];
+                const icons = [
+                  <svg key="listen" className="w-6 h-6 sm:w-7 sm:h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                  </svg>,
+                  <svg key="interact" className="w-6 h-6 sm:w-7 sm:h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.05 4.575a1.575 1.575 0 1 0-3.15 0v3.15M10.05 4.575a1.575 1.575 0 0 1 3.15 0v1.575M10.05 4.575v5.85m3.15-4.275a1.575 1.575 0 0 1 3.15 0v1.575m0 0a1.575 1.575 0 0 1 3.15 0v5.85m-3.15-5.85v.75m-9.45 3.525H5.325a1.575 1.575 0 0 0-1.575 1.575v.675c0 3.107 2.518 5.625 5.625 5.625h2.25c3.107 0 5.625-2.518 5.625-5.625v-5.85" />
+                  </svg>,
+                  <svg key="check" className="w-6 h-6 sm:w-7 sm:h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>,
+                ];
+                const isActive = simPhase === i;
+
+                return (
+                  <div key={i} className={`relative ${colors.light} ${colors.border} border rounded-2xl sm:rounded-3xl p-5 sm:p-8 transition-all duration-500 ${isActive ? `ring-2 ${colors.ring} scale-[1.02] shadow-lg` : "scale-100"}`}>
+                    <div className="flex items-center gap-3 mb-3 sm:mb-4">
+                      <div className={`w-10 h-10 sm:w-12 sm:h-12 ${colors.bg} rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0`}>
+                        {icons[i]}
+                      </div>
+                      <span className={`text-xs font-bold ${colors.text} uppercase tracking-wider`}>
+                        {language === "ar" ? `الخطوة ${step.num}` : `Step ${step.num}`}
+                      </span>
+                    </div>
+                    <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-1 sm:mb-2">{step.title}</h3>
+                    <p className="text-sm sm:text-base text-gray-600 leading-relaxed">{step.desc}</p>
+
+                    {i < 2 && (
+                      <div className={`hidden sm:block absolute top-1/2 -translate-y-1/2 ${isRtl ? "-left-4" : "-right-4"} z-10`}>
+                        <div className={`w-8 h-8 bg-white border-2 ${colors.border} rounded-full flex items-center justify-center`}>
+                          <svg className={`w-4 h-4 ${colors.text} ${isRtl ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                          </svg>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Feature pills */}
+            <div className="flex flex-wrap justify-center gap-3 sm:gap-4 mb-8">
+              {txt.sims.features.map((feat, i) => {
+                const pillIcons = [
+                  <svg key="rw" className="w-4 h-4 sm:w-5 sm:h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061A1.125 1.125 0 0 1 21 8.689v8.122ZM11.25 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061a1.125 1.125 0 0 1 1.683.977v8.122Z" />
+                  </svg>,
+                  <svg key="wb" className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" />
+                  </svg>,
+                  <svg key="pace" className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>,
+                ];
+                const pillBgs = ["bg-violet-50 border-violet-200", "bg-emerald-50 border-emerald-200", "bg-amber-50 border-amber-200"];
+
+                return (
+                  <div key={i} className={`flex items-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 ${pillBgs[i]} border rounded-full`}>
+                    {pillIcons[i]}
+                    <div className="text-left">
+                      <span className="text-sm sm:text-base font-bold text-gray-900">{feat.title}</span>
+                      <span className="text-xs sm:text-sm text-gray-500 ml-1.5">{feat.desc}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Try a sample lesson CTA */}
+            <div className="text-center">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg font-bold text-white bg-[#007229] rounded-full hover:bg-[#005C22] transition-all shadow-xl shadow-[#007229]/30 hover:shadow-2xl hover:shadow-[#007229]/40 hover:-translate-y-1"
+              >
+                <PlayIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+                {txt.sims.cta}
+              </Link>
+            </div>
+          </div>
+        </section>
+
         {/* For Teachers */}
         <section id="teachers" className="py-10 sm:py-16 relative">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -683,8 +916,8 @@ export default function Home() {
             </div>
 
             <div className="flex items-center gap-4 sm:gap-8 text-xs sm:text-sm text-gray-600">
-              <a href="#" className="hover:text-[#007229] transition-colors">{txt.footer.links.privacy}</a>
-              <a href="#" className="hover:text-[#007229] transition-colors">{txt.footer.links.contact}</a>
+              <a href="/privacy" className="hover:text-[#007229] transition-colors">{txt.footer.links.privacy}</a>
+              <a href="/terms" className="hover:text-[#007229] transition-colors">{txt.footer.links.contact}</a>
               <a href="#" className="hover:text-[#D21034] transition-colors">{txt.footer.links.donate}</a>
             </div>
 

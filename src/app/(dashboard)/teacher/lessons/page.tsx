@@ -26,6 +26,7 @@ import {
   type SlideLengthPreset,
   type SlideLanguageMode,
 } from "@/lib/slides-generation";
+import SimOnboardingTour from "@/components/teacher/SimOnboardingTour";
 
 type Subject = {
   id: string;
@@ -283,6 +284,7 @@ export default function TeacherLessonsPage() {
         </div>
         <button
           type="button"
+          data-tour="new-lesson-btn"
           onClick={openQuickCreateModal}
           disabled={!canQuickCreateSlides}
           className="px-4 py-2 bg-[#007229] text-white rounded-xl text-sm font-medium hover:bg-[#005C22] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -411,6 +413,7 @@ export default function TeacherLessonsPage() {
           onClick={closeQuickCreateModal}
         >
           <div
+            data-tour="quick-create-modal"
             className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl border border-gray-100 p-6 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
@@ -550,7 +553,7 @@ export default function TeacherLessonsPage() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div>
+                <div data-tour="lesson-length-preset">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Lesson Length</label>
                   <select
                     value={quickCreateForm.length_preset}
@@ -640,6 +643,10 @@ export default function TeacherLessonsPage() {
               </div>
             )}
 
+            <p className="text-[11px] text-gray-400 text-center">
+              By creating content you agree that all materials become the property of Madrassa Sudan.
+            </p>
+
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
               <button
                 type="button"
@@ -651,6 +658,7 @@ export default function TeacherLessonsPage() {
               </button>
               <button
                 type="button"
+                data-tour="create-draft-btn"
                 onClick={handleQuickCreateSlides}
                 disabled={creatingSlidesDraft || !canQuickCreateSlides}
                 className="px-4 py-2 bg-[#007229] text-white rounded-xl text-sm font-medium hover:bg-[#005C22] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -661,6 +669,13 @@ export default function TeacherLessonsPage() {
           </div>
         </div>
       )}
+
+      {/* Content ownership notice */}
+      <p className="mt-8 text-center text-xs text-gray-400">
+        All content created on this platform is the property of Madrassa Sudan.
+      </p>
+
+      <SimOnboardingTour segments={["lesson-list"]} />
     </div>
   );
 }

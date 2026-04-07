@@ -37,11 +37,20 @@ import {
   type SimStroke,
 } from '@/lib/sim.types';
 import { renderStrokeToCtx, type Stroke } from '@/hooks/useWhiteboard';
+import type { InteractionAnswer } from '@/lib/interactions/types';
+import ExplorationOverlay from '@/components/explorations/ExplorationOverlay';
+import { slideToInteraction } from '@/lib/interactions/adapters';
+import { gradeInteraction } from '@/lib/interactions/grader';
+import { OwlCorrect, OwlWrong, OwlPointing } from '@/components/illustrations';
 
 interface SimPlayerProps {
   payload: SimPayload;
   language?: 'ar' | 'en';
   className?: string;
+  /** Lesson ID — when provided, student answers are persisted to the DB. */
+  lessonId?: string;
+  /** Previously saved slide responses (keyed by slide_id). Pre-populates gate answers on load. */
+  savedResponses?: Record<string, { answer: unknown; isCorrect: boolean }> | null;
   /**
    * Optional non-destructive cut ranges in **seconds** against the original
    * timeline. When provided, the player:
@@ -67,6 +76,10 @@ interface SimPlayerProps {
   onPlayStateChange?: (isPlaying: boolean) => void;
   /** Fires once when the audio metadata has loaded and `play()` is safe. */
   onReady?: () => void;
+  /** Show timestamped teacher notes as an overlay (teacher preview only). */
+  showTeacherNotes?: boolean;
+  /** Fires periodically with playback progress (0–100). */
+  onProgress?: (pct: number) => void;
 }
 
 /**
@@ -267,16 +280,66 @@ function SpotlightOverlay({ spotlight }: { spotlight: { x: number; y: number } |
   );
 }
 
+/** Lightweight confetti scoped to the slide area (absolute, not fixed). */
+function SlideConfetti({ id }: { id: number }) {
+  const colors = ['#D21034', '#007229', '#F59E0B', '#3B82F6', '#EC4899', '#8B5CF6'];
+  // Generate pieces once per mount (id in key forces remount on each trigger)
+  const [pieces] = useState(() =>
+    Array.from({ length: 40 }, (_, i) => ({
+      id: i,
+      color: colors[i % colors.length],
+      left: Math.random() * 100,
+      delay: Math.random() * 0.4,
+      drift: (Math.random() - 0.5) * 80,
+      size: 6 + Math.random() * 6,
+      shape: i % 3,
+      duration: 1.8 + Math.random() * 1,
+    }))
+  );
+  return (
+    <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden" aria-hidden>
+      {pieces.map((p) => (
+        <div
+          key={`${id}-${p.id}`}
+          style={{
+            position: 'absolute',
+            top: '-4%',
+            left: `${p.left}%`,
+            width: p.shape === 2 ? p.size * 0.5 : p.size,
+            height: p.shape === 2 ? p.size * 1.5 : p.size,
+            backgroundColor: p.color,
+            borderRadius: p.shape === 0 ? '50%' : 2,
+            opacity: 0,
+            animation: `sim-confetti-fall ${p.duration}s ease-out ${p.delay}s forwards`,
+            // @ts-expect-error -- CSS custom props for per-piece drift
+            '--drift': `${p.drift}px`,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes sim-confetti-fall {
+          0%   { opacity: 1; transform: translateY(0) translateX(0) rotate(0deg); }
+          100% { opacity: 0; transform: translateY(calc(100vh)) translateX(var(--drift)) rotate(${360 + Math.random() * 360}deg); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimPlayer(
   {
     payload,
     language = 'en',
     className = '',
+    lessonId,
+    savedResponses,
     clipSegments,
     hideControls = false,
     onRealTimeChange,
     onPlayStateChange,
     onReady,
+    showTeacherNotes = false,
+    onProgress,
   },
   ref
 ) {
@@ -296,14 +359,16 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     [sim.events, effectiveClips]
   );
 
-  // Extract `activity_gate` events — these become pause-to-interact stops
-  // during playback, the sim equivalent of the video-lesson task gates in
-  // `lessons/[id]/page.tsx:maybeActivateDueInteraction`.
+  // Extract gate events — both activity_gate and exploration_gate pause
+  // the sim and show an interactive overlay.
   type ActivityGate = Extract<SimEvent, { type: 'activity_gate' }>;
-  const gates = useMemo<ActivityGate[]>(
+  type ExplorationGate = Extract<SimEvent, { type: 'exploration_gate' }>;
+  type AnyGate = ActivityGate | ExplorationGate;
+  const gates = useMemo<AnyGate[]>(
     () =>
       projectedEvents.filter(
-        (e): e is ActivityGate => e.type === 'activity_gate'
+        (e): e is AnyGate =>
+          e.type === 'activity_gate' || e.type === 'exploration_gate'
       ),
     [projectedEvents]
   );
@@ -315,14 +380,35 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const [isPlaying, setIsPlaying] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeGate, setActiveGate] = useState<ActivityGate | null>(null);
+  const [activeGate, setActiveGate] = useState<AnyGate | null>(null);
+  // Student's own answer during an active gate. Reset when the gate clears.
+  const [studentAnswer, setStudentAnswer] = useState<InteractionAnswer | null>(null);
+  // Feedback after the student answers during a gate.
+  const [answerFeedback, setAnswerFeedback] = useState<'correct' | 'incorrect' | 'submitted' | null>(null);
+  const [confettiKey, setConfettiKey] = useState(0);
+  // Track result per gate index for timeline marker icons.
+  const [gateResults, setGateResults] = useState<Record<number, 'correct' | 'incorrect' | 'skipped' | 'submitted'>>({});
+  const activeGateIdxRef = useRef<number | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [showChapters, setShowChapters] = useState(false);
+  const [notesExpanded, setNotesExpanded] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   // Gate indices already surfaced to the viewer (cleared on seek so going
   // backwards re-arms them). A Set keyed by index into `gates` lets us do
   // O(1) membership checks inside the rAF loop.
   const triggeredGatesRef = useRef<Set<number>>(new Set());
+  // Exploration slide IDs already auto-paused on (cleared on seek backwards).
+  const triggeredExplorationSlidesRef = useRef<Set<string>>(new Set());
+  // Whether an auto-pause exploration slide overlay is active.
+  const [activeExplorationSlide, setActiveExplorationSlide] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const rafRef = useRef<number>(0);
+  // Timer-driven playback for audio-less sims
+  const timerStartRef = useRef<number>(0);
+  const timerOffsetRef = useRef<number>(0);
   // Number of events already reflected in `surface`. Lets the rAF loop skip
   // `rebuildSimState` + `setSurface` when no new event has crossed the time
   // cursor since the previous frame — the common case for long sims with
@@ -341,6 +427,15 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     () => Math.max(0, rawTotalMs - clipDurationMs(effectiveClips)),
     [rawTotalMs, effectiveClips]
   );
+
+  // Audio-less sims: mark ready immediately so the play button is enabled.
+  useEffect(() => {
+    if (!audio_url) {
+      setReady(true);
+      onReady?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audio_url]);
 
   // Count of events with t <= realMs (binary search on sorted events).
   const eventsAtMs = useCallback(
@@ -367,15 +462,17 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         typeof performance !== 'undefined' ? performance.now() : Date.now();
       if (force || now - lastEmitWallMsRef.current >= 33) {
         lastEmitWallMsRef.current = now;
-        setPlaybackMs(realToVirtualMs(realMs, effectiveClips));
+        const vMs = realToVirtualMs(realMs, effectiveClips);
+        setPlaybackMs(vMs);
         onRealTimeChange?.(realMs / 1000);
+        if (virtualTotalMs > 0) onProgress?.(Math.min(100, (vMs / virtualTotalMs) * 100));
       }
       const count = eventsAtMs(realMs);
       if (count === appliedEventCountRef.current) return;
       appliedEventCountRef.current = count;
       setSurface(rebuildSimState(deck, projectedEvents, realMs));
     },
-    [deck, projectedEvents, effectiveClips, eventsAtMs, onRealTimeChange]
+    [deck, projectedEvents, effectiveClips, eventsAtMs, onRealTimeChange, virtualTotalMs, onProgress]
   );
 
   // Rebuild the triggered-gates set so every gate strictly before `realMs`
@@ -389,14 +486,35 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         if (gates[i].t < realMs) set.add(i);
       }
       triggeredGatesRef.current = set;
+
+      // Also rebuild the exploration slide set — mark all exploration slides
+      // that were passed before realMs as triggered.
+      const explSet = new Set<string>();
+      let currentSlideId = deck[0]?.id;
+      for (const e of projectedEvents) {
+        if (e.t >= realMs) break;
+        if (e.type === 'slide_change') currentSlideId = e.slide_id;
+      }
+      // Mark all exploration slides whose slide_change event is before realMs
+      for (const e of projectedEvents) {
+        if (e.t >= realMs) break;
+        if (e.type === 'slide_change') {
+          const slide = deck.find((s) => s.id === e.slide_id);
+          if (slide?.type === 'exploration') explSet.add(e.slide_id);
+        }
+      }
+      // If we're currently ON an exploration slide, don't mark it as triggered
+      // so it re-triggers on seek
+      if (currentSlideId) explSet.delete(currentSlideId);
+      triggeredExplorationSlidesRef.current = explSet;
     },
-    [gates]
+    [gates, deck, projectedEvents]
   );
 
   // Find the first gate whose time has been crossed since the last check
   // and hasn't been shown yet. Returns `null` when nothing is due.
   const findDueGate = useCallback(
-    (realMs: number): { idx: number; gate: ActivityGate } | null => {
+    (realMs: number): { idx: number; gate: AnyGate } | null => {
       for (let i = 0; i < gates.length; i++) {
         if (triggeredGatesRef.current.has(i)) continue;
         if (gates[i].t > realMs) break;
@@ -406,6 +524,70 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     },
     [gates]
   );
+
+  // Find the current slide ID at a given time by scanning slide_change events.
+  const slideIdAtMs = useCallback(
+    (realMs: number): string | null => {
+      let slideId: string | null = deck[0]?.id ?? null;
+      for (const e of projectedEvents) {
+        if (e.t > realMs) break;
+        if (e.type === 'slide_change') slideId = e.slide_id;
+      }
+      return slideId;
+    },
+    [deck, projectedEvents]
+  );
+
+  // Check if the current slide at `realMs` is an exploration slide that
+  // hasn't been auto-paused on yet.
+  const findDueExplorationSlide = useCallback(
+    (realMs: number): string | null => {
+      const slideId = slideIdAtMs(realMs);
+      if (!slideId) return null;
+      if (triggeredExplorationSlidesRef.current.has(slideId)) return null;
+      const slide = deck.find((s) => s.id === slideId);
+      if (slide?.type === 'exploration' && slide.exploration_widget_type && slide.exploration_config) {
+        return slideId;
+      }
+      return null;
+    },
+    [deck, slideIdAtMs]
+  );
+
+  // Auto-generate chapters from slide_change events. Each slide transition
+  // becomes a chapter using the slide's title.
+  const chapters = useMemo(() => {
+    const result: { label: string; realMs: number; virtualMs: number; slideId: string }[] = [];
+    // First slide is always a chapter at t=0
+    if (deck.length > 0) {
+      const first = deck[0];
+      const title = (language === 'ar' ? first.title_ar : first.title_en) || first.title_en || first.title_ar;
+      result.push({ label: title || `Slide 1`, realMs: 0, virtualMs: 0, slideId: first.id });
+    }
+    for (const e of projectedEvents) {
+      if (e.type !== 'slide_change') continue;
+      const slide = deck.find((s) => s.id === e.slide_id);
+      if (!slide) continue;
+      const title = (language === 'ar' ? slide.title_ar : slide.title_en) || slide.title_en || slide.title_ar;
+      result.push({
+        label: title || `Slide ${slide.sequence + 1}`,
+        realMs: e.t,
+        virtualMs: realToVirtualMs(e.t, effectiveClips),
+        slideId: slide.id,
+      });
+    }
+    return result;
+  }, [deck, projectedEvents, effectiveClips, language]);
+
+  // Current chapter index based on playback position
+  const currentChapterIdx = useMemo(() => {
+    let idx = 0;
+    for (let i = 1; i < chapters.length; i++) {
+      if (chapters[i].virtualMs <= playbackMs) idx = i;
+      else break;
+    }
+    return idx;
+  }, [chapters, playbackMs]);
 
   // Re-project whenever the event list or clip set changes (e.g. live edit).
   // Only fires when the audio is paused — during playback the rAF tick loop
@@ -421,41 +603,67 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     resetGatesForTime(realMs);
   }, [deck, projectedEvents, effectiveClips, eventsAtMs, resetGatesForTime]);
 
-  // rAF loop: while the audio is playing, sample its currentTime, skip cuts,
+  // Get current real-time ms from audio element or timer fallback.
+  const getCurrentRealMs = useCallback((): number => {
+    const audio = audioRef.current;
+    if (audio) return audio.currentTime * 1000;
+    // Timer-driven: elapsed since play started + offset from previous play/seek
+    const elapsed = (performance.now() - timerStartRef.current) * playbackRate;
+    return Math.min(timerOffsetRef.current + elapsed, rawTotalMs);
+  }, [playbackRate, rawTotalMs]);
+
+  // Pause helper for both audio and timer modes
+  const pausePlayback = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio && !audio.paused) audio.pause();
+    // Save timer position
+    if (!audio) timerOffsetRef.current = getCurrentRealMs();
+    setIsPlaying(false);
+    onPlayStateChange?.(false);
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+    }
+  }, [getCurrentRealMs, onPlayStateChange]);
+
+  // rAF loop: sample currentTime (audio or timer), skip cuts,
   // rebuild surface, schedule next frame.
   const tick = useCallback(() => {
     const audio = audioRef.current;
-    if (!audio) return;
-    const realMs = audio.currentTime * 1000;
+    const realMs = getCurrentRealMs();
 
-    // If we landed inside a cut range, jump to its end and re-enter the loop
-    // next frame (the browser will fire seeked automatically).
+    // If we landed inside a cut range, jump to its end
     const jumpTo = cutEndIfInside(realMs, effectiveClips);
     if (jumpTo !== null) {
       if (jumpTo >= rawTotalMs - 5) {
-        audio.pause();
-        setIsPlaying(false);
-        onPlayStateChange?.(false);
+        pausePlayback();
         applyAt(rawTotalMs, true);
-        rafRef.current = 0;
         return;
       }
-      audio.currentTime = jumpTo / 1000;
+      if (audio) {
+        audio.currentTime = jumpTo / 1000;
+      } else {
+        timerOffsetRef.current = jumpTo;
+        timerStartRef.current = performance.now();
+      }
       rafRef.current = requestAnimationFrame(tick);
       return;
     }
 
     applyAt(realMs);
 
-    // Activity gate — pause the audio and surface the gate so the viewer
-    // can read the activity before continuing. Park the timeline exactly at
-    // the gate so scrubber + projected state match the pause point.
+    // Activity gate — pause and surface the gate
     const due = findDueGate(realMs);
     if (due) {
       triggeredGatesRef.current.add(due.idx);
-      audio.pause();
-      audio.currentTime = due.gate.t / 1000;
+      if (audio) {
+        audio.pause();
+        audio.currentTime = due.gate.t / 1000;
+      } else {
+        timerOffsetRef.current = due.gate.t;
+      }
       applyAt(due.gate.t, true);
+      activeGateIdxRef.current = due.idx;
       setActiveGate(due.gate);
       setIsPlaying(false);
       onPlayStateChange?.(false);
@@ -463,17 +671,39 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       return;
     }
 
-    if (!audio.paused && !audio.ended) {
+    // Auto-pause on exploration slides
+    const dueExplSlide = findDueExplorationSlide(realMs);
+    if (dueExplSlide) {
+      triggeredExplorationSlidesRef.current.add(dueExplSlide);
+      if (audio) audio.pause();
+      else timerOffsetRef.current = realMs;
+      applyAt(realMs, true);
+      setActiveExplorationSlide(dueExplSlide);
+      setIsPlaying(false);
+      onPlayStateChange?.(false);
+      rafRef.current = 0;
+      return;
+    }
+
+    // Check if playback ended
+    if (realMs >= rawTotalMs - 5) {
+      pausePlayback();
+      applyAt(rawTotalMs, true);
+      return;
+    }
+
+    const isStillPlaying = audio ? (!audio.paused && !audio.ended) : true;
+    if (isStillPlaying) {
       rafRef.current = requestAnimationFrame(tick);
     } else {
       rafRef.current = 0;
-      if (audio.ended) {
+      if (audio?.ended) {
         setIsPlaying(false);
         onPlayStateChange?.(false);
         applyAt(rawTotalMs, true);
       }
     }
-  }, [applyAt, effectiveClips, rawTotalMs, onPlayStateChange, findDueGate]);
+  }, [applyAt, effectiveClips, rawTotalMs, onPlayStateChange, findDueGate, findDueExplorationSlide, getCurrentRealMs, pausePlayback]);
 
   useEffect(() => {
     return () => {
@@ -484,8 +714,18 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const handlePlay = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) {
-      // No audio track — step straight to the end of the timeline.
-      applyAt(rawTotalMs, true);
+      // No audio track — timer-driven playback
+      const realMs = timerOffsetRef.current;
+      const jumpTo = cutEndIfInside(realMs, effectiveClips);
+      if (jumpTo !== null) {
+        timerOffsetRef.current = jumpTo;
+      }
+      timerStartRef.current = performance.now();
+      setIsPlaying(true);
+      setActiveGate(null);
+      onPlayStateChange?.(true);
+      setAnswerFeedback(null);
+      if (!rafRef.current) rafRef.current = requestAnimationFrame(tick);
       return;
     }
     // If audio is parked inside a cut (e.g. from a previous seek), nudge it
@@ -495,29 +735,33 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     if (jumpTo !== null) {
       audio.currentTime = jumpTo / 1000;
     }
+    audio.playbackRate = playbackRate;
     audio.play().then(
       () => {
         setIsPlaying(true);
         setActiveGate(null);
         onPlayStateChange?.(true);
+        setAnswerFeedback(null);
         if (!rafRef.current) rafRef.current = requestAnimationFrame(tick);
       },
       (err: unknown) => {
         setError(err instanceof Error ? err.message : 'Playback failed');
       }
     );
-  }, [applyAt, effectiveClips, rawTotalMs, tick, onPlayStateChange]);
+  }, [effectiveClips, tick, onPlayStateChange, playbackRate]);
 
   const handlePause = useCallback(() => {
     const audio = audioRef.current;
     if (audio && !audio.paused) audio.pause();
+    // Save timer position for audio-less mode
+    if (!audio) timerOffsetRef.current = getCurrentRealMs();
     setIsPlaying(false);
     onPlayStateChange?.(false);
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
     }
-  }, [onPlayStateChange]);
+  }, [getCurrentRealMs, onPlayStateChange]);
 
   // Scrubber hands us virtual ms; translate to real audio ms before seeking.
   const handleSeek = useCallback(
@@ -526,6 +770,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       const audio = audioRef.current;
       if (audio) {
         audio.currentTime = realMs / 1000;
+      } else {
+        timerOffsetRef.current = realMs;
+        timerStartRef.current = performance.now();
       }
       applyAt(realMs, true);
       setActiveGate(null);
@@ -538,7 +785,12 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     (realSec: number) => {
       const audio = audioRef.current;
       const clamped = Math.max(0, Math.min(realSec, rawTotalMs / 1000));
-      if (audio) audio.currentTime = clamped;
+      if (audio) {
+        audio.currentTime = clamped;
+      } else {
+        timerOffsetRef.current = clamped * 1000;
+        timerStartRef.current = performance.now();
+      }
       applyAt(clamped * 1000, true);
       setActiveGate(null);
       resetGatesForTime(clamped * 1000);
@@ -549,11 +801,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   // Dismiss the current gate and resume playback. The gate's index is
   // already in `triggeredGatesRef` from the rAF tick that surfaced it, so
   // the next frame won't re-trigger it.
-  const handleContinueGate = useCallback(() => {
-    setActiveGate(null);
-    handlePlay();
-  }, [handlePlay]);
-
+  // Grade the student's answer against the current slide's interaction.
   // Keep `handlePlay`/`handlePause` stable across renders inside the imperative
   // handle so the parent's ref doesn't churn.
   const isPlayingRef = useRef(isPlaying);
@@ -575,6 +823,101 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     [deck, surface.current_slide_id]
   );
 
+  const handleStudentAnswer = useCallback(
+    (answer: InteractionAnswer) => {
+      setStudentAnswer(answer);
+      // Don't grade yet — wait for explicit submit.
+    },
+    []
+  );
+
+  const handleSubmitAnswer = useCallback(() => {
+    if (!studentAnswer || !currentSlide) return;
+    const interaction = slideToInteraction(currentSlide);
+    if (!interaction) return;
+
+    // Teacher-reviewed types: show "submitted" instead of grading
+    const isTeacherReviewed = interaction.type === 'free_response' || interaction.type === 'draw_answer';
+    if (isTeacherReviewed) {
+      setAnswerFeedback('submitted');
+    } else {
+      const result = gradeInteraction(interaction, studentAnswer);
+      const feedback = result.is_correct ? 'correct' : 'incorrect';
+      setAnswerFeedback(feedback);
+      if (feedback === 'correct') {
+        setConfettiKey((k) => k + 1);
+      }
+    }
+
+    // Persist to DB when lessonId is available
+    if (lessonId) {
+      fetch(`/api/lessons/${lessonId}/slide-responses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slide_id: currentSlide.id,
+          answer: studentAnswer,
+        }),
+      }).catch(() => { /* best-effort — don't block UX */ });
+    }
+  }, [studentAnswer, currentSlide, lessonId]);
+
+  const handleRetry = useCallback(() => {
+    setStudentAnswer(null);
+    setAnswerFeedback(null);
+  }, []);
+
+  // Restore saved answer when a gate activates on a slide with a prior response
+  useEffect(() => {
+    if (!activeGate || !currentSlide || !savedResponses) return;
+    const saved = savedResponses[currentSlide.id];
+    if (!saved || saved.answer == null) return;
+    setStudentAnswer(saved.answer as InteractionAnswer);
+    // Detect teacher-reviewed types
+    const interaction = slideToInteraction(currentSlide);
+    const isTeacherReviewed = interaction && (interaction.type === 'free_response' || interaction.type === 'draw_answer');
+    const feedback = isTeacherReviewed ? 'submitted' : (saved.isCorrect ? 'correct' : 'incorrect');
+    setAnswerFeedback(feedback);
+    // Also mark the timeline marker
+    if (activeGateIdxRef.current !== null) {
+      setGateResults((prev) => ({
+        ...prev,
+        [activeGateIdxRef.current!]: feedback,
+      }));
+    }
+  }, [activeGate, currentSlide, savedResponses]);
+
+  const handleContinueGate = useCallback(() => {
+    // If this is an exploration slide auto-pause, dismiss it and resume.
+    if (activeExplorationSlide) {
+      setActiveExplorationSlide(null);
+      handlePlay();
+      return;
+    }
+    // Record outcome for the timeline marker
+    if (activeGateIdxRef.current !== null) {
+      const idx = activeGateIdxRef.current;
+      const result = answerFeedback ?? 'skipped';
+      setGateResults((prev) => ({ ...prev, [idx]: result }));
+    }
+    // Persist skipped gate to server so teachers see it
+    if (!answerFeedback && lessonId && currentSlide) {
+      fetch(`/api/lessons/${lessonId}/slide-responses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slide_id: currentSlide.id,
+          answer: null,
+        }),
+      }).catch(() => { /* best-effort */ });
+    }
+    activeGateIdxRef.current = null;
+    setActiveGate(null);
+    setStudentAnswer(null);
+    setAnswerFeedback(null);
+    handlePlay();
+  }, [handlePlay, answerFeedback, activeExplorationSlide, lessonId, currentSlide]);
+
   const currentSurface: SimSlideSurface | null = currentSlide
     ? surface.slides[currentSlide.id] ?? null
     : null;
@@ -587,51 +930,311 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     );
   }
 
+  // Teacher notes overlay — find the latest note at current playback time
+  const activeTeacherNote = useMemo(() => {
+    if (!showTeacherNotes) return null;
+    const NOTE_DISPLAY_MS = 5000;
+    let latest: { text: string; virtualMs: number } | null = null;
+    for (const e of projectedEvents) {
+      if (e.type !== 'teacher_note') continue;
+      const vMs = realToVirtualMs(e.t, effectiveClips);
+      if (vMs > playbackMs) break;
+      latest = { text: e.text, virtualMs: vMs };
+    }
+    if (!latest) return null;
+    // Hide after 5 seconds
+    if (playbackMs - latest.virtualMs > NOTE_DISPLAY_MS) return null;
+    return latest.text;
+  }, [showTeacherNotes, projectedEvents, effectiveClips, playbackMs]);
+
+  // Speaker notes for the current slide (student-facing).
+  const currentSpeakerNotes = useMemo(() => {
+    if (!currentSlide) return '';
+    const primary = language === 'ar'
+      ? currentSlide.speaker_notes_ar
+      : currentSlide.speaker_notes_en;
+    const fallback = language === 'ar'
+      ? currentSlide.speaker_notes_en
+      : currentSlide.speaker_notes_ar;
+    return (primary?.trim() || fallback?.trim()) ?? '';
+  }, [currentSlide, language]);
+
+  const progressPct = virtualTotalMs > 0
+    ? Math.min(100, (playbackMs / virtualTotalMs) * 100)
+    : 0;
+
+  // Gate positions on the progress bar (converted from real → virtual time).
+  const gateMarkers = useMemo(() => {
+    if (virtualTotalMs <= 0) return [];
+    return gates.map((g, i) => ({
+      pct: Math.min(100, (realToVirtualMs(g.t, effectiveClips) / virtualTotalMs) * 100),
+      realSec: g.t / 1000,
+      gateType: g.type as 'activity_gate' | 'exploration_gate',
+      idx: i,
+    }));
+  }, [gates, effectiveClips, virtualTotalMs]);
+
+  // Initialize gate marker states from saved responses.
+  const savedResponsesRef = useRef(savedResponses);
+  savedResponsesRef.current = savedResponses;
+  const initialGateResultsApplied = useRef(false);
+  useEffect(() => {
+    if (initialGateResultsApplied.current) return;
+    const saved = savedResponsesRef.current;
+    if (!saved || gates.length === 0) return;
+    const initial: Record<number, 'correct' | 'incorrect' | 'skipped'> = {};
+    for (let i = 0; i < gates.length; i++) {
+      const slideId = slideIdAtMs(gates[i].t);
+      const resp = slideId ? saved[slideId] : null;
+      if (resp) {
+        initial[i] = resp.isCorrect ? 'correct' : 'incorrect';
+      }
+    }
+    if (Object.keys(initial).length > 0) {
+      initialGateResultsApplied.current = true;
+      setGateResults(initial);
+    }
+  }, [gates, slideIdAtMs]);
+
+  /** Seek to a gate marker AND immediately activate it. */
+  const handleGateMarkerClick = useCallback(
+    (marker: { realSec: number; idx: number }) => {
+      const audio = audioRef.current;
+      const realMs = marker.realSec * 1000;
+      if (audio) {
+        audio.pause();
+        audio.currentTime = marker.realSec;
+      }
+      applyAt(realMs, true);
+      // Mark all gates up to (but not including) this one as triggered,
+      // so only this gate fires.
+      const set = new Set<number>();
+      for (let i = 0; i < marker.idx; i++) set.add(i);
+      triggeredGatesRef.current = set;
+      // Activate the gate directly.
+      triggeredGatesRef.current.add(marker.idx);
+      setIsPlaying(false);
+      onPlayStateChange?.(false);
+      activeGateIdxRef.current = marker.idx;
+      setStudentAnswer(null);
+      setAnswerFeedback(null);
+      setActiveGate(gates[marker.idx]);
+    },
+    [applyAt, gates, onPlayStateChange]
+  );
+
+  // Spacebar toggles play/pause
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      // Don't hijack space if user is typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      e.preventDefault();
+      if (isPlaying) handlePause();
+      else handlePlay();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isPlaying, handlePlay, handlePause]);
+
+  const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2] as const;
+  const cyclePlaybackRate = useCallback(() => {
+    setPlaybackRate((prev) => {
+      const idx = PLAYBACK_RATES.indexOf(prev as typeof PLAYBACK_RATES[number]);
+      const next = PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length];
+      const audio = audioRef.current;
+      if (audio) audio.playbackRate = next;
+      return next;
+    });
+  }, []);
+
+  const handleChapterClick = useCallback(
+    (realMs: number) => {
+      const audio = audioRef.current;
+      if (audio) audio.currentTime = realMs / 1000;
+      applyAt(realMs, true);
+      setActiveGate(null);
+      resetGatesForTime(realMs);
+      setShowChapters(false);
+    },
+    [applyAt, resetGatesForTime]
+  );
+
+  const toggleFullscreen = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      el.requestFullscreen();
+    }
+  }, []);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  // Offline detection
+  useEffect(() => {
+    const goOffline = () => setIsOffline(true);
+    const goOnline = () => setIsOffline(false);
+    setIsOffline(!navigator.onLine);
+    window.addEventListener('offline', goOffline);
+    window.addEventListener('online', goOnline);
+    return () => {
+      window.removeEventListener('offline', goOffline);
+      window.removeEventListener('online', goOnline);
+    };
+  }, []);
+
+  // Close chapters dropdown on outside click
+  useEffect(() => {
+    if (!showChapters) return;
+    const onClick = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('[data-chapters-menu]')) {
+        setShowChapters(false);
+      }
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, [showChapters]);
+
+  const handleProgressBarClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      handleSeek(pct * virtualTotalMs);
+    },
+    [handleSeek, virtualTotalMs]
+  );
+
   return (
-    <div className={`flex flex-col gap-3 ${className}`}>
-      <div className="relative">
-        <SlideCard
-          slide={currentSlide}
-          language={language}
-          revealedCount={currentSurface?.revealed_bullets}
-          showActivityAnswer={currentSurface?.answer_revealed ?? false}
-          // Replay the teacher's drag-and-drop placements inside the slide
-          // canvas for interactive activity slides. `disabled` so students
-          // watch but can't touch; the projected `activity_answer`
-          // advances automatically as the audio plays.
-          activityInteractive
-          activityInteractiveDisabled
-          activityAnswer={currentSurface?.activity_answer ?? null}
-        />
-        {currentSurface && currentSurface.strokes.length > 0 && (
-          <StrokesOverlay strokes={currentSurface.strokes} />
-        )}
-        {currentSurface?.spotlight && (
-          <SpotlightOverlay spotlight={currentSurface.spotlight} />
-        )}
-        {activeGate && (
-          <div
-            className="absolute inset-0 flex items-center justify-center bg-slate-950/55 backdrop-blur-[2px]"
-            dir={language === 'ar' ? 'rtl' : 'ltr'}
-          >
+    <div ref={containerRef} className={`overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm ${isFullscreen ? 'flex flex-col h-screen !border-0 !rounded-none !shadow-none' : ''} ${className}`}>
+      {/* Slide area */}
+      <div className={`relative ${isFullscreen ? 'flex-1 min-h-0 overflow-hidden' : ''}`}>
+          <SlideCard
+            slide={currentSlide}
+            language={language}
+            chromeless
+            revealedCount={currentSurface?.revealed_bullets}
+            showActivityAnswer={currentSurface?.answer_revealed ?? false}
+            activityInteractive
+            activityInteractiveDisabled={!activeGate}
+            activityAnswer={activeGate ? studentAnswer : (currentSurface?.activity_answer ?? null)}
+            onActivityAnswerChange={activeGate ? handleStudentAnswer : undefined}
+          />
+          {currentSurface && currentSurface.strokes.length > 0 && (
+            <StrokesOverlay strokes={currentSurface.strokes} />
+          )}
+          {currentSurface?.spotlight && (
+            <SpotlightOverlay spotlight={currentSurface.spotlight} />
+          )}
+          {/* Confetti on correct answer */}
+          {confettiKey > 0 && <SlideConfetti key={confettiKey} id={confettiKey} />}
+          {/* Teacher note overlay */}
+          {activeTeacherNote && (
+            <div className="absolute top-3 left-3 right-3 pointer-events-none z-10">
+              <div className="inline-block bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 shadow-sm">
+                <span className="text-xs font-medium text-amber-800">{activeTeacherNote}</span>
+              </div>
+            </div>
+          )}
+      </div>
+
+      {/* Activity gate — prompt bar between slide and control bar */}
+      {activeGate && activeGate.type === 'activity_gate' && (
+        <div className={`flex items-center justify-between gap-3 px-4 py-2.5 flex-shrink-0 transition-colors ${
+          answerFeedback === 'correct'
+            ? 'bg-emerald-600'
+            : answerFeedback === 'incorrect'
+              ? 'bg-rose-600'
+              : answerFeedback === 'submitted'
+                ? 'bg-blue-600'
+                : 'bg-[#007229]'
+        }`}>
+          <span className="text-sm font-semibold text-white flex items-center gap-2">
+            {answerFeedback === 'correct' ? (
+              <>
+                <OwlCorrect className="w-7 h-7 -my-1" />
+                {language === 'ar' ? 'أحسنت!' : 'Great job!'}
+              </>
+            ) : answerFeedback === 'submitted' ? (
+              <>
+                <OwlCorrect className="w-7 h-7 -my-1" />
+                {language === 'ar' ? 'تم الإرسال! سيراجعها المعلم' : 'Submitted! Your teacher will review it'}
+              </>
+            ) : answerFeedback === 'incorrect' ? (
+              <>
+                <OwlWrong className="w-7 h-7 -my-1" />
+                {language === 'ar' ? 'حاول مرة أخرى' : 'Try again!'}
+              </>
+            ) : (
+              <>
+                <OwlPointing className="w-7 h-7 -my-1" />
+                {language === 'ar' ? 'دورك! أجب ثم أرسل' : 'Your turn! Answer then submit'}
+              </>
+            )}
+          </span>
+          <div className="flex items-center gap-2">
+            {/* Submit button — when answer selected but not yet graded */}
+            {!answerFeedback && studentAnswer && (
+              <button
+                type="button"
+                onClick={handleSubmitAnswer}
+                className="flex items-center gap-1.5 rounded-full bg-amber-400 px-4 py-1.5 text-sm font-bold text-slate-900 shadow transition-transform hover:scale-105 active:scale-100"
+              >
+                {language === 'ar' ? 'إرسال' : 'Submit'}
+              </button>
+            )}
+            {/* Try Again button — when incorrect */}
+            {answerFeedback === 'incorrect' && (
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="flex items-center gap-1.5 rounded-full bg-white/90 px-4 py-1.5 text-sm font-bold text-rose-700 shadow transition-transform hover:scale-105 active:scale-100"
+              >
+                {language === 'ar' ? 'حاول مرة أخرى' : 'Try Again'}
+              </button>
+            )}
+            {/* Continue button — always available */}
             <button
               type="button"
               onClick={handleContinueGate}
-              className="group flex items-center gap-4 rounded-full bg-white/95 py-3 ps-3 pe-5 shadow-2xl ring-1 ring-black/5 transition-transform hover:scale-[1.02]"
+              className="flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-sm font-bold text-slate-900 shadow transition-transform hover:scale-105 active:scale-100"
             >
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#007229] text-white shadow-md transition-colors group-hover:bg-[#005a20]">
-                <svg className="h-5 w-5 ms-0.5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </span>
-              <span className="text-base font-semibold text-slate-900">
-                {language === 'ar' ? 'متابعة النشاط' : 'Continue activity'}
-              </span>
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              {language === 'ar' ? 'متابعة' : 'Continue'}
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
+      {/* Exploration gate — interactive exploration widget */}
+      {activeGate && activeGate.type === 'exploration_gate' && (
+        <ExplorationOverlay
+          widgetType={activeGate.widget_type}
+          config={activeGate.config}
+          language={language}
+          onContinue={handleContinueGate}
+        />
+      )}
+
+      {/* Exploration slide auto-pause — shows the widget from the slide config */}
+      {activeExplorationSlide && currentSlide?.type === 'exploration' && currentSlide.exploration_widget_type && currentSlide.exploration_config && (
+        <ExplorationOverlay
+          widgetType={currentSlide.exploration_widget_type}
+          config={currentSlide.exploration_config}
+          language={language}
+          onContinue={handleContinueGate}
+        />
+      )}
+
+      {/* Hidden audio element */}
       {audio_url && (
         <audio
           ref={audioRef}
@@ -647,71 +1250,230 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
             applyAt(rawTotalMs, true);
           }}
           onPause={() => {
-            // Catches external pauses (tab visibility, OS media controls) so
-            // the UI state stays in sync with the element.
             setIsPlaying(false);
             onPlayStateChange?.(false);
           }}
-          onError={() => {
-            setError('Audio failed to load');
-            setIsPlaying(false);
-            onPlayStateChange?.(false);
+          onError={(e) => {
+            // Audio unavailable — allow silent slide-only playback.
+            const audio = e.currentTarget;
+            const code = audio.error?.code;
+            const msg = audio.error?.message;
+            console.warn(`SimPlayer: audio failed to load (code=${code}, msg=${msg}, src=${audio.src?.substring(0, 80)})`);
+            setReady(true);
+            onReady?.();
           }}
         />
       )}
 
+      {isOffline && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-t border-amber-200 text-amber-700 text-xs font-medium">
+          <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.56 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" />
+          </svg>
+          {language === 'ar' ? 'أنت غير متصل بالإنترنت. قد يتوقف التشغيل.' : 'You are offline. Playback may stop.'}
+        </div>
+      )}
+
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
+        <div className="text-sm text-red-400 px-4 py-2">
           {error}
         </div>
       )}
 
+      {/* Control bar */}
       {!hideControls && (
-      <div className="flex items-center gap-3 rounded-2xl bg-slate-100 px-4 py-3">
-        {isPlaying ? (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 border-t border-slate-200">
+          {/* Play / Pause */}
           <button
             type="button"
-            onClick={handlePause}
-            className="w-10 h-10 rounded-full bg-slate-900 text-white grid place-items-center hover:bg-slate-700"
-            aria-label="Pause"
-          >
-            ⏸
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handlePlay}
+            onClick={isPlaying ? handlePause : handlePlay}
             disabled={!!audio_url && !ready}
-            className="w-10 h-10 rounded-full bg-emerald-600 text-white grid place-items-center hover:bg-emerald-500 disabled:bg-slate-400"
-            aria-label="Play"
+            className="w-9 h-9 rounded-full bg-[#007229] text-white grid place-items-center hover:bg-[#005a20] disabled:bg-slate-300 transition-colors flex-shrink-0 shadow-sm"
+            aria-label={!ready && audio_url ? (language === 'ar' ? 'جارٍ التحميل...' : 'Loading...') : isPlaying ? 'Pause' : 'Play'}
           >
-            ▶
+            {!ready && audio_url ? (
+              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10" strokeOpacity="0.3" />
+                <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+              </svg>
+            ) : isPlaying ? (
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="5" width="4" height="14" rx="1" />
+                <rect x="14" y="5" width="4" height="14" rx="1" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5 ml-0.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            )}
           </button>
-        )}
 
-        <div className="flex-1 flex items-center gap-2">
-          <span className="text-xs tabular-nums text-slate-600 w-12 text-right">
-            {formatMs(playbackMs)}
-          </span>
-          <input
-            type="range"
-            min={0}
-            max={Math.max(1, virtualTotalMs)}
-            step={50}
-            value={Math.min(playbackMs, virtualTotalMs)}
-            onChange={(e) => handleSeek(Number(e.target.value))}
-            className="flex-1"
+          {/* Progress bar */}
+          <div
+            className="flex-1 relative h-1.5 bg-slate-200 rounded-full cursor-pointer group py-2 -my-2"
+            onClick={handleProgressBarClick}
+            role="slider"
             aria-label="Seek"
-          />
-          <span className="text-xs tabular-nums text-slate-600 w-12">
-            {formatMs(virtualTotalMs)}
-          </span>
-        </div>
+            aria-valuemin={0}
+            aria-valuemax={virtualTotalMs}
+            aria-valuenow={playbackMs}
+          >
+            <div className="absolute inset-y-2 left-0 right-0 bg-slate-200 rounded-full" />
+            <div
+              className="absolute inset-y-2 left-0 bg-[#007229] rounded-full"
+              style={{ width: `${progressPct}%` }}
+            />
+            {/* Gate markers — colored stars on the timeline */}
+            {gateMarkers.map((m, i) => {
+              const result = gateResults[m.idx];
+              const isActive = activeGateIdxRef.current === m.idx && !!activeGate;
+              const color = result === 'correct'
+                ? 'text-emerald-500'
+                : result === 'submitted'
+                  ? 'text-blue-500'
+                  : result === 'incorrect'
+                    ? 'text-rose-500'
+                    : result === 'skipped'
+                      ? 'text-slate-400'
+                      : isActive
+                        ? 'text-amber-500 animate-pulse'
+                        : 'text-amber-500';
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleGateMarkerClick(m); }}
+                  className={`absolute top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 hover:scale-150 active:scale-100 transition-transform cursor-pointer drop-shadow ${color}`}
+                  style={{ left: `${m.pct}%`, marginLeft: -12 }}
+                  title={
+                    m.gateType === 'exploration_gate'
+                      ? (language === 'ar' ? 'استكشاف' : 'Explore')
+                      : (language === 'ar' ? 'نشاط' : 'Activity')
+                  }
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              );
+            })}
+            {/* Playhead thumb */}
+            <div
+              className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#007229] border-2 border-white shadow opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ left: `${progressPct}%`, marginLeft: -7 }}
+            />
+          </div>
 
-        <div className="text-xs text-slate-500">
-          {sim.events.length} events
+          {/* Time */}
+          <span className="text-xs tabular-nums text-slate-500 flex-shrink-0">
+            {formatMs(playbackMs)} / {formatMs(virtualTotalMs)}
+          </span>
+
+          {/* Speed */}
+          <button
+            type="button"
+            onClick={cyclePlaybackRate}
+            className="h-7 px-1.5 rounded-md text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200 transition-colors flex-shrink-0 tabular-nums"
+            aria-label="Playback speed"
+            title="Playback speed"
+          >
+            {playbackRate === 1 ? '1x' : `${playbackRate}x`}
+          </button>
+
+          {/* Chapters */}
+          {chapters.length > 1 && (
+            <div className="relative flex-shrink-0" data-chapters-menu>
+              <button
+                type="button"
+                onClick={() => setShowChapters((v) => !v)}
+                className="w-8 h-8 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-200 grid place-items-center transition-colors"
+                aria-label="Chapters"
+                title="Chapters"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+                  <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+                </svg>
+              </button>
+              {showChapters && (
+                <div className="absolute bottom-full right-0 mb-2 w-64 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg z-50">
+                  <div className="p-2">
+                    <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      {language === 'ar' ? 'الفصول' : 'Chapters'}
+                    </p>
+                    {chapters.map((ch, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => handleChapterClick(ch.realMs)}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-sm transition-colors ${
+                          i === currentChapterIdx
+                            ? 'bg-[#007229]/10 text-[#007229] font-medium'
+                            : 'text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="text-[10px] tabular-nums text-slate-400 flex-shrink-0 w-8">
+                          {formatMs(ch.virtualMs)}
+                        </span>
+                        <span className="truncate">{ch.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Fullscreen */}
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="w-8 h-8 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-200 grid place-items-center transition-colors flex-shrink-0"
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          >
+            {isFullscreen ? (
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" />
+                <line x1="14" y1="10" x2="21" y2="3" /><line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
+                <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+            )}
+          </button>
         </div>
-      </div>
+      )}
+
+      {/* Speaker notes panel — collapsible section below controls */}
+      {!hideControls && currentSpeakerNotes && (
+        <div className="border-t border-slate-200">
+          <button
+            type="button"
+            onClick={() => setNotesExpanded((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><line x1="10" y1="9" x2="8" y2="9" />
+              </svg>
+              {language === 'ar' ? 'ملاحظات الدرس' : 'Lesson Notes'}
+            </span>
+            <svg className={`w-3.5 h-3.5 transition-transform ${notesExpanded ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          {notesExpanded && (
+            <div className="px-4 pb-3 max-h-32 overflow-y-auto">
+              <p className="text-sm text-slate-600 leading-relaxed" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+                {currentSpeakerNotes}
+              </p>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

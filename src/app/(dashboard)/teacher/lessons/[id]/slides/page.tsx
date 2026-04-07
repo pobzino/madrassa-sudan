@@ -3,6 +3,7 @@
 import { useEffect, useState, use, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
 import {
   getCurriculumRequirementMessage,
   getCurriculumSelectionForLesson,
@@ -150,12 +151,12 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
       });
       if (!res.ok) {
         const data = await res.json();
-        alert('Save failed: ' + (data.error || 'Unknown error'));
+        toast.error('Save failed: ' + (data.error || 'Unknown error'));
       } else {
         setLastSaved(new Date().toLocaleTimeString());
       }
     } catch {
-      alert('Save failed');
+      toast.error('Save failed');
     } finally {
       setSaving(false);
     }

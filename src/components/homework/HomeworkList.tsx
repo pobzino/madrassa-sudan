@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ClipboardList, BookOpen } from "lucide-react";
+import { OwlPointing, OwlThinking, OwlCelebrating, OwlMedal, OwlEncouraging } from "@/components/illustrations";
 import type { AssignmentWithStats, SubmissionQueueItem } from "@/lib/homework.types";
 
 // Teacher Homework List Component
@@ -204,8 +205,8 @@ export function StudentHomeworkList({ homework, isLoading }: StudentHomeworkList
       case "graded":
       case "returned":
         return (
-          <span className="flex items-center gap-1 px-3 py-1.5 bg-emerald-100 text-emerald-700 text-base font-semibold font-fredoka rounded-full">
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <span className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-emerald-100 text-emerald-700 text-xs sm:text-base font-semibold font-fredoka rounded-full whitespace-nowrap">
+            <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
             </svg>
             {score}/{totalPoints}
@@ -213,8 +214,8 @@ export function StudentHomeworkList({ homework, isLoading }: StudentHomeworkList
         );
       case "submitted":
         return (
-          <span className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 text-blue-700 text-base font-semibold font-fredoka rounded-full">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <span className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-blue-100 text-blue-700 text-xs sm:text-base font-semibold font-fredoka rounded-full whitespace-nowrap">
+            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
             Submitted
@@ -222,8 +223,8 @@ export function StudentHomeworkList({ homework, isLoading }: StudentHomeworkList
         );
       case "in_progress":
         return (
-          <span className="flex items-center gap-1 px-3 py-1.5 bg-amber-100 text-amber-700 text-base font-semibold font-fredoka rounded-full">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <span className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-amber-100 text-amber-700 text-xs sm:text-base font-semibold font-fredoka rounded-full whitespace-nowrap">
+            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             In Progress
@@ -231,7 +232,7 @@ export function StudentHomeworkList({ homework, isLoading }: StudentHomeworkList
         );
       default:
         return (
-          <span className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-600 text-base font-semibold font-fredoka rounded-full">
+          <span className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gray-100 text-gray-600 text-xs sm:text-base font-semibold font-fredoka rounded-full whitespace-nowrap">
             Not Started
           </span>
         );
@@ -248,45 +249,53 @@ export function StudentHomeworkList({ homework, isLoading }: StudentHomeworkList
           <Link
             key={item.id}
             href={`/homework/${item.id}`}
-            className="block bg-white rounded-2xl border border-gray-100 shadow-sm p-6 hover:shadow-md hover:-translate-y-0.5 transition-all"
+            className="block bg-white rounded-2xl border border-gray-100 shadow-sm p-3.5 sm:p-5 hover:shadow-md hover:-translate-y-0.5 transition-all active:scale-[0.98]"
           >
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-2.5 sm:gap-3">
+              {/* Owl mascot per status */}
+              <div className="flex-shrink-0 mt-0.5">
+                {item.status === 'not_started' && <OwlPointing className="w-8 h-8 sm:w-10 sm:h-10" />}
+                {item.status === 'in_progress' && <OwlThinking className="w-8 h-8 sm:w-10 sm:h-10" />}
+                {item.status === 'submitted' && <OwlCelebrating className="w-8 h-8 sm:w-10 sm:h-10" />}
+                {(item.status === 'graded' || item.status === 'returned') && (
+                  item.score !== null && item.total_points > 0 && item.score / item.total_points >= 0.7
+                    ? <OwlMedal className="w-8 h-8 sm:w-10 sm:h-10" />
+                    : <OwlEncouraging className="w-8 h-8 sm:w-10 sm:h-10" />
+                )}
+              </div>
+
               <div className="flex-1 min-w-0">
-                <div className="flex items-start gap-3">
-                  <h3 className="font-semibold font-fredoka text-gray-900 text-lg">
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-semibold font-fredoka text-gray-900 text-base sm:text-lg leading-tight line-clamp-2">
                     {item.title_en || item.title_ar}
                   </h3>
-                  {getStatusBadge(item.status, item.score, item.total_points)}
+                  <div className="flex-shrink-0">
+                    {getStatusBadge(item.status, item.score, item.total_points)}
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 mt-2 text-sm">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 mt-1.5 sm:mt-2 text-xs sm:text-sm">
                   {item.subject_name && (
-                    <span className="px-2.5 py-1 rounded-full bg-violet-100 text-violet-700 font-medium">
+                    <span className="px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-violet-100 text-violet-700 font-medium">
                       {item.subject_name}
                     </span>
                   )}
 
                   {item.due_at && !isCompleted && (
-                    <span className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-medium ${
+                    <span className={`flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full font-medium ${
                       isOverdue
                         ? "bg-red-100 text-red-700"
                         : "bg-gray-100 text-gray-600"
                     }`}>
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       {isOverdue ? "Overdue" : "Due"} {new Date(item.due_at).toLocaleDateString()}
                     </span>
                   )}
 
-                  <span className="text-gray-500">{item.total_points} points</span>
+                  <span className="text-gray-500">{item.total_points} pts</span>
                 </div>
-              </div>
-
-              <div className="flex-shrink-0">
-                <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                </svg>
               </div>
             </div>
           </Link>

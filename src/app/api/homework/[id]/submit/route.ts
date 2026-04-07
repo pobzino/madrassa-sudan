@@ -232,10 +232,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Update student streak
-    await updateStudentStreak(supabase, user.id);
+    const streakDays = await updateStudentStreak(supabase, user.id);
 
     return NextResponse.json({
       success: true,
+      streakDays,
       data: {
         submission_id: submissionId,
         status: allQuestionsAutoGradable ? "graded" : "submitted",
@@ -422,11 +423,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// Helper function to update student streak
+// Helper function to update student streak — returns current streak days
 async function updateStudentStreak(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string
-) {
+): Promise<number> {
   const today = new Date().toISOString().split("T")[0];
 
   const { data: existingStreak } = await supabase
@@ -461,6 +462,8 @@ async function updateStudentStreak(
         updated_at: new Date().toISOString(),
       })
       .eq("id", existingStreak.id);
+
+    return newStreak;
   } else {
     await supabase.from("student_streaks").insert({
       student_id: userId,
@@ -469,5 +472,7 @@ async function updateStudentStreak(
       last_activity_date: today,
       total_homework_completed: 1,
     });
+
+    return 1;
   }
 }

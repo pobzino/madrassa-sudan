@@ -1479,6 +1479,7 @@ export type Database = {
           full_name: string
           grade_level: number | null
           id: string
+          is_approved: boolean
           phone: string | null
           preferred_language: string
           privacy_consent_at: string | null
@@ -1494,6 +1495,7 @@ export type Database = {
           full_name: string
           grade_level?: number | null
           id: string
+          is_approved?: boolean
           phone?: string | null
           preferred_language?: string
           privacy_consent_at?: string | null
@@ -1509,6 +1511,7 @@ export type Database = {
           full_name?: string
           grade_level?: number | null
           id?: string
+          is_approved?: boolean
           phone?: string | null
           preferred_language?: string
           privacy_consent_at?: string | null

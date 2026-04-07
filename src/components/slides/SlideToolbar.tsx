@@ -1,20 +1,44 @@
 'use client';
 
 import { useState } from 'react';
+import {
+  Ruler,
+  SlidersHorizontal,
+  MapPin,
+  PenTool,
+  Hash,
+  ArrowUpDown,
+  Palette,
+  type LucideIcon,
+} from 'lucide-react';
 import type { SlideType, SlideInteractionType } from '@/lib/slides.types';
+import type { ExplorationWidgetType, ExplorationWidgetConfig } from '@/lib/explorations/types';
 import { ACTIVITY_TYPE_OPTIONS } from '@/lib/lesson-activities';
+import { EXPLORATION_WIDGET_OPTIONS } from '@/lib/explorations/types';
 import ActivityTypeIcon from '@/components/ActivityTypeIcon';
+import ExplorationPicker from '@/components/explorations/ExplorationPicker';
 
 export interface InteractiveSlideRequest {
   interactionType: SlideInteractionType;
   slideType: 'activity' | 'quiz_preview';
 }
 
+const EXPLORATION_ICON_MAP: Record<string, LucideIcon> = {
+  ruler: Ruler,
+  'sliders-horizontal': SlidersHorizontal,
+  'map-pin': MapPin,
+  'pen-tool': PenTool,
+  hash: Hash,
+  'arrow-up-down': ArrowUpDown,
+  palette: Palette,
+};
+
 interface SlideToolbarProps {
   language: 'ar' | 'en';
   onLanguageChange: (lang: 'ar' | 'en') => void;
   onAddSlide: (type: SlideType) => void;
   onAddInteractiveSlide: (request: InteractiveSlideRequest) => void;
+  onAddExplorationSlide?: (widgetType: ExplorationWidgetType, config: ExplorationWidgetConfig) => void;
   onSave: () => void;
   onPresent: () => void;
   onRecord?: () => void;
@@ -32,6 +56,7 @@ export default function SlideToolbar({
   onLanguageChange,
   onAddSlide,
   onAddInteractiveSlide,
+  onAddExplorationSlide,
   onSave,
   onPresent,
   onRecord,
@@ -40,7 +65,8 @@ export default function SlideToolbar({
   hasSim,
   saving,
 }: SlideToolbarProps) {
-  const [showInteractivePicker, setShowInteractivePicker] = useState(false);
+  const [showActivityPicker, setShowActivityPicker] = useState(false);
+  const [explorationConfig, setExplorationConfig] = useState<ExplorationWidgetType | null>(null);
 
   return (
     <>
@@ -68,7 +94,7 @@ export default function SlideToolbar({
         <div className="flex items-center gap-2">
           {/* Add slide dropdown */}
           <div className="relative group">
-            <button className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5">
+            <button data-tour="add-slide-btn" className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
@@ -96,15 +122,16 @@ export default function SlideToolbar({
             </div>
           </div>
 
-          {/* Add Interactive Slide — dedicated button */}
+          {/* Unified + Activity button */}
           <button
-            onClick={() => setShowInteractivePicker(true)}
+            data-tour="add-interactive-btn"
+            onClick={() => { setShowActivityPicker(true); setExplorationConfig(null); }}
             className="px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors flex items-center gap-1.5"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59" />
             </svg>
-            + Interactive
+            + Activity
           </button>
 
           {/* Record */}
@@ -123,6 +150,7 @@ export default function SlideToolbar({
           {/* Sim record (beta) — event-sourced recording */}
           {onRecordSim && (
             <button
+              data-tour="sim-record-btn"
               onClick={onRecordSim}
               title="Record an event-sourced sim (beta)"
               className="px-3 py-1.5 text-xs font-medium text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50 transition-colors flex items-center gap-1.5"
@@ -171,6 +199,7 @@ export default function SlideToolbar({
 
           {/* Save */}
           <button
+            data-tour="save-btn"
             onClick={onSave}
             disabled={saving}
             className="px-4 py-1.5 text-xs font-medium text-white bg-[#007229] rounded-lg hover:bg-[#005C22] transition-colors disabled:opacity-50 flex items-center gap-1.5"
@@ -180,38 +209,110 @@ export default function SlideToolbar({
         </div>
       </div>
 
-      {/* Interactive slide picker modal */}
-      {showInteractivePicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowInteractivePicker(false)}>
+      {/* Unified Activity picker modal */}
+      {showActivityPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => { setShowActivityPicker(false); setExplorationConfig(null); }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-gray-100">
-              <h3 className="text-lg font-bold text-gray-900">Add Interactive Slide</h3>
-              <p className="text-sm text-gray-500 mt-0.5">Pick an activity type — the slide and interaction will be set up for you.</p>
+              <h3 className="text-lg font-bold text-gray-900">
+                {explorationConfig ? 'Configure Widget' : 'Add Activity Slide'}
+              </h3>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {explorationConfig
+                  ? 'Set up your exploration widget, then click Add.'
+                  : 'Choose a quiz activity or an exploration widget.'}
+              </p>
             </div>
-            <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
-              {ACTIVITY_TYPE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.type}
-                  onClick={() => {
-                    onAddInteractiveSlide({ interactionType: opt.type, slideType: 'activity' });
-                    setShowInteractivePicker(false);
-                  }}
-                  className="w-full flex items-start gap-3 px-4 py-3 rounded-xl border border-gray-100 hover:border-amber-300 hover:bg-amber-50/50 transition-all text-left group"
-                >
-                  <span className="flex-shrink-0 mt-0.5 text-gray-500 group-hover:text-amber-600"><ActivityTypeIcon name={opt.icon} className="w-6 h-6" /></span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-900 group-hover:text-amber-800">{opt.label}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{opt.hint}</p>
+
+            <div className="max-h-[65vh] overflow-y-auto">
+              {/* Show ExplorationPicker config form when a widget type is selected */}
+              {explorationConfig ? (
+                <div className="p-4">
+                  <button
+                    type="button"
+                    onClick={() => setExplorationConfig(null)}
+                    className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-3"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                    </svg>
+                    Back to activities
+                  </button>
+                  <ExplorationPicker
+                    variant="light"
+                    initialType={explorationConfig}
+                    onInsert={(type, config) => {
+                      onAddExplorationSlide?.(type, config);
+                      setShowActivityPicker(false);
+                      setExplorationConfig(null);
+                    }}
+                    onClose={() => setExplorationConfig(null)}
+                  />
+                </div>
+              ) : (
+                <div className="p-4 space-y-5">
+                  {/* Quiz Activities section */}
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Quiz Activities</h4>
+                    <div className="space-y-1.5">
+                      {ACTIVITY_TYPE_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.type}
+                          onClick={() => {
+                            onAddInteractiveSlide({ interactionType: opt.type, slideType: 'activity' });
+                            setShowActivityPicker(false);
+                          }}
+                          className="w-full flex items-start gap-3 px-4 py-3 rounded-xl border border-gray-100 hover:border-amber-300 hover:bg-amber-50/50 transition-all text-left group"
+                        >
+                          <span className="flex-shrink-0 mt-0.5 text-gray-500 group-hover:text-amber-600"><ActivityTypeIcon name={opt.icon} className="w-6 h-6" /></span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-gray-900 group-hover:text-amber-800">{opt.label}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{opt.hint}</p>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-300 group-hover:text-amber-500 flex-shrink-0 mt-1 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                          </svg>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <svg className="w-4 h-4 text-gray-300 group-hover:text-amber-500 flex-shrink-0 mt-1 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                  </svg>
-                </button>
-              ))}
+
+                  {/* Exploration Widgets section */}
+                  {onAddExplorationSlide && (
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Exploration Widgets</h4>
+                      <div className="space-y-1.5">
+                        {EXPLORATION_WIDGET_OPTIONS.map((opt) => {
+                          const Icon = EXPLORATION_ICON_MAP[opt.icon];
+                          return (
+                            <button
+                              key={opt.type}
+                              onClick={() => setExplorationConfig(opt.type)}
+                              className="w-full flex items-start gap-3 px-4 py-3 rounded-xl border border-gray-100 hover:border-blue-300 hover:bg-blue-50/50 transition-all text-left group"
+                            >
+                              <span className="flex-shrink-0 mt-0.5 text-gray-500 group-hover:text-blue-600">
+                                {Icon ? <Icon className="w-6 h-6" /> : <span className="w-6 h-6 block" />}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-gray-900 group-hover:text-blue-800">{opt.label_en}</p>
+                                <p className="text-xs text-gray-500 mt-0.5">{opt.description_en}</p>
+                              </div>
+                              <svg className="w-4 h-4 text-gray-300 group-hover:text-blue-500 flex-shrink-0 mt-1 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                              </svg>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+
             <div className="px-6 py-3 border-t border-gray-100 bg-gray-50">
               <button
-                onClick={() => setShowInteractivePicker(false)}
+                onClick={() => { setShowActivityPicker(false); setExplorationConfig(null); }}
                 className="text-sm text-gray-500 hover:text-gray-700"
               >
                 Cancel

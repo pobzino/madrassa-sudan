@@ -19,6 +19,14 @@ interface PageProps {
 }
 
 export default function SimWatchPage({ params }: PageProps) {
+  if (process.env.NODE_ENV === 'production') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-500">Sim Lab is only available in development mode.</p>
+      </div>
+    );
+  }
+
   const { lessonId, simId } = use(params);
   const [payload, setPayload] = useState<SimPayload | null>(null);
   const [language, setLanguage] = useState<'ar' | 'en'>('en');

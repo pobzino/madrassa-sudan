@@ -114,6 +114,9 @@ export default function LoginPage() {
 
       <div className="max-w-md w-full mx-4 bg-white rounded-3xl shadow-xl border border-gray-100 p-8 sm:p-12 relative z-10 animate-fade-up">
         <div className="text-center mb-10">
+          <div className="w-12 h-12 bg-[var(--primary)] rounded-xl flex items-center justify-center text-white font-bold text-2xl shadow-lg shadow-green-900/10 mx-auto mb-4">
+            م
+          </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">{t.welcomeBack}</h1>
           <p className="text-gray-500">{t.signInSubtitle}</p>
         </div>
@@ -172,7 +175,7 @@ export default function LoginPage() {
           </div>
 
           <div className="flex justify-end">
-            <Link href="/auth/forgot-password" className="text-sm text-[var(--primary)] hover:underline font-medium">
+            <Link href="/auth/forgot-password" className="text-sm text-gray-500 hover:text-[var(--primary)] transition-colors">
               {t.forgotPassword}
             </Link>
           </div>

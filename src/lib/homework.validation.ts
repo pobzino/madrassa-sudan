@@ -30,6 +30,7 @@ export const createQuestionSchema = z.object({
   display_order: z.number().int().optional(),
   rubric: z.array(rubricCriterionSchema).optional().nullable(),
   instructions: z.string().optional().nullable(),
+  hints: z.array(z.string()).optional().default([]),
 });
 
 // Create assignment schema

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
@@ -9,6 +9,7 @@ import type { Profile } from "@/lib/database.types";
 import { clearAuthCache, getCachedProfile, getCachedUser } from "@/lib/supabase/auth-cache";
 import FeedbackModal from "@/components/FeedbackModal";
 import NavigationProgress from "@/components/NavigationProgress";
+import OfflineBanner from "@/components/OfflineBanner";
 import {
   FloatingRocket,
   GraduationCapIcon,
@@ -32,6 +33,7 @@ const translations = {
     aiTutor: "المعلم الذكي",
     myClasses: "فصولي",
     progress: "التقدم",
+    downloads: "التحميلات",
     // Teacher nav
     teacherDashboard: "لوحة المعلم",
     manageLessons: "إدارة الدروس",
@@ -42,6 +44,8 @@ const translations = {
     // Common
     settings: "الإعدادات",
     reportIssue: "الإبلاغ عن مشكلة",
+    privacy: "الخصوصية",
+    terms: "الشروط",
     logout: "تسجيل الخروج",
     loading: "جاري التحميل...",
   },
@@ -54,6 +58,7 @@ const translations = {
     aiTutor: "AI Tutor",
     myClasses: "My Classes",
     progress: "Progress",
+    downloads: "Downloads",
     // Teacher nav
     teacherDashboard: "Teacher Dashboard",
     manageLessons: "Manage Lessons",
@@ -64,6 +69,8 @@ const translations = {
     // Common
     settings: "Settings",
     reportIssue: "Report Issue",
+    privacy: "Privacy",
+    terms: "Terms",
     logout: "Log out",
     loading: "Loading...",
   },
@@ -188,6 +195,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const studentSecondaryNavItems = [
     { href: "/cohorts", label: t.myClasses, icon: <UsersNavIcon className="w-5 h-5" /> },
     { href: "/tutor", label: t.aiTutor, icon: <OwlTutorIcon className="w-5 h-5" /> },
+    { href: "/downloads", label: t.downloads, icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+      </svg>
+    )},
   ];
 
   // Add teacher link for teachers/admins when in student view
@@ -359,6 +371,25 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <SettingsNavIcon className="w-5 h-5" />
           {t.settings}
         </Link>
+        <div className="flex items-center gap-3 px-4 pt-1">
+          <Link
+            href="/privacy"
+            target="_blank"
+            onClick={() => mobile && setSidebarOpen(false)}
+            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            {t.privacy}
+          </Link>
+          <span className="text-gray-300">·</span>
+          <Link
+            href="/terms"
+            target="_blank"
+            onClick={() => mobile && setSidebarOpen(false)}
+            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            {t.terms}
+          </Link>
+        </div>
 
         {/* User Profile */}
         <div className="flex items-center gap-3 px-4 py-3 mt-2 border-t border-gray-100 pt-4">
@@ -390,7 +421,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#007229]/5 via-white to-[#D21034]/5" dir={isRtl ? "rtl" : "ltr"}>
-      <Suspense><NavigationProgress /></Suspense>
+      <OfflineBanner />
+      <NavigationProgress />
 
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-lg border-b border-gray-100 z-40 flex items-center justify-between px-4">

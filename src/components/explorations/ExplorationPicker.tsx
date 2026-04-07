@@ -42,6 +42,8 @@ interface ExplorationPickerProps {
   currentSlideImageUrl?: string | null;
   /** 'dark' for sim recording toolbar, 'light' for slide toolbar modal */
   variant?: 'dark' | 'light';
+  /** When provided, skip the type picker and go straight to configure for this type. */
+  initialType?: ExplorationWidgetType | null;
 }
 
 export default function ExplorationPicker({
@@ -49,9 +51,10 @@ export default function ExplorationPicker({
   onClose,
   currentSlideImageUrl,
   variant = 'dark',
+  initialType,
 }: ExplorationPickerProps) {
-  const [step, setStep] = useState<PickerStep>('pick_type');
-  const [selectedType, setSelectedType] = useState<ExplorationWidgetType | null>(null);
+  const [step, setStep] = useState<PickerStep>(initialType ? 'configure' : 'pick_type');
+  const [selectedType, setSelectedType] = useState<ExplorationWidgetType | null>(initialType ?? null);
 
   // Number Line config
   const [nlMin, setNlMin] = useState(0);
