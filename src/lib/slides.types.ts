@@ -1,3 +1,5 @@
+import type { ExplorationWidgetType, ExplorationWidgetConfig } from '@/lib/explorations/types';
+
 export type SlideType =
   | 'title'
   | 'content'
@@ -7,7 +9,8 @@ export type SlideType =
   | 'quiz_preview'
   | 'question_answer'
   | 'summary'
-  | 'whiteboard';
+  | 'whiteboard'
+  | 'exploration';
 
 export type SlideLayout = 'default' | 'image_left' | 'image_right' | 'image_top' | 'full_image';
 export type SlideTextSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -94,6 +97,10 @@ export interface Slide {
   interaction_hotspots?: SlideInteractionHotspot[] | null;
   activity_id?: string | null;
   annotations?: string | null;
+  /** Exploration widget type for `type: 'exploration'` slides. */
+  exploration_widget_type?: ExplorationWidgetType | null;
+  /** Exploration widget configuration for `type: 'exploration'` slides. */
+  exploration_config?: ExplorationWidgetConfig | null;
 }
 
 export interface SlideDeck {

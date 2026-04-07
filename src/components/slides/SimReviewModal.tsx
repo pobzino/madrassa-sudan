@@ -27,7 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SimPlayer, { type SimPlayerHandle } from './SimPlayer';
 import VideoTimeline from './VideoTimeline';
 import { packClipSegments, useSimClipEditor } from '@/lib/sim-clip-editor';
-import type { SimPayload, SimRow } from '@/lib/sim.types';
+import { compactSimEvents, type SimPayload, type SimRow } from '@/lib/sim.types';
 import type { SimRecording } from '@/hooks/useSimRecorder';
 import type { Slide } from '@/lib/slides.types';
 
@@ -197,7 +197,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
           credentials: 'include',
           body: JSON.stringify({
             deck_snapshot: props.deckSnapshot,
-            events: props.recording.events,
+            events: compactSimEvents(props.recording.events),
             duration_ms: props.recording.durationMs,
             audio_duration_ms: props.recording.durationMs,
             audio_mime: props.recording.audioMime,

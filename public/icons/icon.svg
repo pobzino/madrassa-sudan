@@ -1,0 +1,30 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <rect width="512" height="512" rx="96" fill="#007229"/>
+
+  <!-- Owl body -->
+  <g transform="translate(256,280) scale(3.5)">
+    <!-- Ear tufts -->
+    <ellipse cx="-18" cy="-20" rx="5" ry="7" fill="#a01028"/>
+    <ellipse cx="18" cy="-20" rx="5" ry="7" fill="#a01028"/>
+    <!-- Main body -->
+    <ellipse cx="0" cy="0" rx="24" ry="24" fill="#D21034"/>
+    <!-- Facial disc -->
+    <ellipse cx="0" cy="-4" rx="18" ry="14" fill="#E8334F"/>
+    <!-- Belly -->
+    <ellipse cx="0" cy="14" rx="12" ry="8" fill="#FFF5F5"/>
+    <!-- Eyes -->
+    <ellipse cx="-9" cy="-6" rx="8" ry="9" fill="white"/>
+    <ellipse cx="9" cy="-6" rx="8" ry="9" fill="white"/>
+    <circle cx="-7" cy="-6" r="5" fill="#000"/>
+    <circle cx="-5" cy="-8" r="2" fill="white"/>
+    <circle cx="7" cy="-6" r="5" fill="#000"/>
+    <circle cx="9" cy="-8" r="2" fill="white"/>
+    <!-- Beak -->
+    <ellipse cx="0" cy="4" rx="4" ry="3" fill="#F59E0B"/>
+    <!-- Graduation cap -->
+    <path d="M-20-22c0-2 9-4 20-4s20 2 20 4v3c0 1-9 2-20 2s-20-1-20-2v-3z" fill="#1a1a1a"/>
+    <path d="M-24-26l24-6 24 6-24 8-24-8z" fill="#007229" stroke="white" stroke-width="0.5"/>
+    <circle cx="0" cy="-28" r="2.5" fill="#1a1a1a"/>
+  </g>
+</svg>

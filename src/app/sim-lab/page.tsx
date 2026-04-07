@@ -256,6 +256,15 @@ async function urlToBlob(url: string): Promise<Blob> {
 type Mode = 'idle' | 'recording' | 'playing' | 'paused_interactive';
 
 export default function SimLabPage() {
+  // Sim Lab is a development-only POC — block in production builds.
+  if (process.env.NODE_ENV === 'production') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-500">Sim Lab is only available in development mode.</p>
+      </div>
+    );
+  }
+
   const [deck, setDeck] = useState<ExampleSlide[]>(EXAMPLE_DECK);
   const [surface, setSurface] = useState<SurfaceState>(() => initialSurface(EXAMPLE_DECK));
 

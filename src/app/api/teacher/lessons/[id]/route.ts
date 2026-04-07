@@ -136,7 +136,7 @@ export async function PATCH(
   }
 
   if (updates.is_published === true) {
-    const [{ data: lessonSlides }, { data: lessonTasks }] = await Promise.all([
+    const [{ data: lessonSlides }, { data: lessonTasks }, { data: simRow }] = await Promise.all([
       supabase
         .from('lesson_slides')
         .select('slides')
@@ -147,6 +147,11 @@ export async function PATCH(
         .select('*')
         .eq('lesson_id', lessonId)
         .order('display_order'),
+      supabase
+        .from('lesson_sims')
+        .select('id')
+        .eq('lesson_id', lessonId)
+        .maybeSingle(),
     ])
 
     const publishReadiness = getLessonPublishReadiness({
@@ -166,6 +171,7 @@ export async function PATCH(
       video: lesson,
       videoProcessingStatus: lesson.video_processing_status,
       videoProcessingError: lesson.video_processing_error,
+      hasSim: !!simRow,
     })
 
     if (!publishReadiness.canPublish) {
@@ -224,12 +230,20 @@ export async function DELETE(
 
   const { data: lesson } = await supabase
     .from('lessons')
-    .select('created_by')
+    .select('created_by, is_published')
     .eq('id', lessonId)
     .single()
 
   if (!lesson || !canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // Published lessons can only be deleted by admins
+  if (lesson.is_published && role !== 'admin') {
+    return NextResponse.json(
+      { error: 'Published lessons can only be deleted by an admin.' },
+      { status: 403 }
+    )
   }
 
   const { error } = await supabase

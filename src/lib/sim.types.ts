@@ -14,6 +14,7 @@
 import type { Slide } from '@/lib/slides.types';
 import type { WhiteboardTool, Point } from '@/hooks/useWhiteboard';
 import type { InteractionAnswer } from '@/lib/interactions/types';
+import type { ExplorationWidgetType, ExplorationWidgetConfig } from '@/lib/explorations/types';
 
 // ── Timeline events ─────────────────────────────────────────────────────────
 
@@ -95,7 +96,21 @@ export type SimEvent =
   // Teacher's live answer state on an interactive activity slide. Emitted on
   // every draft answer change (e.g. each drop in a match_pairs widget) so
   // students see the demo play back during sim replay.
-  | { t: number; type: 'activity_answer'; slide_id: string; answer: InteractionAnswer };
+  | { t: number; type: 'activity_answer'; slide_id: string; answer: InteractionAnswer }
+
+  // Teacher note — timestamped annotation visible only to teachers during playback
+  | { t: number; type: 'teacher_note'; slide_id: string; text: string }
+
+  // Exploration gate — pauses the sim and loads an interactive exploration
+  // widget (number line, slider, image hotspots, letter trace). The student
+  // explores until the widget signals completion, then the sim resumes.
+  | {
+      t: number;
+      type: 'exploration_gate';
+      slide_id: string;
+      widget_type: ExplorationWidgetType;
+      config: ExplorationWidgetConfig;
+    };
 
 /** Event shape accepted by `recordEvent`, before `t` is stamped by the recorder. */
 export type SimEventInput = DistributiveOmit<SimEvent, 't'>;
@@ -164,6 +179,11 @@ export interface SimStroke {
   emoji?: string;
 }
 
+export interface ActiveExploration {
+  widget_type: ExplorationWidgetType;
+  config: ExplorationWidgetConfig;
+}
+
 export interface SimSlideSurface {
   strokes: SimStroke[];
   revealed_bullets: number;
@@ -172,6 +192,8 @@ export interface SimSlideSurface {
   active_activity_task_id: string | null;
   /** Last projected teacher answer on an interactive activity slide. */
   activity_answer: InteractionAnswer | null;
+  /** Active exploration widget, if an exploration_gate was the last gate event. */
+  active_exploration: ActiveExploration | null;
 }
 
 export interface SimSurfaceState {
@@ -187,6 +209,7 @@ function initialSlideSurface(): SimSlideSurface {
     spotlight: null,
     active_activity_task_id: null,
     activity_answer: null,
+    active_exploration: null,
   };
 }
 
@@ -296,6 +319,11 @@ function applyToSlide(surface: SimSlideSurface, event: SimEvent): SimSlideSurfac
       return { ...surface, active_activity_task_id: event.task_id };
     case 'activity_answer':
       return { ...surface, activity_answer: event.answer };
+    case 'exploration_gate':
+      return {
+        ...surface,
+        active_exploration: { widget_type: event.widget_type, config: event.config },
+      };
     default:
       return surface;
   }
@@ -346,4 +374,75 @@ export function applySimEvent(
 /** Build a fresh empty surface for the given deck. */
 export function createInitialSimSurface(deck: Slide[]): SimSurfaceState {
   return initialSurface(deck);
+}
+
+// ── Payload optimization ─────────────────────────────────────────────────────
+
+/** Round a number to 1 decimal place to save JSON bytes. */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+function compactPoint(p: Point): Point {
+  return { x: round1(p.x), y: round1(p.y), pressure: round1(p.pressure) };
+}
+
+/**
+ * Compact a sim event array to reduce JSON payload size:
+ * 1. Round all point coordinates to 1 decimal place.
+ * 2. Drop consecutive stroke_point events that are within 1px of each other.
+ *
+ * This is a lossy but visually imperceptible optimization that can shrink
+ * stroke-heavy sims by 30–60%.
+ */
+export function compactSimEvents(events: SimEvent[]): SimEvent[] {
+  const out: SimEvent[] = [];
+  const lastPointForStroke = new Map<string, Point>();
+
+  for (const e of events) {
+    switch (e.type) {
+      case 'stroke_start': {
+        const p = compactPoint(e.point);
+        lastPointForStroke.set(e.id, p);
+        out.push({ ...e, point: p });
+        break;
+      }
+      case 'stroke_point': {
+        const p = compactPoint(e.point);
+        const prev = lastPointForStroke.get(e.id);
+        // Drop if within 1px of previous point (saves ~40 bytes per dropped event)
+        if (prev && Math.abs(p.x - prev.x) < 1 && Math.abs(p.y - prev.y) < 1) {
+          continue;
+        }
+        lastPointForStroke.set(e.id, p);
+        out.push({ ...e, point: p });
+        break;
+      }
+      case 'stroke_end': {
+        lastPointForStroke.delete(e.id);
+        const patched = { ...e } as typeof e;
+        if (patched.start) patched.start = compactPoint(patched.start);
+        if (patched.end) patched.end = compactPoint(patched.end);
+        out.push(patched);
+        break;
+      }
+      case 'stroke_text':
+        out.push({ ...e, position: compactPoint(e.position) });
+        break;
+      case 'stroke_sticker':
+        out.push({ ...e, position: compactPoint(e.position) });
+        break;
+      case 'laser':
+        out.push({ ...e, x: round1(e.x), y: round1(e.y) });
+        break;
+      case 'spotlight_on':
+      case 'spotlight_move':
+        out.push({ ...e, x: round1(e.x), y: round1(e.y) });
+        break;
+      default:
+        out.push(e);
+    }
+  }
+
+  return out;
 }

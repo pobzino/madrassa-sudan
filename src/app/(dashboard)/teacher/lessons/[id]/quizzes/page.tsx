@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import QuestionBuilder from '@/components/teacher/QuestionBuilder'
 import QuizSettingsPanel from '@/components/teacher/QuizSettingsPanel'
 import type { Database, QuizSettings } from '@/lib/database.types'
@@ -116,7 +117,7 @@ export default function TeacherQuizzesPage() {
       await fetchData()
       setIsCreating(false)
     } catch (err: unknown) {
-      alert(getErrorMessage(err, 'Failed to create question'))
+      toast.error(getErrorMessage(err, 'Failed to create question'))
     }
   }
 
@@ -141,7 +142,7 @@ export default function TeacherQuizzesPage() {
       await fetchData()
       setEditingQuestion(null)
     } catch (err: unknown) {
-      alert(getErrorMessage(err, 'Failed to update question'))
+      toast.error(getErrorMessage(err, 'Failed to update question'))
     }
   }
 
@@ -165,7 +166,7 @@ export default function TeacherQuizzesPage() {
 
       await fetchData()
     } catch (err: unknown) {
-      alert(getErrorMessage(err, 'Failed to delete question'))
+      toast.error(getErrorMessage(err, 'Failed to delete question'))
     }
   }
 
@@ -184,7 +185,7 @@ export default function TeacherQuizzesPage() {
 
       await fetchData()
     } catch (err: unknown) {
-      alert(getErrorMessage(err, 'Failed to save settings'))
+      toast.error(getErrorMessage(err, 'Failed to save settings'))
     }
   }
 

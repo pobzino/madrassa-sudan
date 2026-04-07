@@ -263,7 +263,7 @@ export default function InteractionResultsPanel({ lessonId }: Props) {
       [
         { key: "activities" as const, title: "Activities", items: activities },
         { key: "quizzes" as const, title: "Quiz Questions", items: quizzes },
-        { key: "legacySlides" as const, title: "Legacy Slide Interactions", items: legacySlides },
+        { key: "legacySlides" as const, title: "Slide Interactions", items: legacySlides },
       ].filter((section) => section.items.length > 0),
     [activities, legacySlides, quizzes]
   );

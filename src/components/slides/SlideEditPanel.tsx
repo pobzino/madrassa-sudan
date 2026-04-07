@@ -7,6 +7,7 @@ import SlideInteractionFields from './SlideInteractionFields';
 import SlideImageGenerator from './SlideImageGenerator';
 import { OWL_OPTIONS, OWL_PREFIX, isOwlImage, getOwlKey } from '@/lib/owl-illustrations';
 import OwlImage from './OwlImage';
+import { WIDGET_LABELS } from '@/lib/explorations/registry';
 
 interface SlideEditPanelProps {
   slide: Slide;
@@ -26,6 +27,8 @@ const SLIDE_TYPES: { value: SlideType; label: string }[] = [
   { value: 'quiz_preview', label: 'Quiz Preview' },
   { value: 'question_answer', label: 'Q&A Reveal' },
   { value: 'summary', label: 'Summary' },
+  { value: 'exploration', label: 'Exploration' },
+  { value: 'whiteboard', label: 'Whiteboard' },
 ];
 
 const LAYOUTS: { value: SlideLayout; label: string; icon: string }[] = [
@@ -48,6 +51,8 @@ const hasRevealItems = (type: SlideType) => type === 'question_answer';
 const hasLayout = (type: SlideType) => type === 'content' || type === 'diagram_description' || type === 'key_points';
 const supportsStudentInteraction = (type: SlideType) =>
   type === 'activity' || type === 'quiz_preview' || type === 'question_answer';
+/** Slide types that don't use standard content fields (title, body, image, notes, etc.) */
+const isSpecialSlide = (type: SlideType) => type === 'exploration' || type === 'whiteboard';
 
 const inputClass = 'w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#007229] focus:border-[#007229]';
 const labelClass = 'block text-xs font-medium text-gray-600 mb-1';
@@ -202,7 +207,7 @@ export default function SlideEditPanel({
         <select
           value={slide.type}
           onChange={(e) => handleTypeChange(e.target.value as SlideType)}
-          disabled={!canEditType}
+          disabled={!canEditType || isSpecialSlide(slide.type)}
           className={inputClass}
         >
           {SLIDE_TYPES.map((t) => (
@@ -211,8 +216,31 @@ export default function SlideEditPanel({
         </select>
       </div>
 
+      {/* Exploration info panel */}
+      {slide.type === 'exploration' && slide.exploration_widget_type && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 space-y-2">
+          <p className="text-xs font-semibold text-blue-800">Exploration Widget</p>
+          <p className="text-sm font-medium text-blue-700">
+            {WIDGET_LABELS[slide.exploration_widget_type]?.en || slide.exploration_widget_type}
+          </p>
+          <p className="text-[10px] text-blue-600/70">
+            This slide contains an interactive exploration widget. To change the widget, delete this slide and add a new exploration.
+          </p>
+        </div>
+      )}
+
+      {/* Whiteboard info */}
+      {slide.type === 'whiteboard' && (
+        <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-3">
+          <p className="text-xs font-semibold text-violet-800">Whiteboard</p>
+          <p className="text-[10px] text-violet-600/70 mt-1">
+            A blank drawing surface. Content is drawn live during recording.
+          </p>
+        </div>
+      )}
+
       {/* Layout picker */}
-      {hasLayout(slide.type) && (
+      {!isSpecialSlide(slide.type) && hasLayout(slide.type) && (
         <div>
           <label className={labelClass}>Layout</label>
           <div className="grid grid-cols-5 gap-1">
@@ -235,6 +263,7 @@ export default function SlideEditPanel({
         </div>
       )}
 
+      {!isSpecialSlide(slide.type) && <>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelClass}>Title Size</label>
@@ -586,7 +615,7 @@ export default function SlideEditPanel({
       )}
 
       {/* Speaker Notes AR */}
-      <div>
+      <div data-tour="speaker-notes">
         <label className={labelClass}>Speaker Notes (Arabic)</label>
         <textarea
           dir="rtl"
@@ -619,6 +648,7 @@ export default function SlideEditPanel({
           placeholder="Description of ideal image or diagram..."
         />
       </div>
+      </>}
 
       {/* Delete */}
       <button

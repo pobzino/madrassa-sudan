@@ -20,6 +20,7 @@ const translations = {
     confirmationSent: "تم إرسال رسالة التأكيد. تحقق من البريد والرسائل غير المرغوب فيها.",
     enterEmailFirst: "أدخل بريدك الإلكتروني أولاً.",
     emailNotConfirmed: "بريدك غير مؤكد بعد.",
+    forgotPassword: "نسيت كلمة المرور؟",
     noAccount: "ليس لديك حساب؟",
     createAccount: "إنشاء حساب",
   },
@@ -35,6 +36,7 @@ const translations = {
     confirmationSent: "Confirmation email sent. Check your inbox and spam folder.",
     enterEmailFirst: "Enter your email first.",
     emailNotConfirmed: "Your email is not confirmed yet.",
+    forgotPassword: "Forgot password?",
     noAccount: "Don't have an account?",
     createAccount: "Create Account",
   },
@@ -170,6 +172,12 @@ export default function LoginPage() {
                 style={{ textAlign: "left" }}
               />
             </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Link href="/auth/forgot-password" className="text-sm text-gray-500 hover:text-[var(--primary)] transition-colors">
+              {t.forgotPassword}
+            </Link>
           </div>
 
           <button

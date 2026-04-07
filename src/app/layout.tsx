@@ -1,14 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Cairo, Fredoka } from "next/font/google";
 import "./globals.css";
-import dynamic from "next/dynamic";
 import { LanguageWrapper } from "@/components/LanguageWrapper";
 import { getSiteUrl } from "@/lib/site-url";
 import { Toaster } from "sonner";
-import { OfflineProvider } from "@/contexts/OfflineContext";
-
-const CookieConsent = dynamic(() => import("@/components/CookieConsent"));
-const InstallPrompt = dynamic(() => import("@/components/InstallPrompt"));
 
 const inter = Inter({
   variable: "--font-inter",
@@ -75,11 +70,7 @@ export default function RootLayout({
     <html lang="ar" dir="rtl" suppressHydrationWarning>
       <body className={`${inter.variable} ${cairo.variable} ${fredoka.variable} font-cairo antialiased`}>
         <LanguageWrapper>
-          <OfflineProvider>
-            {children}
-          </OfflineProvider>
-          <CookieConsent />
-          <InstallPrompt />
+          {children}
         </LanguageWrapper>
         <Toaster position="top-center" richColors closeButton />
         <script

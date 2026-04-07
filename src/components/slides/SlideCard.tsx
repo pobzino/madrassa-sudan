@@ -10,6 +10,7 @@ import QuizPreviewSlide from './templates/QuizPreviewSlide';
 import QuestionAnswerSlide from './templates/QuestionAnswerSlide';
 import SummarySlide from './templates/SummarySlide';
 import WhiteboardSlide from './templates/WhiteboardSlide';
+import ExplorationSlide from './templates/ExplorationSlide';
 
 interface SlideCardProps {
   slide: Slide;
@@ -28,6 +29,10 @@ interface SlideCardProps {
   activityAnswer?: InteractionAnswer | null;
   onActivityAnswerChange?: (answer: InteractionAnswer) => void;
   activityInteractiveDisabled?: boolean;
+  /** Fired when an exploration widget is completed. */
+  onExplorationComplete?: () => void;
+  /** Strip rounded corners and shadow — used by SimPlayer for edge-to-edge slides. */
+  chromeless?: boolean;
 }
 
 const DESIGN_WIDTH = 1280;
@@ -47,6 +52,8 @@ export default function SlideCard({
   activityAnswer,
   onActivityAnswerChange,
   activityInteractiveDisabled = false,
+  onExplorationComplete,
+  chromeless = false,
 }: SlideCardProps) {
   let renderedContent: ReactNode;
 
@@ -92,6 +99,16 @@ export default function SlideCard({
     case 'whiteboard':
       renderedContent = <WhiteboardSlide slide={slide} language={language} />;
       break;
+    case 'exploration':
+      renderedContent = (
+        <ExplorationSlide
+          slide={slide}
+          language={language}
+          interactive={activityInteractive && renderMode !== 'thumbnail'}
+          onComplete={onExplorationComplete}
+        />
+      );
+      break;
     case 'summary':
     default:
       renderedContent = <SummarySlide slide={slide} language={language} />;
@@ -119,7 +136,7 @@ export default function SlideCard({
   }
 
   return (
-    <div className={`aspect-video rounded-2xl overflow-hidden shadow-lg bg-white ${className}`}>
+    <div className={`aspect-video overflow-hidden bg-white ${chromeless ? '' : 'rounded-2xl shadow-lg'} ${className}`}>
       {renderedContent}
     </div>
   );

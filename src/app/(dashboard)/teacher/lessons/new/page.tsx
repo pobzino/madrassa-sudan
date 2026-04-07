@@ -15,6 +15,7 @@ import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
+import { toast } from "sonner";
 import { getLessonPublishReadiness } from "@/lib/lessons/publish-readiness";
 import {
   type LessonVideoProcessingStatus,
@@ -355,12 +356,12 @@ export default function NewLessonPage() {
 
   async function saveLesson() {
     if (!form.title_ar.trim() || !form.subject_id) {
-      alert("Please fill in the required fields.");
+      toast.error("Please fill in the required fields.");
       return;
     }
 
     if (requiresCurriculum && !form.curriculum_topic) {
-      alert("Select a curriculum topic before saving this lesson.");
+      toast.error("Select a curriculum topic before saving this lesson.");
       return;
     }
 
@@ -371,14 +372,14 @@ export default function NewLessonPage() {
       "Video URL 720p": form.video_url_720p,
     });
     if (blockedVideoFields.length > 0) {
-      alert(
-        `YouTube video links are not allowed. Use ad-free hosted video URLs instead.\nBlocked fields: ${blockedVideoFields.join(", ")}`
+      toast.error(
+        `YouTube video links are not allowed. Use ad-free hosted video URLs instead. Blocked fields: ${blockedVideoFields.join(", ")}`
       );
       return;
     }
 
     if (form.is_published && !publishReadiness.canPublish) {
-      alert(
+      toast.error(
         publishReadiness.blockingReasons
           .map((reason, index) => `${index + 1}. ${reason.message}`)
           .join("\n")
@@ -457,7 +458,7 @@ export default function NewLessonPage() {
 
       if (!processResponse.ok) {
         const processData = await processResponse.json().catch(() => ({}));
-        alert(
+        toast.warning(
           `Lesson saved, but transcript processing failed: ${
             processData.error || "Unknown error"
           }`
@@ -654,7 +655,7 @@ export default function NewLessonPage() {
             onClick={() => {
               if (!canPublishLesson) return;
               if (!form.is_published && !publishReadiness.canPublish) {
-                alert(
+                toast.error(
                   publishReadiness.blockingReasons
                     .map((reason, index) => `${index + 1}. ${reason.message}`)
                     .join("\n")

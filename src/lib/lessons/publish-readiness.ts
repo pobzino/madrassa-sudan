@@ -46,6 +46,7 @@ interface LessonPublishReadinessInput {
   };
   videoProcessingStatus?: string | null;
   videoProcessingError?: string | null;
+  hasSim?: boolean;
 }
 
 export interface LessonPublishReadiness {
@@ -67,10 +68,10 @@ export function getLessonPublishReadiness(
     input.curriculumTopic
   );
 
-  if (!hasVideo) {
+  if (!hasVideo && !input.hasSim) {
     blockingReasons.push({
       code: "missing_video",
-      message: "Attach a lesson video before publishing.",
+      message: "Attach a lesson video or record a sim before publishing.",
     });
   }
 
@@ -88,32 +89,36 @@ export function getLessonPublishReadiness(
     });
   }
 
-  const requiredActivities = input.lessonTasks.filter(
-    (task) =>
-      task.required &&
-      isCanonicalActivityTask(task.task_type) &&
-      task.linked_slide_id
-  );
-  const timedActivities = getEffectiveActivityTimings(
-    input.slides,
-    requiredActivities,
-    null
-  );
-  const missingTimingCount = timedActivities.filter(
-    (timing) =>
-      timing.effectiveTimestampSeconds <= 0 &&
-      timing.task.timestamp_seconds <= 0 &&
-      !timing.sourceSlide
-  ).length;
+  // Activity timing checks only apply to video-based lessons. Sim-only
+  // lessons trigger activities via `activity_gate` events, not timestamps.
+  if (!input.hasSim || hasVideo) {
+    const requiredActivities = input.lessonTasks.filter(
+      (task) =>
+        task.required &&
+        isCanonicalActivityTask(task.task_type) &&
+        task.linked_slide_id
+    );
+    const timedActivities = getEffectiveActivityTimings(
+      input.slides,
+      requiredActivities,
+      null
+    );
+    const missingTimingCount = timedActivities.filter(
+      (timing) =>
+        timing.effectiveTimestampSeconds <= 0 &&
+        timing.task.timestamp_seconds <= 0 &&
+        !timing.sourceSlide
+    ).length;
 
-  if (missingTimingCount > 0) {
-    blockingReasons.push({
-      code: "activity_timing_missing",
-      message:
-        missingTimingCount === 1
-          ? "A required activity still needs a timestamp or linked slide position."
-          : `${missingTimingCount} required activities still need a timestamp or linked slide position.`,
-    });
+    if (missingTimingCount > 0) {
+      blockingReasons.push({
+        code: "activity_timing_missing",
+        message:
+          missingTimingCount === 1
+            ? "A required activity still needs a timestamp or linked slide position."
+            : `${missingTimingCount} required activities still need a timestamp or linked slide position.`,
+      });
+    }
   }
 
   if (hasVideo && normalizedProcessingStatus !== "ready") {

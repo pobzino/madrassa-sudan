@@ -7,6 +7,7 @@ import { OwlTutorIcon } from "@/components/illustrations";
 import { Users, BookOpen, ClipboardList, PenLine, Plus, School, CheckSquare, FileText, UserCircle } from "lucide-react";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
+import { useTourState } from "@/hooks/useTourState";
 
 interface TeacherStats {
   totalStudents: number;
@@ -31,6 +32,7 @@ interface TeacherInsights {
 
 export default function TeacherDashboard() {
   const { loading: authLoading } = useTeacherGuard();
+  const tourState = useTourState();
   const teacherDevBypass = process.env.NEXT_PUBLIC_DEV_ALLOW_TEACHER_VIEW === "1";
   const [stats, setStats] = useState<TeacherStats>({
     totalStudents: 0,
@@ -423,6 +425,44 @@ export default function TeacherDashboard() {
             <p className="text-gray-500">Here&apos;s what&apos;s happening with your classes</p>
           </div>
         </div>
+
+        {/* Getting Started Guide Card */}
+        {!tourState.hasCompletedTour && (
+          <div className="mb-8 bg-gradient-to-r from-emerald-50 to-emerald-100/50 border border-emerald-200 rounded-2xl p-6 relative">
+            <button
+              onClick={() => tourState.dismissTour()}
+              className="absolute top-4 right-4 text-emerald-400 hover:text-emerald-600 transition-colors"
+              aria-label="Dismiss guide"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h2 className="text-lg font-bold text-emerald-900">New here? Take the lesson guide</h2>
+                <p className="text-sm text-emerald-700 mt-1">
+                  Learn how to create lessons, build slides, add interactive activities, and record a sim — step by step. Takes about 2 minutes.
+                </p>
+                <Link
+                  href="/teacher/lessons"
+                  onClick={() => tourState.startTour("lesson-list")}
+                  className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                  </svg>
+                  Start Guide
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
