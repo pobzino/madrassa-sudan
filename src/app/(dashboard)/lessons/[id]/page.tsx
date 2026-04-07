@@ -26,7 +26,6 @@ const SimPlayer = dynamic(() => import("@/components/slides/SimPlayer"), {
 import { Confetti } from "@/components/illustrations";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { getOfflineLesson, getCachedSimAudio, queueProgressUpdate } from "@/lib/offline/db";
-import DownloadButton from "@/components/lessons/DownloadButton";
 import EnhancedQuizOverlay from "@/components/lessons/EnhancedQuizOverlay";
 import LessonActivityOverlay from "@/components/lessons/LessonActivityOverlay";
 import ProgressGateModal from "@/components/lessons/ProgressGateModal";
@@ -1360,7 +1359,6 @@ export default function LessonPlayerPage() {
                 <span>{t.grade} {lesson.grade_level}</span>
               </div>
             </div>
-            <DownloadButton lessonId={lessonId} size="sm" />
           </div>
 
           {/* Completion status */}
