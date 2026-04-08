@@ -14,9 +14,11 @@ import type { SlideGenerationEvent } from "@/lib/server/slide-deck-generator";
 
 export const maxDuration = 120;
 
-function shouldUseBackgroundGeneration(request: NextRequest) {
-  const hostname = request.nextUrl.hostname.toLowerCase();
-  return hostname !== "localhost" && hostname !== "127.0.0.1";
+function shouldUseBackgroundGeneration(_request: NextRequest) {
+  // Disabled: streaming SSE with maxDuration=120 works in production.
+  // The background Netlify function is kept as dead code for now in case
+  // we need to revert.
+  return false;
 }
 
 async function queueBackgroundGeneration({
