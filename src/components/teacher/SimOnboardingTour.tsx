@@ -332,8 +332,25 @@ export default function SimOnboardingTour({ segments }: SimOnboardingTourProps) 
     };
   }, []);
 
-  // On mount, check if there's a pending tour segment to auto-start.
+  // On mount, check for ?tour=1 query param (for testing) or a pending segment.
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const forceTour = params.get('tour') === '1';
+
+    if (forceTour) {
+      // Remove the param from the URL so refresh doesn't re-trigger
+      params.delete('tour');
+      const clean = params.toString();
+      const url = window.location.pathname + (clean ? `?${clean}` : '');
+      window.history.replaceState({}, '', url);
+
+      const timeout = setTimeout(() => {
+        setStepIndex(0);
+        setRun(true);
+      }, 600);
+      return () => clearTimeout(timeout);
+    }
+
     const pending = consumePending();
     if (!pending) return;
 
