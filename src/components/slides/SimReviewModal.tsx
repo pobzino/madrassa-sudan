@@ -35,6 +35,7 @@ export type SimReviewModalProps =
   | {
       mode: 'record-review';
       lessonId: string;
+      language: 'ar' | 'en';
       recording: SimRecording;
       deckSnapshot: Slide[];
       onDiscard: () => void;
@@ -44,6 +45,7 @@ export type SimReviewModalProps =
   | {
       mode: 'edit';
       lessonId: string;
+      language: 'ar' | 'en';
       payload: SimPayload;
       onClose: () => void;
       onSaved: (updated: SimPayload) => void;
@@ -52,6 +54,7 @@ export type SimReviewModalProps =
   | {
       mode: 'view';
       lessonId: string;
+      language: 'ar' | 'en';
       payload: SimPayload;
       onClose: () => void;
     };
@@ -145,6 +148,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const isReadOnly = props.mode === 'view';
 
@@ -185,37 +189,44 @@ export default function SimReviewModal(props: SimReviewModalProps) {
     if (props.mode !== 'record-review') return;
     setSaving(true);
     setSaveError(null);
+    setUploadProgress(0);
     try {
       const audioBase64 = props.recording.audioBlob
         ? await blobToBase64(props.recording.audioBlob)
         : null;
-      const res = await fetch(
-        `/api/teacher/lessons/${props.lessonId}/sims`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            deck_snapshot: props.deckSnapshot,
-            events: compactSimEvents(props.recording.events),
-            duration_ms: props.recording.durationMs,
-            audio_duration_ms: props.recording.durationMs,
-            audio_mime: props.recording.audioMime,
-            audio_base64: audioBase64,
-            clip_segments: previewClips.length > 0 ? previewClips : null,
-          }),
-        }
-      );
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error || `Save failed (${res.status})`);
-      }
-      const saved = (await res.json()) as SimPayload;
+      const body = JSON.stringify({
+        deck_snapshot: props.deckSnapshot,
+        events: compactSimEvents(props.recording.events),
+        duration_ms: props.recording.durationMs,
+        audio_duration_ms: props.recording.durationMs,
+        audio_mime: props.recording.audioMime,
+        audio_base64: audioBase64,
+        clip_segments: previewClips.length > 0 ? previewClips : null,
+      });
+      const saved = await new Promise<SimPayload>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `/api/teacher/lessons/${props.lessonId}/sims`);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.withCredentials = true;
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        };
+        xhr.onload = () => {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300) resolve(data as SimPayload);
+            else reject(new Error(data?.error || `Save failed (${xhr.status})`));
+          } catch { reject(new Error(`Save failed (${xhr.status})`)); }
+        };
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        xhr.send(body);
+      });
       props.onSaved(saved);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
+      setUploadProgress(null);
     }
   }, [props, previewClips]);
 
@@ -334,7 +345,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
           <SimPlayer
             ref={playerRef}
             payload={previewPayload}
-            language="en"
+            language={props.language}
             clipSegments={previewClips}
             hideControls
             onRealTimeChange={setCurrentTime}
@@ -457,7 +468,11 @@ export default function SimReviewModal(props: SimReviewModalProps) {
               disabled={saving}
               className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
-              {saving ? 'Saving…' : 'Save to Lesson'}
+              {saving
+                ? uploadProgress !== null && uploadProgress < 100
+                  ? `Uploading ${uploadProgress}%`
+                  : 'Saving…'
+                : 'Save to Lesson'}
             </button>
           </div>
         )}

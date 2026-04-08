@@ -17,6 +17,63 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SimEvent, SimEventInput } from '@/lib/sim.types';
 
+// ── IndexedDB crash-recovery helpers ─────────────────────────────────────
+const IDB_NAME = 'sim-recovery';
+const IDB_STORE = 'partials';
+const IDB_KEY = 'current';
+
+interface RecoveryData {
+  events: SimEvent[];
+  durationMs: number;
+  savedAt: number;
+}
+
+function openRecoveryDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveRecoveryData(data: RecoveryData): Promise<void> {
+  const db = await openRecoveryDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(data, IDB_KEY);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+async function loadRecoveryData(): Promise<RecoveryData | null> {
+  try {
+    const db = await openRecoveryDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+      req.onsuccess = () => { db.close(); resolve((req.result as RecoveryData) ?? null); };
+      req.onerror = () => { db.close(); resolve(null); };
+    });
+  } catch { return null; }
+}
+
+async function clearRecoveryData(): Promise<void> {
+  try {
+    const db = await openRecoveryDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).delete(IDB_KEY);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); resolve(); };
+    });
+  } catch { /* ignore */ }
+}
+
 export type SimRecorderState =
   | 'idle'
   | 'preparing'
@@ -38,6 +95,14 @@ export interface UseSimRecorderReturn {
   countdownValue: number;
   errorMessage: string | null;
   recording: SimRecording | null;
+  /** Mic input level 0-100. Updated ~15 Hz while recording. */
+  audioLevel: number;
+  /** Recovered events from a previous crashed session (events only, no audio). */
+  recoveredEvents: SimEvent[] | null;
+  /** Accept recovered events as a partial recording (no audio). */
+  acceptRecovery: () => void;
+  /** Discard recovered data. */
+  dismissRecovery: () => void;
   startRecording: () => Promise<void>;
   stopRecording: () => void;
   pauseRecording: () => void;
@@ -71,6 +136,44 @@ export function useSimRecorder(): UseSimRecorderReturn {
   const [countdownValue, setCountdownValue] = useState(3);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [recording, setRecording] = useState<SimRecording | null>(null);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [recoveredEvents, setRecoveredEvents] = useState<SimEvent[] | null>(null);
+  const recoveryIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Check for recovery data on mount
+  useEffect(() => {
+    loadRecoveryData().then((data) => {
+      if (data && data.events.length > 0) {
+        // Only offer recovery if data is less than 24 hours old
+        if (Date.now() - data.savedAt < 24 * 60 * 60 * 1000) {
+          setRecoveredEvents(data.events);
+        } else {
+          clearRecoveryData();
+        }
+      }
+    });
+  }, []);
+
+  const acceptRecovery = useCallback(() => {
+    if (!recoveredEvents) return;
+    const durationMs = recoveredEvents.length > 0
+      ? recoveredEvents[recoveredEvents.length - 1].t
+      : 0;
+    setRecording({
+      events: recoveredEvents,
+      audioBlob: null,
+      audioMime: 'audio/webm',
+      durationMs,
+    });
+    setState('stopped');
+    setRecoveredEvents(null);
+    clearRecoveryData();
+  }, [recoveredEvents]);
+
+  const dismissRecovery = useCallback(() => {
+    setRecoveredEvents(null);
+    clearRecoveryData();
+  }, []);
 
   // Timeline clock state. All refs so we can mutate without re-renders.
   const startedAtRef = useRef<number>(0);         // performance.now() when recording began
@@ -86,6 +189,9 @@ export function useSimRecorder(): UseSimRecorderReturn {
   const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopRequestedRef = useRef(false);
   const stateRef = useRef<SimRecorderState>('idle');
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const levelIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   stateRef.current = state;
 
@@ -130,6 +236,14 @@ export function useSimRecorder(): UseSimRecorderReturn {
       clearInterval(durationIntervalRef.current);
       durationIntervalRef.current = null;
     }
+    if (levelIntervalRef.current) {
+      clearInterval(levelIntervalRef.current);
+      levelIntervalRef.current = null;
+    }
+    if (recoveryIntervalRef.current) {
+      clearInterval(recoveryIntervalRef.current);
+      recoveryIntervalRef.current = null;
+    }
     if (micStreamRef.current) {
       micStreamRef.current.getTracks().forEach((track) => track.stop());
       micStreamRef.current = null;
@@ -141,9 +255,15 @@ export function useSimRecorder(): UseSimRecorderReturn {
         // ignore
       }
     }
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close(); } catch { /* ignore */ }
+      audioContextRef.current = null;
+      analyserRef.current = null;
+    }
     mediaRecorderRef.current = null;
     stopRequestedRef.current = false;
     pauseStartedAtRef.current = null;
+    setAudioLevel(0);
   }, []);
 
   useEffect(() => {
@@ -181,6 +301,28 @@ export function useSimRecorder(): UseSimRecorderReturn {
         video: false,
       });
       micStreamRef.current = stream;
+
+      // Set up audio level metering via AnalyserNode
+      try {
+        const ctx = new AudioContext();
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        audioContextRef.current = ctx;
+        analyserRef.current = analyser;
+        const buf = new Uint8Array(analyser.frequencyBinCount);
+        levelIntervalRef.current = setInterval(() => {
+          if (!analyserRef.current) return;
+          analyserRef.current.getByteFrequencyData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) sum += buf[i];
+          const avg = sum / buf.length;
+          setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
+        }, 67); // ~15 Hz
+      } catch {
+        // Metering is optional — don't block recording
+      }
 
       // Countdown 3-2-1 before arming the recorder
       setState('countdown');
@@ -229,7 +371,12 @@ export function useSimRecorder(): UseSimRecorderReturn {
             durationMs,
           });
           setState('stopped');
+          clearRecoveryData();
 
+          if (recoveryIntervalRef.current) {
+            clearInterval(recoveryIntervalRef.current);
+            recoveryIntervalRef.current = null;
+          }
           if (durationIntervalRef.current) {
             clearInterval(durationIntervalRef.current);
             durationIntervalRef.current = null;
@@ -248,6 +395,18 @@ export function useSimRecorder(): UseSimRecorderReturn {
       recorder.start(250);
 
       setState('recording');
+      setRecoveredEvents(null);
+
+      // Save events to IndexedDB every 10s for crash recovery
+      recoveryIntervalRef.current = setInterval(() => {
+        const events = eventsRef.current;
+        if (events.length === 0) return;
+        saveRecoveryData({
+          events: events.slice(),
+          durationMs: Math.round(getCurrentTimeMs()),
+          savedAt: Date.now(),
+        }).catch(() => { /* best-effort */ });
+      }, 10_000);
 
       durationIntervalRef.current = setInterval(() => {
         const ms = Math.round(getCurrentTimeMs());
@@ -344,6 +503,7 @@ export function useSimRecorder(): UseSimRecorderReturn {
 
   const cancelRecording = useCallback(() => {
     cleanup();
+    clearRecoveryData();
     eventsRef.current = [];
     audioChunksRef.current = [];
     accumulatedPausedMsRef.current = 0;
@@ -359,6 +519,10 @@ export function useSimRecorder(): UseSimRecorderReturn {
     countdownValue,
     errorMessage,
     recording,
+    audioLevel,
+    recoveredEvents,
+    acceptRecovery,
+    dismissRecovery,
     startRecording,
     stopRecording,
     pauseRecording,

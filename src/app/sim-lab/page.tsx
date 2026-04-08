@@ -256,15 +256,6 @@ async function urlToBlob(url: string): Promise<Blob> {
 type Mode = 'idle' | 'recording' | 'playing' | 'paused_interactive';
 
 export default function SimLabPage() {
-  // Sim Lab is a development-only POC — block in production builds.
-  if (process.env.NODE_ENV === 'production') {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-500">Sim Lab is only available in development mode.</p>
-      </div>
-    );
-  }
-
   const [deck, setDeck] = useState<ExampleSlide[]>(EXAMPLE_DECK);
   const [surface, setSurface] = useState<SurfaceState>(() => initialSurface(EXAMPLE_DECK));
 
@@ -709,6 +700,15 @@ export default function SimLabPage() {
   const simSizeKB = sim ? (JSON.stringify(sim.events).length / 1024).toFixed(1) : '0.0';
   const deckSizeKB = (JSON.stringify(deck).length / 1024).toFixed(1);
   void logTick;
+
+  // Sim Lab is a development-only POC — block in production builds.
+  if (process.env.NODE_ENV === 'production') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-500">Sim Lab is only available in development mode.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">

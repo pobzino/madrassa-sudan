@@ -9,6 +9,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { OwlThinking, OwlSad } from "@/components/illustrations";
 import type { Lesson, Subject, LessonProgress } from "@/lib/database.types";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
+import SlideCard from "@/components/slides/SlideCard";
+import type { Slide } from "@/lib/slides.types";
 
 const translations = {
   ar: {
@@ -61,6 +63,7 @@ const SUBJECT_COLORS = [
 type LessonWithProgress = Lesson & {
   progress?: LessonProgress | null;
   subject?: Subject | null;
+  first_slide?: Slide | null;
 };
 
 export default function LessonsPage() {
@@ -94,17 +97,22 @@ export default function LessonsPage() {
 
       const { data: lessonsData } = await supabase
         .from("lessons")
-        .select(`*, subject:subjects(*), progress:lesson_progress(*)`)
+        .select(`*, subject:subjects(*), progress:lesson_progress(*), lesson_slides(slides)`)
         .eq("is_published", true)
         .order("updated_at", { ascending: false });
 
       if (lessonsData) {
-        const mappedLessons = lessonsData.map((lesson) => ({
-          ...lesson,
-          progress: Array.isArray(lesson.progress)
-            ? lesson.progress.find((p: LessonProgress) => p.student_id === user.id) || null
-            : lesson.progress,
-        }));
+        const mappedLessons = lessonsData.map((lesson) => {
+          const slidesRow = lesson.lesson_slides as { slides: unknown } | null;
+          const slidesArr = Array.isArray(slidesRow?.slides) ? slidesRow.slides : [];
+          return {
+            ...lesson,
+            first_slide: slidesArr.length > 0 ? (slidesArr[0] as Slide) : null,
+            progress: Array.isArray(lesson.progress)
+              ? lesson.progress.find((p: LessonProgress) => p.student_id === user.id) || null
+              : lesson.progress,
+          };
+        });
         setLessons(mappedLessons);
       }
 
@@ -283,6 +291,7 @@ export default function LessonsPage() {
                   progress={getProgress(lesson)}
                   completed={isCompleted(lesson)}
                   duration={formatDuration(lesson.video_duration_seconds)}
+                  firstSlide={lesson.first_slide}
                 />
               ))}
             </div>
@@ -312,6 +321,7 @@ export default function LessonsPage() {
                     progress={getProgress(lesson)}
                     completed={false}
                     duration={formatDuration(lesson.video_duration_seconds)}
+                    firstSlide={lesson.first_slide}
                     compact
                   />
                 ))}
@@ -353,6 +363,7 @@ export default function LessonsPage() {
                       progress={getProgress(lesson)}
                       completed={isCompleted(lesson)}
                       duration={formatDuration(lesson.video_duration_seconds)}
+                      firstSlide={lesson.first_slide}
                       compact
                     />
                   ))}
@@ -451,6 +462,7 @@ function LessonCard({
   progress,
   completed,
   duration,
+  firstSlide,
   compact,
 }: {
   lesson: LessonWithProgress;
@@ -461,6 +473,7 @@ function LessonCard({
   progress: number;
   completed: boolean;
   duration: string | null;
+  firstSlide?: Slide | null;
   compact?: boolean;
 }) {
   const title = language === "ar" ? lesson.title_ar : lesson.title_en;
@@ -486,6 +499,8 @@ function LessonCard({
             sizes={compact ? "256px" : "(max-width:640px) 50vw, 25vw"}
             className="object-cover"
           />
+        ) : firstSlide ? (
+          <SlidePreviewThumb slide={firstSlide} language={language} />
         ) : (
           <div className={`absolute inset-0 flex items-center justify-center ${color.bg} bg-opacity-10`}>
             <svg className="w-10 h-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
@@ -544,5 +559,42 @@ function LessonCard({
         </div>
       </div>
     </Link>
+  );
+}
+
+/* ─── Slide Preview Thumbnail ─── */
+
+function SlidePreviewThumb({ slide, language }: { slide: Slide; language: "ar" | "en" }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      const { width, height } = el.getBoundingClientRect();
+      if (width > 0) setScale(Math.max(width / 1280, height / 720));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="absolute inset-0 overflow-hidden pointer-events-none">
+      {scale > 0 && (
+        <div
+          className="absolute top-1/2 left-1/2"
+          style={{
+            width: 1280,
+            height: 720,
+            transform: `translate(-50%, -50%) scale(${scale})`,
+          }}
+        >
+          <SlideCard slide={slide} language={language} />
+        </div>
+      )}
+    </div>
   );
 }

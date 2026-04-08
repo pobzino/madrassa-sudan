@@ -1229,6 +1229,27 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     [handleSeek, virtualTotalMs]
   );
 
+  const handleProgressBarPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const bar = e.currentTarget;
+      bar.setPointerCapture(e.pointerId);
+      const seek = (clientX: number) => {
+        const rect = bar.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        handleSeek(pct * virtualTotalMs);
+      };
+      seek(e.clientX);
+      const onMove = (ev: PointerEvent) => seek(ev.clientX);
+      const onUp = () => {
+        bar.removeEventListener('pointermove', onMove);
+        bar.removeEventListener('pointerup', onUp);
+      };
+      bar.addEventListener('pointermove', onMove);
+      bar.addEventListener('pointerup', onUp);
+    },
+    [handleSeek, virtualTotalMs]
+  );
+
   return (
     <div ref={containerRef} className={`overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm ${isFullscreen ? 'flex flex-col h-screen !border-0 !rounded-none !shadow-none' : ''} ${className}`}>
       {/* Slide area */}
@@ -1405,9 +1426,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         </div>
       )}
 
-      {/* Control bar */}
+      {/* Control bar — force LTR so play/progress/time order is consistent */}
       {!hideControls && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 border-t border-slate-200">
+        <div dir="ltr" className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 border-t border-slate-200">
           {/* Play / Pause */}
           <button
             type="button"
@@ -1433,10 +1454,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
             )}
           </button>
 
-          {/* Progress bar */}
+          {/* Progress bar — always LTR since timelines flow start→end */}
           <div
-            className="flex-1 relative h-1.5 bg-slate-200 rounded-full cursor-pointer group py-2 -my-2"
-            onClick={handleProgressBarClick}
+            dir="ltr"
+            className="flex-1 relative h-1.5 bg-slate-200 rounded-full cursor-pointer group py-2 -my-2 touch-none"
+            onPointerDown={handleProgressBarPointerDown}
             role="slider"
             aria-label="Seek"
             aria-valuemin={0}

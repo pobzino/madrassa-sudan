@@ -12,12 +12,6 @@ import {
 } from '@/lib/server/sim-storage';
 import type { SimPayload, SimRow } from '@/lib/sim.types';
 
-// Base64-encoded audio for a 45-min recording can be ~130 MB.
-// Next.js defaults to 1 MB — raise the limit so longer recordings don't fail.
-export const config = {
-  api: { bodyParser: { sizeLimit: '150mb' } },
-};
-
 /** Allow up to 5 minutes for large audio uploads + storage writes. */
 export const maxDuration = 300;
 

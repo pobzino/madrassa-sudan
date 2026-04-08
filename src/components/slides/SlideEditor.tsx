@@ -452,6 +452,10 @@ export default function SlideEditor({
     recordingDurationMs: simDurationMs,
     countdownValue: simCountdown,
     errorMessage: simRecorderError,
+    audioLevel: simAudioLevel,
+    recoveredEvents: simRecoveredEvents,
+    acceptRecovery: simAcceptRecovery,
+    dismissRecovery: simDismissRecovery,
   } = simRecorder;
 
   // Refs that the whiteboard→sim bridge reads, so the bridge callback can
@@ -1260,9 +1264,21 @@ export default function SlideEditor({
                 <span className={`text-sm tabular-nums min-w-[48px] text-center ${simDurationMs >= SIM_MAX_DURATION_MS - 120_000 ? 'text-red-400 font-bold' : 'text-white/80'}`}>
                   {formatDuration(simDurationMs)}
                 </span>
-                <span className="text-[10px] uppercase tracking-widest text-amber-300 font-bold">
-                  REC
-                </span>
+                {/* Mic level meter */}
+                <div className="flex items-end gap-px h-4" title={`Mic level: ${simAudioLevel}%`}>
+                  {[20, 40, 60, 80, 100].map((threshold) => (
+                    <div
+                      key={threshold}
+                      className="w-[3px] rounded-sm transition-all duration-75"
+                      style={{
+                        height: `${(threshold / 100) * 16}px`,
+                        backgroundColor: simAudioLevel >= threshold
+                          ? threshold <= 60 ? '#4ade80' : threshold <= 80 ? '#facc15' : '#f87171'
+                          : 'rgba(255,255,255,0.15)',
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 
@@ -1511,6 +1527,19 @@ export default function SlideEditor({
           </div>
         )}
 
+        {/* Crash recovery banner */}
+        {simRecoveredEvents && simState === 'idle' && (
+          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[70] bg-amber-600 text-white text-sm px-4 py-2 rounded-xl shadow-lg flex items-center gap-3">
+            <span>Recovered {simRecoveredEvents.length} events from a previous session (no audio)</span>
+            <button onClick={simAcceptRecovery} className="bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded text-xs font-semibold">
+              Restore
+            </button>
+            <button onClick={simDismissRecovery} className="text-white/70 hover:text-white text-xs">
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Controls overlay — hide during active recording */}
         {!simRecording && (
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/60 backdrop-blur-sm rounded-full px-6 py-3">
@@ -1662,6 +1691,7 @@ export default function SlideEditor({
         <SimReviewModal
           mode="record-review"
           lessonId={lessonId}
+          language={language}
           recording={simReviewMode.recording}
           deckSnapshot={simReviewMode.deckSnapshot}
           onDiscard={handleSimDiscard}
@@ -1673,6 +1703,7 @@ export default function SlideEditor({
         <SimReviewModal
           mode="edit"
           lessonId={lessonId}
+          language={language}
           payload={simReviewMode.payload}
           onClose={() => setSimReviewMode(null)}
           onSaved={handleSimEditSaved}
@@ -1683,6 +1714,7 @@ export default function SlideEditor({
         <SimReviewModal
           mode="view"
           lessonId={lessonId}
+          language={language}
           payload={simReviewMode.payload}
           onClose={() => setSimReviewMode(null)}
         />

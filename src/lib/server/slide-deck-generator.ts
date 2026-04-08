@@ -136,6 +136,8 @@ export async function generateSlidesForLesson({
   requestedSlideCount,
   languageMode,
   onProgress,
+  skipSpeakerNotes,
+  enrichNotesOnly,
 }: {
   supabase: SupabaseClient<Database>;
   lessonId: string;
@@ -144,6 +146,10 @@ export async function generateSlidesForLesson({
   requestedSlideCount?: number | null;
   languageMode: SlideLanguageMode;
   onProgress?: (event: SlideGenerationEvent) => void;
+  /** Return immediately after deck generation, skip speaker notes pass. */
+  skipSpeakerNotes?: boolean;
+  /** Skip deck generation — load existing slides and only enrich speaker notes. */
+  enrichNotesOnly?: boolean;
 }): Promise<PolicySlide[]> {
   const aiClient = getOpenAIClient();
   if (!aiClient) {
@@ -845,6 +851,28 @@ ${buildSpeakerNotesContext(slides)}`;
     }
   }
 
+  // ── Notes-only mode: load existing slides, enrich, return ──────────
+  if (enrichNotesOnly) {
+    const { data: existingDeck } = await supabase
+      .from("lesson_slides")
+      .select("slides")
+      .eq("lesson_id", lessonId)
+      .single();
+
+    const existingSlides = Array.isArray(existingDeck?.slides)
+      ? (existingDeck.slides as unknown as PolicySlide[])
+      : null;
+
+    if (!existingSlides || existingSlides.length === 0) {
+      throw new SlideGenerationError("No existing slides to enrich", 404);
+    }
+
+    const enriched = await enrichSpeakerNotes(existingSlides);
+    await persistSlides(enriched);
+    return enriched;
+  }
+
+  // ── Normal deck generation ────────────────────────────────────────
   onProgress?.({ type: 'progress', message: 'Generating slide deck...' });
   let slides = patchSlides(await requestDeck());
   let validationIssues = validateGeneratedSlides(slides, {
@@ -863,7 +891,6 @@ ${buildSpeakerNotesContext(slides)}`;
 
   if (validationIssues.length > 0) {
     console.warn("Slide validation issues after repair + patch:", validationIssues);
-    // Filter out non-critical issues that patchSlides should have handled
     const criticalIssues = validationIssues.filter(
       (issue) =>
         !issue.includes("say_it_twice_prompt") &&
@@ -884,18 +911,19 @@ ${buildSpeakerNotesContext(slides)}`;
   }
 
   await persistSlides(slides);
-  onProgress?.({ type: 'slides', slides });
 
-  onProgress?.({ type: 'progress', message: 'Adding speaker notes...' });
+  // Return early without speaker notes — caller can enrich later
+  if (skipSpeakerNotes) {
+    return slides;
+  }
+
   try {
     const slidesWithSpeakerNotes = await enrichSpeakerNotes(slides);
     await persistSlides(slidesWithSpeakerNotes);
-    onProgress?.({ type: 'done', slides: slidesWithSpeakerNotes });
     return slidesWithSpeakerNotes;
   } catch (error) {
     console.error("Speaker notes enrichment failed; keeping first-pass deck.", error);
   }
 
-  onProgress?.({ type: 'done', slides });
   return slides;
 }
