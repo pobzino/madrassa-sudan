@@ -120,17 +120,22 @@ export async function POST(
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        const send = (event: SlideGenerationEvent) => {
-          try {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
-            );
-          } catch {
-            // Controller may be closed if the client disconnected
-          }
+        const enqueue = (chunk: string) => {
+          try { controller.enqueue(encoder.encode(chunk)); } catch { /* closed */ }
         };
 
+        const send = (event: SlideGenerationEvent) => {
+          enqueue(`data: ${JSON.stringify(event)}\n\n`);
+        };
+
+        // Send keepalive comments every 3s during long AI calls so proxies
+        // (Netlify, Cloudflare, Nginx) don't buffer or timeout the stream.
+        const heartbeat = setInterval(() => enqueue(": keepalive\n\n"), 3000);
+
         try {
+          // Initial comment to flush headers through any proxy
+          enqueue(": stream-start\n\n");
+
           await generateSlidesForLesson({
             supabase,
             lessonId,
@@ -150,11 +155,8 @@ export async function POST(
                 : "Generation failed";
           send({ type: "error", message });
         } finally {
-          try {
-            controller.close();
-          } catch {
-            // Already closed
-          }
+          clearInterval(heartbeat);
+          try { controller.close(); } catch { /* already closed */ }
         }
       },
     });
@@ -162,7 +164,8 @@ export async function POST(
     return new Response(stream, {
       headers: {
         "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
         Connection: "keep-alive",
       },
     });
