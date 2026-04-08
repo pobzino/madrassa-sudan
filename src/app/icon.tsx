@@ -18,28 +18,39 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#007229",
-          borderRadius: "6px",
+          background: "transparent",
         }}
       >
-        {/* Simplified owl face — readable at 32x32 */}
-        <svg width="26" height="26" viewBox="0 0 40 40" fill="none">
-          {/* Head */}
-          <circle cx="20" cy="22" r="16" fill="#D21034" />
+        {/* Owl favicon - full size */}
+        <svg width="32" height="32" viewBox="0 0 64 64" fill="none">
+          {/* Ear tufts */}
+          <ellipse cx="14" cy="18" rx="5" ry="7" fill="#a01028" />
+          <ellipse cx="50" cy="18" rx="5" ry="7" fill="#a01028" />
+
+          {/* Main body */}
+          <ellipse cx="32" cy="38" rx="24" ry="24" fill="#D21034" />
+
           {/* Facial disc */}
-          <ellipse cx="20" cy="20" rx="13" ry="10" fill="#E8334F" />
+          <ellipse cx="32" cy="34" rx="18" ry="14" fill="#E8334F" />
+
+          {/* Belly */}
+          <ellipse cx="32" cy="52" rx="12" ry="8" fill="#FFF5F5" />
+
           {/* Eyes */}
-          <ellipse cx="14" cy="19" rx="5.5" ry="6" fill="white" />
-          <ellipse cx="26" cy="19" rx="5.5" ry="6" fill="white" />
-          <circle cx="15.5" cy="19" r="3.5" fill="#000" />
-          <circle cx="17" cy="17.5" r="1.5" fill="white" />
-          <circle cx="24.5" cy="19" r="3.5" fill="#000" />
-          <circle cx="26" cy="17.5" r="1.5" fill="white" />
+          <ellipse cx="23" cy="32" rx="8" ry="9" fill="white" />
+          <ellipse cx="41" cy="32" rx="8" ry="9" fill="white" />
+          <circle cx="25" cy="32" r="5" fill="#000000" />
+          <circle cx="27" cy="30" r="2" fill="white" />
+          <circle cx="39" cy="32" r="5" fill="#000000" />
+          <circle cx="41" cy="30" r="2" fill="white" />
+
           {/* Beak */}
-          <ellipse cx="20" cy="27" rx="3" ry="2" fill="#F59E0B" />
-          {/* Cap */}
-          <path d="M6 10l14-5 14 5-14 6-14-6z" fill="#007229" stroke="white" strokeWidth="0.5" />
-          <rect x="8" y="10" width="24" height="3" rx="1" fill="#1a1a1a" />
+          <ellipse cx="32" cy="42" rx="4" ry="3" fill="#F59E0B" />
+
+          {/* Graduation cap */}
+          <path d="M12 16c0-2 9-4 20-4s20 2 20 4v3c0 1-9 2-20 2s-20-1-20-2v-3z" fill="#1a1a1a" />
+          <path d="M8 12l24-6 24 6-24 8-24-8z" fill="#007229" />
+          <circle cx="32" cy="10" r="2.5" fill="#1a1a1a" />
         </svg>
       </div>
     ),
