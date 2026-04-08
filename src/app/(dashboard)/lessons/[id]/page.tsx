@@ -197,8 +197,6 @@ export default function LessonPlayerPage() {
 
   // Celebration state
   const [showConfetti, setShowConfetti] = useState(false);
-  const lastPlaybackSecondRef = useRef(0);
-
   // Load lesson data
   useEffect(() => {
     async function loadData() {

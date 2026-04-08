@@ -15,7 +15,7 @@ const translations = {
     explore: "استكشاف",
     searchPlaceholder: "ابحث عن درس...",
     allSubjects: "الكل",
-    continueWatching: "متابعة المشاهدة",
+    continueWatching: "متابعة التعلم",
     noLessonsFound: "لم يتم العثور على دروس",
     tryAdjusting: "جرب تعديل الفلاتر أو البحث",
     minutes: "د",
@@ -32,7 +32,7 @@ const translations = {
     explore: "Explore",
     searchPlaceholder: "Search lessons...",
     allSubjects: "All",
-    continueWatching: "Continue Watching",
+    continueWatching: "Continue Learning",
     noLessonsFound: "No lessons found",
     tryAdjusting: "Try adjusting your filters or search",
     minutes: "min",
@@ -165,9 +165,14 @@ export default function LessonsPage() {
   };
 
   const getProgress = (lesson: LessonWithProgress) => {
-    if (!lesson.progress || !lesson.video_duration_seconds) return 0;
-    return Math.round(
-      (lesson.progress.last_position_seconds / lesson.video_duration_seconds) * 100
+    if (!lesson.progress) return 0;
+    if (lesson.progress.completed) return 100;
+    if (!lesson.video_duration_seconds) return 0;
+    return Math.min(
+      100,
+      Math.round(
+        (lesson.progress.last_position_seconds / lesson.video_duration_seconds) * 100
+      )
     );
   };
 

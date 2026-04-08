@@ -11,130 +11,13 @@ interface DrawnPoint {
   y: number;
 }
 
-function computeAccuracy(
-  drawn: DrawnPoint[],
-  guidePaths: Array<{ points: Array<{ x: number; y: number }> }>
-): number {
-  if (drawn.length === 0) return Infinity;
-  const guidePoints = guidePaths.flatMap((p) => p.points);
-  if (guidePoints.length === 0) return 0;
-
-  let totalDist = 0;
-  for (const dp of drawn) {
-    let minDist = Infinity;
-    for (const gp of guidePoints) {
-      const d = Math.sqrt((dp.x - gp.x) ** 2 + (dp.y - gp.y) ** 2);
-      if (d < minDist) minDist = d;
-    }
-    totalDist += minDist;
-  }
-  return totalDist / drawn.length;
-}
-
-function computeCoverage(
-  drawn: DrawnPoint[],
-  guidePaths: Array<{ points: Array<{ x: number; y: number }> }>,
-  tolerance: number
-): number {
-  const mainPaths = guidePaths.filter((p) => p.points.length > 1);
-  const guidePoints = mainPaths.flatMap((p) => p.points);
-  if (guidePoints.length === 0 || drawn.length === 0) return 0;
-
-  let covered = 0;
-  for (const gp of guidePoints) {
-    const close = drawn.some(
-      (dp) => Math.sqrt((dp.x - gp.x) ** 2 + (dp.y - gp.y) ** 2) <= tolerance * 2
-    );
-    if (close) covered++;
-  }
-  return covered / guidePoints.length;
-}
-
-function renderTextMask(
-  text: string,
-  script: 'ar' | 'en',
-  canvasSize: number
-): boolean[] {
-  const offscreen = document.createElement('canvas');
-  offscreen.width = canvasSize;
-  offscreen.height = canvasSize;
-  const ctx = offscreen.getContext('2d')!;
-
-  const fontFamily = script === 'ar' ? '"Cairo", sans-serif' : 'sans-serif';
-
-  let fontSize = Math.floor(canvasSize * 0.7);
-  ctx.font = `bold ${fontSize}px ${fontFamily}`;
-  let metrics = ctx.measureText(text);
-  while (metrics.width > canvasSize * 0.85 && fontSize > 20) {
-    fontSize -= 4;
-    ctx.font = `bold ${fontSize}px ${fontFamily}`;
-    metrics = ctx.measureText(text);
-  }
-
-  const x = (canvasSize - metrics.width) / 2;
-  const ascent = metrics.actualBoundingBoxAscent || fontSize * 0.8;
-  const descent = metrics.actualBoundingBoxDescent || fontSize * 0.2;
-  const textHeight = ascent + descent;
-  const y = (canvasSize + textHeight) / 2 - descent;
-
-  ctx.fillStyle = '#000';
-  ctx.fillText(text, x, y);
-
-  const imageData = ctx.getImageData(0, 0, canvasSize, canvasSize);
-  const mask: boolean[] = new Array(canvasSize * canvasSize);
-  for (let i = 0; i < mask.length; i++) {
-    mask[i] = imageData.data[i * 4 + 3] > 50;
-  }
-  return mask;
-}
-
-function computeTextCoverage(
-  drawn: DrawnPoint[],
-  textMask: boolean[],
-  canvasSize: number,
-  strokeRadius: number
-): number {
-  let totalTextPixels = 0;
-  for (let i = 0; i < textMask.length; i++) {
-    if (textMask[i]) totalTextPixels++;
-  }
-  if (totalTextPixels === 0) return 0;
-
-  const covered = new Uint8Array(canvasSize * canvasSize);
-  const scale = canvasSize / VIEWBOX;
-
-  for (const pt of drawn) {
-    const cx = Math.round(pt.x * scale);
-    const cy = Math.round(pt.y * scale);
-    const r = Math.round(strokeRadius * scale);
-
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (dx * dx + dy * dy > r * r) continue;
-        const px = cx + dx;
-        const py = cy + dy;
-        if (px >= 0 && px < canvasSize && py >= 0 && py < canvasSize) {
-          covered[py * canvasSize + px] = 1;
-        }
-      }
-    }
-  }
-
-  let coveredCount = 0;
-  for (let i = 0; i < textMask.length; i++) {
-    if (textMask[i] && covered[i]) coveredCount++;
-  }
-
-  return coveredCount / totalTextPixels;
-}
-
 export default function LetterTraceWidget({
   config,
   language,
   onComplete,
 }: ExplorationWidgetProps<LetterTraceConfig>) {
   const displayText = config.text || config.letter || '';
-  const { script, tolerance } = config;
+  const { script } = config;
   const hasVectorPaths = config.stroke_paths && config.stroke_paths.length > 0;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -142,20 +25,12 @@ export default function LetterTraceWidget({
   const [drawnPoints, setDrawnPoints] = useState<DrawnPoint[]>([]);
   const [completed, setCompleted] = useState(false);
   const [feedback, setFeedback] = useState<'good' | 'try_again' | null>(null);
+  const [checking, setChecking] = useState(false);
   const [starRating, setStarRating] = useState(0);
+  const [aiFeedback, setAiFeedback] = useState<string | null>(null);
   const completedRef = useRef(false);
-  const textMaskRef = useRef<boolean[] | null>(null);
 
   const scale = CANVAS_SIZE / VIEWBOX;
-
-  // Progress indicator based on coverage
-  const [coverageProgress, setCoverageProgress] = useState(0);
-
-  useEffect(() => {
-    if (!hasVectorPaths && displayText) {
-      textMaskRef.current = renderTextMask(displayText, script, CANVAS_SIZE);
-    }
-  }, [displayText, script, hasVectorPaths]);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -180,7 +55,7 @@ export default function LetterTraceWidget({
         } else {
           ctx.beginPath();
           ctx.strokeStyle = 'rgba(156, 163, 175, 0.3)';
-          ctx.lineWidth = 16; // Thicker trace guide
+          ctx.lineWidth = 16;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
           const pts = path.points;
@@ -190,7 +65,6 @@ export default function LetterTraceWidget({
           }
           ctx.stroke();
 
-          // Start dot (animated guide dot placeholder)
           if (pts.length >= 2 && drawnPoints.length === 0) {
             const ax = pts[0].x * scale;
             const ay = pts[0].y * scale;
@@ -198,7 +72,6 @@ export default function LetterTraceWidget({
             ctx.arc(ax, ay, 7, 0, Math.PI * 2);
             ctx.fillStyle = 'rgba(59, 130, 246, 0.6)';
             ctx.fill();
-            // Outer ring
             ctx.beginPath();
             ctx.arc(ax, ay, 12, 0, Math.PI * 2);
             ctx.strokeStyle = 'rgba(59, 130, 246, 0.3)';
@@ -232,7 +105,7 @@ export default function LetterTraceWidget({
       ctx.strokeText(displayText, x, y);
     }
 
-    // Draw student strokes — thicker line
+    // Draw student strokes
     if (drawnPoints.length > 1) {
       ctx.beginPath();
       ctx.strokeStyle = completed
@@ -240,7 +113,7 @@ export default function LetterTraceWidget({
         : feedback === 'try_again'
           ? '#ef4444'
           : '#3b82f6';
-      ctx.lineWidth = 12; // Thicker trace
+      ctx.lineWidth = 12;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.moveTo(drawnPoints[0].x * scale, drawnPoints[0].y * scale);
@@ -269,14 +142,15 @@ export default function LetterTraceWidget({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if (completed) return;
+      if (completed || checking) return;
       setDrawing(true);
       setFeedback(null);
+      setAiFeedback(null);
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       const pt = getCanvasPoint(e.clientX, e.clientY);
       setDrawnPoints([pt]);
     },
-    [completed, getCanvasPoint]
+    [completed, checking, getCanvasPoint]
   );
 
   const handlePointerMove = useCallback(
@@ -288,40 +162,78 @@ export default function LetterTraceWidget({
     [drawing, completed, getCanvasPoint]
   );
 
-  const handlePointerUp = useCallback(() => {
-    if (!drawing || completedRef.current) return;
+  const captureCanvas = useCallback((): string | null => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    // Export at 1x resolution for a small payload
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = CANVAS_SIZE;
+    exportCanvas.height = CANVAS_SIZE;
+    const ctx = exportCanvas.getContext('2d')!;
+    ctx.drawImage(canvas, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    return exportCanvas.toDataURL('image/png', 0.8);
+  }, []);
+
+  const handlePointerUp = useCallback(async () => {
+    if (!drawing || completedRef.current || checking) return;
     setDrawing(false);
 
-    // Tracing is practice — always accept the attempt, just vary the star rating
-    if (hasVectorPaths && config.stroke_paths) {
-      const coverage = computeCoverage(drawnPoints, config.stroke_paths, tolerance);
-      setCoverageProgress(coverage);
+    if (drawnPoints.length < 10) return;
 
-      if (drawnPoints.length > 5) {
+    // Capture the canvas and send to AI for grading
+    const imageDataUrl = captureCanvas();
+    if (!imageDataUrl) return;
+
+    setChecking(true);
+    try {
+      const res = await fetch('/api/lesson-progress/trace-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_data_url: imageDataUrl,
+          target_text: displayText,
+          script,
+        }),
+      });
+
+      if (!res.ok) {
+        // On API error, accept so kids aren't blocked
         completedRef.current = true;
         setCompleted(true);
         setFeedback('good');
-        setStarRating(coverage >= 0.85 ? 3 : coverage >= 0.6 ? 2 : 1);
+        setStarRating(2);
         setTimeout(() => onComplete(), 500);
+        return;
       }
-    } else if (textMaskRef.current) {
-      const coverage = computeTextCoverage(drawnPoints, textMaskRef.current, CANVAS_SIZE, 5);
-      setCoverageProgress(coverage);
 
-      if (drawnPoints.length > 5) {
+      const data = await res.json();
+      if (data.isCorrect) {
         completedRef.current = true;
         setCompleted(true);
         setFeedback('good');
-        setStarRating(coverage >= 0.7 ? 3 : coverage >= 0.4 ? 2 : 1);
+        setStarRating(data.stars || 2);
+        if (data.feedback) setAiFeedback(data.feedback);
         setTimeout(() => onComplete(), 500);
+      } else {
+        setFeedback('try_again');
+        if (data.feedback) setAiFeedback(data.feedback);
       }
+    } catch {
+      // On network error, accept so kids aren't blocked
+      completedRef.current = true;
+      setCompleted(true);
+      setFeedback('good');
+      setStarRating(2);
+      setTimeout(() => onComplete(), 500);
+    } finally {
+      setChecking(false);
     }
-  }, [drawing, drawnPoints, config.stroke_paths, hasVectorPaths, tolerance, onComplete]);
+  }, [drawing, drawnPoints, checking, captureCanvas, displayText, script, onComplete]);
 
   const handleReset = useCallback(() => {
     setDrawnPoints([]);
     setFeedback(null);
-    setCoverageProgress(0);
+    setAiFeedback(null);
   }, []);
 
   return (
@@ -337,18 +249,6 @@ export default function LetterTraceWidget({
         </span>
       </div>
 
-      {/* Progress fill bar */}
-      {!completed && drawnPoints.length > 0 && (
-        <div className="w-full max-w-[300px]">
-          <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-blue-400 transition-all duration-300"
-              style={{ width: `${Math.min(100, coverageProgress * 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Canvas */}
       <div className="relative">
         <canvas
@@ -360,6 +260,16 @@ export default function LetterTraceWidget({
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
         />
+
+        {/* Checking overlay */}
+        {checking && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 rounded-2xl">
+            <div className="w-8 h-8 border-3 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-slate-500 mt-2">
+              {language === 'ar' ? 'جاري التحقق...' : 'Checking...'}
+            </p>
+          </div>
+        )}
 
         {/* Completion overlay with star rating */}
         {feedback === 'good' && (
@@ -379,7 +289,7 @@ export default function LetterTraceWidget({
               ))}
             </div>
             <p className="text-sm font-bold text-emerald-700 mt-1">
-              {language === 'ar' ? '!أحسنت' : 'Well done!'}
+              {aiFeedback || (language === 'ar' ? '!أحسنت' : 'Well done!')}
             </p>
           </div>
         )}
@@ -391,14 +301,15 @@ export default function LetterTraceWidget({
           <span
             className={`text-sm text-amber-600 font-medium ${language === 'ar' ? 'font-cairo' : ''}`}
           >
-            {language === 'ar' ? 'حاول مرة أخرى!' : 'Try again!'}
+            {aiFeedback || (language === 'ar' ? 'حاول مرة أخرى!' : 'Try again!')}
           </span>
         )}
         {!completed && (
           <button
             type="button"
             onClick={handleReset}
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors min-h-[44px]"
+            disabled={checking}
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors min-h-[44px] disabled:opacity-50"
           >
             {language === 'ar' ? 'مسح' : 'Clear'}
           </button>
@@ -406,7 +317,7 @@ export default function LetterTraceWidget({
       </div>
 
       {/* Instruction */}
-      {!completed && !feedback && (
+      {!completed && !feedback && !checking && (
         <p className={`text-sm text-slate-500 text-center ${language === 'ar' ? 'font-cairo' : ''}`}>
           {language === 'ar'
             ? '✏️ تتبع النص بإصبعك فوق الخطوط الرمادية'

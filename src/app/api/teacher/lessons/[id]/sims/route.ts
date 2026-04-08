@@ -259,6 +259,14 @@ export async function POST(
       row = updatedRow as unknown as SimRow;
     }
 
+    // Populate the lesson's video_duration_seconds from the sim duration so
+    // progress bars on the student lessons list work correctly.
+    const durationSeconds = Math.ceil(body.duration_ms / 1000);
+    await supabase
+      .from('lessons')
+      .update({ video_duration_seconds: durationSeconds })
+      .eq('id', lessonId);
+
     const audioUrl = await signAudioUrl(lessonId, row.audio_path);
     return NextResponse.json(rowToPayload(row, audioUrl), { status: 201 });
   } catch (error) {
