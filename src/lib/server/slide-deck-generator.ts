@@ -5,7 +5,7 @@ import {
   getCurriculumSelectionForLesson,
   getSupportedSubjectKey,
 } from "../curriculum";
-import { getOpenAIClient, AI_MODEL } from "../ai/openai-client";
+import { getOpenAIClient, AI_MODEL_FAST } from "../ai/openai-client";
 import type { Database } from "../database.types";
 import {
   clampSlideCount,
@@ -636,7 +636,7 @@ ${validationSchemaNotes}
 
   async function requestStructuredDeck(prompt: string, schemaName: string): Promise<PolicySlide[]> {
     const completion = await openaiClient.chat.completions.create({
-      model: AI_MODEL,
+      model: AI_MODEL_FAST,
       messages: [{ role: "user", content: prompt }],
       response_format: {
         type: "json_schema",
@@ -782,7 +782,7 @@ ${buildSpeakerNotesContext(slides)}`;
     } as const;
 
     const completion = await openaiClient.chat.completions.create({
-      model: AI_MODEL,
+      model: AI_MODEL_FAST,
       messages: [{ role: "user", content: speakerNotesPrompt }],
       response_format: {
         type: "json_schema",

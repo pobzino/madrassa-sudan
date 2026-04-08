@@ -2,6 +2,9 @@ import OpenAI from "openai";
 
 export const AI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4";
 
+/** Fast model for structured output (slide deck generation, speaker notes). */
+export const AI_MODEL_FAST = process.env.OPENAI_MODEL_FAST || "gpt-4o-mini";
+
 let openaiClientSingleton: OpenAI | null = null;
 
 export function getOpenAIClient(): OpenAI | null {
