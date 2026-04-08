@@ -122,6 +122,12 @@ function buildSpeakerNotesContext(slides: PolicySlide[]): string {
     .join("\n\n");
 }
 
+export type SlideGenerationEvent =
+  | { type: 'progress'; message: string }
+  | { type: 'slides'; slides: PolicySlide[] }
+  | { type: 'done'; slides: PolicySlide[] }
+  | { type: 'error'; message: string };
+
 export async function generateSlidesForLesson({
   supabase,
   lessonId,
@@ -129,6 +135,7 @@ export async function generateSlidesForLesson({
   generationContext,
   requestedSlideCount,
   languageMode,
+  onProgress,
 }: {
   supabase: SupabaseClient<Database>;
   lessonId: string;
@@ -136,6 +143,7 @@ export async function generateSlidesForLesson({
   generationContext: SlideGenerationContext | null;
   requestedSlideCount?: number | null;
   languageMode: SlideLanguageMode;
+  onProgress?: (event: SlideGenerationEvent) => void;
 }): Promise<PolicySlide[]> {
   const aiClient = getOpenAIClient();
   if (!aiClient) {
@@ -837,6 +845,7 @@ ${buildSpeakerNotesContext(slides)}`;
     }
   }
 
+  onProgress?.({ type: 'progress', message: 'Generating slide deck...' });
   let slides = patchSlides(await requestDeck());
   let validationIssues = validateGeneratedSlides(slides, {
     slideCount,
@@ -844,6 +853,7 @@ ${buildSpeakerNotesContext(slides)}`;
   });
 
   if (validationIssues.length > 0) {
+    onProgress?.({ type: 'progress', message: 'Refining slides...' });
     slides = patchSlides(await repairDeck(slides, validationIssues));
     validationIssues = validateGeneratedSlides(slides, {
       slideCount,
@@ -874,14 +884,18 @@ ${buildSpeakerNotesContext(slides)}`;
   }
 
   await persistSlides(slides);
+  onProgress?.({ type: 'slides', slides });
 
+  onProgress?.({ type: 'progress', message: 'Adding speaker notes...' });
   try {
     const slidesWithSpeakerNotes = await enrichSpeakerNotes(slides);
     await persistSlides(slidesWithSpeakerNotes);
+    onProgress?.({ type: 'done', slides: slidesWithSpeakerNotes });
     return slidesWithSpeakerNotes;
   } catch (error) {
     console.error("Speaker notes enrichment failed; keeping first-pass deck.", error);
   }
 
+  onProgress?.({ type: 'done', slides });
   return slides;
 }

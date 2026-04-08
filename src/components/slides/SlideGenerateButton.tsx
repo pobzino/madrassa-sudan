@@ -18,6 +18,33 @@ interface SlideGenerateButtonProps {
   compact?: boolean;
 }
 
+/** Parse SSE data lines from a text buffer. Returns parsed events and remaining buffer. */
+function parseSSEBuffer(buffer: string): {
+  events: Array<{ type: string; [key: string]: unknown }>;
+  remaining: string;
+} {
+  const events: Array<{ type: string; [key: string]: unknown }> = [];
+  const parts = buffer.split('\n\n');
+  const remaining = parts.pop() || '';
+
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+
+    for (const line of trimmed.split('\n')) {
+      if (line.startsWith('data: ')) {
+        try {
+          events.push(JSON.parse(line.slice(6)));
+        } catch {
+          // Skip malformed events
+        }
+      }
+    }
+  }
+
+  return { events, remaining };
+}
+
 export default function SlideGenerateButton({
   lessonId,
   hasExistingSlides,
@@ -88,6 +115,74 @@ export default function SlideGenerateButton({
     [lessonId, onGeneratingChange]
   );
 
+  /** Read an SSE stream from the generate endpoint. Returns true if slides were received. */
+  const readSSEStream = useCallback(
+    async (res: Response): Promise<boolean> => {
+      const body = res.body;
+      if (!body) return false;
+
+      const reader = body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let receivedSlides = false;
+
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const { events, remaining } = parseSSEBuffer(buffer);
+          buffer = remaining;
+
+          for (const event of events) {
+            switch (event.type) {
+              case 'progress': {
+                const msg = (event as { message?: string }).message || 'Generating...';
+                setProgress(msg);
+                onGeneratingChange?.(true, msg);
+                break;
+              }
+              case 'slides': {
+                const slides = (event as { slides?: Slide[] }).slides;
+                if (Array.isArray(slides) && slides.length > 0) {
+                  receivedSlides = true;
+                  onGenerated(slides);
+                  const noteMsg = 'Adding speaker notes...';
+                  setProgress(noteMsg);
+                  onGeneratingChange?.(true, noteMsg);
+                }
+                break;
+              }
+              case 'done': {
+                const slides = (event as { slides?: Slide[] }).slides;
+                if (Array.isArray(slides) && slides.length > 0) {
+                  receivedSlides = true;
+                  onGenerated(slides);
+                }
+                break;
+              }
+              case 'error': {
+                const message = (event as { message?: string }).message || 'Generation failed';
+                if (!receivedSlides) {
+                  throw new Error(message);
+                }
+                // If we already have slides, swallow the error (speaker notes failed)
+                console.warn('Slide generation stream error after slides received:', message);
+                break;
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      return receivedSlides;
+    },
+    [onGenerated, onGeneratingChange]
+  );
+
   const handleGenerate = useCallback(async () => {
     if (disabledReason) {
       return;
@@ -108,6 +203,7 @@ export default function SlideGenerateButton({
     setProgress(progressMsg);
     onGeneratingChange?.(true, progressMsg);
     let hasPolledBackground = false;
+    let receivedStreamSlides = false;
 
     try {
       const res = await fetch(`/api/teacher/lessons/${lessonId}/slides/generate`, {
@@ -138,6 +234,18 @@ export default function SlideGenerateButton({
         );
       }
 
+      const contentType = res.headers.get('content-type') || '';
+
+      if (contentType.includes('text/event-stream')) {
+        // Streaming response — show slides as soon as deck is ready
+        receivedStreamSlides = await readSSEStream(res);
+        if (!receivedStreamSlides) {
+          throw new Error('Stream completed without returning slides.');
+        }
+        return;
+      }
+
+      // Fallback: regular JSON response
       if (!res.ok) {
         const text = await res.text();
         let errorMessage = 'Generation failed';
@@ -158,6 +266,9 @@ export default function SlideGenerateButton({
       const data = await res.json();
       onGenerated(data.slides || []);
     } catch (err) {
+      // If stream already delivered slides, don't treat speaker note errors as failures
+      if (receivedStreamSlides) return;
+
       const errorMessage = err instanceof Error ? err.message : 'Generation failed';
       const shouldAttemptRecovery =
         !hasPolledBackground &&
@@ -187,7 +298,7 @@ export default function SlideGenerateButton({
       setProgress('');
       onGeneratingChange?.(false, '');
     }
-  }, [disabledReason, generationContext, hasExistingSlides, languageMode, lessonId, onGenerated, onGeneratingChange, slideCount, tryRecoverSavedSlides]);
+  }, [disabledReason, generationContext, hasExistingSlides, languageMode, lessonId, onGenerated, onGeneratingChange, readSSEStream, slideCount, tryRecoverSavedSlides]);
 
   useEffect(() => {
     if (!autoGenerate || hasExistingSlides || hasAutoGenerated.current || disabledReason) {
@@ -234,7 +345,7 @@ export default function SlideGenerateButton({
           </svg>
           <div>
             <p className="text-sm font-medium text-emerald-800">{progress}</p>
-            <p className="text-xs text-emerald-600">This usually takes about 1-2 minutes.</p>
+            <p className="text-xs text-emerald-600">This usually takes about 30 seconds.</p>
           </div>
         </div>
       )}

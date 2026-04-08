@@ -475,35 +475,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audio_url]);
 
-  // ── Resume position persistence ─────────────────────────────────────────
+  // ── Resume position persistence (refs declared early, effects after applyAt) ──
   const resumeKey = lessonId ? `sim-resume:${lessonId}` : null;
   const resumeAppliedRef = useRef(false);
-
-  // Restore saved position once audio is ready
-  useEffect(() => {
-    if (!resumeKey || resumeAppliedRef.current || !ready) return;
-    resumeAppliedRef.current = true;
-    try {
-      const saved = localStorage.getItem(resumeKey);
-      if (!saved) return;
-      const savedMs = Number(saved);
-      if (!savedMs || savedMs <= 0 || savedMs >= virtualTotalMs - 1000) return;
-      // Seek to the saved position
-      const realMs = virtualToRealMs(savedMs, effectiveClips);
-      const audio = audioRef.current;
-      if (audio) audio.currentTime = realMs / 1000;
-      applyAt(realMs, true);
-    } catch { /* ignore */ }
-  }, [resumeKey, ready, virtualTotalMs, effectiveClips, applyAt]);
-
-  // Periodically save the playback position (every 5 seconds)
-  useEffect(() => {
-    if (!resumeKey || !isPlaying) return;
-    const timer = setInterval(() => {
-      try { localStorage.setItem(resumeKey, String(playbackMs)); } catch { /* quota */ }
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [resumeKey, isPlaying, playbackMs]);
 
   // Keep audioSrc in sync when the prop changes (e.g. parent re-fetches).
   useEffect(() => { setAudioSrc(audio_url); }, [audio_url]);
@@ -575,6 +549,32 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     },
     [deck, projectedEvents, effectiveClips, eventsAtMs, onRealTimeChange, virtualTotalMs, onProgress]
   );
+
+  // ── Resume position effects (must be after applyAt) ───────────────────
+  // Restore saved position once audio is ready
+  useEffect(() => {
+    if (!resumeKey || resumeAppliedRef.current || !ready) return;
+    resumeAppliedRef.current = true;
+    try {
+      const saved = localStorage.getItem(resumeKey);
+      if (!saved) return;
+      const savedMs = Number(saved);
+      if (!savedMs || savedMs <= 0 || savedMs >= virtualTotalMs - 1000) return;
+      const realMs = virtualToRealMs(savedMs, effectiveClips);
+      const audio = audioRef.current;
+      if (audio) audio.currentTime = realMs / 1000;
+      applyAt(realMs, true);
+    } catch { /* ignore */ }
+  }, [resumeKey, ready, virtualTotalMs, effectiveClips, applyAt]);
+
+  // Periodically save the playback position (every 5 seconds)
+  useEffect(() => {
+    if (!resumeKey || !isPlaying) return;
+    const timer = setInterval(() => {
+      try { localStorage.setItem(resumeKey, String(playbackMs)); } catch { /* quota */ }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [resumeKey, isPlaying, playbackMs]);
 
   // Rebuild the triggered-gates set so every gate strictly before `realMs`
   // is marked triggered. Called on seeks and whenever the gate list changes

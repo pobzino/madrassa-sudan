@@ -10,8 +10,9 @@ import {
   generateSlidesForLesson,
   SlideGenerationError,
 } from "@/lib/server/slide-deck-generator";
+import type { SlideGenerationEvent } from "@/lib/server/slide-deck-generator";
 
-export const maxDuration = 30;
+export const maxDuration = 120;
 
 function shouldUseBackgroundGeneration(request: NextRequest) {
   const hostname = request.nextUrl.hostname.toLowerCase();
@@ -112,16 +113,57 @@ export async function POST(
       }
     }
 
-    const slides = await generateSlidesForLesson({
-      supabase,
-      lessonId,
-      userId: user.id,
-      generationContext,
-      requestedSlideCount: slideCount,
-      languageMode,
+    // Stream SSE events so the client sees slides as soon as the deck is ready,
+    // before speaker notes are generated.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (event: SlideGenerationEvent) => {
+          try {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
+            );
+          } catch {
+            // Controller may be closed if the client disconnected
+          }
+        };
+
+        try {
+          await generateSlidesForLesson({
+            supabase,
+            lessonId,
+            userId: user.id,
+            generationContext,
+            requestedSlideCount: slideCount,
+            languageMode,
+            onProgress: send,
+          });
+        } catch (error) {
+          console.error("Generate slides error:", error);
+          const message =
+            error instanceof SlideGenerationError
+              ? error.message
+              : error instanceof Error
+                ? error.message
+                : "Generation failed";
+          send({ type: "error", message });
+        } finally {
+          try {
+            controller.close();
+          } catch {
+            // Already closed
+          }
+        }
+      },
     });
 
-    return NextResponse.json({ slides });
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   } catch (error) {
     console.error("Generate slides error:", error);
 
