@@ -4,14 +4,11 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { toast } from 'sonner';
 import type { Slide, SlideType } from '@/lib/slides.types';
-import type { LessonVideoProcessingStatus } from '@/lib/lessons/video-processing';
 import SlideCard from './SlideCard';
 import SlideThumbnail from './SlideThumbnail';
 import SlideEditPanel from './SlideEditPanel';
 import SlideToolbar, { type InteractiveSlideRequest } from './SlideToolbar';
 import dynamic from 'next/dynamic';
-import { useBackgroundVideoUpload } from '@/contexts/BackgroundVideoUploadContext';
-import { useSlideRecorder } from '@/hooks/useSlideRecorder';
 import { useWhiteboard, type WhiteboardEvent } from '@/hooks/useWhiteboard';
 import WhiteboardToolbar from './WhiteboardToolbar';
 import { useSimRecorder, SIM_MAX_DURATION_MS, type SimRecording } from '@/hooks/useSimRecorder';
@@ -33,12 +30,6 @@ export interface RegenerateProps {
   onGeneratingChange: (generating: boolean, progress: string) => void;
 }
 
-const RecordingOverlay = dynamic(() => import('./RecordingOverlay'), {
-  loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
-});
-const RecordingReviewModal = dynamic(() => import('./RecordingReviewModal'), {
-  loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
-});
 const SimReviewModal = dynamic(() => import('./SimReviewModal'), {
   loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
 });
@@ -365,16 +356,6 @@ interface SlideEditorProps {
   focusedSlideId?: string | null;
   lessonId?: string;
   lessonTitle?: string;
-  onVideoReady?: (urls: {
-    video_url_1080p: string;
-    video_url_360p: string;
-    video_url_480p: string;
-    video_url_720p: string;
-    duration_seconds?: number;
-    video_processing_status?: LessonVideoProcessingStatus;
-    video_processing_error?: string | null;
-    video_processed_at?: string | null;
-  }) => void;
   /** Fires when a sim is saved or deleted, so the parent can sync its state. */
   onSimChange?: (sim: SimPayload | null) => void;
   /** When false, hides sim recording/review buttons. */
@@ -392,7 +373,6 @@ export default function SlideEditor({
   focusedSlideId,
   lessonId,
   lessonTitle,
-  onVideoReady,
   onSimChange,
   simEnabled,
   regenerateProps,
@@ -404,8 +384,6 @@ export default function SlideEditor({
   const [revealedCount, setRevealedCount] = useState(0);
   const [showActivityAnswer, setShowActivityAnswer] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [showReviewModal, setShowReviewModal] = useState(false);
   const [whiteboardActive, setWhiteboardActive] = useState(false);
 
   // Sim (event-sourced) recording state — parallel test flow alongside video Record.
@@ -551,20 +529,6 @@ export default function SlideEditor({
 
   const slideContainerRef = useRef<HTMLDivElement>(null);
 
-  const {
-    recorderState,
-    recordingDuration,
-    recordedBlob,
-    errorMessage: recorderError,
-    countdownValue,
-    startRecording: recorderStart,
-    stopRecording: recorderStop,
-    pauseRecording,
-    resumeRecording,
-    canvasRef,
-    snapshotSlide,
-  } = useSlideRecorder({ slideContainerRef });
-  const backgroundVideoUpload = useBackgroundVideoUpload();
 
   const selectedSlide = slides[selectedIndex] || null;
 
@@ -604,26 +568,8 @@ export default function SlideEditor({
     return () => clearTimeout(timeout);
   }, [presentIndex, syncWhiteboardSlide]);
 
-  // Snapshot slide when presentIndex or revealedCount changes during recording
-  // Small delay lets React paint the new slide before html-to-image captures it
-  useEffect(() => {
-    if (recording && (recorderState === 'recording' || recorderState === 'paused')) {
-      const t = setTimeout(() => snapshotSlide(), 120);
-      return () => clearTimeout(t);
-    }
-  }, [presentIndex, revealedCount, showActivityAnswer, recording, recorderState, snapshotSlide]);
-
-  const captureAfterNavigation = useCallback(() => {
-    if (!recording || (recorderState !== 'recording' && recorderState !== 'paused')) {
-      return;
-    }
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        snapshotSlide();
-      });
-    });
-  }, [recording, recorderState, snapshotSlide]);
+  // No-op for backwards compat with sim recording code that calls this
+  const captureAfterNavigation = useCallback(() => {}, []);
 
   const goToNextPresentStep = useCallback(() => {
     flushSync(() => {
@@ -645,20 +591,6 @@ export default function SlideEditor({
 
     captureAfterNavigation();
   }, [captureAfterNavigation]);
-
-  // When recording stops, show review modal
-  useEffect(() => {
-    if (recorderState === 'stopped' && recordedBlob) {
-      const timeout = setTimeout(() => {
-        setRecording(false);
-        setPresenting(false);
-        setWhiteboardActive(false);
-        setShowReviewModal(true);
-      }, 0);
-
-      return () => clearTimeout(timeout);
-    }
-  }, [recorderState, recordedBlob]);
 
   // ── Sim event emission ────────────────────────────────────────────────────
   // Emit `slide_change` whenever the presented slide changes or the recorder
@@ -900,10 +832,7 @@ export default function SlideEditor({
         e.preventDefault();
         goToPreviousPresentStep();
       } else if (e.key === 'Escape') {
-        if (recording) {
-          // During recording, Escape stops recording instead of exiting
-          recorderStop();
-        } else if (simRecording) {
+        if (simRecording) {
           if (simState === 'recording' || simState === 'paused') {
             simStopRecording();
           } else {
@@ -927,8 +856,6 @@ export default function SlideEditor({
     goToPreviousPresentStep,
     presentSlide?.type,
     presenting,
-    recording,
-    recorderStop,
     simRecording,
     simState,
     simStopRecording,
@@ -1082,15 +1009,6 @@ export default function SlideEditor({
     setPresenting(true);
   }
 
-  async function startRecord() {
-    setPresentIndex(selectedIndex);
-    setPresenting(true);
-    setRecording(true);
-    // Small delay so the presentation DOM renders before we start recording
-    await new Promise((r) => setTimeout(r, 100));
-    recorderStart();
-  }
-
   const startSimRecord = useCallback(async () => {
     if (!lessonId) return;
     if (lessonPublished) {
@@ -1167,44 +1085,6 @@ export default function SlideEditor({
     });
   }, [existingSim, lessonPublished]);
 
-  function handleRetake() {
-    setShowReviewModal(false);
-    startRecord();
-  }
-
-  function handleDiscard() {
-    setShowReviewModal(false);
-  }
-
-  async function handleUpload(editedBlob?: Blob) {
-    const blobToUpload = editedBlob || recordedBlob;
-    if (!blobToUpload || !lessonId) {
-      return;
-    }
-
-    const result = await backgroundVideoUpload.startUpload({
-      blob: blobToUpload,
-      lessonId,
-      lessonTitle: lessonTitle || 'Recording',
-      onVideoReady,
-    });
-
-    if (!result.ok) {
-      toast.error(result.error);
-      return;
-    }
-
-    setShowReviewModal(false);
-  }
-
-  const handlePreviousWhileRecording = useCallback(() => {
-    goToPreviousPresentStep();
-  }, [goToPreviousPresentStep]);
-
-  const handleNextWhileRecording = useCallback(() => {
-    goToNextPresentStep();
-  }, [goToNextPresentStep]);
-
   const handleToggleAnswerReveal = useCallback(() => {
     setShowActivityAnswer((current) => !current);
   }, []);
@@ -1216,7 +1096,7 @@ export default function SlideEditor({
         <div className="flex h-full w-full items-center justify-center gap-6 px-4 py-6 lg:px-6">
           <div
             ref={slideContainerRef}
-            className={`relative mx-auto w-full ${recording || simRecording ? 'max-w-5xl lg:max-w-[min(72vw,1100px)]' : 'max-w-6xl'}`}
+            className={`relative mx-auto w-full ${simRecording ? 'max-w-5xl lg:max-w-[min(72vw,1100px)]' : 'max-w-6xl'}`}
           >
             <SlideCard
               key={`${presentIndex}:${revealedCount}:${language}`}
@@ -1234,7 +1114,7 @@ export default function SlideEditor({
               activityAnswer={activitySimAnswer}
               onActivityAnswerChange={handleActivityAnswerChange}
             />
-            {(recording || simRecording) && (
+            {simRecording && (
               <WhiteboardCanvas
                 whiteboard={whiteboard}
                 active={whiteboardActive}
@@ -1242,62 +1122,11 @@ export default function SlideEditor({
             )}
           </div>
 
-          {recording && presentSpeakerNotes && (
-            <aside className="hidden lg:flex w-80 shrink-0 self-stretch max-h-[calc(100vh-3rem)] flex-col rounded-3xl border border-white/15 bg-white/10 p-5 text-white shadow-2xl backdrop-blur-md">
-              <div className="mb-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/60">
-                  Presenter Notes
-                </p>
-                <p className="mt-2 text-sm font-semibold text-white/90" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-                  {language === 'ar' ? presentSlide?.title_ar || presentSlide?.title_en : presentSlide?.title_en || presentSlide?.title_ar}
-                </p>
-              </div>
-              <div className="overflow-y-auto pr-1">
-                <p className="whitespace-pre-wrap text-sm leading-6 text-white/90" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-                  {presentSpeakerNotes}
-                </p>
-              </div>
-            </aside>
-          )}
-
         </div>
 
         {/* Whiteboard toolbar — visible when drawing is active */}
-        {recording && whiteboardActive && (recorderState === 'recording' || recorderState === 'paused') && (
-          <WhiteboardToolbar whiteboard={whiteboard} />
-        )}
         {simRecording && whiteboardActive && (simState === 'recording' || simState === 'paused') && (
           <WhiteboardToolbar whiteboard={whiteboard} />
-        )}
-
-        {/* Recording overlay (countdown, REC indicator, controls) */}
-        {recording && (
-          <RecordingOverlay
-            recorderState={recorderState}
-            countdownValue={countdownValue}
-            recordingDuration={recordingDuration}
-            canGoPrevious={canGoPreviousWhileRecording}
-            canGoNext={canGoNextWhileRecording}
-            canRevealAnswer={isPresentActivitySlide}
-            isAnswerRevealed={showActivityAnswer}
-            isWhiteboardActive={whiteboardActive}
-            canvasRef={canvasRef}
-            onPrevious={handlePreviousWhileRecording}
-            onNext={handleNextWhileRecording}
-            onToggleAnswer={handleToggleAnswerReveal}
-            onToggleWhiteboard={() => setWhiteboardActive((v) => !v)}
-            onInsertWhiteboardSlide={insertWhiteboardSlideDuringRecording}
-            onPause={pauseRecording}
-            onResume={resumeRecording}
-            onStop={recorderStop}
-          />
-        )}
-
-        {/* Recording error */}
-        {recorderError && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] bg-red-600 text-white text-sm px-4 py-2 rounded-full">
-            {recorderError}
-          </div>
         )}
 
         {/* Sim recording HUD — minimal controls for beta */}
@@ -1566,7 +1395,7 @@ export default function SlideEditor({
         )}
 
         {/* Controls overlay — hide during active recording */}
-        {!recording && !simRecording && (
+        {!simRecording && (
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/60 backdrop-blur-sm rounded-full px-6 py-3">
             <button
               onClick={goToPreviousPresentStep}
@@ -1614,28 +1443,8 @@ export default function SlideEditor({
           </div>
         )}
 
-        {/* Slide counter during recording */}
-        {recording && (recorderState === 'recording' || recorderState === 'paused') && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[55] bg-black/60 backdrop-blur-sm rounded-full px-4 py-2">
-            <span className="text-white/80 text-sm font-medium">
-              {presentIndex + 1} / {slides.length}
-            </span>
-          </div>
-        )}
-
-        {recording && presentSpeakerNotes && (
-          <div className="fixed inset-x-4 bottom-24 z-[55] rounded-2xl border border-white/15 bg-black/75 p-4 text-white shadow-2xl backdrop-blur-sm lg:hidden">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
-              Presenter Notes
-            </p>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/90" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-              {presentSpeakerNotes}
-            </p>
-          </div>
-        )}
-
         {/* Language toggle in present mode */}
-        {!recording && !simRecording && (
+        {!simRecording && (
           <div className="absolute top-4 right-4">
             <button
               onClick={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
@@ -1661,7 +1470,6 @@ export default function SlideEditor({
           onAddExplorationSlide={addExplorationSlide}
           onSave={onSave}
           onPresent={startPresent}
-          onRecord={lessonId ? startRecord : undefined}
           onRecordSim={lessonId && simEnabled ? startSimRecord : undefined}
           onOpenSim={lessonId && simEnabled ? handleOpenSim : undefined}
           hasSim={existingSim !== null}
@@ -1731,16 +1539,6 @@ export default function SlideEditor({
           )}
         </div>
       </div>
-
-      {/* Recording review modal */}
-      {showReviewModal && recordedBlob && (
-        <RecordingReviewModal
-          blob={recordedBlob}
-          onUpload={handleUpload}
-          onRetake={handleRetake}
-          onDiscard={handleDiscard}
-        />
-      )}
 
       {/* Sim review / edit / view modal — single entry point for all sim UX. */}
       {simReviewMode && lessonId && simReviewMode.kind === 'record-review' && (

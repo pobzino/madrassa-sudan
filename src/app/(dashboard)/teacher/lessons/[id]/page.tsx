@@ -8,7 +8,6 @@ import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import { useSimAccess } from "@/lib/hooks/useSimAccess";
-import { useBackgroundVideoUpload } from "@/contexts/BackgroundVideoUploadContext";
 import {
   getCurriculumRequirementMessage,
   getCurriculumSelectionForLesson,
@@ -20,8 +19,6 @@ import {
 import type { Database } from "@/lib/database.types";
 import dynamic from "next/dynamic";
 import SimOnboardingTour from "@/components/teacher/SimOnboardingTour";
-import SlideGenerateButton from "@/components/slides/SlideGenerateButton";
-import SlideCard from "@/components/slides/SlideCard";
 
 const SlideEditor = dynamic(() => import("@/components/slides/SlideEditor"), {
   loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
@@ -36,29 +33,19 @@ import type { SimPayload } from "@/lib/sim.types";
 import type { Slide } from "@/lib/slides.types";
 import {
   ensureSlidesForSupportedTasks,
-  isCanonicalActivityTask,
   normalizeLessonTaskForm,
   syncTaskFormsFromSlides,
 } from "@/lib/lesson-activities";
 import type { LessonTaskForm } from "@/lib/tasks.types";
-import { toPlayableVideoUrl } from "@/lib/bunny-playback";
 import { getLessonPublishReadiness } from "@/lib/lessons/publish-readiness";
 import { toast } from "sonner";
-import {
-  getLessonVideoKey,
-  type LessonVideoProcessingStatus,
-  normalizeLessonVideoProcessingStatus,
-} from "@/lib/lessons/video-processing";
 import {
   clampSlideCount,
   DEFAULT_SLIDE_LENGTH_PRESET,
   getSlideGenerationContextStorageKey,
   getSlideLengthPresetConfig,
   getSlideLengthPresetFromCount,
-  MIN_GENERATED_SLIDE_COUNT,
-  MAX_GENERATED_SLIDE_COUNT,
   parseSlideGenerationContext,
-  SLIDE_LENGTH_PRESET_OPTIONS,
   TEACHER_GRADE_OPTIONS,
   type SlideGenerationContext,
   type SlideLengthPreset,
@@ -88,70 +75,10 @@ type LessonForm = {
   curriculum_topic: CurriculumSelection | null;
   is_published: boolean;
   thumbnail_url: string;
-  video_url_1080p: string;
-  video_url_360p: string;
-  video_url_480p: string;
-  video_url_720p: string;
-  captions_ar_url: string;
-  captions_en_url: string;
-  video_duration_seconds: string;
-  video_processing_status: LessonVideoProcessingStatus;
-  video_processing_error: string;
-  video_processed_at: string;
 };
 
 type Tab = "details" | "slides" | "sim" | "results";
 type EditorSaveState = "saved" | "dirty" | "saving" | "error";
-
-type LessonVideoUrls = {
-  video_url_1080p: string;
-  video_url_360p: string;
-  video_url_480p: string;
-  video_url_720p: string;
-  duration_seconds?: number;
-  video_processing_status?: LessonVideoProcessingStatus;
-  video_processing_error?: string | null;
-  video_processed_at?: string | null;
-};
-
-function applyVideoUrlsToForm(previous: LessonForm, urls: LessonVideoUrls): LessonForm {
-  return {
-    ...previous,
-    video_url_1080p: urls.video_url_1080p,
-    video_url_360p: urls.video_url_360p,
-    video_url_480p: urls.video_url_480p,
-    video_url_720p: urls.video_url_720p,
-    ...(urls.duration_seconds != null
-      ? { video_duration_seconds: String(urls.duration_seconds) }
-      : {}),
-    ...(urls.video_processing_status
-      ? { video_processing_status: urls.video_processing_status }
-      : {}),
-    ...(urls.video_processing_error !== undefined
-      ? { video_processing_error: urls.video_processing_error || "" }
-      : {}),
-    ...(urls.video_processed_at !== undefined
-      ? { video_processed_at: urls.video_processed_at || "" }
-      : {}),
-  };
-}
-
-function formatTimestampLabel(value: number) {
-  const totalSeconds = Math.max(0, Math.round(value));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function getTeacherPreviewVideoUrl(form: LessonForm) {
-  return toPlayableVideoUrl(
-    form.video_url_720p ||
-      form.video_url_480p ||
-      form.video_url_360p ||
-      form.video_url_1080p ||
-      ""
-  );
-}
 
 async function syncLessonTasks(
   supabase: ReturnType<typeof createClient>,
@@ -226,13 +153,8 @@ function buildEditorSnapshot({
   lessonTasks: LessonTaskForm[];
   slideLanguageMode: SlideLanguageMode;
 }) {
-  const persistedForm = { ...form };
-  delete persistedForm.video_processing_status;
-  delete persistedForm.video_processing_error;
-  delete persistedForm.video_processed_at;
-
   return JSON.stringify({
-    form: persistedForm,
+    form,
     assignedCohortIds: [...assignedCohortIds].sort(),
     slideLanguageMode,
     slides,
@@ -245,11 +167,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const router = useRouter();
   const { profile, loading: authLoading } = useTeacherGuard();
   const { canAccessSims } = useSimAccess();
-  const {
-    activeLessonId: backgroundUploadLessonId,
-    stage: backgroundUploadStage,
-    statusMessage: backgroundUploadStatusMessage,
-  } = useBackgroundVideoUpload();
   const [deleting, setDeleting] = useState(false);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [availableCohorts, setAvailableCohorts] = useState<CohortOption[]>([]);
@@ -275,12 +192,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
   const [slideGenProgress, setSlideGenProgress] = useState("");
   const canPublishLesson = profile?.role === "admin";
-  const lastPersistedVideoKeyRef = useRef("");
   const lastPersistedPublishedRef = useRef(false);
   const autosaveTimeoutRef = useRef<number | null>(null);
   const hasInitializedSnapshotRef = useRef(false);
   const lastSavedSnapshotRef = useRef("");
-  const [isRetryingVideoProcessing, setIsRetryingVideoProcessing] = useState(false);
   const [lessonSim, setLessonSim] = useState<SimPayload | null>(null);
 
   const [form, setForm] = useState<LessonForm>({
@@ -293,16 +208,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     curriculum_topic: null,
     is_published: false,
     thumbnail_url: "",
-    video_url_1080p: "",
-    video_url_360p: "",
-    video_url_480p: "",
-    video_url_720p: "",
-    captions_ar_url: "",
-    captions_en_url: "",
-    video_duration_seconds: "",
-    video_processing_status: "idle",
-    video_processing_error: "",
-    video_processed_at: "",
   });
 
   const [lessonTasks, setLessonTasks] = useState<LessonTaskForm[]>([]);
@@ -418,22 +323,9 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         ),
         is_published: lesson.is_published,
         thumbnail_url: lesson.thumbnail_url || "",
-        video_url_1080p: lesson.video_url_1080p || "",
-        video_url_360p: lesson.video_url_360p || "",
-        video_url_480p: lesson.video_url_480p || "",
-        video_url_720p: lesson.video_url_720p || "",
-        captions_ar_url: lesson.captions_ar_url || "",
-        captions_en_url: lesson.captions_en_url || "",
-        video_duration_seconds: lesson.video_duration_seconds ? String(lesson.video_duration_seconds) : "",
-        video_processing_status: normalizeLessonVideoProcessingStatus(
-          lesson.video_processing_status
-        ),
-        video_processing_error: lesson.video_processing_error || "",
-        video_processed_at: lesson.video_processed_at || "",
       };
       setForm(initialForm);
       lastPersistedPublishedRef.current = lesson.is_published;
-      lastPersistedVideoKeyRef.current = getLessonVideoKey(initialForm);
     }
 
     const { data: taskRows } = await supabase
@@ -528,45 +420,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     finally { setSlideSaving(false); }
   }, [id, lessonTasks, slideLanguageMode, slides]);
 
-  const processPublishedVideo = useCallback(
-    async (successText: string, options?: { showMessage?: boolean }) => {
-      const response = await fetch(`/api/teacher/lessons/${id}/process-video`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language_hint: "ar" }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || "Video transcript processing failed");
-      }
-
-      setForm((previous) => ({
-        ...previous,
-        video_processing_status: "ready",
-        video_processing_error: "",
-        video_processed_at: new Date().toISOString(),
-      }));
-
-      const processedText =
-        data.embedding_count > 0
-          ? `${successText} Transcript and search index updated.`
-          : `${successText} Transcript updated.`;
-
-      if (options?.showMessage !== false) {
-        setSaveMessage({ type: "success", text: processedText });
-        setTimeout(() => setSaveMessage(null), 3000);
-      }
-    },
-    [id]
-  );
-
-  const handleSlideVideoReady = useCallback(
-    async (urls: LessonVideoUrls) => {
-      setForm((prev) => applyVideoUrlsToForm(prev, urls));
-    },
-    []
-  );
 
   const slideGenerationBlockedReason = getCurriculumRequirementMessage(
     subjects.find((s) => s.id === form.subject_id) ?? null,
@@ -576,7 +429,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
   const selectedSubject = subjects.find((subject) => subject.id === form.subject_id) ?? null;
   const requiresCurriculum = hasMappedCurriculum(selectedSubject, form.grade_level);
-  const hasLessonVideo = Boolean(getLessonVideoKey(form));
   const publishReadiness = useMemo(
     () =>
       getLessonPublishReadiness({
@@ -584,15 +436,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         gradeLevel: form.grade_level,
         curriculumTopic: form.curriculum_topic,
         slides,
-        lessonTasks,
-        video: form,
-        videoProcessingStatus: form.video_processing_status,
-        videoProcessingError: form.video_processing_error,
         hasSim: !!lessonSim,
       }),
     [
       form,
-      lessonTasks,
       lessonSim,
       selectedSubject,
       slides,
@@ -671,13 +518,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
             curriculum_topic: serializeCurriculumSelection(form.curriculum_topic),
             is_published: form.is_published,
             thumbnail_url: form.thumbnail_url.trim() || null,
-            video_url_1080p: form.video_url_1080p.trim() || null,
-            video_url_360p: form.video_url_360p.trim() || null,
-            video_url_480p: form.video_url_480p.trim() || null,
-            video_url_720p: form.video_url_720p.trim() || null,
-            captions_ar_url: form.captions_ar_url.trim() || null,
-            captions_en_url: form.captions_en_url.trim() || null,
-            video_duration_seconds: form.video_duration_seconds ? Number(form.video_duration_seconds) : null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", id);
@@ -730,29 +570,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         }
 
         await syncLessonTasks(supabase, id, syncedTasks);
-        const nextVideoKey = getLessonVideoKey(form);
-        const normalizedVideoProcessingStatus = normalizeLessonVideoProcessingStatus(
-          form.video_processing_status
-        );
-        const shouldProcessPublishedVideo =
-          Boolean(form.is_published && nextVideoKey) &&
-          (normalizedVideoProcessingStatus !== "ready" ||
-            !lastPersistedPublishedRef.current ||
-            lastPersistedVideoKeyRef.current !== nextVideoKey);
-
-        if (shouldProcessPublishedVideo) {
-          await processPublishedVideo(showSuccessMessage ? "Saved." : "Autosaved.", {
-            showMessage: showSuccessMessage,
-          });
-          lastPersistedPublishedRef.current = true;
-          lastPersistedVideoKeyRef.current = nextVideoKey;
-        } else {
-          lastPersistedPublishedRef.current = form.is_published;
-          lastPersistedVideoKeyRef.current = nextVideoKey;
-          if (showSuccessMessage) {
-            setSaveMessage({ type: "success", text: "Saved" });
-            setTimeout(() => setSaveMessage(null), 2000);
-          }
+        lastPersistedPublishedRef.current = form.is_published;
+        if (showSuccessMessage) {
+          setSaveMessage({ type: "success", text: "Saved" });
+          setTimeout(() => setSaveMessage(null), 2000);
         }
 
         const savedAt = new Date().toLocaleTimeString();
@@ -778,7 +599,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       form,
       id,
       lessonTasks,
-      processPublishedVideo,
       publishReadiness,
       requiresCurriculum,
       slideLanguageMode,
@@ -842,133 +662,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       }
     };
   }, []);
-
-  const handleRetryVideoProcessing = useCallback(async () => {
-    if (!hasLessonVideo) {
-      return;
-    }
-
-    setIsRetryingVideoProcessing(true);
-    setForm((previous) => ({
-      ...previous,
-      video_processing_status: "processing",
-      video_processing_error: "",
-    }));
-    try {
-      await processPublishedVideo("Video processed.");
-    } catch (error) {
-      setForm((previous) => ({
-        ...previous,
-        video_processing_status: "error",
-        video_processing_error:
-          error instanceof Error ? error.message : "Video processing failed",
-      }));
-      setSaveMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Video processing failed",
-      });
-    } finally {
-      setIsRetryingVideoProcessing(false);
-    }
-  }, [hasLessonVideo, processPublishedVideo]);
-
-  const isBackgroundUploadForLesson =
-    backgroundUploadLessonId === id &&
-    ["uploading", "processing", "saving", "error"].includes(backgroundUploadStage);
-  const videoStatus = useMemo(() => {
-    if (isBackgroundUploadForLesson) {
-      if (backgroundUploadStage === "error") {
-        return {
-          tone: "red" as const,
-          title: "Video upload needs attention",
-          description: backgroundUploadStatusMessage || "The background upload failed before it could finish.",
-          actionLabel: null,
-        };
-      }
-
-      if (backgroundUploadStage === "uploading") {
-        return {
-          tone: "amber" as const,
-          title: "Uploading video in the background",
-          description:
-            backgroundUploadStatusMessage ||
-            "You can keep working in the dashboard while the recording uploads. Keep this tab open.",
-          actionLabel: null,
-        };
-      }
-
-      return {
-        tone: "amber" as const,
-        title: "Preparing video in the background",
-        description:
-          backgroundUploadStatusMessage ||
-          "The recording is uploaded and the lesson is finishing video processing in the background.",
-        actionLabel: null,
-      };
-    }
-
-    if (hasLessonVideo) {
-      const processingStatus = normalizeLessonVideoProcessingStatus(
-        form.video_processing_status
-      );
-
-      if (processingStatus === "processing") {
-        return {
-          tone: "amber" as const,
-          title: "Processing lesson video",
-          description:
-            "Transcript and search indexing are running for this lesson video. Publishing stays blocked until this finishes.",
-          actionLabel: null,
-        };
-      }
-
-      if (processingStatus === "error") {
-        return {
-          tone: "red" as const,
-          title: "Lesson video needs attention",
-          description:
-            form.video_processing_error ||
-            "Transcript or search processing failed. Retry it before publishing.",
-          actionLabel: "Retry transcript + search",
-        };
-      }
-
-      if (processingStatus === "pending") {
-        return {
-          tone: "amber" as const,
-          title: "Lesson video attached",
-          description:
-            "Run transcript and search processing before publishing this lesson.",
-          actionLabel: "Process video now",
-        };
-      }
-
-      return {
-        tone: "emerald" as const,
-        title: form.is_published ? "Published lesson video ready" : "Lesson video ready",
-        description: form.is_published
-          ? "Transcript and search indexing are up to date for this lesson video. You can re-run processing if needed."
-          : "Transcript and search indexing are ready. This lesson can now be published once the remaining checks pass.",
-        actionLabel: "Retry transcript + search",
-      };
-    }
-
-    return {
-      tone: "gray" as const,
-      title: "No lesson video yet",
-      description:
-        "Record or upload a video from the slide editor. Once saved, transcript and search indexing can run automatically for published lessons.",
-      actionLabel: null,
-    };
-  }, [
-    backgroundUploadStage,
-    backgroundUploadStatusMessage,
-    form.is_published,
-    form.video_processing_error,
-    form.video_processing_status,
-    hasLessonVideo,
-    isBackgroundUploadForLesson,
-  ]);
 
   const saveStateMeta = useMemo(() => {
     if (saveState === "saving") {
@@ -1131,9 +824,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           assignedCohortIds={assignedCohortIds}
           setAssignedCohortIds={setAssignedCohortIds}
           canPublishLesson={canPublishLesson}
-          videoStatus={videoStatus}
-          onRetryVideoProcessing={hasLessonVideo ? handleRetryVideoProcessing : null}
-          isRetryingVideoProcessing={isRetryingVideoProcessing}
           publishReadiness={publishReadiness}
         />
         )}
@@ -1182,7 +872,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                 preferredLanguage={slideLanguageMode === "en" ? "en" : "ar"}
                 lessonId={id}
                 lessonTitle={form.title_ar || form.title_en || ""}
-                onVideoReady={handleSlideVideoReady}
                 focusedSlideId={slideEditorFocusId}
                 onSimChange={setLessonSim}
                 simEnabled={canAccessSims}
@@ -1338,9 +1027,6 @@ function DetailsTab({
   assignedCohortIds,
   setAssignedCohortIds,
   canPublishLesson,
-  videoStatus,
-  onRetryVideoProcessing,
-  isRetryingVideoProcessing,
   publishReadiness,
 }: {
   form: LessonForm;
@@ -1351,23 +1037,8 @@ function DetailsTab({
   assignedCohortIds: string[];
   setAssignedCohortIds: (value: string[] | ((prev: string[]) => string[])) => void;
   canPublishLesson: boolean;
-  videoStatus: {
-    tone: "gray" | "amber" | "emerald" | "red";
-    title: string;
-    description: string;
-    actionLabel: string | null;
-  };
-  onRetryVideoProcessing: (() => void) | null;
-  isRetryingVideoProcessing: boolean;
   publishReadiness: ReturnType<typeof getLessonPublishReadiness>;
 }) {
-  const videoToneClasses = {
-    gray: "border-gray-200 bg-gray-50/70 text-gray-700",
-    amber: "border-amber-200 bg-amber-50/70 text-amber-800",
-    emerald: "border-emerald-200 bg-emerald-50/70 text-emerald-800",
-    red: "border-red-200 bg-red-50/70 text-red-800",
-  } as const;
-
   return (
     <div className="space-y-6">
       {/* Titles */}
@@ -1473,37 +1144,11 @@ function DetailsTab({
       <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Lesson Video</h2>
-            <p className="mt-2 text-sm text-gray-500">
-              Recordings upload in the background and lesson video processing can be retried here if transcript or search indexing needs another pass.
-            </p>
-          </div>
-          {videoStatus.actionLabel && onRetryVideoProcessing && (
-            <button
-              type="button"
-              onClick={onRetryVideoProcessing}
-              disabled={isRetryingVideoProcessing}
-              className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isRetryingVideoProcessing ? "Processing..." : videoStatus.actionLabel}
-            </button>
-          )}
-        </div>
-
-        <div className={`rounded-2xl border px-4 py-4 ${videoToneClasses[videoStatus.tone]}`}>
-          <p className="text-sm font-semibold">{videoStatus.title}</p>
-          <p className="mt-1 text-sm opacity-90">{videoStatus.description}</p>
-        </div>
-      </section>
-
-      <section className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
               Publish Readiness
             </h2>
             <p className="mt-2 text-sm text-gray-500">
-              Publishing is blocked until the lesson has a video, slides, curriculum topic, and finished transcript/search processing.
+              Publishing is blocked until the lesson has a sim, slides, and a curriculum topic.
             </p>
           </div>
           <span

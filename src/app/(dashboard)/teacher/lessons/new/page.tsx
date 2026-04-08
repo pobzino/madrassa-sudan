@@ -17,11 +17,6 @@ import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import { toast } from "sonner";
 import { getLessonPublishReadiness } from "@/lib/lessons/publish-readiness";
-import {
-  type LessonVideoProcessingStatus,
-  normalizeLessonVideoProcessingStatus,
-} from "@/lib/lessons/video-processing";
-import { getDisallowedLessonVideoFields } from "@/lib/lessons/video-url-guards";
 import { TEACHER_GRADE_OPTIONS } from "@/lib/slides-generation";
 
 type Subject = {
@@ -40,16 +35,6 @@ type LessonForm = {
   curriculum_topic: CurriculumSelection | null;
   is_published: boolean;
   thumbnail_url: string;
-  video_url_1080p: string;
-  video_url_360p: string;
-  video_url_480p: string;
-  video_url_720p: string;
-  captions_ar_url: string;
-  captions_en_url: string;
-  video_duration_seconds: string;
-  video_processing_status: LessonVideoProcessingStatus;
-  video_processing_error: string;
-  video_processed_at: string;
 };
 
 type AutosaveState = "idle" | "saving" | "saved" | "error";
@@ -68,16 +53,6 @@ function getInitialForm(): LessonForm {
     curriculum_topic: null,
     is_published: false,
     thumbnail_url: "",
-    video_url_1080p: "",
-    video_url_360p: "",
-    video_url_480p: "",
-    video_url_720p: "",
-    captions_ar_url: "",
-    captions_en_url: "",
-    video_duration_seconds: "",
-    video_processing_status: "idle",
-    video_processing_error: "",
-    video_processed_at: "",
   };
 }
 
@@ -107,20 +82,6 @@ function buildLessonFormFromRow(
     ),
     is_published: row.is_published ?? false,
     thumbnail_url: row.thumbnail_url || "",
-    video_url_1080p: row.video_url_1080p || "",
-    video_url_360p: row.video_url_360p || "",
-    video_url_480p: row.video_url_480p || "",
-    video_url_720p: row.video_url_720p || "",
-    captions_ar_url: row.captions_ar_url || "",
-    captions_en_url: row.captions_en_url || "",
-    video_duration_seconds: row.video_duration_seconds
-      ? String(row.video_duration_seconds)
-      : "",
-    video_processing_status: normalizeLessonVideoProcessingStatus(
-      row.video_processing_status
-    ),
-    video_processing_error: row.video_processing_error || "",
-    video_processed_at: row.video_processed_at || "",
   };
 }
 
@@ -133,13 +94,6 @@ function hasDraftContent(form: LessonForm) {
       form.subject_id ||
       form.curriculum_topic ||
       form.thumbnail_url.trim() ||
-      form.video_url_1080p.trim() ||
-      form.video_url_360p.trim() ||
-      form.video_url_480p.trim() ||
-      form.video_url_720p.trim() ||
-      form.captions_ar_url.trim() ||
-      form.captions_en_url.trim() ||
-      form.video_duration_seconds.trim() ||
       form.is_published
   );
 }
@@ -158,15 +112,6 @@ function getDraftPayload(form: LessonForm, fallbackSubjectId: string) {
     curriculum_topic: serializeCurriculumSelection(form.curriculum_topic),
     is_published: false,
     thumbnail_url: form.thumbnail_url.trim() || null,
-    video_url_1080p: form.video_url_1080p.trim() || null,
-    video_url_360p: form.video_url_360p.trim() || null,
-    video_url_480p: form.video_url_480p.trim() || null,
-    video_url_720p: form.video_url_720p.trim() || null,
-    captions_ar_url: form.captions_ar_url.trim() || null,
-    captions_en_url: form.captions_en_url.trim() || null,
-    video_duration_seconds: form.video_duration_seconds
-      ? Number(form.video_duration_seconds)
-      : null,
   };
 }
 
@@ -175,21 +120,6 @@ function getAutosaveMessage(status: AutosaveState, error: string) {
   if (status === "saved") return "Draft autosaved";
   if (status === "error") return error || "Draft autosave failed";
   return "Draft autosaves to the database while you work";
-}
-
-function getLessonVideoKey(form: Pick<
-  LessonForm,
-  "video_url_1080p" | "video_url_360p" | "video_url_480p" | "video_url_720p"
->) {
-  return [
-    form.video_url_360p,
-    form.video_url_480p,
-    form.video_url_720p,
-    form.video_url_1080p,
-  ]
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .join("|");
 }
 
 export default function NewLessonPage() {
@@ -275,10 +205,6 @@ export default function NewLessonPage() {
     gradeLevel: form.grade_level,
     curriculumTopic: form.curriculum_topic,
     slides: [],
-    lessonTasks: [],
-    video: form,
-    videoProcessingStatus: form.video_processing_status,
-    videoProcessingError: form.video_processing_error,
   });
 
   useEffect(() => {
@@ -365,19 +291,6 @@ export default function NewLessonPage() {
       return;
     }
 
-    const blockedVideoFields = getDisallowedLessonVideoFields({
-      "Video URL 1080p": form.video_url_1080p,
-      "Video URL 360p": form.video_url_360p,
-      "Video URL 480p": form.video_url_480p,
-      "Video URL 720p": form.video_url_720p,
-    });
-    if (blockedVideoFields.length > 0) {
-      toast.error(
-        `YouTube video links are not allowed. Use ad-free hosted video URLs instead. Blocked fields: ${blockedVideoFields.join(", ")}`
-      );
-      return;
-    }
-
     if (form.is_published && !publishReadiness.canPublish) {
       toast.error(
         publishReadiness.blockingReasons
@@ -407,15 +320,6 @@ export default function NewLessonPage() {
       curriculum_topic: serializeCurriculumSelection(form.curriculum_topic),
       is_published: form.is_published,
       thumbnail_url: form.thumbnail_url.trim() || null,
-      video_url_1080p: form.video_url_1080p.trim() || null,
-      video_url_360p: form.video_url_360p.trim() || null,
-      video_url_480p: form.video_url_480p.trim() || null,
-      video_url_720p: form.video_url_720p.trim() || null,
-      captions_ar_url: form.captions_ar_url.trim() || null,
-      captions_en_url: form.captions_en_url.trim() || null,
-      video_duration_seconds: form.video_duration_seconds
-        ? Number(form.video_duration_seconds)
-        : null,
     };
 
     const lessonQuery = draftLessonId
@@ -448,23 +352,6 @@ export default function NewLessonPage() {
     lastSavedDraftKeyRef.current = JSON.stringify(
       getDraftPayload(form, form.subject_id)
     );
-
-    if (payload.is_published && getLessonVideoKey(form)) {
-      const processResponse = await fetch(`/api/teacher/lessons/${lesson.id}/process-video`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language_hint: "ar" }),
-      });
-
-      if (!processResponse.ok) {
-        const processData = await processResponse.json().catch(() => ({}));
-        toast.warning(
-          `Lesson saved, but transcript processing failed: ${
-            processData.error || "Unknown error"
-          }`
-        );
-      }
-    }
 
     router.push(`/teacher/lessons/${lesson.id}`);
   }
@@ -684,7 +571,7 @@ export default function NewLessonPage() {
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
             <p className="font-semibold">Publish is blocked on this page.</p>
             <p className="mt-1">
-              Save the lesson as a draft first, then add slides, record/upload a video, and finish transcript/search processing in the lesson editor.
+              Save the lesson as a draft first, then add slides and record a sim in the lesson editor.
             </p>
           </div>
         )}

@@ -48,8 +48,6 @@ interface SlideToolbarProps {
   onAddExplorationSlide?: (widgetType: ExplorationWidgetType, config: ExplorationWidgetConfig) => void;
   onSave: () => void;
   onPresent: () => void;
-  onRecord?: () => void;
-  /** Sim (event-sourced) recording — parallel test flow alongside the video Record button. */
   onRecordSim?: () => void;
   /** Open the lesson's single sim for review/edit/view. Only shown when `hasSim` is true. */
   onOpenSim?: () => void;
@@ -69,7 +67,6 @@ export default function SlideToolbar({
   onAddExplorationSlide,
   onSave,
   onPresent,
-  onRecord,
   onRecordSim,
   onOpenSim,
   hasSim,
@@ -245,20 +242,7 @@ export default function SlideToolbar({
             + Activity
           </button>
 
-          {/* Record */}
-          {onRecord && (
-            <button
-              onClick={onRecord}
-              className="px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="12" cy="12" r="8" />
-              </svg>
-              Record
-            </button>
-          )}
-
-          {/* Sim record (beta) — event-sourced recording */}
+          {/* Sim record */}
           {onRecordSim && (
             <button
               data-tour="sim-record-btn"

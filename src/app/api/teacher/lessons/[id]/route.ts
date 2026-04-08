@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { canManageLesson, getTeacherRole } from '@/lib/server/teacher-lesson-access'
 import { getLessonPublishReadiness } from '@/lib/lessons/publish-readiness'
-import { normalizeLessonTaskForm } from '@/lib/lesson-activities'
 import type { Slide } from '@/lib/slides.types'
 
 const QuizSettingsSchema = z.object({
@@ -85,13 +84,6 @@ export async function PATCH(
       subject_id,
       grade_level,
       curriculum_topic,
-      video_url_1080p,
-      video_url_720p,
-      video_url_480p,
-      video_url_360p,
-      video_duration_seconds,
-      video_processing_status,
-      video_processing_error,
       subjects (
         name_ar,
         name_en
@@ -136,17 +128,12 @@ export async function PATCH(
   }
 
   if (updates.is_published === true) {
-    const [{ data: lessonSlides }, { data: lessonTasks }, { data: simRow }] = await Promise.all([
+    const [{ data: lessonSlides }, { data: simRow }] = await Promise.all([
       supabase
         .from('lesson_slides')
         .select('slides')
         .eq('lesson_id', lessonId)
         .maybeSingle(),
-      supabase
-        .from('lesson_tasks')
-        .select('*')
-        .eq('lesson_id', lessonId)
-        .order('display_order'),
       supabase
         .from('lesson_sims')
         .select('id')
@@ -161,16 +148,6 @@ export async function PATCH(
       slides: Array.isArray(lessonSlides?.slides)
         ? (lessonSlides?.slides as unknown as Slide[])
         : [],
-      lessonTasks: (lessonTasks || []).map((task) =>
-        normalizeLessonTaskForm({
-          ...(task as Record<string, unknown>),
-          id: task.id,
-          task_type: String(task.task_type),
-        })
-      ),
-      video: lesson,
-      videoProcessingStatus: lesson.video_processing_status,
-      videoProcessingError: lesson.video_processing_error,
       hasSim: !!simRow,
     })
 
