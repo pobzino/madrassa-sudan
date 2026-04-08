@@ -245,20 +245,19 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
                 Generate slides with AI to get started, or they can be manually created.
               </p>
             </div>
-            {!autoGenerate && (
-              <div className="flex justify-center">
-                <SlideGenerateButton
-                  lessonId={id}
-                  hasExistingSlides={false}
-                  languageMode={languageMode}
-                  generationContext={generationContext}
-                  slideCount={slideCount}
-                  disabledReason={slideGenerationBlockedReason}
-                  onGenerated={(newSlides) => setSlides(newSlides)}
-                  onGeneratingChange={handleGeneratingChange}
-                />
-              </div>
-            )}
+            <div className="flex justify-center">
+              <SlideGenerateButton
+                lessonId={id}
+                hasExistingSlides={false}
+                languageMode={languageMode}
+                generationContext={generationContext}
+                slideCount={slideCount}
+                autoGenerate={autoGenerate}
+                disabledReason={slideGenerationBlockedReason}
+                onGenerated={(newSlides) => setSlides(newSlides)}
+                onGeneratingChange={handleGeneratingChange}
+              />
+            </div>
           </div>
         )
       ) : (
