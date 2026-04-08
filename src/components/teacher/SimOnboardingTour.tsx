@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Joyride,
   type EventData,
@@ -17,6 +17,13 @@ import { useTourState } from '@/hooks/useTourState';
 
 type TourSegment = 'lesson-list' | 'lesson-editor' | 'sim-recording' | 'post-recording';
 
+const SEGMENT_ORDER: TourSegment[] = [
+  'lesson-list',
+  'lesson-editor',
+  'sim-recording',
+  'post-recording',
+];
+
 interface TourStep extends Step {
   data?: { segment: TourSegment };
 }
@@ -30,6 +37,7 @@ const ALL_STEPS: TourStep[] = [
       'Click here to create a new lesson. You\'ll pick a subject, grade level, and curriculum topic — then the AI generates your slide deck.',
     placement: 'bottom',
     skipBeacon: true,
+    spotlightClicks: true,
     data: { segment: 'lesson-list' },
   },
   {
@@ -57,6 +65,7 @@ const ALL_STEPS: TourStep[] = [
       'Click here to create the lesson draft and auto-generate your presentation slides. You\'ll be taken to the slide editor next.',
     placement: 'top',
     skipBeacon: true,
+    spotlightClicks: true,
     data: { segment: 'lesson-list' },
   },
 
@@ -113,6 +122,7 @@ const ALL_STEPS: TourStep[] = [
       'When your slides are ready, click "Sim β" to start recording. A sim captures your voice, slide navigation, whiteboard drawings, and activity demonstrations — all in one take.',
     placement: 'bottom',
     skipBeacon: true,
+    spotlightClicks: true,
     data: { segment: 'lesson-editor' },
   },
 
@@ -187,6 +197,7 @@ const ALL_STEPS: TourStep[] = [
       'When you\'re done teaching, click Stop. You\'ll get to review your recording before saving it.',
     placement: 'top',
     skipBeacon: true,
+    spotlightClicks: true,
     data: { segment: 'sim-recording' },
   },
 
@@ -302,15 +313,24 @@ interface SimOnboardingTourProps {
 }
 
 export default function SimOnboardingTour({ segments }: SimOnboardingTourProps) {
-  const { consumePending, dismissTour } = useTourState();
+  const { consumePending, dismissTour, startTour } = useTourState();
   const [run, setRun] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Filter steps to only those whose segment matches this page AND whose
-  // target element actually exists in the DOM.
+  // Filter steps to only those whose segment matches this page.
   const steps = useMemo(() => {
     return ALL_STEPS.filter((s) => s.data?.segment && segments.includes(s.data.segment));
   }, [segments]);
+
+  // Clean up polling on unmount.
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    };
+  }, []);
 
   // On mount, check if there's a pending tour segment to auto-start.
   useEffect(() => {
@@ -330,36 +350,137 @@ export default function SimOnboardingTour({ segments }: SimOnboardingTourProps) 
     return () => clearTimeout(timeout);
   }, [consumePending, steps]);
 
+  /** Start polling for a missing target element. When found, resume the tour. */
+  const waitForTarget = useCallback(
+    (targetSelector: string, atIndex: number) => {
+      // Clear any existing poll
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+
+      setRun(false); // Pause joyride while waiting
+
+      pollRef.current = setInterval(() => {
+        if (document.querySelector(targetSelector)) {
+          if (pollRef.current) clearInterval(pollRef.current);
+          if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+          pollRef.current = null;
+          pollTimeoutRef.current = null;
+          // Target appeared — resume tour at this step
+          setStepIndex(atIndex);
+          setRun(true);
+        }
+      }, 400);
+
+      // Give up after 30s — skip this step
+      pollTimeoutRef.current = setTimeout(() => {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        pollTimeoutRef.current = null;
+
+        // Try to find the next step with an existing target
+        for (let i = atIndex + 1; i < steps.length; i++) {
+          const sel = typeof steps[i].target === 'string' ? steps[i].target : null;
+          if (sel && document.querySelector(sel)) {
+            setStepIndex(i);
+            setRun(true);
+            return;
+          }
+        }
+        // No more visible steps — end this segment and hand off
+        handleSegmentEnd(atIndex);
+      }, 30000);
+    },
+    [steps] // handleSegmentEnd added below via ref pattern
+  );
+
+  /** When a segment ends (last step or no more targets), hand off to the next. */
+  const handleSegmentEnd = useCallback(() => {
+    setRun(false);
+
+    // Find the last segment we were showing
+    const lastStep = steps[steps.length - 1];
+    const currentSegment = lastStep?.data?.segment;
+    if (!currentSegment) {
+      dismissTour();
+      return;
+    }
+
+    const segIdx = SEGMENT_ORDER.indexOf(currentSegment);
+    if (segIdx >= 0 && segIdx < SEGMENT_ORDER.length - 1) {
+      const nextSeg = SEGMENT_ORDER[segIdx + 1];
+      // If the next segment is on this same page, start it
+      if (segments.includes(nextSeg)) {
+        const idx = steps.findIndex((s) => s.data?.segment === nextSeg);
+        if (idx >= 0) {
+          const sel = typeof steps[idx].target === 'string' ? steps[idx].target : null;
+          if (sel && document.querySelector(sel)) {
+            setStepIndex(idx);
+            setRun(true);
+          } else if (sel) {
+            // Target not in DOM yet — wait for it
+            waitForTarget(sel, idx);
+          }
+          return;
+        }
+      }
+      // Next segment is on a different page — save as pending
+      startTour(nextSeg);
+    } else {
+      // Last segment — tour complete
+      dismissTour();
+    }
+  }, [steps, segments, dismissTour, startTour, waitForTarget]);
+
   const handleEvent = useCallback(
-    (data: EventData, controls: Controls) => {
+    (data: EventData, _controls: Controls) => {
       const { status, action, type, index } = data;
 
       // Tour ended (finished or skipped).
       if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
         setRun(false);
-        dismissTour();
+        if (status === STATUS.SKIPPED) {
+          dismissTour();
+        } else {
+          handleSegmentEnd();
+        }
         return;
       }
 
       // Step navigation.
       if (type === EVENTS.STEP_AFTER) {
-        if (action === ACTIONS.NEXT || action === ACTIONS.CLOSE) {
-          setStepIndex(index + 1);
+        if (action === ACTIONS.NEXT) {
+          const nextIdx = index + 1;
+          if (nextIdx >= steps.length) {
+            // Past last step — hand off to next segment
+            handleSegmentEnd();
+            return;
+          }
+          setStepIndex(nextIdx);
         } else if (action === ACTIONS.PREV) {
-          setStepIndex(index - 1);
+          setStepIndex(Math.max(0, index - 1));
+        } else if (action === ACTIONS.CLOSE) {
+          // X button = dismiss entirely
+          setRun(false);
+          dismissTour();
         }
       }
 
-      // Target not found — skip forward.
+      // Target not found — wait for element instead of skipping.
       if (type === EVENTS.TARGET_NOT_FOUND) {
-        setStepIndex(index + 1);
+        const step = steps[index];
+        const selector = typeof step?.target === 'string' ? step.target : null;
+        if (selector) {
+          waitForTarget(selector, index);
+        } else {
+          // No valid selector — skip forward
+          setStepIndex(index + 1);
+        }
       }
     },
-    [dismissTour]
+    [dismissTour, handleSegmentEnd, steps, waitForTarget]
   );
 
-  /** Start the tour programmatically (called from parent via ref or context). */
-  // Expose a way for parent pages to trigger the tour for a specific segment.
+  /** Start the tour programmatically (called from parent via custom event). */
   useEffect(() => {
     function handleStart(e: Event) {
       const detail = (e as CustomEvent<{ segment?: string }>).detail;
