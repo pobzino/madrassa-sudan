@@ -244,7 +244,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Primary Action Button */}
       <div className="p-4">
         <Link
-          href={isInTeacherView ? "/teacher/homework/create" : "/lessons"}
+          href={isInTeacherView ? "/teacher/lessons/new" : "/lessons"}
           onClick={() => mobile && setSidebarOpen(false)}
           className={`group flex items-center justify-center gap-2 w-full px-4 bg-[#007229] hover:bg-[#005C22] text-white font-bold rounded-xl transition-all shadow-lg shadow-[#007229]/30 hover:shadow-xl hover:shadow-[#007229]/40 hover:-translate-y-0.5 ${
             isStudentView ? "py-4 text-base font-fredoka" : "py-3"
@@ -253,7 +253,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {isInTeacherView ? (
             <>
               <ClipboardNavIcon className="w-6 h-6" />
-              <span>{language === "ar" ? "إنشاء واجب" : "Create Assignment"}</span>
+              <span>{language === "ar" ? "درس جديد" : "New Lesson"}</span>
             </>
           ) : (
             <>
