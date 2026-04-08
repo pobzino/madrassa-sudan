@@ -49,6 +49,36 @@ function formatDuration(ms: number): string {
 
 // ExplorationPicker is now imported from @/components/explorations/ExplorationPicker
 
+/** Live spotlight overlay for the teacher during recording. Tracks the pointer. */
+function SpotlightRecordingOverlay({ containerRef }: { containerRef: React.RefObject<HTMLDivElement | null> }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = (e: PointerEvent) => {
+      const rect = el.getBoundingClientRect();
+      const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+      const yPct = ((e.clientY - rect.top) / rect.height) * 100;
+      setPos({ x: xPct, y: yPct });
+    };
+    el.addEventListener('pointermove', handler);
+    return () => el.removeEventListener('pointermove', handler);
+  }, [containerRef]);
+
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none z-30"
+      style={{
+        background: pos
+          ? `radial-gradient(circle at ${pos.x}% ${pos.y}%, transparent 0, transparent 120px, rgba(0,0,0,0.55) 240px)`
+          : 'rgba(0,0,0,0.55)',
+      }}
+      aria-hidden
+    />
+  );
+}
+
 interface InteractivePlaceholders {
   title_ar: string;
   title_en: string;
@@ -512,9 +542,35 @@ export default function SlideEditor({
 
   const whiteboard = useWhiteboard({ onEvent: handleWhiteboardEvent });
 
+  // Bridge laser pointer moves from WhiteboardCanvas into sim events.
+  // Throttled to ~10 events/sec so we don't bloat the timeline.
+  const lastLaserEmitRef = useRef(0);
+  const handleLaserMove = useCallback(
+    (x: number, y: number) => {
+      if (!simRecordingRef.current) return;
+      const now = performance.now();
+      if (now - lastLaserEmitRef.current < 100) return;
+      lastLaserEmitRef.current = now;
+      const slide = slidesRef.current[presentIndexRef.current];
+      if (!slide) return;
+      recordSimEvent({ type: 'laser', slide_id: slide.id, x, y });
+    },
+    [recordSimEvent]
+  );
+
   useEffect(() => {
     setLanguage(preferredLanguage);
   }, [preferredLanguage]);
+
+  // Prevent accidental tab/window close while sim is recording
+  useEffect(() => {
+    if (!simRecording) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [simRecording]);
 
   useEffect(() => {
     if (!focusedSlideId) {
@@ -752,6 +808,49 @@ export default function SlideEditor({
       if (noteFlashTimerRef.current) window.clearTimeout(noteFlashTimerRef.current);
     };
   }, []);
+
+  // ── Spotlight during sim recording ────────────────────────────────────
+  const [spotlightActive, setSpotlightActive] = useState(false);
+  const spotlightThrottleRef = useRef(0);
+  const slideAreaRef = useRef<HTMLDivElement>(null);
+
+  // Turn off spotlight when recording stops
+  useEffect(() => {
+    if (!simRecording) setSpotlightActive(false);
+  }, [simRecording]);
+
+  const handleSpotlightPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!spotlightActive || !simRecordingRef.current) return;
+      const now = performance.now();
+      if (now - spotlightThrottleRef.current < 100) return;
+      spotlightThrottleRef.current = now;
+      const el = slideAreaRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 1280;
+      const y = ((e.clientY - rect.top) / rect.height) * 720;
+      const slide = slidesRef.current[presentIndexRef.current];
+      if (!slide) return;
+      recordSimEvent({ type: 'spotlight_move', slide_id: slide.id, x, y });
+    },
+    [spotlightActive, recordSimEvent]
+  );
+
+  const handleToggleSpotlight = useCallback(() => {
+    setSpotlightActive((prev) => {
+      const slide = slidesRef.current[presentIndexRef.current];
+      if (!slide) return prev;
+      if (!prev) {
+        // Turn on — emit spotlight_on at center
+        recordSimEvent({ type: 'spotlight_on', slide_id: slide.id, x: 640, y: 360 });
+      } else {
+        // Turn off
+        recordSimEvent({ type: 'spotlight_off', slide_id: slide.id });
+      }
+      return !prev;
+    });
+  }, [recordSimEvent]);
 
   // Emit `reveal_answer` when the teacher flips the activity answer on.
   const prevAnswerRevealedRef = useRef(false);
@@ -1095,8 +1194,9 @@ export default function SlideEditor({
       <div className="fixed inset-0 z-50 bg-black">
         <div className="flex h-full w-full items-center justify-center gap-6 px-4 py-6 lg:px-6">
           <div
-            ref={slideContainerRef}
+            ref={(el) => { (slideContainerRef as React.MutableRefObject<HTMLDivElement | null>).current = el; slideAreaRef.current = el; }}
             className={`relative mx-auto w-full ${simRecording ? 'max-w-5xl lg:max-w-[min(72vw,1100px)]' : 'max-w-6xl'}`}
+            onPointerMove={spotlightActive ? handleSpotlightPointerMove : undefined}
           >
             <SlideCard
               key={`${presentIndex}:${revealedCount}:${language}`}
@@ -1118,7 +1218,12 @@ export default function SlideEditor({
               <WhiteboardCanvas
                 whiteboard={whiteboard}
                 active={whiteboardActive}
+                onLaserMove={handleLaserMove}
               />
+            )}
+            {/* Spotlight visual overlay — dims slide with a light circle at pointer */}
+            {simRecording && spotlightActive && (
+              <SpotlightRecordingOverlay containerRef={slideAreaRef} />
             )}
           </div>
 
@@ -1129,7 +1234,7 @@ export default function SlideEditor({
           <WhiteboardToolbar whiteboard={whiteboard} />
         )}
 
-        {/* Sim recording HUD — minimal controls for beta */}
+        {/* Sim recording HUD */}
         {simRecording && (
           <>
             {/* Countdown */}
@@ -1156,7 +1261,7 @@ export default function SlideEditor({
                   {formatDuration(simDurationMs)}
                 </span>
                 <span className="text-[10px] uppercase tracking-widest text-amber-300 font-bold">
-                  sim β
+                  REC
                 </span>
               </div>
             )}
@@ -1284,6 +1389,18 @@ export default function SlideEditor({
                   }`}
                 >
                   {whiteboardActive ? 'Draw: On' : 'Draw'}
+                </button>
+
+                <button
+                  onClick={handleToggleSpotlight}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
+                    spotlightActive
+                      ? 'bg-amber-400 text-black'
+                      : 'text-white/80 hover:text-white'
+                  }`}
+                  title="Spotlight — dim the slide and highlight where you point"
+                >
+                  {spotlightActive ? 'Spot: On' : 'Spot'}
                 </button>
 
                 {isPresentActivitySlide && (

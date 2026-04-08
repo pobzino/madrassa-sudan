@@ -7,9 +7,19 @@ import {
   ClipSegmentSchema,
   SIM_AUDIO_BUCKET,
   assertCanManageLesson,
+  assertSimFeatureAccess,
   signAudioUrl,
 } from '@/lib/server/sim-storage';
 import type { SimPayload, SimRow } from '@/lib/sim.types';
+
+// Base64-encoded audio for a 45-min recording can be ~130 MB.
+// Next.js defaults to 1 MB — raise the limit so longer recordings don't fail.
+export const config = {
+  api: { bodyParser: { sizeLimit: '150mb' } },
+};
+
+/** Allow up to 5 minutes for large audio uploads + storage writes. */
+export const maxDuration = 300;
 
 /** Server-side max duration: 45 minutes. */
 const SIM_MAX_DURATION_MS = 45 * 60 * 1000;
@@ -54,6 +64,9 @@ export async function GET(
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const simAccess = await assertSimFeatureAccess(user.id, supabase);
+    if (!simAccess.ok) return simAccess.response;
 
     const access = await assertCanManageLesson(lessonId, user.id, supabase);
     if (!access.ok) return access.response;
@@ -101,6 +114,9 @@ export async function POST(
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const simAccess = await assertSimFeatureAccess(user.id, supabase);
+    if (!simAccess.ok) return simAccess.response;
 
     const access = await assertCanManageLesson(lessonId, user.id, supabase);
     if (!access.ok) return access.response;
@@ -261,10 +277,26 @@ export async function POST(
 
     // Populate the lesson's video_duration_seconds from the sim duration so
     // progress bars on the student lessons list work correctly.
+    // Also auto-set the thumbnail from the first slide's image if none exists.
     const durationSeconds = Math.ceil(body.duration_ms / 1000);
+    const firstSlideImage = Array.isArray(body.deck_snapshot) && body.deck_snapshot.length > 0
+      ? (body.deck_snapshot[0] as { image_url?: string })?.image_url ?? null
+      : null;
+    const lessonUpdates: Record<string, unknown> = { video_duration_seconds: durationSeconds };
+    if (firstSlideImage) {
+      // Only set thumbnail if the lesson doesn't already have a custom one
+      const { data: currentLesson } = await supabase
+        .from('lessons')
+        .select('thumbnail_url')
+        .eq('id', lessonId)
+        .single();
+      if (!currentLesson?.thumbnail_url) {
+        lessonUpdates.thumbnail_url = firstSlideImage;
+      }
+    }
     await supabase
       .from('lessons')
-      .update({ video_duration_seconds: durationSeconds })
+      .update(lessonUpdates)
       .eq('id', lessonId);
 
     const audioUrl = await signAudioUrl(lessonId, row.audio_path);

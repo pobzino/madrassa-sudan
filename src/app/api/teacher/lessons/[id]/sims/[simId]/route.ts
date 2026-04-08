@@ -6,6 +6,7 @@ import {
   ClipSegmentSchema,
   SIM_AUDIO_BUCKET,
   assertCanManageLesson,
+  assertSimFeatureAccess,
   signAudioUrl,
 } from '@/lib/server/sim-storage';
 import type { Json } from '@/lib/database.types';
@@ -33,6 +34,9 @@ export async function GET(
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const simAccess = await assertSimFeatureAccess(user.id, supabase);
+    if (!simAccess.ok) return simAccess.response;
 
     const access = await assertCanManageLesson(lessonId, user.id, supabase);
     if (!access.ok) return access.response;
@@ -80,6 +84,9 @@ export async function PATCH(
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const simAccess = await assertSimFeatureAccess(user.id, supabase);
+    if (!simAccess.ok) return simAccess.response;
 
     const access = await assertCanManageLesson(lessonId, user.id, supabase);
     if (!access.ok) return access.response;
@@ -153,6 +160,9 @@ export async function DELETE(
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const simAccess = await assertSimFeatureAccess(user.id, supabase);
+    if (!simAccess.ok) return simAccess.response;
 
     const access = await assertCanManageLesson(lessonId, user.id, supabase);
     if (!access.ok) return access.response;

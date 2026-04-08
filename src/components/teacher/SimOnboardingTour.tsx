@@ -119,7 +119,7 @@ const ALL_STEPS: TourStep[] = [
     target: '[data-tour="sim-record-btn"]',
     title: 'Record Your Sim',
     content:
-      'When your slides are ready, click "Sim β" to start recording. A sim captures your voice, slide navigation, whiteboard drawings, and activity demonstrations — all in one take.',
+      'When your slides are ready, click "Sim" to start recording. A sim captures your voice, slide navigation, whiteboard drawings, and activity demonstrations — all in one take.',
     placement: 'bottom',
     skipBeacon: true,
     spotlightClicks: true,

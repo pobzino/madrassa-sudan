@@ -265,6 +265,43 @@ function StrokesOverlay({ strokes }: { strokes: SimStroke[] }) {
   );
 }
 
+/** Ephemeral laser dot rendered during playback. Fades after 300ms. */
+function LaserOverlay({ x, y, age }: { x: number; y: number; age: number }) {
+  const leftPct = (x / DESIGN_WIDTH) * 100;
+  const topPct = (y / DESIGN_HEIGHT) * 100;
+  const opacity = Math.max(0, 1 - age / 300);
+  if (opacity <= 0) return null;
+  return (
+    <div
+      className="absolute pointer-events-none"
+      style={{
+        left: `${leftPct}%`,
+        top: `${topPct}%`,
+        transform: 'translate(-50%, -50%)',
+        width: 24,
+        height: 24,
+        borderRadius: '50%',
+        background: `radial-gradient(circle, rgba(255,80,80,${opacity * 0.9}) 0%, rgba(255,40,40,${opacity * 0.5}) 40%, transparent 70%)`,
+        boxShadow: `0 0 12px rgba(255,60,60,${opacity * 0.6})`,
+      }}
+      aria-hidden
+    >
+      <div
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          backgroundColor: `rgba(255,255,255,${opacity * 0.95})`,
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+        }}
+      />
+    </div>
+  );
+}
+
 function SpotlightOverlay({ spotlight }: { spotlight: { x: number; y: number } | null }) {
   if (!spotlight) return null;
   const leftPct = (spotlight.x / DESIGN_WIDTH) * 100;
@@ -405,6 +442,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const [activeExplorationSlide, setActiveExplorationSlide] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [audioSrc, setAudioSrc] = useState(audio_url);
   const rafRef = useRef<number>(0);
   // Timer-driven playback for audio-less sims
   const timerStartRef = useRef<number>(0);
@@ -436,6 +474,69 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audio_url]);
+
+  // ── Resume position persistence ─────────────────────────────────────────
+  const resumeKey = lessonId ? `sim-resume:${lessonId}` : null;
+  const resumeAppliedRef = useRef(false);
+
+  // Restore saved position once audio is ready
+  useEffect(() => {
+    if (!resumeKey || resumeAppliedRef.current || !ready) return;
+    resumeAppliedRef.current = true;
+    try {
+      const saved = localStorage.getItem(resumeKey);
+      if (!saved) return;
+      const savedMs = Number(saved);
+      if (!savedMs || savedMs <= 0 || savedMs >= virtualTotalMs - 1000) return;
+      // Seek to the saved position
+      const realMs = virtualToRealMs(savedMs, effectiveClips);
+      const audio = audioRef.current;
+      if (audio) audio.currentTime = realMs / 1000;
+      applyAt(realMs, true);
+    } catch { /* ignore */ }
+  }, [resumeKey, ready, virtualTotalMs, effectiveClips, applyAt]);
+
+  // Periodically save the playback position (every 5 seconds)
+  useEffect(() => {
+    if (!resumeKey || !isPlaying) return;
+    const timer = setInterval(() => {
+      try { localStorage.setItem(resumeKey, String(playbackMs)); } catch { /* quota */ }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [resumeKey, isPlaying, playbackMs]);
+
+  // Keep audioSrc in sync when the prop changes (e.g. parent re-fetches).
+  useEffect(() => { setAudioSrc(audio_url); }, [audio_url]);
+
+  // Proactively refresh the signed audio URL before it expires (every 5h).
+  // Also retries on audio error to handle already-expired URLs.
+  const refreshAudioUrl = useCallback(async () => {
+    if (!lessonId) return;
+    try {
+      const res = await fetch(`/api/lessons/${lessonId}/sim`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const freshUrl: string | null = data?.sim?.audio_url ?? null;
+      if (freshUrl) {
+        const audio = audioRef.current;
+        const currentTime = audio?.currentTime ?? 0;
+        setAudioSrc(freshUrl);
+        // Restore playback position after src swap
+        requestAnimationFrame(() => {
+          const a = audioRef.current;
+          if (a && currentTime > 0) a.currentTime = currentTime;
+        });
+      }
+    } catch { /* best-effort */ }
+  }, [lessonId]);
+
+  useEffect(() => {
+    if (!audio_url || !lessonId) return;
+    // Refresh every 5 hours (signed URLs last 6h)
+    const REFRESH_MS = 5 * 60 * 60 * 1000;
+    const timer = setInterval(refreshAudioUrl, REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [audio_url, lessonId, refreshAudioUrl]);
 
   // Count of events with t <= realMs (binary search on sorted events).
   const eventsAtMs = useCallback(
@@ -959,6 +1060,23 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     return (primary?.trim() || fallback?.trim()) ?? '';
   }, [currentSlide, language]);
 
+  // Find the most recent laser event within 300ms of current playback time
+  const LASER_FADE_MS = 300;
+  const activeLaser = useMemo(() => {
+    const realMs = virtualToRealMs(playbackMs, effectiveClips);
+    for (let i = projectedEvents.length - 1; i >= 0; i--) {
+      const e = projectedEvents[i];
+      if (e.t > realMs) continue;
+      if (e.type === 'laser') {
+        const age = realMs - e.t;
+        if (age <= LASER_FADE_MS) return { x: e.x, y: e.y, age };
+        return null;
+      }
+      if (e.t < realMs - LASER_FADE_MS) break;
+    }
+    return null;
+  }, [playbackMs, effectiveClips, projectedEvents]);
+
   const progressPct = virtualTotalMs > 0
     ? Math.min(100, (playbackMs / virtualTotalMs) * 100)
     : 0;
@@ -1129,6 +1247,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
           {currentSurface && currentSurface.strokes.length > 0 && (
             <StrokesOverlay strokes={currentSurface.strokes} />
           )}
+          {activeLaser && (
+            <LaserOverlay x={activeLaser.x} y={activeLaser.y} age={activeLaser.age} />
+          )}
           {currentSurface?.spotlight && (
             <SpotlightOverlay spotlight={currentSurface.spotlight} />
           )}
@@ -1235,10 +1356,10 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       )}
 
       {/* Hidden audio element */}
-      {audio_url && (
+      {audioSrc && (
         <audio
           ref={audioRef}
-          src={audio_url}
+          src={audioSrc}
           preload="auto"
           onLoadedMetadata={() => {
             setReady(true);
@@ -1254,13 +1375,17 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
             onPlayStateChange?.(false);
           }}
           onError={(e) => {
-            // Audio unavailable — allow silent slide-only playback.
             const audio = e.currentTarget;
             const code = audio.error?.code;
             const msg = audio.error?.message;
             console.warn(`SimPlayer: audio failed to load (code=${code}, msg=${msg}, src=${audio.src?.substring(0, 80)})`);
-            setReady(true);
-            onReady?.();
+            // Try refreshing the signed URL — it may have expired.
+            if (lessonId) {
+              refreshAudioUrl();
+            } else {
+              setReady(true);
+              onReady?.();
+            }
           }}
         />
       )}

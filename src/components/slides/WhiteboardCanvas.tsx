@@ -6,6 +6,8 @@ import type { WhiteboardAPI, Point } from '@/hooks/useWhiteboard';
 interface WhiteboardCanvasProps {
   whiteboard: WhiteboardAPI;
   active: boolean;
+  /** Fires with normalised (0-1280, 0-720) coordinates while the laser tool is in use. */
+  onLaserMove?: (x: number, y: number) => void;
 }
 
 // Logical coordinate space matching slide design
@@ -20,7 +22,7 @@ interface LaserPoint {
 
 const LASER_LIFETIME_MS = 700;
 
-export default function WhiteboardCanvas({ whiteboard, active }: WhiteboardCanvasProps) {
+export default function WhiteboardCanvas({ whiteboard, active, onLaserMove }: WhiteboardCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [textInput, setTextInput] = useState<{ x: number; y: number; value: string } | null>(null);
@@ -28,6 +30,8 @@ export default function WhiteboardCanvas({ whiteboard, active }: WhiteboardCanva
   const rafRef = useRef<number>(0);
   const laserTrailRef = useRef<LaserPoint[]>([]);
   const laserRafRef = useRef<number>(0);
+  const onLaserMoveRef = useRef(onLaserMove);
+  onLaserMoveRef.current = onLaserMove;
 
   // Convert pointer event to logical coordinates
   const getPoint = useCallback((e: React.PointerEvent): Point => {
@@ -183,6 +187,7 @@ export default function WhiteboardCanvas({ whiteboard, active }: WhiteboardCanva
       (e.target as Element).setPointerCapture(e.pointerId);
       laserTrailRef.current.push({ x: point.x, y: point.y, time: performance.now() });
       startLaserLoop();
+      onLaserMoveRef.current?.(point.x, point.y);
       return;
     }
 
@@ -199,6 +204,7 @@ export default function WhiteboardCanvas({ whiteboard, active }: WhiteboardCanva
     if (whiteboard.settings.tool === 'laser') {
       laserTrailRef.current.push({ x: point.x, y: point.y, time: performance.now() });
       startLaserLoop();
+      onLaserMoveRef.current?.(point.x, point.y);
       return;
     }
 

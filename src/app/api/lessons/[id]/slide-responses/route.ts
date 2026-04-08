@@ -8,7 +8,15 @@ import { computeSlideInteractionCorrectness, hasStudentInteraction } from '@/lib
 
 const SlideResponseSchema = z.object({
   slide_id: z.string().min(1),
-  answer: z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()]),
+  answer: z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.array(z.string()),
+    // draw_answer submissions are { type: 'draw_answer', image_data_url: string }
+    z.object({ type: z.literal('draw_answer'), image_data_url: z.string() }),
+    z.null(),
+  ]),
   time_spent_seconds: z.number().int().min(0).optional(),
 });
 

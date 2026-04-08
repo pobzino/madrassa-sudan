@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { signAudioUrl } from '@/lib/server/sim-storage';
+import { signAudioUrl, assertSimFeatureAccess } from '@/lib/server/sim-storage';
 import type { SimPayload, SimRow } from '@/lib/sim.types';
 
 /**
@@ -29,6 +29,9 @@ export async function GET(
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const simAccess = await assertSimFeatureAccess(user.id, supabase);
+    if (!simAccess.ok) return simAccess.response;
 
     const { data: row, error } = await supabase
       .from('lesson_sims')

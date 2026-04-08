@@ -247,13 +247,13 @@ export default function SlideToolbar({
             <button
               data-tour="sim-record-btn"
               onClick={onRecordSim}
-              title="Record an event-sourced sim (beta)"
+              title="Record a sim"
               className="px-3 py-1.5 text-xs font-medium text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50 transition-colors flex items-center gap-1.5"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="12" r="8" />
               </svg>
-              Sim β
+              Sim
             </button>
           )}
 

@@ -920,7 +920,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                   No sim has been recorded for this lesson yet.
                 </p>
                 <p className="mt-2 text-xs text-gray-400">
-                  Open the Slides tab and press <span className="font-semibold">Sim β</span> in the editor toolbar to record one.
+                  Open the Slides tab and press <span className="font-semibold">Sim</span> in the editor toolbar to record one.
                 </p>
               </div>
             )}

@@ -77,3 +77,24 @@ export async function assertCanManageLesson(
 
   return { ok: true, lessonPublished: lesson.is_published === true };
 }
+
+/**
+ * Check whether the current user has the `can_access_sims` flag enabled.
+ * In development mode, the flag defaults to true if unset.
+ */
+export async function assertSimFeatureAccess(
+  userId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('can_access_sims')
+    .eq('id', userId)
+    .single();
+
+  const canAccess = profile?.can_access_sims ?? (process.env.NODE_ENV === 'development');
+  if (!canAccess) {
+    return { ok: false, response: NextResponse.json({ error: 'Sim access not enabled for this account.' }, { status: 403 }) };
+  }
+  return { ok: true };
+}
