@@ -22,7 +22,8 @@ export default function LetterTraceWidget({
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawing, setDrawing] = useState(false);
-  const [drawnPoints, setDrawnPoints] = useState<DrawnPoint[]>([]);
+  const [allStrokes, setAllStrokes] = useState<DrawnPoint[][]>([]);
+  const [currentStroke, setCurrentStroke] = useState<DrawnPoint[]>([]);
   const [completed, setCompleted] = useState(false);
   const [feedback, setFeedback] = useState<'good' | 'try_again' | null>(null);
   const [checking, setChecking] = useState(false);
@@ -65,7 +66,7 @@ export default function LetterTraceWidget({
           }
           ctx.stroke();
 
-          if (pts.length >= 2 && drawnPoints.length === 0) {
+          if (pts.length >= 2 && allStrokes.length === 0 && currentStroke.length === 0) {
             const ax = pts[0].x * scale;
             const ay = pts[0].y * scale;
             ctx.beginPath();
@@ -106,23 +107,27 @@ export default function LetterTraceWidget({
     }
 
     // Draw student strokes
-    if (drawnPoints.length > 1) {
+    const strokeColor = completed
+      ? '#10b981'
+      : feedback === 'try_again'
+        ? '#ef4444'
+        : '#3b82f6';
+    const drawStroke = (points: DrawnPoint[]) => {
+      if (points.length < 2) return;
       ctx.beginPath();
-      ctx.strokeStyle = completed
-        ? '#10b981'
-        : feedback === 'try_again'
-          ? '#ef4444'
-          : '#3b82f6';
+      ctx.strokeStyle = strokeColor;
       ctx.lineWidth = 12;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.moveTo(drawnPoints[0].x * scale, drawnPoints[0].y * scale);
-      for (let i = 1; i < drawnPoints.length; i++) {
-        ctx.lineTo(drawnPoints[i].x * scale, drawnPoints[i].y * scale);
+      ctx.moveTo(points[0].x * scale, points[0].y * scale);
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x * scale, points[i].y * scale);
       }
       ctx.stroke();
-    }
-  }, [config.stroke_paths, hasVectorPaths, displayText, script, drawnPoints, scale, completed, feedback]);
+    };
+    for (const stroke of allStrokes) drawStroke(stroke);
+    drawStroke(currentStroke);
+  }, [config.stroke_paths, hasVectorPaths, displayText, script, allStrokes, currentStroke, scale, completed, feedback]);
 
   useEffect(() => {
     redraw();
@@ -148,7 +153,7 @@ export default function LetterTraceWidget({
       setAiFeedback(null);
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       const pt = getCanvasPoint(e.clientX, e.clientY);
-      setDrawnPoints([pt]);
+      setCurrentStroke([pt]);
     },
     [completed, checking, getCanvasPoint]
   );
@@ -157,7 +162,7 @@ export default function LetterTraceWidget({
     (e: React.PointerEvent) => {
       if (!drawing || completed) return;
       const pt = getCanvasPoint(e.clientX, e.clientY);
-      setDrawnPoints((prev) => [...prev, pt]);
+      setCurrentStroke((prev) => [...prev, pt]);
     },
     [drawing, completed, getCanvasPoint]
   );
@@ -174,13 +179,20 @@ export default function LetterTraceWidget({
     return exportCanvas.toDataURL('image/png', 0.8);
   }, []);
 
-  const handlePointerUp = useCallback(async () => {
-    if (!drawing || completedRef.current || checking) return;
+  const handlePointerUp = useCallback(() => {
+    if (!drawing) return;
     setDrawing(false);
+    if (currentStroke.length > 1) {
+      setAllStrokes((prev) => [...prev, currentStroke]);
+    }
+    setCurrentStroke([]);
+  }, [drawing, currentStroke]);
 
-    if (drawnPoints.length < 10) return;
+  const hasDrawn = allStrokes.length > 0;
 
-    // Capture the canvas and send to AI for grading
+  const handleSubmit = useCallback(async () => {
+    if (completedRef.current || checking || !hasDrawn) return;
+
     const imageDataUrl = captureCanvas();
     if (!imageDataUrl) return;
 
@@ -197,7 +209,6 @@ export default function LetterTraceWidget({
       });
 
       if (!res.ok) {
-        // On API error, accept so kids aren't blocked
         completedRef.current = true;
         setCompleted(true);
         setFeedback('good');
@@ -219,7 +230,6 @@ export default function LetterTraceWidget({
         if (data.feedback) setAiFeedback(data.feedback);
       }
     } catch {
-      // On network error, accept so kids aren't blocked
       completedRef.current = true;
       setCompleted(true);
       setFeedback('good');
@@ -228,10 +238,11 @@ export default function LetterTraceWidget({
     } finally {
       setChecking(false);
     }
-  }, [drawing, drawnPoints, checking, captureCanvas, displayText, script, onComplete]);
+  }, [checking, hasDrawn, captureCanvas, displayText, script, onComplete]);
 
   const handleReset = useCallback(() => {
-    setDrawnPoints([]);
+    setAllStrokes([]);
+    setCurrentStroke([]);
     setFeedback(null);
     setAiFeedback(null);
   }, []);
@@ -296,7 +307,7 @@ export default function LetterTraceWidget({
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col items-center gap-2">
         {feedback === 'try_again' && (
           <span
             className={`text-sm text-amber-600 font-medium ${language === 'ar' ? 'font-cairo' : ''}`}
@@ -305,14 +316,26 @@ export default function LetterTraceWidget({
           </span>
         )}
         {!completed && (
-          <button
-            type="button"
-            onClick={handleReset}
-            disabled={checking}
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors min-h-[44px] disabled:opacity-50"
-          >
-            {language === 'ar' ? 'مسح' : 'Clear'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={checking || !hasDrawn}
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors min-h-[44px] disabled:opacity-50"
+            >
+              {language === 'ar' ? 'مسح' : 'Clear'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={checking || !hasDrawn}
+              className="rounded-full bg-blue-500 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-600 transition-colors min-h-[44px] disabled:opacity-50 shadow-sm"
+            >
+              {checking
+                ? (language === 'ar' ? 'جاري التحقق...' : 'Checking...')
+                : (language === 'ar' ? 'تحقق ✓' : 'Check ✓')}
+            </button>
+          </div>
         )}
       </div>
 
