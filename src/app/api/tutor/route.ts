@@ -433,7 +433,7 @@ export async function POST(request: NextRequest) {
 
         // Check for image parts in user messages
         const imageParts = msg.role === "user"
-          ? msg.parts?.filter((part) => part.type === "image").map((part) => (part as { image?: string }).image).filter(Boolean) || []
+          ? msg.parts?.filter((part) => (part.type as string) === "image").map((part) => (part as { image?: string }).image).filter(Boolean) || []
           : [];
 
         if (text && imageParts.length > 0) {

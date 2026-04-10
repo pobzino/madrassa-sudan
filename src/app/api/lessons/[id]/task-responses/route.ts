@@ -19,9 +19,18 @@ const TaskResponseSchema = z.object({
   status: z.enum(['completed', 'skipped', 'timed_out']).default('completed'),
 })
 
-function getAnswerFromPayload(payload: z.infer<typeof TaskResponseSchema>) {
+type StoredAnswer = boolean | number | string | string[] | null
+
+function isStoredAnswer(value: unknown): value is StoredAnswer {
+  if (value === null || typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string') {
+    return true
+  }
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+function getAnswerFromPayload(payload: z.infer<typeof TaskResponseSchema>): StoredAnswer {
   if (payload.answer !== undefined) {
-    return payload.answer
+    return isStoredAnswer(payload.answer) ? payload.answer : null
   }
 
   if (payload.response_data) {

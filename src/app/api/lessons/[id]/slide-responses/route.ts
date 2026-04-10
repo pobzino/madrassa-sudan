@@ -185,7 +185,14 @@ export async function POST(
     return NextResponse.json({ error: 'Slide interaction type is missing' }, { status: 400 });
   }
 
-  const isCorrect = computeSlideInteractionCorrectness(slide, answer);
+  // draw_answer submissions are an object; computeSlideInteractionCorrectness
+  // only needs a truthy string for presence check, so pass the data URL when
+  // available, otherwise pass the primitive answer through.
+  const normalizedAnswer =
+    typeof answer === 'object' && answer !== null && !Array.isArray(answer) && 'image_data_url' in answer
+      ? (answer.image_data_url as string)
+      : (answer as boolean | number | string | string[] | null);
+  const isCorrect = computeSlideInteractionCorrectness(slide, normalizedAnswer);
   const responseData = {
     answer,
   } as Json;

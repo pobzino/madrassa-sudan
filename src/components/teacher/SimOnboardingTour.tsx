@@ -37,7 +37,6 @@ const ALL_STEPS: TourStep[] = [
       'Click here to create a new lesson. You\'ll pick a subject, grade level, and curriculum topic — then the AI generates your slide deck.',
     placement: 'bottom',
     skipBeacon: true,
-    spotlightClicks: true,
     data: { segment: 'lesson-list' },
   },
   {
@@ -65,7 +64,6 @@ const ALL_STEPS: TourStep[] = [
       'Click here to create the lesson draft and auto-generate your presentation slides. You\'ll be taken to the slide editor next.',
     placement: 'top',
     skipBeacon: true,
-    spotlightClicks: true,
     data: { segment: 'lesson-list' },
   },
 
@@ -122,7 +120,6 @@ const ALL_STEPS: TourStep[] = [
       'When your slides are ready, click "Sim" to start recording. A sim captures your voice, slide navigation, whiteboard drawings, and activity demonstrations — all in one take.',
     placement: 'bottom',
     skipBeacon: true,
-    spotlightClicks: true,
     data: { segment: 'lesson-editor' },
   },
 
@@ -197,7 +194,6 @@ const ALL_STEPS: TourStep[] = [
       'When you\'re done teaching, click Stop. You\'ll get to review your recording before saving it.',
     placement: 'top',
     skipBeacon: true,
-    spotlightClicks: true,
     data: { segment: 'sim-recording' },
   },
 
@@ -396,7 +392,8 @@ export default function SimOnboardingTour({ segments }: SimOnboardingTourProps) 
 
         // Try to find the next step with an existing target
         for (let i = atIndex + 1; i < steps.length; i++) {
-          const sel = typeof steps[i].target === 'string' ? steps[i].target : null;
+          const target = steps[i].target;
+          const sel = typeof target === 'string' ? target : null;
           if (sel && document.querySelector(sel)) {
             setStepIndex(i);
             setRun(true);
@@ -404,7 +401,7 @@ export default function SimOnboardingTour({ segments }: SimOnboardingTourProps) 
           }
         }
         // No more visible steps — end this segment and hand off
-        handleSegmentEnd(atIndex);
+        handleSegmentEnd();
       }, 30000);
     },
     [steps] // handleSegmentEnd added below via ref pattern

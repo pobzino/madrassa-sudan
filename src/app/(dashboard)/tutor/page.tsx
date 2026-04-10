@@ -1006,7 +1006,7 @@ export default function TutorPage() {
       await sendMessage(
         parts.length === 1 && parts[0].type === "text"
           ? { text: userMessage }
-          : { parts },
+          : ({ parts } as Parameters<typeof sendMessage>[0]),
         {
           body: {
             language: language,
@@ -1132,7 +1132,7 @@ export default function TutorPage() {
       }
 
       // Image content counts
-      if (part.type === "image") {
+      if ((part.type as string) === "image") {
         return true;
       }
 
@@ -1176,7 +1176,7 @@ export default function TutorPage() {
       }
 
       // Image parts (from user messages)
-      if (part.type === "image") {
+      if ((part.type as string) === "image") {
         const imgPart = part as { image?: string };
         if (imgPart.image) {
           return (

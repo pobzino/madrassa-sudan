@@ -222,9 +222,13 @@ export async function GET(
     );
   }
 
-  const slideDeck = Array.isArray(slideDeckResult.data?.slides) ? slideDeckResult.data?.slides : [];
+  const slideDeck = (Array.isArray(slideDeckResult.data?.slides) ? slideDeckResult.data?.slides : []) as Array<{
+    id?: string;
+    title_ar?: string;
+    title_en?: string;
+  }>;
   const slideMeta = new Map(
-    slideDeck.map((slide: { id?: string; title_ar?: string; title_en?: string }) => [
+    slideDeck.map((slide) => [
       slide.id,
       {
         title_ar: slide.title_ar || "",
@@ -259,7 +263,7 @@ export async function GET(
       label: `Q${index + 1}`,
       kind: "quiz_question",
       prompt_ar: question.question_text_ar,
-      prompt_en: question.question_text_en,
+      prompt_en: question.question_text_en || "",
       total_responses: responses.length,
       correct_count: totalCorrect,
       avg_score: average(totalCorrect, responses.length),
@@ -283,13 +287,16 @@ export async function GET(
     const timedOutCount = responses.filter((response) => response.status === "timed_out").length;
     const totalScore = responses.reduce((sum, response) => sum + (response.completion_score || 0), 0);
     const totalTime = responses.reduce((sum, response) => sum + (response.time_spent_seconds || 0), 0);
+    const taskData = (task.task_data && typeof task.task_data === "object" && !Array.isArray(task.task_data)
+      ? (task.task_data as Record<string, unknown>)
+      : {}) as Record<string, unknown>;
     const modelAnswerAr =
-      task.task_type === "free_response" && typeof task.task_data?.expected_answer_ar === "string"
-        ? task.task_data.expected_answer_ar
+      task.task_type === "free_response" && typeof taskData.expected_answer_ar === "string"
+        ? (taskData.expected_answer_ar as string)
         : "";
     const modelAnswerEn =
-      task.task_type === "free_response" && typeof task.task_data?.expected_answer_en === "string"
-        ? task.task_data.expected_answer_en
+      task.task_type === "free_response" && typeof taskData.expected_answer_en === "string"
+        ? (taskData.expected_answer_en as string)
         : "";
     const students = responses.map((response) => {
       const review = readTeacherReview(response.response_data);

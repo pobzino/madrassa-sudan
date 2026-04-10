@@ -78,8 +78,25 @@ export function isCanonicalActivityTask(taskType: string): taskType is Supported
   return isSupportedTaskType(normalizeTaskType(taskType));
 }
 
+export interface NormalizableLessonTaskInput {
+  id: string;
+  task_type: string;
+  title_ar?: string | null;
+  title_en?: string | null;
+  instruction_ar?: string | null;
+  instruction_en?: string | null;
+  timestamp_seconds?: number | null;
+  task_data?: unknown;
+  timeout_seconds?: number | null;
+  is_skippable?: boolean | null;
+  required?: boolean | null;
+  points?: number | null;
+  linked_slide_id?: string | null;
+  display_order?: number | null;
+}
+
 export function normalizeLessonTaskForm(
-  task: Partial<LessonTaskForm> & { id: string; task_type: string }
+  task: NormalizableLessonTaskInput
 ): LessonTaskForm {
   return {
     id: task.id,
@@ -89,7 +106,9 @@ export function normalizeLessonTaskForm(
     instruction_ar: task.instruction_ar || '',
     instruction_en: task.instruction_en || '',
     timestamp_seconds: task.timestamp_seconds || 0,
-    task_data: (task.task_data as Record<string, unknown>) || {},
+    task_data: (task.task_data && typeof task.task_data === 'object' && !Array.isArray(task.task_data)
+      ? (task.task_data as Record<string, unknown>)
+      : {}),
     timeout_seconds: task.timeout_seconds ?? null,
     is_skippable: task.is_skippable ?? true,
     required: task.required ?? true,
@@ -790,7 +809,7 @@ export function computeActivityScore(
       instruction_ar: '',
       instruction_en: '',
       timestamp_seconds: 0,
-      task_data,
+      task_data: taskData,
     },
     null
   );

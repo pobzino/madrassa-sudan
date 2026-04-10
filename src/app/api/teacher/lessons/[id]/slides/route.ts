@@ -117,7 +117,7 @@ export async function PUT(
       .upsert(
         {
           lesson_id: lessonId,
-          slides: slidesWithActivities,
+          slides: slidesWithActivities as unknown as Json,
           language_mode: language_mode || "ar",
           updated_at: new Date().toISOString(),
         },

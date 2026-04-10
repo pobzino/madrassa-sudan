@@ -70,9 +70,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limit: count this user's generations in the last 24h via service client.
+    // ai_image_generations is not yet in the generated Database types, so we
+    // access it via an untyped alias to bypass the table-name literal check.
     const serviceClient = createServiceClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const serviceDb: any = serviceClient;
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { count: recentCount, error: countError } = await serviceClient
+    const { count: recentCount, error: countError } = await serviceDb
       .from("ai_image_generations")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
@@ -151,7 +155,7 @@ export async function POST(request: NextRequest) {
 
     // Audit row. The DB check constraint allows 'scene' | 'owl'; all generations
     // are now single-shot scenes with no owl involvement, so we always use 'scene'.
-    await serviceClient.from("ai_image_generations").insert({
+    await serviceDb.from("ai_image_generations").insert({
       user_id: user.id,
       lesson_id: lessonId,
       slide_id: slideId,

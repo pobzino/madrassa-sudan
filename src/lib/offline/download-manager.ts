@@ -133,7 +133,7 @@ export async function downloadLesson(
           // Reconstruct blob and cache it
           const mimeType =
             audioRes.headers.get("content-type") || simPayload.sim.audio_mime || "audio/webm";
-          const audioBlob = new Blob(chunks, { type: mimeType });
+          const audioBlob = new Blob(chunks as BlobPart[], { type: mimeType });
           await cacheSimAudio(lessonId, audioBlob);
         }
       } catch (e) {
