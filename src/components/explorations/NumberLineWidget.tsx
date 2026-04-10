@@ -70,9 +70,8 @@ export default function NumberLineWidget({
       (e.target as SVGElement).setPointerCapture(e.pointerId);
       const v = getValueFromEvent(e.clientX);
       setValue(v);
-      checkComplete(v);
     },
-    [completed, getValueFromEvent, checkComplete]
+    [completed, getValueFromEvent]
   );
 
   const handlePointerMove = useCallback(
@@ -80,14 +79,16 @@ export default function NumberLineWidget({
       if (!draggingRef.current || completed) return;
       const v = getValueFromEvent(e.clientX);
       setValue(v);
-      checkComplete(v);
     },
-    [completed, getValueFromEvent, checkComplete]
+    [completed, getValueFromEvent]
   );
 
   const handlePointerUp = useCallback(() => {
+    if (draggingRef.current && !completed) {
+      checkComplete(value);
+    }
     draggingRef.current = false;
-  }, []);
+  }, [completed, value, checkComplete]);
 
   // Tick marks
   const effectiveStep = step && step > 0 ? step : (max - min) / 10;
