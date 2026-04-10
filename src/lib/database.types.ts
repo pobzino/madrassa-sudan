@@ -1134,6 +1134,8 @@ export type Database = {
           video_url_480p: string | null
           video_url_720p: string | null
           playback_mode: string
+          submitted_for_review: boolean
+          submitted_for_review_at: string | null
         }
         Insert: {
           ai_generated_at?: string | null
@@ -1164,6 +1166,8 @@ export type Database = {
           video_url_480p?: string | null
           video_url_720p?: string | null
           playback_mode?: string
+          submitted_for_review?: boolean
+          submitted_for_review_at?: string | null
         }
         Update: {
           ai_generated_at?: string | null
@@ -1194,6 +1198,8 @@ export type Database = {
           video_url_480p?: string | null
           video_url_720p?: string | null
           playback_mode?: string
+          submitted_for_review?: boolean
+          submitted_for_review_at?: string | null
         }
         Relationships: [
           {
@@ -1838,7 +1844,7 @@ export type Database = {
         | "submitted"
         | "graded"
         | "returned"
-      user_role: "student" | "teacher" | "parent" | "admin"
+      user_role: "student" | "teacher" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never

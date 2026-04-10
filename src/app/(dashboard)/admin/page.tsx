@@ -62,7 +62,6 @@ function roleBadge(role: string) {
     admin: "bg-purple-100 text-purple-700",
     teacher: "bg-blue-100 text-blue-700",
     student: "bg-emerald-100 text-emerald-700",
-    parent: "bg-amber-100 text-amber-700",
   };
   return colors[role] || "bg-gray-100 text-gray-600";
 }
@@ -510,7 +509,6 @@ export default function AdminPage() {
                       >
                         <option value="student">Student</option>
                         <option value="teacher">Teacher</option>
-                        <option value="parent">Parent</option>
                         <option value="admin">Admin</option>
                       </select>
                       <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />

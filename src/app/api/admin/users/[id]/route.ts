@@ -31,7 +31,7 @@ export async function PATCH(
     const body = await request.json();
 
     const allowedFields = ["role", "is_approved", "full_name", "grade_level"] as const;
-    const validRoles = ["student", "teacher", "parent", "admin"];
+    const validRoles = ["student", "teacher", "admin"];
 
     const updates: Record<string, unknown> = {};
     for (const field of allowedFields) {
