@@ -1,7 +1,7 @@
 import type { Slide } from "@/lib/slides.types";
 import type { SupportedSubjectKey } from "@/lib/curriculum";
 
-type SlideLessonPhase =
+export type SlideLessonPhase =
   | "title"
   | "objectives"
   | "core_teaching"

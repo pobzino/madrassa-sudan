@@ -108,6 +108,32 @@ export default function SlideGenerateButton({
       generation_context: generationContext,
     };
 
+    // Fire-and-forget: enrich speaker notes in background after deck is ready
+    const fireNotesEnrichment = () => {
+      const notesMsg = 'Adding speaker notes...';
+      setProgress(notesMsg);
+      onGeneratingChange?.(true, notesMsg);
+
+      fetch(generateUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...generateBody, enrich_notes: true }),
+      })
+        .then(async (notesRes) => {
+          if (!notesRes.ok) return;
+          const notesData = await notesRes.json();
+          if (Array.isArray(notesData.slides) && notesData.slides.length > 0) {
+            onGenerated(notesData.slides);
+          }
+        })
+        .catch(() => { /* speaker notes failed — deck still works fine */ })
+        .finally(() => {
+          setGenerating(false);
+          setProgress('');
+          onGeneratingChange?.(false, '');
+        });
+    };
+
     try {
       const res = await fetch(generateUrl, {
         method: 'POST',
@@ -132,35 +158,25 @@ export default function SlideGenerateButton({
       }
 
       const data = await res.json();
+
+      // Background generation queued (202) — poll for saved slides
+      if (data.queued) {
+        const recoveredSlides = await tryRecoverSavedSlides(generationStartedAtMs);
+        if (recoveredSlides && recoveredSlides.length > 0) {
+          setError('');
+          onGenerated(recoveredSlides);
+          fireNotesEnrichment();
+          return;
+        }
+        throw new Error('Generation timed out — please try again.');
+      }
+
       const slides = data.slides || [];
       onGenerated(slides);
 
       // Phase 2: enrich speaker notes in background (non-blocking)
       if (data.notes_pending && slides.length > 0) {
-        const notesMsg = 'Adding speaker notes...';
-        setProgress(notesMsg);
-        onGeneratingChange?.(true, notesMsg);
-
-        fetch(generateUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...generateBody, enrich_notes: true }),
-        })
-          .then(async (notesRes) => {
-            if (!notesRes.ok) return;
-            const notesData = await notesRes.json();
-            if (Array.isArray(notesData.slides) && notesData.slides.length > 0) {
-              onGenerated(notesData.slides);
-            }
-          })
-          .catch(() => { /* speaker notes failed — deck still works fine */ })
-          .finally(() => {
-            setGenerating(false);
-            setProgress('');
-            onGeneratingChange?.(false, '');
-          });
-
-        // Don't run the outer finally cleanup — the notes callback handles it
+        fireNotesEnrichment();
         return;
       }
     } catch (err) {
@@ -177,8 +193,8 @@ export default function SlideGenerateButton({
         : null;
       if (recoveredSlides) {
         setError('');
-        setProgress('Slides loaded.');
         onGenerated(recoveredSlides);
+        fireNotesEnrichment();
         return;
       }
 

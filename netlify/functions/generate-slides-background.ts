@@ -167,6 +167,8 @@ export async function handler(event: {
       languageMode,
     });
 
+    // Skip speaker notes — they'll be enriched by a follow-up request
+    // after the client receives the initial deck.
     await generateSlidesForLesson({
       supabase,
       lessonId,
@@ -174,6 +176,7 @@ export async function handler(event: {
       requestedSlideCount: slideCount,
       languageMode,
       generationContext,
+      skipSpeakerNotes: true,
     });
 
     console.log("Background slide generation completed", {
