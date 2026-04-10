@@ -1435,18 +1435,17 @@ export default function SlideEditor({
                 <button
                   data-tour="pause-here-btn"
                   onClick={handleInsertSimGate}
-                  title="Drop a pause marker at this moment — playback will stop here with a Continue button"
+                  title="Drop a checkpoint at this moment — playback will stop here with a Continue button"
                   className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
                     gateFlash
                       ? 'bg-emerald-400 text-black'
                       : 'bg-white/15 text-white hover:bg-white/25'
                   }`}
                 >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="6" y="5" width="4" height="14" rx="1" />
-                    <rect x="14" y="5" width="4" height="14" rx="1" />
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  {gateFlash ? 'Pause set' : 'Pause here'}
+                  {gateFlash ? 'Checkpoint set' : 'Checkpoint'}
                 </button>
 
                 {/* Insert Exploration */}

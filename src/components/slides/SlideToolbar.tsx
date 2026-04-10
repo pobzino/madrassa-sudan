@@ -242,7 +242,7 @@ export default function SlideToolbar({
             + Activity
           </button>
 
-          {/* Sim record */}
+          {/* Recorder — start a new sim recording */}
           {onRecordSim && (
             <button
               data-tour="sim-record-btn"
@@ -253,31 +253,22 @@ export default function SlideToolbar({
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="12" r="8" />
               </svg>
-              Sim
+              Recorder
             </button>
           )}
 
-          {/* Sim — review/edit/view the lesson's single recorded sim */}
+          {/* View recorded sim */}
           {onOpenSim && hasSim && (
             <button
+              data-tour="sim-view-btn"
               onClick={onOpenSim}
-              title="Review the recorded sim for this lesson"
-              className="px-3 py-1.5 text-xs font-medium text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50 transition-colors flex items-center gap-1.5"
+              title="View the recorded sim"
+              className="px-3 py-1.5 text-xs font-medium text-emerald-700 border border-emerald-300 rounded-lg hover:bg-emerald-50 transition-colors flex items-center gap-1.5"
             >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
-              Sim
+              View sim
             </button>
           )}
 
