@@ -56,11 +56,12 @@ export default function ExplorationPicker({
   const [step, setStep] = useState<PickerStep>(initialType ? 'configure' : 'pick_type');
   const [selectedType, setSelectedType] = useState<ExplorationWidgetType | null>(initialType ?? null);
 
-  // Number Line config
+  // Number Line config — target/tolerance are optional; leaving them blank
+  // makes the number line a pure exploration tool with no correctness check.
   const [nlMin, setNlMin] = useState(0);
   const [nlMax, setNlMax] = useState(10);
-  const [nlTarget, setNlTarget] = useState(5);
-  const [nlTolerance, setNlTolerance] = useState(0.5);
+  const [nlTarget, setNlTarget] = useState<string>('');
+  const [nlTolerance, setNlTolerance] = useState<string>('');
 
   // Slider Explore config
   const [slLabel, setSlLabel] = useState('');
@@ -117,12 +118,14 @@ export default function ExplorationPicker({
 
     switch (selectedType) {
       case 'number_line': {
+        const parsedTarget = nlTarget.trim() === '' ? undefined : Number(nlTarget);
+        const parsedTolerance = nlTolerance.trim() === '' ? undefined : Number(nlTolerance);
         const config: NumberLineConfig = {
           type: 'number_line',
           min: nlMin,
           max: nlMax,
-          target: nlTarget,
-          tolerance: nlTolerance,
+          ...(parsedTarget !== undefined && !Number.isNaN(parsedTarget) ? { target: parsedTarget } : {}),
+          ...(parsedTolerance !== undefined && !Number.isNaN(parsedTolerance) ? { tolerance: parsedTolerance } : {}),
         };
         onInsert(selectedType, config);
         break;
@@ -249,12 +252,12 @@ export default function ExplorationPicker({
               <input type="number" value={nlMax} onChange={(e) => setNlMax(Number(e.target.value))} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Target</label>
-              <input type="number" value={nlTarget} onChange={(e) => setNlTarget(Number(e.target.value))} step="any" className={inputCls} />
+              <label className={labelCls}>Target (optional)</label>
+              <input type="number" value={nlTarget} onChange={(e) => setNlTarget(e.target.value)} step="any" placeholder="none" className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Tolerance</label>
-              <input type="number" value={nlTolerance} onChange={(e) => setNlTolerance(Number(e.target.value))} step="any" className={inputCls} />
+              <label className={labelCls}>Tolerance (optional)</label>
+              <input type="number" value={nlTolerance} onChange={(e) => setNlTolerance(e.target.value)} step="any" placeholder="—" className={inputCls} />
             </div>
           </div>
           <div className="flex gap-2 pt-1">

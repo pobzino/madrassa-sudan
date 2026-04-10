@@ -35,6 +35,8 @@ export default function NumberLineWidget({
   onComplete,
 }: ExplorationWidgetProps<NumberLineConfig>) {
   const { min, max, target, tolerance, step, unit_label_ar, unit_label_en } = config;
+  const hasTarget = typeof target === 'number';
+  const effectiveTolerance = tolerance ?? 0.5;
   const [value, setValue] = useState((min + max) / 2);
   const [completed, setCompleted] = useState(false);
   const draggingRef = useRef(false);
@@ -55,12 +57,13 @@ export default function NumberLineWidget({
 
   const checkComplete = useCallback(
     (v: number) => {
-      if (!completed && Math.abs(v - target) <= tolerance) {
+      if (!hasTarget) return;
+      if (!completed && Math.abs(v - (target as number)) <= effectiveTolerance) {
         setCompleted(true);
         onComplete();
       }
     },
-    [completed, target, tolerance, onComplete]
+    [completed, hasTarget, target, effectiveTolerance, onComplete]
   );
 
   const handlePointerDown = useCallback(
@@ -98,8 +101,7 @@ export default function NumberLineWidget({
   }
 
   const handleX = valueToX(value, min, max);
-  const isClose = Math.abs(value - target) <= tolerance;
-  const progress = 1 - Math.min(1, Math.abs(value - target) / (max - min));
+  const isClose = hasTarget && Math.abs(value - (target as number)) <= effectiveTolerance;
 
   return (
     <div className="flex flex-col items-center gap-4 w-full max-w-lg mx-auto px-4 select-none rounded-2xl bg-gradient-to-b from-blue-50/60 to-white py-6">
@@ -158,12 +160,12 @@ export default function NumberLineWidget({
           strokeLinecap="round"
         />
 
-        {/* Target zone (shown after completion) */}
-        {completed && (
+        {/* Target zone (shown after completion, only when target exists) */}
+        {completed && hasTarget && (
           <rect
-            x={valueToX(target - tolerance, min, max)}
+            x={valueToX((target as number) - effectiveTolerance, min, max)}
             y={LINE_Y - 22}
-            width={valueToX(target + tolerance, min, max) - valueToX(target - tolerance, min, max)}
+            width={valueToX((target as number) + effectiveTolerance, min, max) - valueToX((target as number) - effectiveTolerance, min, max)}
             height={44}
             rx={10}
             fill="#10b981"

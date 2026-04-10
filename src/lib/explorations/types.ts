@@ -22,9 +22,12 @@ export interface NumberLineConfig {
   type: 'number_line';
   min: number;
   max: number;
-  target: number;
-  /** How close the student's placement must be to count as correct. */
-  tolerance: number;
+  /** Optional target value. When omitted, the widget is a free exploration
+   * tool with no correctness check and no celebration. */
+  target?: number;
+  /** How close the student's placement must be to count as correct. Only
+   * applies when `target` is set. */
+  tolerance?: number;
   step?: number;
   unit_label_ar?: string;
   unit_label_en?: string;
