@@ -253,7 +253,7 @@ export default function SlideToolbar({
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="12" r="8" />
               </svg>
-              Recorder
+              Record
             </button>
           )}
 
