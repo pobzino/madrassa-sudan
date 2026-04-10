@@ -3,10 +3,13 @@ import { OwlPointing } from '@/components/illustrations';
 import SlideImage from './SlideImage';
 import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
 import { getSlideLanguageBlock } from './bilingual';
+import { computeRevealState, isNewlyRevealedIndex } from '../revealCounts';
 
 interface Props {
   slide: Slide;
   language: 'ar' | 'en';
+  revealedCount?: number;
+  onReveal?: () => void;
 }
 
 const BULLET_COLORS = [
@@ -18,11 +21,12 @@ const BULLET_COLORS = [
   { bg: 'bg-pink-500', card: 'bg-pink-50 border-pink-200' },
 ];
 
-export default function KeyPointsSlide({ slide, language }: Props) {
+export default function KeyPointsSlide({ slide, language, revealedCount, onReveal }: Props) {
   const primary = getSlideLanguageBlock(slide, language);
   const hasImage = !!slide.image_url;
   const layout = slide.layout || 'default';
   const isHorizontal = layout === 'image_left' || layout === 'image_right';
+  const reveal = computeRevealState(primary.bullets, revealedCount, onReveal);
 
   return (
     <div className="relative w-full h-full bg-gradient-to-br from-green-50 via-white to-emerald-50 flex overflow-hidden">
@@ -53,12 +57,19 @@ export default function KeyPointsSlide({ slide, language }: Props) {
           >
             {primary.title}
           </h2>
-          <div className="space-y-2">
-            {primary.bullets.map((bullet, index) => {
+          <div
+            className={`space-y-2 ${reveal.canReveal ? 'cursor-pointer' : ''}`}
+            onClick={reveal.canReveal ? onReveal : undefined}
+          >
+            {reveal.visibleItems.map((bullet, index) => {
               const color = BULLET_COLORS[index % BULLET_COLORS.length];
+              const isNewlyRevealed = isNewlyRevealedIndex(reveal, index);
 
               return (
-                <div key={`${primary.language}-${index}`} className="flex items-start gap-3">
+                <div
+                  key={`${primary.language}-${index}`}
+                  className={`flex items-start gap-3 ${isNewlyRevealed ? 'animate-pop-in' : ''}`}
+                >
                   <div className={`flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${color.bg} text-white flex items-center justify-center text-sm sm:text-base font-bold shadow-sm`}>
                     {index + 1}
                   </div>

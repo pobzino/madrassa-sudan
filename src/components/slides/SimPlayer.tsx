@@ -1255,9 +1255,14 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       {/* Slide area */}
       <div className={`relative ${isFullscreen ? 'flex-1 min-h-0 overflow-hidden' : ''}`}>
           <SlideCard
+            // Key on slide id so the entrance animation replays each time
+            // the active slide changes during replay. Reveal state flows
+            // through `revealedCount` so bullet reveals do NOT remount.
+            key={`${currentSlide?.id ?? ''}:${language}`}
             slide={currentSlide}
             language={language}
             chromeless
+            applyEntranceAnimation
             revealedCount={currentSurface?.revealed_bullets}
             showActivityAnswer={currentSurface?.answer_revealed ?? false}
             activityInteractive

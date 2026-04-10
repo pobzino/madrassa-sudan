@@ -8,6 +8,7 @@ import SlideCard from './SlideCard';
 import SlideThumbnail from './SlideThumbnail';
 import SlideEditPanel from './SlideEditPanel';
 import SlideToolbar, { type InteractiveSlideRequest } from './SlideToolbar';
+import { getTotalRevealSteps } from './revealCounts';
 import dynamic from 'next/dynamic';
 import { useWhiteboard, type WhiteboardEvent } from '@/hooks/useWhiteboard';
 import WhiteboardToolbar from './WhiteboardToolbar';
@@ -594,10 +595,7 @@ export default function SlideEditor({
 
   // Get reveal item count for current presentation slide
   const presentSlide = slides[presentIndex];
-  const presentRevealItems = presentSlide?.type === 'question_answer'
-    ? (language === 'ar' ? presentSlide.reveal_items_ar : presentSlide.reveal_items_en) || []
-    : [];
-  const totalRevealItems = presentRevealItems.length;
+  const totalRevealItems = getTotalRevealSteps(presentSlide, language);
   const presentSpeakerNotesPrimary = language === 'ar'
     ? presentSlide?.speaker_notes_ar?.trim()
     : presentSlide?.speaker_notes_en?.trim();
@@ -1203,11 +1201,16 @@ export default function SlideEditor({
             onPointerMove={spotlightActive ? handleSpotlightPointerMove : undefined}
           >
             <SlideCard
-              key={`${presentIndex}:${revealedCount}:${language}`}
+              // Keying on slide id + language remounts the card only on slide
+              // navigation or language switch, which is when the entrance
+              // animation should replay. Reveal state flows through props so
+              // progressive reveal updates without forcing a remount.
+              key={`${slides[presentIndex]?.id ?? presentIndex}:${language}`}
               slide={slides[presentIndex]}
               language={language}
               className="!rounded-none !shadow-2xl"
-              revealedCount={slides[presentIndex]?.type === 'question_answer' ? revealedCount : undefined}
+              applyEntranceAnimation
+              revealedCount={totalRevealItems > 0 ? revealedCount : undefined}
               onReveal={() => setRevealedCount((c) => c + 1)}
               showActivityAnswer={isPresentActivitySlide ? showActivityAnswer : false}
               // Turn on the real DnD widget inside the slide canvas so the

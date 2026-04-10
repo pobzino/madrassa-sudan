@@ -14,6 +14,7 @@ export type SlideType =
 
 export type SlideLayout = 'default' | 'image_left' | 'image_right' | 'image_top' | 'full_image';
 export type SlideTextSize = 'sm' | 'md' | 'lg' | 'xl';
+export type SlideEntranceAnimation = 'none' | 'fade' | 'slide_up' | 'pop';
 export type SlideLessonPhase = 'title' | 'objectives' | 'core_teaching' | 'practice' | 'summary_goodbye';
 export type MathRepresentationStage = 'concrete_visual' | 'abstract' | 'not_applicable';
 export type SlideInteractionType =
@@ -60,6 +61,8 @@ export interface Slide {
   layout: SlideLayout | null;
   title_size?: SlideTextSize | null;
   body_size?: SlideTextSize | null;
+  progressive_reveal?: boolean | null;
+  entrance_animation?: SlideEntranceAnimation | null;
   lesson_phase?: SlideLessonPhase | null;
   idea_focus_en?: string | null;
   idea_focus_ar?: string | null;

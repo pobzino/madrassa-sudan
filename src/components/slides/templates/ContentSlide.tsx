@@ -3,32 +3,49 @@ import { OwlReading } from '@/components/illustrations';
 import SlideImage, { SlideBackgroundImage } from './SlideImage';
 import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
 import { getSlideLanguageBlock } from './bilingual';
+import { computeRevealState, isNewlyRevealedIndex, splitBodyParagraphs } from '../revealCounts';
 
 interface Props {
   slide: Slide;
   language: 'ar' | 'en';
+  revealedCount?: number;
 }
 
-function BilingualPanels({ slide, language, dark = false }: Props & { dark?: boolean }) {
+function BilingualPanels({
+  slide,
+  language,
+  dark = false,
+  revealedCount,
+}: Props & { dark?: boolean }) {
   const block = getSlideLanguageBlock(slide, language);
+  const allParagraphs = splitBodyParagraphs(block.body);
+  const reveal = computeRevealState(allParagraphs, revealedCount);
 
   return (
     <div
       dir={block.dir}
-      className={`rounded-xl p-3 ${dark ? 'bg-white/10' : 'bg-white/75'}`}
+      className={`rounded-xl p-3 space-y-3 ${dark ? 'bg-white/10' : 'bg-white/75'}`}
     >
-      <p
-        className={`whitespace-pre-line ${dark ? 'text-white/95' : 'text-gray-700'} ${getSlideBodyClasses(
-          slide.body_size
-        )} ${block.isArabic ? 'font-cairo' : 'font-inter'}`}
-      >
-        {block.body}
-      </p>
+      {reveal.visibleItems.map((paragraph, index) => {
+        const isNewlyRevealed = isNewlyRevealedIndex(reveal, index);
+        return (
+          <p
+            key={`${block.language}-${index}`}
+            className={`whitespace-pre-line ${dark ? 'text-white/95' : 'text-gray-700'} ${getSlideBodyClasses(
+              slide.body_size
+            )} ${block.isArabic ? 'font-cairo' : 'font-inter'} ${
+              isNewlyRevealed ? 'animate-pop-in' : ''
+            }`}
+          >
+            {paragraph}
+          </p>
+        );
+      })}
     </div>
   );
 }
 
-export default function ContentSlide({ slide, language }: Props) {
+export default function ContentSlide({ slide, language, revealedCount }: Props) {
   const primary = getSlideLanguageBlock(slide, language);
   const hasImage = !!slide.image_url;
   const layout = slide.layout || 'default';
@@ -46,7 +63,7 @@ export default function ContentSlide({ slide, language }: Props) {
           {primary.title}
         </h2>
         <div className="relative z-10 rounded-2xl bg-black/30 p-4 backdrop-blur-sm sm:p-6">
-          <BilingualPanels slide={slide} language={language} dark />
+          <BilingualPanels slide={slide} language={language} dark revealedCount={revealedCount} />
         </div>
       </div>
     );
@@ -82,7 +99,7 @@ export default function ContentSlide({ slide, language }: Props) {
             {primary.title}
           </h2>
           <div className="rounded-2xl border border-emerald-100 bg-white/80 p-4 shadow-sm sm:p-6">
-            <BilingualPanels slide={slide} language={language} />
+            <BilingualPanels slide={slide} language={language} revealedCount={revealedCount} />
           </div>
         </div>
 

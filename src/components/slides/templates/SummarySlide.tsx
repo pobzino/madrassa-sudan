@@ -3,13 +3,16 @@ import { OwlCelebrating } from '@/components/illustrations';
 import SlideImage from './SlideImage';
 import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
 import { getSlideLanguageBlock } from './bilingual';
+import { computeRevealState, isNewlyRevealedIndex } from '../revealCounts';
 
 interface Props {
   slide: Slide;
   language: 'ar' | 'en';
+  revealedCount?: number;
+  onReveal?: () => void;
 }
 
-export default function SummarySlide({ slide, language }: Props) {
+export default function SummarySlide({ slide, language, revealedCount, onReveal }: Props) {
   const primary = getSlideLanguageBlock(slide, language);
   const hasImage = !!slide.image_url;
 
@@ -55,28 +58,40 @@ export default function SummarySlide({ slide, language }: Props) {
 
       <div className="relative z-10 w-full max-w-[90%]">
         {(() => {
-          const lines =
+          const allLines =
             primary.bullets.length > 0 ? primary.bullets : primary.body.split('\n').filter(Boolean);
+          const reveal = computeRevealState(allLines, revealedCount, onReveal);
 
           return (
-            <div className="space-y-2">
-              {lines.map((line, index) => (
-                <div key={`${primary.language}-${index}`} className="flex items-start gap-3 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2.5">
-                  <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-[#F59E0B] text-white flex items-center justify-center shadow-sm">
-                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <p
-                    dir={primary.dir}
-                    className={`flex-1 pt-0.5 text-white/95 ${getSlideBodyClasses(slide.body_size, 'list')} ${
-                      primary.isArabic ? 'font-cairo' : 'font-inter'
+            <div
+              className={`space-y-2 ${reveal.canReveal ? 'cursor-pointer' : ''}`}
+              onClick={reveal.canReveal ? onReveal : undefined}
+            >
+              {reveal.visibleItems.map((line, index) => {
+                const isNewlyRevealed = isNewlyRevealedIndex(reveal, index);
+                return (
+                  <div
+                    key={`${primary.language}-${index}`}
+                    className={`flex items-start gap-3 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2.5 ${
+                      isNewlyRevealed ? 'animate-pop-in' : ''
                     }`}
                   >
-                    {line}
-                  </p>
-                </div>
-              ))}
+                    <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-[#F59E0B] text-white flex items-center justify-center shadow-sm">
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <p
+                      dir={primary.dir}
+                      className={`flex-1 pt-0.5 text-white/95 ${getSlideBodyClasses(slide.body_size, 'list')} ${
+                        primary.isArabic ? 'font-cairo' : 'font-inter'
+                      }`}
+                    >
+                      {line}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           );
         })()}
