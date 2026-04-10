@@ -690,7 +690,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "details", label: "Details" },
     { key: "slides", label: "Slides", count: slides.length },
-    ...(canAccessSims ? [{ key: "sim" as Tab, label: "Sim" }] : []),
+    ...(canAccessSims ? [{ key: "sim" as Tab, label: "Video" }] : []),
     { key: "results", label: "Results" },
   ];
 

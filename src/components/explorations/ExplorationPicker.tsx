@@ -387,8 +387,7 @@ export default function ExplorationPicker({
             <button
               type="button"
               onClick={handleConfirm}
-              disabled={!ltText.trim()}
-              className="flex-1 rounded-lg bg-blue-600 text-white text-xs font-semibold py-1.5 hover:bg-blue-500 disabled:opacity-50"
+              className="flex-1 rounded-lg bg-blue-600 text-white text-xs font-semibold py-1.5 hover:bg-blue-500"
             >
               Add
             </button>
@@ -415,7 +414,7 @@ export default function ExplorationPicker({
           </div>
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={() => setStep('pick_type')} className={btnBackCls}>Back</button>
-            <button type="button" onClick={handleConfirm} disabled={coObjects.length === 0} className="flex-1 rounded-lg bg-blue-600 text-white text-xs font-semibold py-1.5 hover:bg-blue-500 disabled:opacity-50">Add</button>
+            <button type="button" onClick={handleConfirm} className="flex-1 rounded-lg bg-blue-600 text-white text-xs font-semibold py-1.5 hover:bg-blue-500">Add</button>
           </div>
         </div>
       )}
@@ -458,7 +457,7 @@ export default function ExplorationPicker({
           </div>
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={() => setStep('pick_type')} className={btnBackCls}>Back</button>
-            <button type="button" onClick={handleConfirm} disabled={sortItems.length === 0 || sortCategories.length < 2} className="flex-1 rounded-lg bg-blue-600 text-white text-xs font-semibold py-1.5 hover:bg-blue-500 disabled:opacity-50">Add</button>
+            <button type="button" onClick={handleConfirm} className="flex-1 rounded-lg bg-blue-600 text-white text-xs font-semibold py-1.5 hover:bg-blue-500">Add</button>
           </div>
         </div>
       )}
