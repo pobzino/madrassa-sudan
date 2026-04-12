@@ -31,6 +31,32 @@ function buildDefaultPrompt(slide: Slide): string {
   return parts.join(' — ');
 }
 
+async function parseImageGenerationResponse(res: Response): Promise<{ imageUrl?: string; error?: string }> {
+  const contentType = res.headers.get('content-type') || '';
+
+  if (contentType.includes('application/json')) {
+    return (await res.json()) as { imageUrl?: string; error?: string };
+  }
+
+  const bodyText = (await res.text()).trim();
+  const looksLikeHtml = /<(!doctype|html|head|body)\b/i.test(bodyText);
+
+  if (looksLikeHtml) {
+    return {
+      error:
+        res.status === 401 || res.status === 403
+          ? 'Your session has expired. Refresh the page and sign in again.'
+          : `The image service returned an unexpected HTML response (${res.status || 'unknown status'}). Please try again.`,
+    };
+  }
+
+  return {
+    error:
+      bodyText ||
+      `The image service returned an unexpected response (${res.status || 'unknown status'}). Please try again.`,
+  };
+}
+
 export default function SlideImageGenerator({ slide, lessonId, onUpdate }: Props) {
   const defaultPrompt = useMemo(() => buildDefaultPrompt(slide), [slide]);
   const [open, setOpen] = useState(false);
@@ -55,7 +81,10 @@ export default function SlideImageGenerator({ slide, lessonId, onUpdate }: Props
     try {
       const res = await fetch('/api/teacher/slides/generate-image', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
         body: JSON.stringify({
           lessonId,
           slideId: slide.id,
@@ -64,8 +93,9 @@ export default function SlideImageGenerator({ slide, lessonId, onUpdate }: Props
           ideaFocus: slide.idea_focus_en || null,
         }),
       });
-      const data = await res.json();
+      const data = await parseImageGenerationResponse(res);
       if (!res.ok) throw new Error(data.error || 'Generation failed');
+      if (!data.imageUrl) throw new Error('Image generation succeeded but returned no image URL.');
       setPreviewUrl(data.imageUrl as string);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Generation failed');

@@ -22,8 +22,36 @@ const STYLE = [
   'Solid flat colors, thick clean outlines, simple rounded shapes, bright friendly saturated palette.',
   'Similar look to modern flat vector children\'s book illustrations and educational apps.',
   'NO photorealism, NO 3D rendering, NO gradients, NO textures, NO depth-of-field, NO realistic lighting.',
-  'NO text, NO letters, NO numbers, NO words written anywhere in the image.',
+  'Avoid stray decorative text or labels unless the lesson prompt explicitly asks for them.',
 ].join(' ');
+
+const EDUCATIONAL_SYMBOL_KEYWORDS = [
+  'number',
+  'numbers',
+  'numeral',
+  'numerals',
+  'digit',
+  'digits',
+  'count',
+  'counting',
+  'equation',
+  'fraction',
+  'math',
+  'letter',
+  'letters',
+  'word',
+  'words',
+  'label',
+  'labels',
+  'alphabet',
+  'card',
+  'cards',
+];
+
+function requestsWrittenSymbols(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return /\d/.test(normalized) || EDUCATIONAL_SYMBOL_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
 
 const SUDANESE_CHARACTER_GUIDE = [
   'IF the scene includes any human characters (children, students, teachers, adults, or any people):',
@@ -55,6 +83,11 @@ export function buildSlideImagePrompt({
   const context = contextParts.join(' ');
 
   const subject = `Scene: ${cleaned}.`;
+  const writingInstruction = requestsWrittenSymbols(cleaned)
+    ? 'The teacher explicitly asked for educational symbols or labels. Include only the exact requested numbers, letters, words, or cards, make them large and legible, and do not add any extra text beyond what was requested.'
+    : 'Do not include any visible text, letters, numerals, labels, or captions in the image.';
 
-  return [STYLE, context, subject, SUDANESE_CHARACTER_GUIDE].filter(Boolean).join('\n\n');
+  return [STYLE, context, subject, writingInstruction, SUDANESE_CHARACTER_GUIDE]
+    .filter(Boolean)
+    .join('\n\n');
 }
