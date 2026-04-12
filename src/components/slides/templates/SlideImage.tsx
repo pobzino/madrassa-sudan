@@ -6,9 +6,23 @@ interface SlideImageProps {
   src: string;
   className?: string;
   objectFit?: 'cover' | 'contain';
+  positionX?: number | null;
+  positionY?: number | null;
 }
 
-export default function SlideImage({ src, className = '', objectFit = 'cover' }: SlideImageProps) {
+function getObjectPosition(positionX?: number | null, positionY?: number | null): string {
+  const x = typeof positionX === 'number' ? positionX : 50;
+  const y = typeof positionY === 'number' ? positionY : 50;
+  return `${x}% ${y}%`;
+}
+
+export default function SlideImage({
+  src,
+  className = '',
+  objectFit = 'contain',
+  positionX,
+  positionY,
+}: SlideImageProps) {
   if (isOwlImage(src)) {
     return <OwlImage url={src} className={className} />;
   }
@@ -17,12 +31,23 @@ export default function SlideImage({ src, className = '', objectFit = 'cover' }:
       src={src}
       alt=""
       className={`rounded-2xl ${objectFit === 'cover' ? 'object-cover' : 'object-contain'} ${className}`}
+      style={{ objectPosition: getObjectPosition(positionX, positionY) }}
       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
     />
   );
 }
 
-export function SlideBackgroundImage({ src }: { src: string }) {
+export function SlideBackgroundImage({
+  src,
+  objectFit = 'cover',
+  positionX,
+  positionY,
+}: {
+  src: string;
+  objectFit?: 'cover' | 'contain';
+  positionX?: number | null;
+  positionY?: number | null;
+}) {
   if (isOwlImage(src)) {
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-emerald-100 to-green-50">
@@ -32,10 +57,12 @@ export function SlideBackgroundImage({ src }: { src: string }) {
   }
   return (
     <>
+      <div className="absolute inset-0 bg-slate-900" />
       <img
         src={src}
         alt=""
-        className="absolute inset-0 w-full h-full object-cover"
+        className={`absolute inset-0 h-full w-full ${objectFit === 'cover' ? 'object-cover' : 'object-contain'}`}
+        style={{ objectPosition: getObjectPosition(positionX, positionY) }}
         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
       />
       <div className="absolute inset-0 bg-black/50" />

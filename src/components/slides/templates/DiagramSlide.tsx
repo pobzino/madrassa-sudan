@@ -37,7 +37,12 @@ export default function DiagramSlide({ slide, language }: Props) {
   if (layout === 'full_image' && hasImage) {
     return (
       <div className="relative w-full h-full flex flex-col justify-end p-8 sm:p-12 overflow-hidden">
-        <SlideBackgroundImage src={slide.image_url!} />
+        <SlideBackgroundImage
+          src={slide.image_url!}
+          objectFit={slide.image_fit ?? 'cover'}
+          positionX={slide.image_position_x}
+          positionY={slide.image_position_y}
+        />
         <h2
           dir={primary.dir}
           className={`relative z-10 mb-1 font-fredoka font-bold text-white drop-shadow-lg ${getSlideTitleClasses(
@@ -65,7 +70,13 @@ export default function DiagramSlide({ slide, language }: Props) {
       {layout === 'image_top' && hasImage ? (
         <div className="flex-1 flex flex-col p-6 sm:p-10 md:p-12 gap-4">
           <div className="flex-shrink-0 h-2/5">
-            <SlideImage src={slide.image_url!} className="w-full h-full shadow-md" />
+            <SlideImage
+              src={slide.image_url!}
+              className="w-full h-full shadow-md"
+              objectFit={slide.image_fit ?? 'contain'}
+              positionX={slide.image_position_x}
+              positionY={slide.image_position_y}
+            />
           </div>
           <div className="flex-1 flex flex-col justify-center">
             <h2
@@ -102,7 +113,13 @@ export default function DiagramSlide({ slide, language }: Props) {
 
           <div className="flex-1 flex items-center justify-center">
             {hasImage ? (
-              <SlideImage src={slide.image_url!} className="w-full h-full max-h-full shadow-md" />
+              <SlideImage
+                src={slide.image_url!}
+                className="w-full h-full max-h-full shadow-md"
+                objectFit={slide.image_fit ?? 'contain'}
+                positionX={slide.image_position_x}
+                positionY={slide.image_position_y}
+              />
             ) : (
               <div className="w-full h-full min-h-[120px] flex flex-col items-center justify-center p-4 sm:p-6 rounded-2xl border-2 border-dashed border-cyan-300 bg-cyan-50/50">
                 <svg className="w-10 h-10 sm:w-12 sm:h-12 text-cyan-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

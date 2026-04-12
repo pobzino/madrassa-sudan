@@ -76,7 +76,12 @@ export default function SlideImageGenerator({ slide, lessonId, onUpdate }: Props
 
   function handleUseImage() {
     if (!previewUrl) return;
-    onUpdate({ image_url: previewUrl });
+    onUpdate({
+      image_url: previewUrl,
+      image_fit: 'contain',
+      image_position_x: 50,
+      image_position_y: 50,
+    });
     setOpen(false);
     reset();
   }

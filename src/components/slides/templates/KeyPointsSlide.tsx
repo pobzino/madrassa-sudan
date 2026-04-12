@@ -44,7 +44,13 @@ export default function KeyPointsSlide({ slide, language, revealedCount, onRevea
       <div className={`flex-1 flex ${isHorizontal ? (layout === 'image_left' ? 'flex-row' : 'flex-row-reverse') : ''} gap-2 p-6 sm:p-10 md:p-12`}>
         {hasImage && isHorizontal && (
           <div className="w-2/5 flex-shrink-0 flex items-center">
-            <SlideImage src={slide.image_url!} className="w-full h-full max-h-full shadow-md" />
+            <SlideImage
+              src={slide.image_url!}
+              className="w-full h-full max-h-full shadow-md"
+              objectFit={slide.image_fit ?? 'contain'}
+              positionX={slide.image_position_x}
+              positionY={slide.image_position_y}
+            />
           </div>
         )}
 
@@ -96,7 +102,13 @@ export default function KeyPointsSlide({ slide, language, revealedCount, onRevea
         {!isHorizontal && (
           <div className="hidden sm:flex items-center flex-shrink-0 w-16 md:w-20">
             {hasImage ? (
-              <SlideImage src={slide.image_url!} className="w-full h-auto max-h-full shadow-md" objectFit="contain" />
+              <SlideImage
+                src={slide.image_url!}
+                className="w-full h-auto max-h-full shadow-md"
+                objectFit={slide.image_fit ?? 'contain'}
+                positionX={slide.image_position_x}
+                positionY={slide.image_position_y}
+              />
             ) : (
               <OwlPointing />
             )}

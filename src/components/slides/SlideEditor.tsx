@@ -130,6 +130,9 @@ function createBlankSlide(type: SlideType, sequence: number): Slide {
     reveal_items_ar: type === 'question_answer' ? [''] : null,
     reveal_items_en: type === 'question_answer' ? [''] : null,
     image_url: null,
+    image_fit: 'contain',
+    image_position_x: 50,
+    image_position_y: 50,
     layout: null,
     title_size: 'md',
     body_size: 'md',
@@ -403,7 +406,6 @@ export default function SlideEditor({
   preferredLanguage = 'ar',
   focusedSlideId,
   lessonId,
-  lessonTitle,
   onSimChange,
   simEnabled,
   regenerateProps,
@@ -605,13 +607,6 @@ export default function SlideEditor({
   // Get reveal item count for current presentation slide
   const presentSlide = slides[presentIndex];
   const totalRevealItems = getTotalRevealSteps(presentSlide, language);
-  const presentSpeakerNotesPrimary = language === 'ar'
-    ? presentSlide?.speaker_notes_ar?.trim()
-    : presentSlide?.speaker_notes_en?.trim();
-  const presentSpeakerNotesFallback = language === 'ar'
-    ? presentSlide?.speaker_notes_en?.trim()
-    : presentSlide?.speaker_notes_ar?.trim();
-  const presentSpeakerNotes = presentSpeakerNotesPrimary || presentSpeakerNotesFallback || '';
   const isPresentActivitySlide = presentSlide?.type === 'activity';
   const canGoPreviousWhileRecording = presentIndex > 0;
   const canGoNextWhileRecording = presentIndex < slides.length - 1 || revealedCount < totalRevealItems;

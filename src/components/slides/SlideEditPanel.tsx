@@ -1,13 +1,22 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import type { Slide, SlideType, SlideLayout, SlideTextSize, SlideTextAlign, SlideEntranceAnimation } from '@/lib/slides.types';
+import type {
+  Slide,
+  SlideType,
+  SlideLayout,
+  SlideTextSize,
+  SlideTextAlign,
+  SlideEntranceAnimation,
+  SlideImageFit,
+} from '@/lib/slides.types';
 import { createClient } from '@/lib/supabase/client';
 import SlideInteractionFields from './SlideInteractionFields';
 import SlideImageGenerator from './SlideImageGenerator';
 import { OWL_OPTIONS, OWL_PREFIX, isOwlImage, getOwlKey } from '@/lib/owl-illustrations';
 import OwlImage from './OwlImage';
 import { WIDGET_LABELS } from '@/lib/explorations/registry';
+import SlideImage from './templates/SlideImage';
 
 interface SlideEditPanelProps {
   slide: Slide;
@@ -50,6 +59,11 @@ const TEXT_ALIGNS: { value: SlideTextAlign; label: string }[] = [
   { value: 'left', label: 'Left' },
   { value: 'center', label: 'Center' },
   { value: 'right', label: 'Right' },
+];
+
+const IMAGE_FITS: { value: SlideImageFit; label: string; description: string }[] = [
+  { value: 'contain', label: 'Contain', description: 'Show the full image' },
+  { value: 'cover', label: 'Cover', description: 'Fill the frame, may crop' },
 ];
 
 const ENTRANCE_ANIMATIONS: { value: SlideEntranceAnimation; label: string }[] = [
@@ -197,7 +211,12 @@ export default function SlideEditPanel({
       }
 
       const { data } = supabase.storage.from('lessons').getPublicUrl(path);
-      onUpdate({ image_url: data.publicUrl });
+      onUpdate({
+        image_url: data.publicUrl,
+        image_fit: 'contain',
+        image_position_x: 50,
+        image_position_y: 50,
+      });
     } catch (error) {
       setImageUploadError(error instanceof Error ? error.message : 'Image upload failed.');
     } finally {
@@ -414,7 +433,12 @@ export default function SlideEditPanel({
                 type="button"
                 onClick={() => {
                   setImageUploadError(null);
-                  onUpdate({ image_url: null });
+                  onUpdate({
+                    image_url: null,
+                    image_fit: 'contain',
+                    image_position_x: 50,
+                    image_position_y: 50,
+                  });
                 }}
                 className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-50"
               >
@@ -440,14 +464,74 @@ export default function SlideEditPanel({
 
           {/* Image preview */}
           {slide.image_url && !isOwlImage(slide.image_url) && (
-            <div className="relative w-full h-20 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={slide.image_url}
-                alt="Slide image preview"
-                className="w-full h-full object-cover"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
+            <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="relative h-24 w-full overflow-hidden rounded-lg border border-gray-200 bg-white">
+                <SlideImage
+                  src={slide.image_url}
+                  className="h-full w-full"
+                  objectFit={slide.image_fit ?? 'contain'}
+                  positionX={slide.image_position_x}
+                  positionY={slide.image_position_y}
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Image Fit</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {IMAGE_FITS.map((fit) => {
+                    const isActive = (slide.image_fit ?? 'contain') === fit.value;
+                    return (
+                      <button
+                        key={fit.value}
+                        type="button"
+                        onClick={() => onUpdate({ image_fit: fit.value })}
+                        className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                          isActive
+                            ? 'border-[#007229] bg-green-50 text-[#007229]'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        <span className="block text-xs font-semibold">{fit.label}</span>
+                        <span className="block text-[10px] text-gray-400">{fit.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>
+                    Focus X <span className="text-[10px] text-gray-400">Left to right</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={slide.image_position_x ?? 50}
+                    onChange={(e) => onUpdate({ image_position_x: Number(e.target.value) })}
+                    className="w-full accent-[#007229]"
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    Focus Y <span className="text-[10px] text-gray-400">Top to bottom</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={slide.image_position_y ?? 50}
+                    onChange={(e) => onUpdate({ image_position_y: Number(e.target.value) })}
+                    className="w-full accent-[#007229]"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[10px] text-gray-400">
+                Use <span className="font-medium text-gray-500">Contain</span> to avoid cropping. Switch to <span className="font-medium text-gray-500">Cover</span> when you want the image to fill the frame, then adjust the focus sliders.
+              </p>
             </div>
           )}
 
@@ -473,7 +557,14 @@ export default function SlideEditPanel({
                   <button
                     key={owl.key}
                     type="button"
-                    onClick={() => onUpdate({ image_url: isSelected ? null : `${OWL_PREFIX}${owl.key}` })}
+                    onClick={() =>
+                      onUpdate({
+                        image_url: isSelected ? null : `${OWL_PREFIX}${owl.key}`,
+                        image_fit: 'contain',
+                        image_position_x: 50,
+                        image_position_y: 50,
+                      })
+                    }
                     className={`relative w-full aspect-square rounded-lg border-2 transition-all flex items-center justify-center ${
                       isSelected
                         ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-300'

@@ -53,7 +53,12 @@ export default function ContentSlide({ slide, language, revealedCount }: Props) 
   if (layout === 'full_image' && hasImage) {
     return (
       <div className="relative w-full h-full flex flex-col justify-end p-8 sm:p-12 overflow-hidden">
-        <SlideBackgroundImage src={slide.image_url!} />
+        <SlideBackgroundImage
+          src={slide.image_url!}
+          objectFit={slide.image_fit ?? 'cover'}
+          positionX={slide.image_position_x}
+          positionY={slide.image_position_y}
+        />
         <h2
           dir={primary.dir}
           className={`relative z-10 mb-1 font-fredoka font-bold text-white drop-shadow-lg ${getSlideTitleClasses(
@@ -85,7 +90,13 @@ export default function ContentSlide({ slide, language, revealedCount }: Props) 
       <div className={`flex-1 flex ${isHorizontal ? (layout === 'image_left' ? 'flex-row' : 'flex-row-reverse') : 'flex-col'} gap-4 p-6 sm:p-10 md:p-14`}>
         {hasImage && (isHorizontal || isImageTop) && (
           <div className={isHorizontal ? 'w-2/5 flex-shrink-0 flex items-center' : 'flex-shrink-0 h-1/3'}>
-            <SlideImage src={slide.image_url!} className={`w-full ${isHorizontal ? 'h-full max-h-full' : 'h-full'} shadow-md`} />
+            <SlideImage
+              src={slide.image_url!}
+              className={`w-full ${isHorizontal ? 'h-full max-h-full' : 'h-full'} shadow-md`}
+              objectFit={slide.image_fit ?? 'contain'}
+              positionX={slide.image_position_x}
+              positionY={slide.image_position_y}
+            />
           </div>
         )}
 
@@ -111,7 +122,13 @@ export default function ContentSlide({ slide, language, revealedCount }: Props) 
 
         {hasImage && !isHorizontal && !isImageTop && (
           <div className="hidden sm:flex items-center flex-shrink-0 w-28 md:w-36">
-            <SlideImage src={slide.image_url!} className="w-full h-auto max-h-full shadow-md" objectFit="contain" />
+            <SlideImage
+              src={slide.image_url!}
+              className="w-full h-auto max-h-full shadow-md"
+              objectFit={slide.image_fit ?? 'contain'}
+              positionX={slide.image_position_x}
+              positionY={slide.image_position_y}
+            />
           </div>
         )}
       </div>

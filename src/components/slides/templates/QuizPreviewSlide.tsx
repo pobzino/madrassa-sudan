@@ -37,7 +37,13 @@ export default function QuizPreviewSlide({ slide, language }: Props) {
       {/* Image or Owl mascot */}
       <div className="relative z-10 w-14 h-14 sm:w-18 sm:h-18 mb-2 sm:mb-3">
         {hasImage ? (
-          <SlideImage src={slide.image_url!} className="w-full h-full shadow-md" />
+          <SlideImage
+            src={slide.image_url!}
+            className="w-full h-full shadow-md"
+            objectFit={slide.image_fit ?? 'contain'}
+            positionX={slide.image_position_x}
+            positionY={slide.image_position_y}
+          />
         ) : (
           <OwlConfused />
         )}

@@ -1,5 +1,4 @@
 import type { Slide, SlideInteractionType } from '@/lib/slides.types';
-import { OwlExcited } from '@/components/illustrations';
 import SlideImage, { SlideBackgroundImage } from './SlideImage';
 import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
 import {
@@ -534,7 +533,12 @@ export default function ActivitySlide({
   if (slide.layout === 'full_image' && hasImage) {
     return (
       <div dir={isAr ? 'rtl' : 'ltr'} className="relative w-full h-full flex flex-col items-center p-8 sm:p-12 overflow-y-auto" style={{ justifyContent: 'safe center' }}>
-        <SlideBackgroundImage src={slide.image_url!} />
+        <SlideBackgroundImage
+          src={slide.image_url!}
+          objectFit={slide.image_fit ?? 'cover'}
+          positionX={slide.image_position_x}
+          positionY={slide.image_position_y}
+        />
         <span className={`relative z-10 inline-flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r ${theme.badgeGradient} text-white rounded-full text-xs sm:text-sm font-bold mb-3 shadow-md`}>
           <theme.icon className="w-4 h-4" /> {isAr ? theme.label_ar : theme.label_en}
         </span>
@@ -575,7 +579,13 @@ export default function ActivitySlide({
       {/* Image if provided */}
       {hasImage && (
         <div className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 mb-2 sm:mb-3">
-          <SlideImage src={slide.image_url!} className="w-full h-full shadow-md" />
+          <SlideImage
+            src={slide.image_url!}
+            className="w-full h-full shadow-md"
+            objectFit={slide.image_fit ?? 'contain'}
+            positionX={slide.image_position_x}
+            positionY={slide.image_position_y}
+          />
         </div>
       )}
 

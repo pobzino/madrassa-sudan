@@ -36,7 +36,13 @@ export default function SummarySlide({ slide, language, revealedCount, onReveal 
 
       <div className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 mb-2 sm:mb-3">
         {hasImage ? (
-          <SlideImage src={slide.image_url!} className="w-full h-full shadow-lg" />
+          <SlideImage
+            src={slide.image_url!}
+            className="w-full h-full shadow-lg"
+            objectFit={slide.image_fit ?? 'contain'}
+            positionX={slide.image_position_x}
+            positionY={slide.image_position_y}
+          />
         ) : (
           <OwlCelebrating />
         )}

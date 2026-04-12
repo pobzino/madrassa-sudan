@@ -38,7 +38,12 @@ export default function TitleSlide({ slide, language }: Props) {
   if (isFullImage) {
     return (
       <div className="relative w-full h-full flex flex-col items-center p-8 sm:p-12 overflow-y-auto" style={{ justifyContent: 'safe center' }}>
-        <SlideBackgroundImage src={slide.image_url!} />
+        <SlideBackgroundImage
+          src={slide.image_url!}
+          objectFit={slide.image_fit ?? 'cover'}
+          positionX={slide.image_position_x}
+          positionY={slide.image_position_y}
+        />
         <h1
           dir={primary.dir}
           className={`relative z-10 mb-2 ${getSlideTextAlignClass(
@@ -78,7 +83,13 @@ export default function TitleSlide({ slide, language }: Props) {
 
       <div className="relative z-10 mb-3 sm:mb-5 w-20 h-20 sm:w-28 sm:h-28">
         {hasImage ? (
-          <SlideImage src={slide.image_url!} className="w-full h-full shadow-lg" />
+          <SlideImage
+            src={slide.image_url!}
+            className="w-full h-full shadow-lg"
+            objectFit={slide.image_fit ?? 'contain'}
+            positionX={slide.image_position_x}
+            positionY={slide.image_position_y}
+          />
         ) : (
           <OwlWelcome />
         )}
