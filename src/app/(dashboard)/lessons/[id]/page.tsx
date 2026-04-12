@@ -176,9 +176,11 @@ export default function LessonPlayerPage() {
   const [userId, setUserId] = useState<string | null>(null);
 
   // Lesson sim (event-sourced recording). Replaces the Bunny CDN video on
-  // the student page — if a sim exists we render SimPlayer; otherwise the
-  // player area shows an empty state.
+  // the student page — if a sim exists we render SimPlayer; otherwise we
+  // fall back to a legacy mp4 in the lesson-videos bucket (for older lessons
+  // that were uploaded as full-frame video before the sim recorder existed).
   const [lessonSim, setLessonSim] = useState<SimPayload | null>(null);
+  const [legacyVideoUrl, setLegacyVideoUrl] = useState<string | null>(null);
 
   // Question/quiz state
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
@@ -304,7 +306,27 @@ export default function LessonPlayerPage() {
         window.localStorage.setItem(storageKey, JSON.stringify(mappedResponses));
       }
 
-      setLessonSim((simRes?.sim as SimPayload | null) ?? null);
+      const sim = (simRes?.sim as SimPayload | null) ?? null;
+      setLessonSim(sim);
+
+      // No sim recorded? Probe for a legacy mp4 in the lesson-videos bucket.
+      // Older lessons (pre-sim-recorder) were uploaded as plain mp4 files at
+      // `lesson-videos/<lessonId>/video_720p.mp4`. We HEAD the file to confirm
+      // it exists, then render a <video> element instead of the empty state.
+      if (!sim) {
+        const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        if (baseUrl) {
+          const candidate = `${baseUrl}/storage/v1/object/public/lesson-videos/${lessonId}/video_720p.mp4`;
+          try {
+            const head = await fetch(candidate, { method: "HEAD" });
+            if (head.ok) {
+              setLegacyVideoUrl(candidate);
+            }
+          } catch {
+            // Ignore — leave legacyVideoUrl null and show empty state.
+          }
+        }
+      }
 
       // Fetch subject
       if (lessonData.subject_id) {
@@ -456,7 +478,7 @@ export default function LessonPlayerPage() {
 
     const { data: updatedProgress } = await supabase.from("lesson_progress").upsert(progressData, { onConflict: "student_id,lesson_id" }).select().single();
     if (updatedProgress) setProgress(updatedProgress);
-  }, [userId, lessonId, supabase, answeredQuestions.size, correctQuestions]);
+  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size]);
 
   // Close progress gate and let sim handle replay
   const handleRewatchQuiz = useCallback(() => {
@@ -573,11 +595,27 @@ export default function LessonPlayerPage() {
       </div>
 
       {/* Lesson recording — sim-based playback. Replaces the legacy Bunny
-          video for the student view. If the lesson has no sim yet, show an
+          video for the student view. If the lesson has no sim yet, fall back
+          to the legacy mp4 in the lesson-videos bucket; otherwise show an
           empty state. */}
       {lessonSim && canAccessSims ? (
         <div className="mx-auto max-w-6xl px-3 py-2">
           <SimPlayer payload={lessonSim} language={language} lessonId={lessonId} savedResponses={slideInteractionResponses} onProgress={handleSimProgress} />
+        </div>
+      ) : legacyVideoUrl ? (
+        <div className="relative bg-black aspect-video max-h-[70vh] mx-auto">
+          <video
+            src={legacyVideoUrl}
+            poster={lesson.thumbnail_url || undefined}
+            controls
+            playsInline
+            className="w-full h-full"
+            onEnded={() => {
+              if (!progress?.completed) {
+                handleMarkComplete();
+              }
+            }}
+          />
         </div>
       ) : (
         <div className="relative bg-black aspect-video max-h-[70vh] mx-auto flex items-center justify-center">

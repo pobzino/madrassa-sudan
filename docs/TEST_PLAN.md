@@ -12,7 +12,7 @@
 - **Backend:** Next.js API routes + Supabase
 - **AI:** OpenAI GPT-4o via `/api/tutor`
 - **Database:** Supabase PostgreSQL
-- **Features:** AI Tutor, Diagnostic Assessments, Homework/Grading, Guardian Portal
+- **Features:** AI Tutor, Diagnostic Assessments, Homework/Grading, Teacher authoring
 
 ### Priority Legend
 - 🔴 **Critical** - Must pass, blocks deployment
@@ -52,9 +52,9 @@
 **Flow:** Teacher assigns → Student submits → Teacher grades
 **Expected:** Full workflow completes, grades persist
 
-### TEST-FEAT-004: Guardian Portal Access 🔴
-**Scenario:** Guardian views child's progress
-**Expected:** Guardian sees only their child's data
+### TEST-FEAT-004: Offline Lesson Access 🔴
+**Scenario:** Student opens a downloaded lesson while offline
+**Expected:** Downloaded lesson loads and queued progress sync resumes when back online
 
 ---
 
@@ -64,9 +64,9 @@
 **Test:** Student cannot access teacher routes
 **Expected:** 403 Forbidden
 
-### TEST-AUTH-002: Guardian Isolation 🔴
-**Test:** Guardian A cannot see Guardian B's child
-**Expected:** Only own child's data visible
+### TEST-AUTH-002: Teacher/Admin Isolation 🔴
+**Test:** Non-admin teacher cannot access another teacher's restricted data
+**Expected:** Only permitted cohort and lesson data is visible
 
 ### TEST-AUTH-003: Session Management 🟠
 **Test:** Login → Use app → Logout → Verify session cleared

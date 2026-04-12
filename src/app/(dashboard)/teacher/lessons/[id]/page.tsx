@@ -74,6 +74,7 @@ type LessonForm = {
   grade_level: number;
   curriculum_topic: CurriculumSelection | null;
   is_published: boolean;
+  submitted_for_review: boolean;
   thumbnail_url: string;
 };
 
@@ -192,6 +193,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false);
   const [slideGenProgress, setSlideGenProgress] = useState("");
   const canPublishLesson = profile?.role === "admin";
+  const [submittingForReview, setSubmittingForReview] = useState(false);
   const lastPersistedPublishedRef = useRef(false);
   const autosaveTimeoutRef = useRef<number | null>(null);
   const hasInitializedSnapshotRef = useRef(false);
@@ -207,6 +209,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     grade_level: 1,
     curriculum_topic: null,
     is_published: false,
+    submitted_for_review: false,
     thumbnail_url: "",
   });
 
@@ -322,6 +325,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           lesson.curriculum_topic
         ),
         is_published: lesson.is_published,
+        submitted_for_review: lesson.submitted_for_review ?? false,
         thumbnail_url: lesson.thumbnail_url || "",
       };
       setForm(initialForm);
@@ -708,33 +712,125 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                 <h1 className="text-lg font-bold text-gray-900 truncate">
                   {form.title_en || form.title_ar || "Untitled Lesson"}
                 </h1>
-                <button
-                  data-tour="publish-badge"
-                  onClick={() => {
-                    if (!canPublishLesson) return;
-                    if (!form.is_published && !publishReadiness.canPublish) {
-                      setActiveTab("details");
-                      setSaveState("error");
-                      setSaveMessage({
-                        type: "error",
-                        text:
-                          publishReadiness.blockingReasons[0]?.message ||
-                          "Resolve the publish blockers before publishing this lesson.",
-                      });
-                      return;
-                    }
-                    setForm({ ...form, is_published: !form.is_published });
-                  }}
-                  disabled={!canPublishLesson}
-                  className={`flex-shrink-0 px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors ${
-                    form.is_published
-                      ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                      : "bg-amber-50 text-amber-700 hover:bg-amber-100"
-                  } ${!canPublishLesson ? "cursor-not-allowed opacity-70 hover:bg-inherit" : ""}`}
-                  title={!canPublishLesson ? "Only admins can change lesson publish status." : undefined}
-                >
-                  {form.is_published ? "Published" : "Draft"}
-                </button>
+                {form.is_published ? (
+                  /* Published badge — admins can toggle, teachers read-only */
+                  <button
+                    data-tour="publish-badge"
+                    onClick={() => {
+                      if (!canPublishLesson) return;
+                      setForm({ ...form, is_published: false });
+                    }}
+                    disabled={!canPublishLesson}
+                    className={`flex-shrink-0 px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors bg-emerald-50 text-emerald-700 ${canPublishLesson ? "hover:bg-emerald-100" : "cursor-default"}`}
+                    title={canPublishLesson ? "Click to unpublish" : undefined}
+                  >
+                    Published
+                  </button>
+                ) : form.submitted_for_review ? (
+                  /* In Review badge with withdraw option for teachers */
+                  <span className="flex items-center gap-1.5">
+                    <span className="flex-shrink-0 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700">
+                      In Review
+                    </span>
+                    <button
+                      onClick={async () => {
+                        setSubmittingForReview(true);
+                        try {
+                          const res = await fetch(`/api/teacher/lessons/${id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ submitted_for_review: false }),
+                          });
+                          if (!res.ok) {
+                            const data = await res.json().catch(() => ({}));
+                            toast.error(data.error || "Failed to withdraw");
+                            return;
+                          }
+                          setForm({ ...form, submitted_for_review: false });
+                          toast.success("Withdrawn from review");
+                        } catch {
+                          toast.error("Failed to withdraw");
+                        } finally {
+                          setSubmittingForReview(false);
+                        }
+                      }}
+                      disabled={submittingForReview}
+                      className="text-[11px] text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+                    >
+                      {submittingForReview ? "..." : "Withdraw"}
+                    </button>
+                  </span>
+                ) : (
+                  /* Draft — show submit for review (teachers) or publish toggle (admins) */
+                  canPublishLesson ? (
+                    <button
+                      data-tour="publish-badge"
+                      onClick={() => {
+                        if (!publishReadiness.canPublish) {
+                          setActiveTab("details");
+                          setSaveState("error");
+                          setSaveMessage({
+                            type: "error",
+                            text:
+                              publishReadiness.blockingReasons[0]?.message ||
+                              "Resolve the publish blockers before publishing this lesson.",
+                          });
+                          return;
+                        }
+                        setForm({ ...form, is_published: true });
+                      }}
+                      className="flex-shrink-0 px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    >
+                      Draft
+                    </button>
+                  ) : (
+                    <button
+                      data-tour="publish-badge"
+                      onClick={async () => {
+                        if (!publishReadiness.canPublish) {
+                          setActiveTab("details");
+                          setSaveState("error");
+                          setSaveMessage({
+                            type: "error",
+                            text:
+                              publishReadiness.blockingReasons[0]?.message ||
+                              "Resolve the publish blockers before submitting for review.",
+                          });
+                          return;
+                        }
+                        setSubmittingForReview(true);
+                        try {
+                          // Save current form first, then submit for review
+                          const res = await fetch(`/api/teacher/lessons/${id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ submitted_for_review: true }),
+                          });
+                          if (!res.ok) {
+                            const data = await res.json().catch(() => ({}));
+                            toast.error(data.error || "Failed to submit for review");
+                            return;
+                          }
+                          setForm({ ...form, submitted_for_review: true });
+                          toast.success("Submitted for admin review");
+                        } catch {
+                          toast.error("Failed to submit for review");
+                        } finally {
+                          setSubmittingForReview(false);
+                        }
+                      }}
+                      disabled={submittingForReview || !publishReadiness.canPublish}
+                      className={`flex-shrink-0 px-2.5 py-0.5 rounded-md text-[11px] font-semibold transition-colors ${
+                        publishReadiness.canPublish
+                          ? "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                          : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      }`}
+                      title={!publishReadiness.canPublish ? "Resolve publish blockers first" : "Submit lesson for admin review"}
+                    >
+                      {submittingForReview ? "Submitting..." : "Submit for Review"}
+                    </button>
+                  )
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -775,7 +871,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                 {deleting ? "Deleting..." : "Delete"}
               </button>
               <button
-                onClick={saveAll}
+                onClick={() => void saveAll()}
                 disabled={saving}
                 className="px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60"
               >
@@ -1194,7 +1290,7 @@ function DetailsTab({
             </p>
             {!canPublishLesson && (
               <p className="mt-2 text-sm text-amber-600">
-                Only admins can publish or unpublish lessons.
+                Lessons must be submitted for review and approved by an admin before publishing.
               </p>
             )}
           </div>

@@ -1,7 +1,7 @@
 import type { Slide } from '@/lib/slides.types';
 import { OwlReading } from '@/components/illustrations';
 import SlideImage, { SlideBackgroundImage } from './SlideImage';
-import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
+import { getSlideBodyClasses, getSlideTextAlignClass, getSlideTitleClasses } from '../slideText';
 import { getSlideLanguageBlock } from './bilingual';
 import { computeRevealState, isNewlyRevealedIndex, splitBodyParagraphs } from '../revealCounts';
 
@@ -33,7 +33,7 @@ function BilingualPanels({
             key={`${block.language}-${index}`}
             className={`whitespace-pre-line ${dark ? 'text-white/95' : 'text-gray-700'} ${getSlideBodyClasses(
               slide.body_size
-            )} ${block.isArabic ? 'font-cairo' : 'font-inter'} ${
+            )} ${getSlideTextAlignClass(slide.text_align)} ${block.isArabic ? 'font-cairo' : 'font-inter'} ${
               isNewlyRevealed ? 'animate-pop-in' : ''
             }`}
           >
@@ -58,7 +58,7 @@ export default function ContentSlide({ slide, language, revealedCount }: Props) 
           dir={primary.dir}
           className={`relative z-10 mb-1 font-fredoka font-bold text-white drop-shadow-lg ${getSlideTitleClasses(
             slide.title_size
-          )} ${primary.isArabic ? 'font-cairo' : ''}`}
+          )} ${getSlideTextAlignClass(slide.text_align)} ${primary.isArabic ? 'font-cairo' : ''}`}
         >
           {primary.title}
         </h2>
@@ -92,9 +92,9 @@ export default function ContentSlide({ slide, language, revealedCount }: Props) 
         <div className="flex-1 flex flex-col justify-center min-w-0">
           <h2
             dir={primary.dir}
-            className={`mb-1 font-fredoka font-bold text-gray-900 ${getSlideTitleClasses(slide.title_size)} ${
-              primary.isArabic ? 'font-cairo' : ''
-            }`}
+            className={`mb-1 font-fredoka font-bold text-gray-900 ${getSlideTitleClasses(slide.title_size)} ${getSlideTextAlignClass(
+              slide.text_align
+            )} ${primary.isArabic ? 'font-cairo' : ''}`}
           >
             {primary.title}
           </h2>

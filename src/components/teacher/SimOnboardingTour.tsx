@@ -314,6 +314,7 @@ export default function SimOnboardingTour({ segments }: SimOnboardingTourProps) 
   const [stepIndex, setStepIndex] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSegmentEndRef = useRef<() => void>(() => {});
 
   // Filter steps to only those whose segment matches this page.
   const steps = useMemo(() => {
@@ -401,10 +402,10 @@ export default function SimOnboardingTour({ segments }: SimOnboardingTourProps) 
           }
         }
         // No more visible steps — end this segment and hand off
-        handleSegmentEnd();
+        handleSegmentEndRef.current();
       }, 30000);
     },
-    [steps] // handleSegmentEnd added below via ref pattern
+    [steps]
   );
 
   /** When a segment ends (last step or no more targets), hand off to the next. */
@@ -444,6 +445,10 @@ export default function SimOnboardingTour({ segments }: SimOnboardingTourProps) 
       dismissTour();
     }
   }, [steps, segments, dismissTour, startTour, waitForTarget]);
+
+  useEffect(() => {
+    handleSegmentEndRef.current = handleSegmentEnd;
+  }, [handleSegmentEnd]);
 
   const handleEvent = useCallback(
     (data: EventData, _controls: Controls) => {

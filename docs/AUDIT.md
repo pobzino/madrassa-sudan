@@ -60,9 +60,8 @@ Falls back to `amalmadrassa.netlify.app` — breaks for other deployments.
 Dashboard maps subject names via `name.includes("math")` instead of using the `icon` field from DB.
 - **Files:** `src/app/(dashboard)/dashboard/page.tsx`
 
-### 13. Guardian Portal Incomplete
-Tables and RLS exist, but dashboard/student view pages need verification of actual content.
-- **Files:** `src/app/(dashboard)/guardian/`
+### 13. Guardian Scope Removed
+Guardian-facing product features were scrapped. Historical references in older audits and migrations should not be treated as active platform scope.
 
 ### 14. No Error Boundaries
 No React error boundaries for crashed components — failed video player, bad API response, or auth expiration crashes the page.
@@ -95,7 +94,7 @@ During the E2E testing pass, the following build-breaking issues were fixed:
 1. **Next.js 16 `params` must be `Promise`** — Updated 7 API route handlers and 1 page component to use `await params` / `React.use()`:
    - `src/app/api/teacher/lessons/[id]/route.ts` (GET, PATCH)
    - `src/app/api/teacher/lessons/[id]/questions/route.ts` (GET, POST, PATCH, DELETE, PUT)
-   - `src/app/(dashboard)/guardian/students/[id]/page.tsx`
+   - Historical guardian route references removed from active scope
 
 2. **Wrong column name `teacher_id` → `created_by`** — Fixed in 2 files:
    - `src/app/api/teacher/lessons/[id]/questions/[questionId]/route.ts`
@@ -130,8 +129,7 @@ Tested locally on `http://localhost:3000` with a teacher-role account.
 | Teacher Dashboard `/teacher` | OK | Stats cards, quick actions, recent activity |
 | Create Lesson `/teacher/lessons/new` | OK | Bilingual form, all 8 subjects in dropdown, grades 1-12 |
 | Create Assignment `/teacher/homework/create` | OK | Class/subject selectors, 5 question types |
-| Guardian Portal `/guardian/dashboard` | OK | Link a Student CTA, empty state |
 | Settings `/settings` | OK | Profile editing, role badge, language preference |
 | Auth redirect `/auth/login` | OK | Redirects to dashboard when already logged in |
 
-**Console errors:** Only "Error loading students" on guardian page (expected — test user is not a guardian role). No crashes or unhandled exceptions.
+**Console errors:** No crashes or unhandled exceptions reported in the tested core flows.

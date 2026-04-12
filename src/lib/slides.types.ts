@@ -14,9 +14,10 @@ export type SlideType =
 
 export type SlideLayout = 'default' | 'image_left' | 'image_right' | 'image_top' | 'full_image';
 export type SlideTextSize = 'sm' | 'md' | 'lg' | 'xl';
-export type SlideEntranceAnimation = 'none' | 'fade' | 'slide_up' | 'pop';
+export type SlideTextAlign = 'left' | 'center' | 'right';
 export type SlideLessonPhase = 'title' | 'objectives' | 'core_teaching' | 'practice' | 'summary_goodbye';
 export type MathRepresentationStage = 'concrete_visual' | 'abstract' | 'not_applicable';
+export type SlideEntranceAnimation = 'none' | 'fade' | 'slide_up' | 'pop';
 export type SlideInteractionType =
   | 'free_response'
   | 'choose_correct'
@@ -61,8 +62,7 @@ export interface Slide {
   layout: SlideLayout | null;
   title_size?: SlideTextSize | null;
   body_size?: SlideTextSize | null;
-  progressive_reveal?: boolean | null;
-  entrance_animation?: SlideEntranceAnimation | null;
+  text_align?: SlideTextAlign | null;
   lesson_phase?: SlideLessonPhase | null;
   idea_focus_en?: string | null;
   idea_focus_ar?: string | null;
@@ -104,6 +104,18 @@ export interface Slide {
   exploration_widget_type?: ExplorationWidgetType | null;
   /** Exploration widget configuration for `type: 'exploration'` slides. */
   exploration_config?: ExplorationWidgetConfig | null;
+  /**
+   * When true on `key_points`/`summary`/`content` slides, bullets (or body
+   * paragraphs for `content`) appear one at a time in present/replay mode.
+   * The first item is always visible on slide entry.
+   */
+  progressive_reveal?: boolean | null;
+  /**
+   * Optional entrance animation that plays whenever this slide first becomes
+   * active in present mode or sim replay. `null`/`undefined` or `'none'`
+   * mean no entrance animation.
+   */
+  entrance_animation?: SlideEntranceAnimation | null;
 }
 
 export interface SlideDeck {

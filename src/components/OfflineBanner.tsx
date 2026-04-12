@@ -1,38 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function OfflineBanner() {
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(
+    () => typeof navigator === "undefined" || navigator.onLine
+  );
   const [showReconnected, setShowReconnected] = useState(false);
-  const [wasOffline, setWasOffline] = useState(false);
+  const wasOfflineRef = useRef(false);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setIsOnline(navigator.onLine);
-    const goOnline = () => setIsOnline(true);
-    const goOffline = () => setIsOnline(false);
+    const goOnline = () => {
+      setIsOnline(true);
+      if (!wasOfflineRef.current) return;
+      wasOfflineRef.current = false;
+      setShowReconnected(true);
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = setTimeout(() => setShowReconnected(false), 3000);
+    };
+    const goOffline = () => {
+      wasOfflineRef.current = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      setShowReconnected(false);
+      setIsOnline(false);
+    };
     window.addEventListener("online", goOnline);
     window.addEventListener("offline", goOffline);
     return () => {
       window.removeEventListener("online", goOnline);
       window.removeEventListener("offline", goOffline);
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     };
   }, []);
-
-  useEffect(() => {
-    if (!isOnline) {
-      setWasOffline(true);
-      setShowReconnected(false);
-      return;
-    }
-
-    if (wasOffline) {
-      setShowReconnected(true);
-      const timer = setTimeout(() => setShowReconnected(false), 3000);
-      setWasOffline(false);
-      return () => clearTimeout(timer);
-    }
-  }, [isOnline, wasOffline]);
 
   if (isOnline && !showReconnected) return null;
 

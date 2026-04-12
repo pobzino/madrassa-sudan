@@ -41,8 +41,8 @@ export async function GET() {
     // Get teacher names and student counts for each cohort
     const cohortIds = (cohorts || []).map((c) => c.id);
 
-    let teacherMap: Record<string, string[]> = {};
-    let studentCountMap: Record<string, number> = {};
+    const teacherMap: Record<string, string[]> = {};
+    const studentCountMap: Record<string, number> = {};
 
     if (cohortIds.length > 0) {
       // Get teachers

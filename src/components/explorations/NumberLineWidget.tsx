@@ -11,17 +11,42 @@ const LINE_X_END = 540;
 const LINE_LENGTH = LINE_X_END - LINE_X_START;
 const HANDLE_R = 18;
 
+function getStepPrecision(step: number): number {
+  const normalized = step.toString().toLowerCase();
+  if (normalized.includes('e-')) {
+    const [, exponent = '0'] = normalized.split('e-');
+    return Number(exponent);
+  }
+
+  const decimals = normalized.split('.')[1];
+  return decimals ? decimals.length : 0;
+}
+
+function getSnapStep(min: number, max: number, step?: number): number | undefined {
+  if (step && step > 0) return step;
+  if (Number.isInteger(min) && Number.isInteger(max)) return 1;
+  return undefined;
+}
+
+function snapValue(raw: number, min: number, max: number, step?: number): number {
+  const clamped = Math.max(min, Math.min(max, raw));
+  const snapStep = getSnapStep(min, max, step);
+
+  if (!snapStep) {
+    return Math.round(clamped * 100) / 100;
+  }
+
+  const snapped = Math.round((clamped - min) / snapStep) * snapStep + min;
+  return Number(snapped.toFixed(getStepPrecision(snapStep)));
+}
+
 function valueToX(value: number, min: number, max: number): number {
   return LINE_X_START + ((value - min) / (max - min)) * LINE_LENGTH;
 }
 
 function xToValue(x: number, min: number, max: number, step?: number): number {
   const raw = min + ((x - LINE_X_START) / LINE_LENGTH) * (max - min);
-  const clamped = Math.max(min, Math.min(max, raw));
-  if (step && step > 0) {
-    return Math.round(clamped / step) * step;
-  }
-  return Math.round(clamped * 100) / 100;
+  return snapValue(raw, min, max, step);
 }
 
 function formatValue(v: number): string {
@@ -37,8 +62,9 @@ export default function NumberLineWidget({
   const { min, max, target, tolerance, step, unit_label_ar, unit_label_en } = config;
   const hasTarget = typeof target === 'number';
   const effectiveTolerance = tolerance ?? 0.5;
-  const [value, setValue] = useState((min + max) / 2);
+  const [value, setValue] = useState(() => snapValue((min + max) / 2, min, max, step));
   const [completed, setCompleted] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const draggingRef = useRef(false);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -70,6 +96,7 @@ export default function NumberLineWidget({
     (e: React.PointerEvent) => {
       if (completed) return;
       draggingRef.current = true;
+      setIsDragging(true);
       (e.target as SVGElement).setPointerCapture(e.pointerId);
       const v = getValueFromEvent(e.clientX);
       setValue(v);
@@ -91,12 +118,13 @@ export default function NumberLineWidget({
       checkComplete(value);
     }
     draggingRef.current = false;
+    setIsDragging(false);
   }, [completed, value, checkComplete]);
 
   // Tick marks
-  const effectiveStep = step && step > 0 ? step : (max - min) / 10;
+  const tickStep = step && step > 0 ? step : (max - min) / 10;
   const ticks: number[] = [];
-  for (let v = min; v <= max + effectiveStep * 0.01; v += effectiveStep) {
+  for (let v = min; v <= max + tickStep * 0.01; v += tickStep) {
     ticks.push(Math.round(v * 1000) / 1000);
   }
 
@@ -204,7 +232,7 @@ export default function NumberLineWidget({
         })}
 
         {/* Pulsing invite ring (before dragging starts) */}
-        {!completed && !draggingRef.current && (
+        {!completed && !isDragging && (
           <circle
             cx={handleX}
             cy={LINE_Y}

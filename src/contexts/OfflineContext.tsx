@@ -48,7 +48,9 @@ export function useOffline() {
 }
 
 export function OfflineProvider({ children }: { children: ReactNode }) {
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(
+    () => typeof navigator === "undefined" || navigator.onLine
+  );
   const [downloads, setDownloads] = useState<Map<string, DownloadState>>(
     new Map()
   );
@@ -57,38 +59,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   const [storageQuota, setStorageQuota] = useState(0);
   const wasOffline = useRef(false);
 
-  // Initialize
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    loadState();
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
-
-  // Auto-sync when coming back online
-  useEffect(() => {
-    if (!isOnline) {
-      wasOffline.current = true;
-      return;
-    }
-
-    if (wasOffline.current) {
-      wasOffline.current = false;
-      syncProgressQueue();
-    }
-  }, [isOnline]);
-
-  async function loadState() {
+  const loadState = useCallback(async () => {
     try {
       const [states, lessons, estimate] = await Promise.all([
         getAllDownloadStates(),
@@ -103,9 +74,9 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     } catch {
       // IndexedDB not available
     }
-  }
+  }, []);
 
-  async function syncProgressQueue() {
+  const syncProgressQueue = useCallback(async () => {
     try {
       const items = await getQueuedUpdates();
       if (items.length === 0) return;
@@ -135,7 +106,38 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     } catch {
       // Ignore sync errors
     }
-  }
+  }, []);
+
+  // Initialize
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    queueMicrotask(() => {
+      void loadState();
+    });
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [loadState]);
+
+  // Auto-sync when coming back online
+  useEffect(() => {
+    if (!isOnline) {
+      wasOffline.current = true;
+      return;
+    }
+
+    if (wasOffline.current) {
+      wasOffline.current = false;
+      void syncProgressQueue();
+    }
+  }, [isOnline, syncProgressQueue]);
 
   const downloadLesson = useCallback(
     async (lessonId: string) => {
@@ -195,7 +197,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
 
   const refreshDownloads = useCallback(async () => {
     await loadState();
-  }, []);
+  }, [loadState]);
 
   const value = useMemo<OfflineContextValue>(
     () => ({

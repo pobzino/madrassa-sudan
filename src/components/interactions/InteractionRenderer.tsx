@@ -103,7 +103,7 @@ export default function InteractionRenderer({
     // present / review arrive in a later phase.
     return (
       <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-xs text-gray-500">
-        Interaction mode "{mode}" is not implemented yet.
+        Interaction mode &quot;{mode}&quot; is not implemented yet.
       </div>
     );
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { OwlSad } from "@/components/illustrations";
 
@@ -12,26 +12,11 @@ interface OfflineLesson {
 
 export default function OfflinePage() {
   const [lessons, setLessons] = useState<OfflineLesson[]>([]);
-  const [isOnline, setIsOnline] = useState(false);
+  const [isOnline, setIsOnline] = useState(
+    () => typeof navigator !== "undefined" && navigator.onLine
+  );
 
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    // Load downloaded lessons from IndexedDB
-    loadOfflineLessons();
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
-
-  async function loadOfflineLessons() {
+  const loadOfflineLessons = useCallback(async () => {
     try {
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
         const req = indexedDB.open("amal-offline", 1);
@@ -60,7 +45,24 @@ export default function OfflinePage() {
     } catch {
       // IndexedDB not initialized yet — no downloads
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    // Load downloaded lessons from IndexedDB
+    queueMicrotask(() => {
+      void loadOfflineLessons();
+    });
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [loadOfflineLessons]);
 
   if (isOnline) {
     return (

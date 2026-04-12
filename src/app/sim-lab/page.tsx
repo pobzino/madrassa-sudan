@@ -37,6 +37,7 @@
  *   the DB row would have, just inlined for demo purposes.
  */
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // ── Types ──
@@ -730,7 +731,7 @@ export default function SimLabPage() {
           >
             {showStorageInfo ? 'Hide' : 'Show'} storage info
           </button>
-          <a href="/" className="text-gray-500 hover:text-gray-800 underline">← Back</a>
+          <Link href="/" className="text-gray-500 hover:text-gray-800 underline">← Back</Link>
         </div>
       </header>
 

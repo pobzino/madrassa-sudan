@@ -30,18 +30,11 @@ export default function SliderExploreWidget({
   const [value, setValue] = useState(initial);
   const [visitedStages, setVisitedStages] = useState<Set<number>>(new Set());
   const [completed, setCompleted] = useState(false);
-  const [prevIdx, setPrevIdx] = useState(-1);
   const completedRef = useRef(false);
 
   const label = language === 'ar' ? label_ar : label_en;
   const currentStage = getActiveStage(value, stages);
   const currentIdx = stageIndex(currentStage, stages);
-
-  // Track stage transitions for crossfade
-  const stageChanged = currentIdx !== prevIdx;
-  useEffect(() => {
-    if (stageChanged) setPrevIdx(currentIdx);
-  }, [currentIdx, stageChanged, prevIdx]);
 
   // Track visited stages
   useEffect(() => {

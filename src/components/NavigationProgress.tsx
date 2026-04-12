@@ -16,9 +16,10 @@ function NavigationProgressInner() {
     if (current === prevRef.current) return;
     prevRef.current = current;
 
-    // Navigation completed — jump to 100% then hide
-    setProgress(100);
-    setVisible(true);
+    const frame = requestAnimationFrame(() => {
+      setProgress(100);
+      setVisible(true);
+    });
 
     const hide = setTimeout(() => {
       setVisible(false);
@@ -30,7 +31,10 @@ function NavigationProgressInner() {
       timerRef.current = null;
     }
 
-    return () => clearTimeout(hide);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(hide);
+    };
   }, [pathname, searchParams]);
 
   // Listen for clicks on internal links to start the bar immediately

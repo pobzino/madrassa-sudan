@@ -15,7 +15,7 @@ function MarkdownContent({ content }: { content: string }) {
   let listType: "ul" | "ol" = "ul";
 
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
+    const line = lines[i];
 
     if (i === 0 && line.startsWith("# ")) continue;
     if (i === 1 && line.startsWith("**Last Updated")) continue;

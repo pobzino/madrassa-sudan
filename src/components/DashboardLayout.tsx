@@ -240,11 +240,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const navItems = isInTeacherView ? teacherNavItems : studentNavItems;
   const isStudentView = !isInTeacherView;
 
-  // Clear navigating state when route changes
-  useEffect(() => {
-    setNavigatingTo(null);
-  }, [pathname]);
-
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
     return pathname.startsWith(href);
@@ -286,7 +281,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <nav className="flex-1 px-3 py-2 overflow-y-auto">
         {navItems.map((item) => {
           const active = isActive(item.href);
-          const isNavigating = navigatingTo === item.href;
+          const isNavigating = navigatingTo === item.href && !active;
           const itemColor = "color" in item ? (item as { color: string }).color : null;
           return (
             <Link
@@ -334,7 +329,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="my-2 border-t border-gray-100" />
             {studentSecondaryNavItems.map((item) => {
               const active = isActive(item.href);
-              const isNavigating = navigatingTo === item.href;
+              const isNavigating = navigatingTo === item.href && !active;
               return (
                 <Link
                   key={item.href}

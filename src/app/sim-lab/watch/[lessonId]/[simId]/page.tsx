@@ -20,16 +20,21 @@ interface PageProps {
 
 export default function SimWatchPage({ params }: PageProps) {
   const { lessonId, simId } = use(params);
-  const [payload, setPayload] = useState<SimPayload | null>(null);
+  const requestKey = `${lessonId}:${simId}`;
+  const [result, setResult] = useState<{
+    key: string;
+    payload: SimPayload | null;
+    error: string | null;
+  }>({
+    key: requestKey,
+    payload: null,
+    error: null,
+  });
   const [language, setLanguage] = useState<'ar' | 'en'>('en');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'production') return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
     fetch(`/api/teacher/lessons/${lessonId}/sims/${simId}`, {
       credentials: 'include',
@@ -42,20 +47,32 @@ export default function SimWatchPage({ params }: PageProps) {
         return (await res.json()) as SimPayload;
       })
       .then((data) => {
-        if (!cancelled) setPayload(data);
+        if (!cancelled) {
+          setResult({
+            key: requestKey,
+            payload: data,
+            error: null,
+          });
+        }
       })
       .catch((err: unknown) => {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : 'Failed to load sim');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setResult({
+            key: requestKey,
+            payload: null,
+            error: err instanceof Error ? err.message : 'Failed to load sim',
+          });
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [lessonId, simId]);
+  }, [lessonId, simId, requestKey]);
+
+  const payload = result.key === requestKey ? result.payload : null;
+  const error = result.key === requestKey ? result.error : null;
+  const loading = result.key !== requestKey || (!payload && !error);
 
   if (process.env.NODE_ENV === 'production') {
     return (

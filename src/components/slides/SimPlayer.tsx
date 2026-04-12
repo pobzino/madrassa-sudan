@@ -16,6 +16,7 @@
  */
 
 import {
+  type CSSProperties,
   forwardRef,
   memo,
   useCallback,
@@ -208,7 +209,10 @@ function StrokesOverlay({ strokes }: { strokes: SimStroke[] }) {
   // across renders — otherwise the ResizeObserver effect tears down and
   // rebuilds on every stroke change, and `redraw` runs twice per change.
   const strokesRef = useRef(strokes);
-  strokesRef.current = strokes;
+
+  useEffect(() => {
+    strokesRef.current = strokes;
+  }, [strokes]);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -329,6 +333,7 @@ function SlideConfetti({ id }: { id: number }) {
       delay: Math.random() * 0.4,
       drift: (Math.random() - 0.5) * 80,
       size: 6 + Math.random() * 6,
+      rotate: 360 + Math.random() * 360,
       shape: i % 3,
       duration: 1.8 + Math.random() * 1,
     }))
@@ -348,15 +353,15 @@ function SlideConfetti({ id }: { id: number }) {
             borderRadius: p.shape === 0 ? '50%' : 2,
             opacity: 0,
             animation: `sim-confetti-fall ${p.duration}s ease-out ${p.delay}s forwards`,
-            // @ts-expect-error -- CSS custom props for per-piece drift
             '--drift': `${p.drift}px`,
-          }}
+            '--rotate': `${p.rotate}deg`,
+          } as CSSProperties & Record<'--drift' | '--rotate', string>}
         />
       ))}
       <style>{`
         @keyframes sim-confetti-fall {
           0%   { opacity: 1; transform: translateY(0) translateX(0) rotate(0deg); }
-          100% { opacity: 0; transform: translateY(calc(100vh)) translateX(var(--drift)) rotate(${360 + Math.random() * 360}deg); }
+          100% { opacity: 0; transform: translateY(calc(100vh)) translateX(var(--drift)) rotate(var(--rotate)); }
         }
       `}</style>
     </div>
@@ -906,7 +911,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   // Keep `handlePlay`/`handlePause` stable across renders inside the imperative
   // handle so the parent's ref doesn't churn.
   const isPlayingRef = useRef(isPlaying);
-  isPlayingRef.current = isPlaying;
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   useImperativeHandle(
     ref,
@@ -1023,14 +1030,6 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     ? surface.slides[currentSlide.id] ?? null
     : null;
 
-  if (!currentSlide) {
-    return (
-      <div className={`flex items-center justify-center text-slate-500 ${className}`}>
-        This sim has no slides.
-      </div>
-    );
-  }
-
   // Teacher notes overlay — find the latest note at current playback time
   const activeTeacherNote = useMemo(() => {
     if (!showTeacherNotes) return null;
@@ -1094,7 +1093,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
   // Initialize gate marker states from saved responses.
   const savedResponsesRef = useRef(savedResponses);
-  savedResponsesRef.current = savedResponses;
+  useEffect(() => {
+    savedResponsesRef.current = savedResponses;
+  }, [savedResponses]);
   const initialGateResultsApplied = useRef(false);
   useEffect(() => {
     if (initialGateResultsApplied.current) return;
@@ -1249,6 +1250,14 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     },
     [handleSeek, virtualTotalMs]
   );
+
+  if (!currentSlide) {
+    return (
+      <div className={`flex items-center justify-center text-slate-500 ${className}`}>
+        This sim has no slides.
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className={`overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm ${isFullscreen ? 'flex flex-col h-screen !border-0 !rounded-none !shadow-none' : ''} ${className}`}>

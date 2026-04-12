@@ -16,7 +16,7 @@ function MarkdownContent({ content }: { content: string }) {
   let listType: "ul" | "ol" = "ul";
 
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
+    const line = lines[i];
 
     // Skip the first H1 title and "Last Updated" line (we render our own header)
     if (i === 0 && line.startsWith("# ")) continue;

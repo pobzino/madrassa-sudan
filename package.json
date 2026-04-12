@@ -2,11 +2,15 @@
   "name": "amal-school",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.19.0 <21 || >=22.12.0"
+  },
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "ingest:lessons": "node scripts/ingest-lesson-embeddings.mjs",
     "inspect:slides": "node scripts/inspect-slides.mjs",
     "test": "vitest run",

@@ -1,4 +1,4 @@
-import type { SlideTextSize } from '@/lib/slides.types';
+import type { SlideTextAlign, SlideTextSize } from '@/lib/slides.types';
 
 type TitleVariant = 'hero' | 'standard';
 type BodyVariant = 'standard' | 'compact' | 'list';
@@ -49,4 +49,14 @@ export function getSlideTitleClasses(size?: SlideTextSize | null, variant: Title
 
 export function getSlideBodyClasses(size?: SlideTextSize | null, variant: BodyVariant = 'standard'): string {
   return BODY_CLASSES[variant][normalizeSize(size)];
+}
+
+export function getSlideTextAlignClass(
+  align: SlideTextAlign | null | undefined,
+  fallback: 'text-left' | 'text-center' | 'text-right' | '' = ''
+): string {
+  if (align === 'left') return 'text-left';
+  if (align === 'center') return 'text-center';
+  if (align === 'right') return 'text-right';
+  return fallback;
 }

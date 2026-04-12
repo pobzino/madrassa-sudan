@@ -1,7 +1,7 @@
 import type { Slide } from '@/lib/slides.types';
 import { OwlWelcome } from '@/components/illustrations';
 import SlideImage, { SlideBackgroundImage } from './SlideImage';
-import { getSlideBodyClasses, getSlideTitleClasses } from '../slideText';
+import { getSlideBodyClasses, getSlideTextAlignClass, getSlideTitleClasses } from '../slideText';
 import { getSlideLanguageBlock } from './bilingual';
 
 interface Props {
@@ -19,9 +19,10 @@ function LanguageBody({ slide, language }: Props) {
   return (
     <div dir={block.dir} className="max-w-[88%] rounded-2xl bg-white/15 px-6 py-4 backdrop-blur-sm">
       <p
-        className={`text-white/90 ${getSlideBodyClasses(slide.body_size)} ${
-          block.isArabic ? 'font-cairo' : 'font-inter'
-        }`}
+        className={`text-white/90 ${getSlideBodyClasses(slide.body_size)} ${getSlideTextAlignClass(
+          slide.text_align,
+          'text-center'
+        )} ${block.isArabic ? 'font-cairo' : 'font-inter'}`}
       >
         {block.body}
       </p>
@@ -40,7 +41,10 @@ export default function TitleSlide({ slide, language }: Props) {
         <SlideBackgroundImage src={slide.image_url!} />
         <h1
           dir={primary.dir}
-          className={`relative z-10 mb-2 text-center font-fredoka font-bold leading-tight text-white drop-shadow-lg ${getSlideTitleClasses(slide.title_size, 'hero')} ${
+          className={`relative z-10 mb-2 ${getSlideTextAlignClass(
+            slide.text_align,
+            'text-center'
+          )} font-fredoka font-bold leading-tight text-white drop-shadow-lg ${getSlideTitleClasses(slide.title_size, 'hero')} ${
             primary.isArabic ? 'font-cairo' : ''
           }`}
         >
@@ -82,7 +86,10 @@ export default function TitleSlide({ slide, language }: Props) {
 
       <h1
         dir={primary.dir}
-        className={`relative z-10 mb-2 text-center font-fredoka font-bold leading-tight text-white ${getSlideTitleClasses(slide.title_size, 'hero')} ${
+        className={`relative z-10 mb-2 ${getSlideTextAlignClass(
+          slide.text_align,
+          'text-center'
+        )} font-fredoka font-bold leading-tight text-white ${getSlideTitleClasses(slide.title_size, 'hero')} ${
           primary.isArabic ? 'font-cairo' : ''
         }`}
       >

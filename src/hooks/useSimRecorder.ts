@@ -193,7 +193,9 @@ export function useSimRecorder(): UseSimRecorderReturn {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  stateRef.current = state;
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // ── Time helpers ──────────────────────────────────────────────────────────
 

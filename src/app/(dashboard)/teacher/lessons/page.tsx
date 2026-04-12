@@ -40,6 +40,7 @@ type LessonRow = {
   title_en: string;
   grade_level: number;
   is_published: boolean;
+  submitted_for_review: boolean;
   subject: Subject | null;
   updated_at: string;
   slide_count: number;
@@ -92,6 +93,7 @@ export default function TeacherLessonsPage() {
         title_en,
         grade_level,
         is_published,
+        submitted_for_review,
         updated_at,
         subject:subjects (
           id,
@@ -123,6 +125,7 @@ export default function TeacherLessonsPage() {
         title_en: row.title_en,
         grade_level: row.grade_level,
         is_published: row.is_published,
+        submitted_for_review: (row as Record<string, unknown>).submitted_for_review as boolean || false,
         subject: row.subject as Subject | null,
         updated_at: row.updated_at,
         slide_count: slideCount,
@@ -377,10 +380,12 @@ export default function TeacherLessonsPage() {
                       className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium ${
                         lesson.is_published
                           ? "bg-emerald-50 text-emerald-700"
-                          : "bg-amber-50 text-amber-700"
+                          : lesson.submitted_for_review
+                            ? "bg-blue-50 text-blue-700"
+                            : "bg-amber-50 text-amber-700"
                       }`}
                     >
-                      {lesson.is_published ? "Published" : "Draft"}
+                      {lesson.is_published ? "Published" : lesson.submitted_for_review ? "In Review" : "Draft"}
                     </span>
                     {lesson.slide_count > 0 && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-violet-50 text-violet-700">

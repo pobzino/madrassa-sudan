@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import type { ExplorationWidgetProps, ColorPickerConfig } from '@/lib/explorations/types';
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -38,7 +38,7 @@ export default function ColorPickerWidget({
   const maxDist = 255;
   const proximity = Math.max(0, 1 - dist / maxDist);
 
-  const handleChange = useCallback((channel: 'r' | 'g' | 'b', v: number) => {
+  function handleChange(channel: 'r' | 'g' | 'b', v: number) {
     if (completed) return;
     const nr = channel === 'r' ? v : r;
     const ng = channel === 'g' ? v : g;
@@ -53,7 +53,7 @@ export default function ColorPickerWidget({
       setCompleted(true);
       setTimeout(() => onComplete(), 500);
     }
-  }, [r, g, b, completed, targetRgb, tolerance, onComplete]);
+  }
 
   return (
     <div className="flex flex-col items-center gap-5 w-full max-w-sm mx-auto px-4 rounded-2xl bg-gradient-to-b from-purple-50/60 to-white py-6">

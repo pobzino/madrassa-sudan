@@ -50,9 +50,7 @@ Without Supabase credentials, the dev server will crash on any route that touche
 | TEST-6.1 | Lessons: Content creation | CODE-PASS | High |
 | TEST-6.2 | Lessons: Progress tracking (POST) | CODE-PASS | High |
 | TEST-6.3 | Lessons: Progress retrieval (GET) | CODE-PASS | High |
-| TEST-7.1 | Guardian: Invite code generation | CODE-PASS | High |
-| TEST-7.2 | Guardian: Link with code | CODE-PASS | High |
-| TEST-7.3 | Guardian: Data isolation | CODE-PASS | High |
+| TEST-7.x | Guardian scope | RETIRED | N/A |
 | TEST-8.1 | Settings: Profile update | CODE-PASS | Medium |
 | TEST-8.2 | Settings: Language preference | CODE-PASS | Medium |
 | TEST-8.3 | Settings: Password change | CODE-PASS | Medium |
@@ -340,36 +338,9 @@ Without Supabase credentials, the dev server will crash on any route that touche
 
 ---
 
-### 7. Guardian Portal (High)
+### 7. Guardian Scope (Retired)
 
-#### TEST-7.1: POST /api/guardian/invite
-**Status:** CODE-PASS  
-**Analysis:**
-- Only students can generate invite codes (role check)
-- 6-character alphanumeric code (removes ambiguous chars: 0, O, 1, I)
-- Uniqueness: retries up to 10 times
-- Expiry: 7 days
-- Supports relationship types: parent, guardian, sibling, other
-- Returns: code, expiry, relationship type
-
-#### TEST-7.2: POST /api/guardian/link
-**Status:** CODE-PASS  
-**Analysis:**
-- Auth check (guardian must be logged in)
-- Validates code (uppercase, trimmed)
-- Checks: not used, not expired
-- Prevents self-linking (`student_id === user.id`)
-- Handles existing link gracefully (marks invite used, returns error)
-- Creates `guardian_students` record with `is_approved: true`
-- Marks invite as used
-
-#### TEST-7.3: Guardian Data Isolation
-**Status:** CODE-PASS  
-**Analysis:**
-- `guardian_students` table links guardian to specific students
-- Guardian dashboard pages (`src/app/(dashboard)/guardian/`) query through this link
-- RLS policies (defined in migration `2026021800000_parent_portal.sql`) should enforce row-level isolation
-- **Note:** Could not verify RLS policies without database access
+Guardian-facing product features were removed from active scope. Historical API and migration notes in this section are retained only as record of past testing and should not be treated as current production requirements.
 
 ---
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import getStroke from 'perfect-freehand';
 
 // ── Types ──
@@ -312,11 +312,17 @@ export function useWhiteboard(options: UseWhiteboardOptions = {}) {
   // Mirror `strokes` in a ref so stable callbacks can read the latest value
   // without needing to be recreated on every stroke change.
   const strokesRef = useRef<Stroke[]>(strokes);
-  strokesRef.current = strokes;
 
   // Observer for sim recorders. Kept in a ref so callbacks stay stable.
   const onEventRef = useRef(options.onEvent);
-  onEventRef.current = options.onEvent;
+
+  useEffect(() => {
+    strokesRef.current = strokes;
+  }, [strokes]);
+
+  useEffect(() => {
+    onEventRef.current = options.onEvent;
+  }, [options.onEvent]);
 
   // Re-emit a fully-committed stroke as a creation sequence (used by redo).
   const emitStrokeCreation = useCallback((stroke: Stroke) => {

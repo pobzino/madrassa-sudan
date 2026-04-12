@@ -21,7 +21,8 @@ const UpdateLessonSchema = z.object({
   description_ar: z.string().optional(),
   description_en: z.string().optional(),
   curriculum_topic: z.unknown().optional(),
-  is_published: z.boolean().optional()
+  is_published: z.boolean().optional(),
+  submitted_for_review: z.boolean().optional()
 })
 
 // GET - Fetch lesson details
@@ -127,6 +128,45 @@ export async function PATCH(
     )
   }
 
+  // Teachers can submit for review (but not directly publish)
+  if (updates.submitted_for_review === true && role !== 'admin') {
+    // Validate publish readiness before allowing submission
+    const [{ data: lessonSlides }, { data: simRow }] = await Promise.all([
+      supabase
+        .from('lesson_slides')
+        .select('slides')
+        .eq('lesson_id', lessonId)
+        .maybeSingle(),
+      supabase
+        .from('lesson_sims')
+        .select('id')
+        .eq('lesson_id', lessonId)
+        .maybeSingle(),
+    ])
+
+    const reviewReadiness = getLessonPublishReadiness({
+      subject: Array.isArray(lesson.subjects) ? lesson.subjects[0] ?? null : lesson.subjects,
+      gradeLevel: lesson.grade_level,
+      curriculumTopic: (updates.curriculum_topic ?? lesson.curriculum_topic ?? null) as never,
+      slides: Array.isArray(lessonSlides?.slides)
+        ? (lessonSlides?.slides as unknown as Slide[])
+        : [],
+      hasSim: !!simRow,
+    })
+
+    if (!reviewReadiness.canPublish) {
+      return NextResponse.json(
+        {
+          error:
+            reviewReadiness.blockingReasons[0]?.message ||
+            'Resolve the publish blockers before submitting for review.',
+          details: reviewReadiness.blockingReasons,
+        },
+        { status: 400 }
+      )
+    }
+  }
+
   if (updates.is_published === true) {
     const [{ data: lessonSlides }, { data: simRow }] = await Promise.all([
       supabase
@@ -164,12 +204,26 @@ export async function PATCH(
     }
   }
 
-  const { curriculum_topic, ...restUpdates } = updates
+  const { curriculum_topic, submitted_for_review, ...restUpdates } = updates
   const lessonUpdates: Database['public']['Tables']['lessons']['Update'] = {
     ...restUpdates,
     ...(curriculum_topic !== undefined
       ? { curriculum_topic: curriculum_topic as Json | null }
       : {}),
+  }
+
+  // Handle submitted_for_review
+  if (submitted_for_review !== undefined) {
+    lessonUpdates.submitted_for_review = submitted_for_review
+    lessonUpdates.submitted_for_review_at = submitted_for_review
+      ? new Date().toISOString()
+      : null
+  }
+
+  // When admin publishes, auto-clear the review submission
+  if (updates.is_published === true) {
+    lessonUpdates.submitted_for_review = false
+    lessonUpdates.submitted_for_review_at = null
   }
 
   // Update lesson

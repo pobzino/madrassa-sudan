@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -22,16 +22,12 @@ const translations = {
 const CONSENT_KEY = "cookie-consent";
 
 export default function CookieConsent() {
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !window.localStorage.getItem(CONSENT_KEY);
+  });
   const { language } = useLanguage();
   const t = translations[language];
-
-  useEffect(() => {
-    const stored = localStorage.getItem(CONSENT_KEY);
-    if (!stored) {
-      setVisible(true);
-    }
-  }, []);
 
   const handleChoice = (choice: "accepted" | "declined") => {
     localStorage.setItem(CONSENT_KEY, choice);

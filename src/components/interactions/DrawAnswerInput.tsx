@@ -18,7 +18,7 @@
  *   `strokes` only ticks on commit — no raster thrash during drawing.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useWhiteboard } from '@/hooks/useWhiteboard';
 import WhiteboardCanvas from '@/components/slides/WhiteboardCanvas';
 import type { InteractionAnswer } from '@/lib/interactions/types';
@@ -52,14 +52,11 @@ export default function DrawAnswerInput({
   // Rasterize on every stroke commit. Perfect-freehand keeps in-progress
   // points in `currentStrokeRef`, so `strokes` only updates at stroke end —
   // one canvas allocation per committed stroke, not per pointer move.
-  const onAnswerChangeRef = useRef(onAnswerChange);
-  onAnswerChangeRef.current = onAnswerChange;
   useEffect(() => {
     if (disabled) return;
-    const emit = onAnswerChangeRef.current;
-    if (!emit) return;
+    if (!onAnswerChange) return;
     if (strokes.length === 0) {
-      emit({ type: 'draw_answer', image_data_url: '' });
+      onAnswerChange({ type: 'draw_answer', image_data_url: '' });
       return;
     }
     const canvas = document.createElement('canvas');
@@ -70,11 +67,11 @@ export default function DrawAnswerInput({
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, DRAW_EXPORT_W, DRAW_EXPORT_H);
     renderToCanvas(ctx, DRAW_EXPORT_W, DRAW_EXPORT_H, DRAW_SOURCE_W, DRAW_SOURCE_H);
-    emit({
+    onAnswerChange({
       type: 'draw_answer',
       image_data_url: canvas.toDataURL('image/png'),
     });
-  }, [strokes, renderToCanvas, disabled]);
+  }, [strokes, renderToCanvas, disabled, onAnswerChange]);
 
   // Read-only: hydrate from the stored PNG. We can't round-trip a rasterized
   // image back into editable strokes, so replay is display-only. Always take

@@ -25,7 +25,6 @@ Our legal basis for processing includes:
 Our platform serves:
 - **Students** (children ages 6-18)
 - **Teachers** (educators and facilitators)
-- **Guardians** (parents, family members, and authorized caregivers)
 - **Partner Organizations** (NGOs and educational institutions)
 
 ## Data We Collect
@@ -66,13 +65,6 @@ Our platform serves:
 - Grading activity and feedback provided
 - Lesson planning and curriculum access
 
-### 3. Guardian/Parent Information
-
-- Full name, email address, phone number (optional)
-- Relationship to student (parent, sibling, guardian, other)
-- Access logs for student progress viewing
-- Communication preferences
-
 ## How We Use Your Data
 
 ### Educational Purposes
@@ -86,7 +78,7 @@ Our platform serves:
 2. **Academic Progress Tracking:**
    - Monitor lesson completion and homework submission rates
    - Track quiz scores and assignment grades
-   - Generate progress reports for students, teachers, and guardians
+   - Generate progress reports for students and teachers
    - Identify patterns in mistakes to improve instruction
 
 3. **Teacher Support:**
@@ -97,8 +89,8 @@ Our platform serves:
 ### Platform Operations
 
 1. **Authentication and Access Control:**
-   - Verify user identity and role (student, teacher, guardian)
-   - Enforce role-based permissions (e.g., guardians can only view linked students)
+   - Verify user identity and role (student or teacher)
+   - Enforce role-based permissions
    - Detect and prevent unauthorized access
 
 2. **Safety and Abuse Prevention:**
@@ -133,7 +125,7 @@ We share data only with trusted service providers necessary for platform operati
 - **No Training:** Student data is **NOT** used to train OpenAI models (per API terms)
 
 ### Email Service Provider (Transactional Emails)
-- **Purpose:** Send account verification, password resets, and guardian invitation emails
+- **Purpose:** Send account verification, password resets, and operational emails
 - **Data Shared:** Email addresses, names, and message content (no academic data)
 - **Retention:** Typically 30-90 days per provider policy
 
@@ -148,12 +140,12 @@ We retain data as follows:
 
 | Data Type | Retention Period | Rationale |
 |-----------|------------------|-----------|
-| **Student Accounts** | Until account deletion or graduation + 1 year | Academic continuity; guardians can export records |
+| **Student Accounts** | Until account deletion or graduation + 1 year | Academic continuity |
 | **Lesson Progress & Grades** | 5 years from last activity | Educational records; required by some partner agreements |
 | **AI Tutor Conversations** | 2 years from conversation date | Safety audits; allows review of flagged content |
 | **Diagnostic Assessments** | Permanent (for academic record) | Placement decisions; longitudinal progress tracking |
 | **Homework Submissions** | 3 years from submission | Grading appeals; teacher reference |
-| **Teacher/Guardian Accounts** | Until account deletion + 90 days | Operational continuity |
+| **Teacher Accounts** | Until account deletion + 90 days | Operational continuity |
 | **Technical Logs (IP, session)** | 90 days | Security incident investigation |
 
 **Deletion:** When data retention periods expire, records are permanently deleted from production databases and backups.
@@ -172,8 +164,7 @@ We take special care with children's data:
 - No public profiles or social networking features
 
 ### Parental Rights (see "Your Rights" section)
-- Parents/guardians can review all student data via the Guardian Portal
-- Parents can request deletion of student accounts at any time
+- Parents/caregivers can request deletion of student accounts at any time
 
 ### Secure AI Interactions
 - AI tutor conversations are monitored for safety (see AI-SAFETY.md)
@@ -198,7 +189,7 @@ We implement technical and organizational safeguards:
 
 ### Technical Controls
 - **Encryption:** All data encrypted in transit (HTTPS/TLS) and at rest (AES-256)
-- **Authentication:** Multi-factor authentication (MFA) available for teachers and guardians
+- **Authentication:** Multi-factor authentication (MFA) available for teachers and administrators
 - **Access Control:** Role-based permissions enforced via Supabase Row-Level Security (RLS)
 - **Rate Limiting:** Prevents brute-force attacks and API abuse
 - **Session Management:** Automatic session expiration after inactivity
@@ -220,9 +211,8 @@ No system is 100% secure. In the event of a data breach, we will:
 Depending on your location, you may have the following rights:
 
 ### Access and Portability
-- **View Your Data:** Students, teachers, and guardians can view their data via account dashboards
+- **View Your Data:** Students and teachers can view their data via account dashboards
 - **Export Data:** Download AI tutor conversations, lesson progress, and homework submissions in Markdown format
-- **Guardian Access:** Parents/guardians can view all linked student data via the Guardian Portal
 
 ### Correction and Deletion
 - **Update Information:** Correct profile information (name, grade level, language preference) via account settings
@@ -231,10 +221,10 @@ Depending on your location, you may have the following rights:
 
 ### Restriction and Objection
 - **Limit Processing:** Request we stop using data for specific purposes (e.g., AI tutor feature)
-- **Withdraw Consent:** Guardians can withdraw consent for children's accounts at any time
+- **Withdraw Consent:** Parents/caregivers can withdraw consent for children's accounts at any time
 
 ### Automated Decision-Making
-- **Diagnostic Placement:** Automated assessments determine grade-level placement, but teachers and guardians can override recommendations
+- **Diagnostic Placement:** Automated assessments determine grade-level placement, but teachers can override recommendations
 - **Right to Human Review:** Any automated decision (e.g., content flagging) can be appealed for human review
 
 ## How to Exercise Your Rights
@@ -242,7 +232,6 @@ Depending on your location, you may have the following rights:
 To exercise any of these rights, contact us:
 
 **Email:** [privacy@amalmadrassa.org] (replace with actual contact)  
-**Guardian Portal:** [https://app.amalmadrassa.org/guardian] — access student data directly  
 **Data Protection Officer (if applicable):** [dpo@amalmadrassa.org]
 
 We will respond to requests within 30 days. For deletion requests, we may retain certain data if required by law or legitimate educational purposes (e.g., final grade transcripts).
@@ -265,7 +254,7 @@ We may update this Privacy Policy to reflect:
 - Feedback from users and partner organizations
 
 **Notification:** We will notify users of material changes via:
-- Email to registered addresses (for teachers and guardians)
+- Email to registered addresses (for teachers and administrators)
 - In-app banner notification (for students)
 - Updated "Last Modified" date at the top of this document
 

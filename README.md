@@ -2,7 +2,7 @@
 
 **AI-Powered Education Platform for Displaced Sudanese Children**
 
-Amal Madrassa is a free, open educational platform designed to support displaced Sudanese children through AI-powered tutoring, diagnostic assessments, teacher-facilitated homework, and parent/guardian progress tracking. Built with Next.js, Supabase, and OpenAI.
+Amal Madrassa is a free, open educational platform designed to support displaced Sudanese children through AI-powered tutoring, diagnostic assessments, teacher-facilitated homework, and teacher-led progress tracking. Built with Next.js, Supabase, and OpenAI.
 
 ---
 
@@ -13,8 +13,7 @@ Millions of Sudanese children have been displaced by conflict, losing access to 
 - **Personalized AI tutoring** in Arabic and English, adapting to each student's grade level
 - **Diagnostic assessments** to identify learning gaps and place students appropriately
 - **Teacher-created homework** with structured grading and feedback
-- **Guardian portal** for parents and caregivers to monitor progress
-- **Offline-first design** (planned) for areas with limited internet connectivity
+- **Offline lesson access** with local caching and progress sync for unstable connections
 
 **Our Goal:** Ensure every displaced child can continue learning, no matter where they are.
 
@@ -37,19 +36,11 @@ Millions of Sudanese children have been displaced by conflict, losing access to 
 - ✅ **Grading Interface:** Efficient grading with keyboard shortcuts, rubrics, and bulk feedback
 - 📈 **Analytics:** View student performance, identify struggling learners, and adjust instruction
 
-### For Guardians (Parents/Family Members)
-
-- 👀 **Progress Monitoring:** View linked students' lesson progress, grades, and AI tutor conversations
-- 📧 **Guardian Invitations:** Teachers or students can invite guardians to join and track progress
-- 🔒 **Privacy-Respecting:** Guardians can only access students they are explicitly linked to
-
----
-
 ## Tech Stack
 
-- **Frontend:** Next.js 14 (App Router), React, TypeScript, Tailwind CSS
+- **Frontend:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS
 - **Backend:** Next.js API Routes, Supabase (PostgreSQL + Auth + Real-time)
-- **AI:** OpenAI GPT-4/GPT-5 via Responses API
+- **AI:** OpenAI GPT-5.4 / GPT-5.4-mini via Responses API
 - **Database:** PostgreSQL with Row-Level Security (RLS) via Supabase
 - **Hosting:** Vercel (recommended) or any Node.js hosting platform
 - **Email:** Transactional email service (optional: Resend, SendGrid)
@@ -60,7 +51,7 @@ Millions of Sudanese children have been displaced by conflict, losing access to 
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Node.js `20.19+` or `22.12+`
 - Supabase account (free tier works for development)
 - OpenAI API key with access to GPT-4 or GPT-5
 
@@ -109,8 +100,7 @@ Millions of Sudanese children have been displaced by conflict, losing access to 
    - Run migrations in order:
      - `supabase/migrations/20260216171100_diagnostic_assessments.sql`
      - `supabase/migrations/20260216191200_homework_system_complete.sql`
-     - `supabase/migrations/2026021800000_parent_portal.sql`
-   - Verify tables are created in Supabase Table Editor
+     - Verify tables are created in Supabase Table Editor
 
 5. **Run the development server:**
 
@@ -124,8 +114,6 @@ Millions of Sudanese children have been displaced by conflict, losing access to 
 
    - **Student:** Sign up at `/register` with role "Student"
    - **Teacher:** Manually set `role = 'teacher'` in Supabase `profiles` table
-   - **Guardian:** Invite via student settings or teacher dashboard
-
 ---
 
 ## Documentation
@@ -150,7 +138,6 @@ amal-madrassa/
 │   │   ├── api/              # API routes (tutor, homework, auth)
 │   │   ├── dashboard/        # Student dashboard
 │   │   ├── teacher/          # Teacher-only pages
-│   │   ├── guardian/         # Guardian portal
 │   │   └── tutor/            # AI tutor interface
 │   ├── components/           # React components
 │   ├── lib/                  # Utilities, types, and helpers
@@ -179,7 +166,7 @@ The AI tutor uses OpenAI's GPT models with a custom system prompt designed for:
 - **Bilingual Support:** Responds exclusively in student's preferred language (Arabic or English)
 - **Safety Monitoring:** Logs all conversations and flags concerning content (self-harm, abuse) for human review
 
-**How it works:** Students chat with the AI via `/tutor`. Conversations are saved to the database and accessible to teachers and guardians for review.
+**How it works:** Students chat with the AI via `/tutor`. Conversations are saved to the database and accessible to teachers and platform staff for review when needed.
 
 ### Diagnostic Assessments
 
@@ -249,13 +236,11 @@ For production deployment, follow the **[Deployment Guide](./docs/DEPLOYMENT.md)
 - [x] AI tutor with bilingual support (Arabic/English)
 - [x] Diagnostic assessments for grade placement
 - [x] Teacher homework creation and grading system
-- [x] Guardian/parent progress tracking portal
 - [x] Student dashboard with lesson progress
 - [x] Content moderation and safety logging
 
 ### 🚧 In Progress
 
-- [ ] Offline-first mode (PWA with local caching)
 - [ ] Mobile app (React Native or Flutter)
 - [ ] SMS-based homework submission (for areas with limited internet)
 - [ ] Voice-to-text input for low-literacy students

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import type { Slide, SlideType, SlideLayout, SlideTextSize, SlideEntranceAnimation } from '@/lib/slides.types';
+import type { Slide, SlideType, SlideLayout, SlideTextSize, SlideTextAlign, SlideEntranceAnimation } from '@/lib/slides.types';
 import { createClient } from '@/lib/supabase/client';
 import SlideInteractionFields from './SlideInteractionFields';
 import SlideImageGenerator from './SlideImageGenerator';
@@ -44,6 +44,12 @@ const TEXT_SIZES: { value: SlideTextSize; label: string }[] = [
   { value: 'md', label: 'M' },
   { value: 'lg', label: 'L' },
   { value: 'xl', label: 'XL' },
+];
+
+const TEXT_ALIGNS: { value: SlideTextAlign; label: string }[] = [
+  { value: 'left', label: 'Left' },
+  { value: 'center', label: 'Center' },
+  { value: 'right', label: 'Right' },
 ];
 
 const ENTRANCE_ANIMATIONS: { value: SlideEntranceAnimation; label: string }[] = [
@@ -313,24 +319,51 @@ export default function SlideEditPanel({
         </div>
       </div>
 
-      {/* Entrance animation */}
       <div>
-        <label className={labelClass}>Entrance Animation</label>
-        <div className="grid grid-cols-4 gap-1">
-          {ENTRANCE_ANIMATIONS.map((anim) => (
+        <label className={labelClass}>Text Alignment</label>
+        <div className="grid grid-cols-3 gap-1">
+          {TEXT_ALIGNS.map((a) => (
             <button
-              key={anim.value}
-              onClick={() => onUpdate({ entrance_animation: anim.value })}
+              key={a.value}
+              onClick={() => onUpdate({ text_align: a.value })}
+              title={a.label}
               className={`rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
-                (slide.entrance_animation || 'none') === anim.value
+                slide.text_align === a.value
                   ? 'border-[#007229] bg-green-50 text-[#007229]'
                   : 'border-gray-200 text-gray-600 hover:border-gray-300'
               }`}
             >
-              {anim.label}
+              {a.label}
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Entrance Animation */}
+      <div>
+        <label className={labelClass}>Entrance Animation</label>
+        <div className="grid grid-cols-4 gap-1">
+          {ENTRANCE_ANIMATIONS.map((a) => {
+            const current = slide.entrance_animation || 'none';
+            return (
+              <button
+                key={a.value}
+                onClick={() => onUpdate({ entrance_animation: a.value })}
+                title={a.label}
+                className={`rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+                  current === a.value
+                    ? 'border-[#007229] bg-green-50 text-[#007229]'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                {a.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-1 text-[10px] text-gray-400">
+          Plays when this slide first appears in present mode or replay.
+        </p>
       </div>
 
       {/* Progressive reveal toggle */}
@@ -343,14 +376,14 @@ export default function SlideEditPanel({
               onChange={(e) => onUpdate({ progressive_reveal: e.target.checked })}
               className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#007229] focus:ring-[#007229]"
             />
-            <div className="flex-1">
-              <span className="text-xs font-medium text-gray-700">Reveal one at a time</span>
-              <p className="text-[10px] text-gray-400 mt-0.5">
+            <span className="text-xs font-medium text-gray-700">
+              Reveal one at a time
+              <span className="block text-[10px] font-normal text-gray-400">
                 {slide.type === 'content'
                   ? 'Body paragraphs (separated by blank lines) appear one at a time.'
                   : 'Bullets appear one at a time on tap/arrow.'}
-              </p>
-            </div>
+              </span>
+            </span>
           </label>
         </div>
       )}

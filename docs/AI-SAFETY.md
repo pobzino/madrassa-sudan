@@ -7,7 +7,7 @@
 This document outlines the safety measures, content moderation practices, and ethical guidelines for the AI tutor ("معلم البومة" / Owl Teacher) on the Amal Madrassa platform. It is intended for:
 
 - **Teachers:** To understand how the AI operates and what to monitor
-- **Guardians:** To make informed decisions about their children's use of the AI tutor
+- **Parents and Caregivers:** To understand how the platform safeguards children
 - **Platform Staff:** To guide moderation, review, and incident response
 - **Partner Organizations:** To verify compliance with child safeguarding policies
 
@@ -123,7 +123,7 @@ The AI adapts responses based on:
    **Response:**
    - The AI provides a supportive, non-judgmental response ("I'm here to help. Please talk to a trusted adult.")
    - The conversation is **flagged for human review** (teacher or platform staff)
-   - In severe cases (e.g., imminent harm), a notification is sent to the student's teacher and/or guardian
+   - In severe cases (e.g., imminent harm), a notification is sent to the student's teacher and designated safeguarding contact
 
    **Implementation Note:** This feature is **planned** but may not be fully implemented in the current codebase. Manual review of flagged conversations is the primary safety mechanism.
 
@@ -132,12 +132,11 @@ The AI adapts responses based on:
 **Who Reviews:**
 - **Teachers:** Can view all AI conversations for students in their cohorts
 - **Platform Staff:** Review flagged content and incident reports
-- **Guardians:** Can view conversations for linked students via the Guardian Portal
 
 **Review Triggers:**
 - Automated flags (moderation API, keyword patterns)
 - Teacher-initiated review (e.g., after noticing unusual behavior)
-- Student or guardian reports
+- Student or caregiver reports
 
 **Review Process:**
 1. Reviewer accesses conversation transcript in the platform
@@ -145,7 +144,7 @@ The AI adapts responses based on:
 3. Takes action if needed:
    - **No Action:** False positive (e.g., student discussing historical violence for a lesson)
    - **Educational Intervention:** Teacher follows up with student to clarify or provide support
-   - **Safety Intervention:** Notify guardian, school counselor, or authorities (for abuse disclosure)
+   - **Safety Intervention:** Notify a caregiver, school counselor, or authorities (for abuse disclosure)
    - **Account Action:** Suspend student account (for severe policy violations)
 
 **Frequency:**
@@ -175,9 +174,9 @@ The AI adapts responses based on:
 **Response:**
 1. AI reminds student of platform guidelines
 2. Teacher reviews conversation and speaks with student
-3. If behavior continues, guardian is notified
+3. If behavior continues, a caregiver or safeguarding lead is notified
 
-**Escalation:** Teacher → Guardian
+**Escalation:** Teacher → Safeguarding Contact
 
 ### Level 3: Serious Concerns (Expressions of Distress, Safety Risks)
 
@@ -189,10 +188,10 @@ The AI adapts responses based on:
 **Response:**
 1. AI provides immediate supportive message ("Please talk to a trusted adult. You are not alone.")
 2. Conversation is **immediately flagged** for human review
-3. Teacher and/or guardian are notified **within 1 hour**
+3. Teacher and/or designated safeguarding contact are notified **within 1 hour**
 4. Platform staff assess need for external intervention (e.g., contacting local NGO, child protection services)
 
-**Escalation:** AI Flag → Teacher → Guardian → Partner NGO/Authorities (if required by law)
+**Escalation:** AI Flag → Teacher → Safeguarding Contact → Partner NGO/Authorities (if required by law)
 
 **Legal Obligation:** In many jurisdictions, teachers and platform operators are **mandatory reporters** of child abuse. If abuse is disclosed, we will report to appropriate authorities.
 
@@ -204,7 +203,7 @@ The AI adapts responses based on:
 
 **Response:**
 1. **Immediate:** Platform staff are notified via alert system
-2. **Within 30 minutes:** Contact student's guardian and/or local emergency services
+2. **Within 30 minutes:** Contact the student's caregiver/emergency contact and/or local emergency services
 3. **Within 24 hours:** File report with relevant authorities and partner organizations
 
 **Escalation:** AI Flag → Platform Staff → Emergency Services/Authorities
@@ -227,7 +226,7 @@ The AI tutor can call **tool functions** to access student data and perform acti
 **Privacy Enforcement:**
 - All tools include `WHERE student_id = auth.uid()` filters (enforced via Supabase RLS)
 - Students cannot access other students' data
-- Teachers and guardians have separate tool access (not via AI)
+- Teachers and platform staff have separate review access (not via AI)
 
 ### Rate Limiting
 
@@ -266,7 +265,6 @@ Every AI interaction creates a record in the `ai_messages` table:
 
 - **Students:** Can view and delete their own conversation history
 - **Teachers:** Can view conversations for students in their cohorts (read-only)
-- **Guardians:** Can view conversations for linked students
 - **Platform Staff:** Can access all conversations for safety audits
 
 ### Audit Schedule

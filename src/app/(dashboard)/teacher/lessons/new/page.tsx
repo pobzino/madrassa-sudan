@@ -534,38 +534,39 @@ export default function NewLessonPage() {
           />
         </div>
 
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">
-            Publish immediately
-          </span>
-          <button
-            onClick={() => {
-              if (!canPublishLesson) return;
-              if (!form.is_published && !publishReadiness.canPublish) {
-                toast.error(
-                  publishReadiness.blockingReasons
-                    .map((reason, index) => `${index + 1}. ${reason.message}`)
-                    .join("\n")
-                );
-                return;
-              }
-              setForm({ ...form, is_published: !form.is_published });
-            }}
-            disabled={!canPublishLesson}
-            className={`w-12 h-6 rounded-full flex items-center px-1 transition-colors ${
-              form.is_published
-                ? "bg-emerald-500 justify-end"
-                : "bg-gray-200 justify-start"
-            } ${!canPublishLesson ? "cursor-not-allowed opacity-60" : ""}`}
-            title={!canPublishLesson ? "Only admins can publish lessons." : undefined}
-          >
-            <span className="w-4 h-4 bg-white rounded-full shadow" />
-          </button>
-        </div>
-        {!canPublishLesson && (
-          <p className="text-xs text-amber-600">
-            New lessons created by teachers stay as drafts until an admin publishes them.
-          </p>
+        {canPublishLesson ? (
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">
+              Publish immediately
+            </span>
+            <button
+              onClick={() => {
+                if (!form.is_published && !publishReadiness.canPublish) {
+                  toast.error(
+                    publishReadiness.blockingReasons
+                      .map((reason, index) => `${index + 1}. ${reason.message}`)
+                      .join("\n")
+                  );
+                  return;
+                }
+                setForm({ ...form, is_published: !form.is_published });
+              }}
+              className={`w-12 h-6 rounded-full flex items-center px-1 transition-colors ${
+                form.is_published
+                  ? "bg-emerald-500 justify-end"
+                  : "bg-gray-200 justify-start"
+              }`}
+            >
+              <span className="w-4 h-4 bg-white rounded-full shadow" />
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 text-xs text-blue-800">
+            <p className="font-semibold">This lesson will be saved as a draft.</p>
+            <p className="mt-1">
+              After adding slides and a sim, you can submit it for admin review from the lesson editor.
+            </p>
+          </div>
         )}
         {canPublishLesson && !publishReadiness.canPublish && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">

@@ -278,7 +278,7 @@ If not using Vercel:
   - Verify it appears in the student homework list
 - [ ] **Role-Based Access:**
   - Verify students cannot access teacher features (e.g., `/teacher/grading`)
-  - Verify guardians can only view linked students' data
+  - Verify non-teachers cannot access teacher/admin features
 
 ### 5.2 Performance Verification
 
@@ -300,7 +300,7 @@ Run these checks:
 - [ ] **Privacy Policy accessible:** `/privacy` page loads
 - [ ] **Terms of Service accessible:** `/terms` page loads
 - [ ] **AI Safety Guide available:** Link to `/docs/AI-SAFETY.md` in help section
-- [ ] **Guardian consent mechanism:** Test guardian invitation flow
+- [ ] **Child consent process documented:** Confirm onboarding and partner procedures cover required parental/caregiver consent
 
 ---
 
@@ -331,15 +331,6 @@ npm run ingest:lessons
 ```
 
 Or manually upload via Supabase dashboard → Table Editor → `lessons`.
-
-### 6.3 Guardian Invitations
-
-Teachers or students can invite guardians:
-1. Student logs in → **Settings → Guardians**
-2. Enter guardian email → Send invitation
-3. Guardian receives email with signup link
-
----
 
 ## Step 7: Monitoring and Maintenance
 
@@ -444,7 +435,7 @@ Before going live, verify:
 - [ ] OpenAI API key restricted to server-side routes only
 - [ ] Rate limiting enabled (Supabase Auth and AI tutor)
 - [ ] Privacy Policy and Terms of Service accessible
-- [ ] Guardian consent flow tested
+- [ ] Child consent flow documented and tested with partner operations
 - [ ] AI tutor content moderation active (see AI-SAFETY.md)
 - [ ] Backup strategy in place (weekly database exports)
 - [ ] Monitoring alerts configured (uptime, errors, flagged content)

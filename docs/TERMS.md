@@ -18,7 +18,7 @@ Amal Madrassa is designed to provide:
 2. **AI Tutoring:** Interactive learning support via "معلم البومة" (Owl Teacher), an AI tutor powered by OpenAI
 3. **Homework System:** Teacher-created assignments with grading and feedback
 4. **Diagnostic Assessments:** Placement tests to identify appropriate grade levels
-5. **Progress Tracking:** Dashboards for students, teachers, and guardians
+5. **Progress Tracking:** Dashboards for students and teachers
 
 This platform is intended for **educational purposes only** and is provided free of charge to displaced Sudanese children and their communities through partnerships with NGOs and humanitarian organizations.
 
@@ -35,11 +35,6 @@ This platform is intended for **educational purposes only** and is provided free
    - Authorized by partner organizations or school administrators
    - Can create cohorts, assign homework, grade submissions, and track student progress
    - Must comply with professional conduct standards
-
-3. **Guardians (Parents/Family Members):**
-   - Can view progress for linked students
-   - Can manage student account settings
-   - Cannot access other students' data
 
 ### Account Registration
 
@@ -61,7 +56,7 @@ We reserve the right to suspend or terminate accounts that violate these Terms o
 ### You MAY:
 - Use the platform for educational purposes (learning, teaching, homework)
 - Ask the AI tutor questions related to academic subjects
-- Share your progress with teachers and guardians
+- Share your progress with teachers and authorized platform staff
 - Collaborate with classmates on group assignments (when permitted by teachers)
 - Request help understanding homework concepts (the AI will guide, not provide answers)
 
@@ -111,7 +106,7 @@ The AI tutor is **NOT** a replacement for human teachers. It may:
 - Provide guidance that is too advanced or too simple
 
 **Students should:**
-- Verify answers with textbooks, teachers, or guardians
+- Verify answers with textbooks, teachers, or trusted caregivers
 - Report incorrect or confusing responses to teachers
 - Use the AI as a learning tool, not a homework answer key
 
@@ -124,7 +119,7 @@ AI tutor conversations are logged and monitored for:
 
 See [AI-SAFETY.md](./AI-SAFETY.md) for detailed moderation practices.
 
-**If the AI detects concerning content (e.g., a student expresses suicidal thoughts), a teacher or guardian may be notified for intervention.**
+**If the AI detects concerning content (e.g., a student expresses suicidal thoughts), a teacher or designated safeguarding contact may be notified for intervention.**
 
 ## Homework and Academic Integrity
 
@@ -143,7 +138,7 @@ If a teacher determines you have violated academic integrity (e.g., copying answ
 
 **We believe in learning from mistakes.** Teachers will work with students to understand *why* academic integrity matters, not just punish violations.
 
-## Teacher and Guardian Responsibilities
+## Teacher and Caregiver Responsibilities
 
 ### Teachers
 
@@ -154,12 +149,12 @@ Teachers agree to:
 - Report concerning behavior (e.g., signs of abuse) to appropriate authorities
 - Use the platform in accordance with partner organization policies
 
-### Guardians
+### Parents and Caregivers
 
-Guardians agree to:
-- Monitor their child's platform use and ensure appropriate behavior
-- Respect the privacy of other students (do not share progress reports for children you are not linked to)
-- Support teachers and platform staff in maintaining a safe learning environment
+Parents and caregivers are expected to:
+- Support children in using the platform appropriately
+- Follow local safeguarding and consent requirements
+- Coordinate with teachers and partner organizations when welfare concerns arise
 
 ## Intellectual Property
 
@@ -175,7 +170,7 @@ All lessons, quizzes, diagnostic assessments, and platform design are the intell
 ### Student Work
 
 Students retain ownership of their homework submissions, essays, and creative work. By submitting work to the platform, you grant us a license to:
-- Store and display it to your teachers and guardians
+- Store and display it to your teachers and authorized platform reviewers
 - Use it for grading and feedback purposes
 - Analyze it in aggregate (anonymized) for platform improvement
 
@@ -193,7 +188,6 @@ Your use of the platform is governed by our [Privacy Policy](./PRIVACY.md), whic
 **Key Privacy Points:**
 - Student data is **not sold** to advertisers
 - AI conversations are logged for safety and educational continuity
-- Guardians can view all linked student data via the Guardian Portal
 - You can request account deletion at any time
 
 ## Platform Availability and Changes

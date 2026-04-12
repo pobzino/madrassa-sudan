@@ -31,7 +31,10 @@ export default function WhiteboardCanvas({ whiteboard, active, onLaserMove }: Wh
   const laserTrailRef = useRef<LaserPoint[]>([]);
   const laserRafRef = useRef<number>(0);
   const onLaserMoveRef = useRef(onLaserMove);
-  onLaserMoveRef.current = onLaserMove;
+
+  useEffect(() => {
+    onLaserMoveRef.current = onLaserMove;
+  }, [onLaserMove]);
 
   // Convert pointer event to logical coordinates
   const getPoint = useCallback((e: React.PointerEvent): Point => {

@@ -462,11 +462,20 @@ export default function SlideEditor({
   // Refs that the whiteboard→sim bridge reads, so the bridge callback can
   // stay stable while picking up the latest slide/sim state.
   const simRecordingRef = useRef(simRecording);
-  simRecordingRef.current = simRecording;
   const slidesRef = useRef(slides);
-  slidesRef.current = slides;
   const presentIndexRef = useRef(presentIndex);
-  presentIndexRef.current = presentIndex;
+
+  useEffect(() => {
+    simRecordingRef.current = simRecording;
+  }, [simRecording]);
+
+  useEffect(() => {
+    slidesRef.current = slides;
+  }, [slides]);
+
+  useEffect(() => {
+    presentIndexRef.current = presentIndex;
+  }, [presentIndex]);
 
   // Stable bridge: translate whiteboard events into sim events stamped with
   // the current slide_id. `recordSimEvent` is stable, and all other reads
