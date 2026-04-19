@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
 import type {
   Slide,
   SlideType,
@@ -114,6 +114,37 @@ export default function SlideEditPanel({
   const imagePositionX = slide.image_position_x ?? 50;
   const imagePositionY = slide.image_position_y ?? 50;
   const imageZoom = getSlideImageZoom(slide);
+
+  const handleTextControlKeyDownCapture = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' || !(event.target instanceof HTMLElement)) {
+      return;
+    }
+
+    const editable = event.target.closest('input, textarea, [contenteditable="true"]');
+    if (!editable) {
+      return;
+    }
+
+    event.stopPropagation();
+
+    if (!(editable instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const allowsEnterDefault = [
+      'button',
+      'checkbox',
+      'file',
+      'radio',
+      'range',
+      'reset',
+      'submit',
+    ].includes(editable.type);
+
+    if (!allowsEnterDefault) {
+      event.preventDefault();
+    }
+  }, []);
 
   const updateImagePositionFromPointer = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -258,7 +289,10 @@ export default function SlideEditPanel({
   }
 
   return (
-    <div className="space-y-4 p-4 overflow-y-auto h-full">
+    <div
+      className="space-y-4 p-4 overflow-y-auto h-full"
+      onKeyDownCapture={handleTextControlKeyDownCapture}
+    >
       <h3 className="text-sm font-semibold text-gray-900">Edit Slide</h3>
 
       {slide.is_required && (
