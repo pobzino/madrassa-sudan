@@ -538,6 +538,7 @@ export default function ActivitySlide({
           objectFit={slide.image_fit ?? 'cover'}
           positionX={slide.image_position_x}
           positionY={slide.image_position_y}
+          zoom={slide.image_zoom}
         />
         <span className={`relative z-10 inline-flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r ${theme.badgeGradient} text-white rounded-full text-xs sm:text-sm font-bold mb-3 shadow-md`}>
           <theme.icon className="w-4 h-4" /> {isAr ? theme.label_ar : theme.label_en}
@@ -585,6 +586,7 @@ export default function ActivitySlide({
             objectFit={slide.image_fit ?? 'contain'}
             positionX={slide.image_position_x}
             positionY={slide.image_position_y}
+            zoom={slide.image_zoom}
           />
         </div>
       )}

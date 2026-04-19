@@ -42,6 +42,7 @@ export default function DiagramSlide({ slide, language }: Props) {
           objectFit={slide.image_fit ?? 'cover'}
           positionX={slide.image_position_x}
           positionY={slide.image_position_y}
+          zoom={slide.image_zoom}
         />
         <h2
           dir={primary.dir}
@@ -76,6 +77,7 @@ export default function DiagramSlide({ slide, language }: Props) {
               objectFit={slide.image_fit ?? 'contain'}
               positionX={slide.image_position_x}
               positionY={slide.image_position_y}
+              zoom={slide.image_zoom}
             />
           </div>
           <div className="flex-1 flex flex-col justify-center">
@@ -119,6 +121,7 @@ export default function DiagramSlide({ slide, language }: Props) {
                 objectFit={slide.image_fit ?? 'contain'}
                 positionX={slide.image_position_x}
                 positionY={slide.image_position_y}
+                zoom={slide.image_zoom}
               />
             ) : (
               <div className="w-full h-full min-h-[120px] flex flex-col items-center justify-center p-4 sm:p-6 rounded-2xl border-2 border-dashed border-cyan-300 bg-cyan-50/50">

@@ -111,6 +111,7 @@ export default function SlideImageGenerator({ slide, lessonId, onUpdate }: Props
       image_fit: 'contain',
       image_position_x: 50,
       image_position_y: 50,
+      image_zoom: 1,
     });
     setOpen(false);
     reset();

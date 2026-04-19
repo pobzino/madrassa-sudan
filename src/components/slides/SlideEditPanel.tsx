@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type {
   Slide,
   SlideType,
@@ -64,6 +64,7 @@ const TEXT_ALIGNS: { value: SlideTextAlign; label: string }[] = [
 const IMAGE_FITS: { value: SlideImageFit; label: string; description: string }[] = [
   { value: 'contain', label: 'Contain', description: 'Show the full image' },
   { value: 'cover', label: 'Cover', description: 'Fill the frame, may crop' },
+  { value: 'fill', label: 'Stretch', description: 'Force-fill the frame' },
 ];
 
 const ENTRANCE_ANIMATIONS: { value: SlideEntranceAnimation; label: string }[] = [
@@ -86,6 +87,16 @@ const isSpecialSlide = (type: SlideType) => type === 'exploration' || type === '
 const inputClass = 'w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#007229] focus:border-[#007229]';
 const labelClass = 'block text-xs font-medium text-gray-600 mb-1';
 
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function getSlideImageZoom(slide: Slide): number {
+  return typeof slide.image_zoom === 'number' && Number.isFinite(slide.image_zoom)
+    ? Math.max(0.5, Math.min(3, slide.image_zoom))
+    : 1;
+}
+
 export default function SlideEditPanel({
   slide,
   onUpdate,
@@ -100,6 +111,26 @@ export default function SlideEditPanel({
   const [imageUploading, setImageUploading] = useState(false);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imagePositionX = slide.image_position_x ?? 50;
+  const imagePositionY = slide.image_position_y ?? 50;
+  const imageZoom = getSlideImageZoom(slide);
+
+  const updateImagePositionFromPointer = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const x = clampPercent(((event.clientX - rect.left) / rect.width) * 100);
+      const y = clampPercent(((event.clientY - rect.top) / rect.height) * 100);
+      onUpdate({ image_position_x: x, image_position_y: y });
+    },
+    [onUpdate]
+  );
+
+  const setImageAnchor = useCallback(
+    (x: number, y: number) => {
+      onUpdate({ image_position_x: x, image_position_y: y });
+    },
+    [onUpdate]
+  );
 
   function handleTypeChange(newType: SlideType) {
     const updates: Partial<Slide> = { type: newType };
@@ -216,6 +247,7 @@ export default function SlideEditPanel({
         image_fit: 'contain',
         image_position_x: 50,
         image_position_y: 50,
+        image_zoom: 1,
       });
     } catch (error) {
       setImageUploadError(error instanceof Error ? error.message : 'Image upload failed.');
@@ -438,6 +470,7 @@ export default function SlideEditPanel({
                     image_fit: 'contain',
                     image_position_x: 50,
                     image_position_y: 50,
+                    image_zoom: 1,
                   });
                 }}
                 className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-50"
@@ -465,19 +498,41 @@ export default function SlideEditPanel({
           {/* Image preview */}
           {slide.image_url && !isOwlImage(slide.image_url) && (
             <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <div className="relative h-24 w-full overflow-hidden rounded-lg border border-gray-200 bg-white">
+              <div
+                className="relative h-28 w-full cursor-crosshair overflow-hidden rounded-lg border border-gray-200 bg-white"
+                onPointerDown={(event) => {
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  updateImagePositionFromPointer(event);
+                }}
+                onPointerMove={(event) => {
+                  if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+                  updateImagePositionFromPointer(event);
+                }}
+                onPointerUp={(event) => {
+                  if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                  }
+                }}
+                title="Drag to reposition the image focus"
+              >
                 <SlideImage
                   src={slide.image_url}
                   className="h-full w-full"
                   objectFit={slide.image_fit ?? 'contain'}
-                  positionX={slide.image_position_x}
-                  positionY={slide.image_position_y}
+                  positionX={imagePositionX}
+                  positionY={imagePositionY}
+                  zoom={imageZoom}
+                />
+                <div
+                  className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#007229] shadow"
+                  style={{ left: `${imagePositionX}%`, top: `${imagePositionY}%` }}
+                  aria-hidden
                 />
               </div>
 
               <div>
                 <label className={labelClass}>Image Fit</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {IMAGE_FITS.map((fit) => {
                     const isActive = (slide.image_fit ?? 'contain') === fit.value;
                     return (
@@ -499,6 +554,22 @@ export default function SlideEditPanel({
                 </div>
               </div>
 
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="text-xs font-medium text-gray-600">Zoom</label>
+                  <span className="font-mono text-[10px] text-gray-400">{Math.round(imageZoom * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={50}
+                  max={250}
+                  step={5}
+                  value={Math.round(imageZoom * 100)}
+                  onChange={(e) => onUpdate({ image_zoom: Number(e.target.value) / 100 })}
+                  className="w-full accent-[#007229]"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>
@@ -508,7 +579,7 @@ export default function SlideEditPanel({
                     type="range"
                     min={0}
                     max={100}
-                    value={slide.image_position_x ?? 50}
+                    value={imagePositionX}
                     onChange={(e) => onUpdate({ image_position_x: Number(e.target.value) })}
                     className="w-full accent-[#007229]"
                   />
@@ -522,15 +593,56 @@ export default function SlideEditPanel({
                     type="range"
                     min={0}
                     max={100}
-                    value={slide.image_position_y ?? 50}
+                    value={imagePositionY}
                     onChange={(e) => onUpdate({ image_position_y: Number(e.target.value) })}
                     className="w-full accent-[#007229]"
                   />
                 </div>
               </div>
 
+              <div>
+                <p className="mb-1 text-[10px] font-medium text-gray-500">Quick position</p>
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    ['Top left', 0, 0],
+                    ['Top', 50, 0],
+                    ['Top right', 100, 0],
+                    ['Left', 0, 50],
+                    ['Center', 50, 50],
+                    ['Right', 100, 50],
+                    ['Bottom left', 0, 100],
+                    ['Bottom', 50, 100],
+                    ['Bottom right', 100, 100],
+                  ].map(([label, x, y]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => setImageAnchor(x as number, y as number)}
+                      className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-500 hover:border-[#007229]/40 hover:text-[#007229]"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  onUpdate({
+                    image_fit: 'contain',
+                    image_position_x: 50,
+                    image_position_y: 50,
+                    image_zoom: 1,
+                  })
+                }
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                Reset image placement
+              </button>
+
               <p className="text-[10px] text-gray-400">
-                Use <span className="font-medium text-gray-500">Contain</span> to avoid cropping. Switch to <span className="font-medium text-gray-500">Cover</span> when you want the image to fill the frame, then adjust the focus sliders.
+                Drag the preview to set the focal point. Use <span className="font-medium text-gray-500">Contain</span> to avoid cropping, <span className="font-medium text-gray-500">Cover</span> to fill neatly, or <span className="font-medium text-gray-500">Stretch</span> when you need the image to force-fit the frame.
               </p>
             </div>
           )}
@@ -563,6 +675,7 @@ export default function SlideEditPanel({
                         image_fit: 'contain',
                         image_position_x: 50,
                         image_position_y: 50,
+                        image_zoom: 1,
                       })
                     }
                     className={`relative w-full aspect-square rounded-lg border-2 transition-all flex items-center justify-center ${

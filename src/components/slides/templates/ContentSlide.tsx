@@ -58,6 +58,7 @@ export default function ContentSlide({ slide, language, revealedCount }: Props) 
           objectFit={slide.image_fit ?? 'cover'}
           positionX={slide.image_position_x}
           positionY={slide.image_position_y}
+          zoom={slide.image_zoom}
         />
         <h2
           dir={primary.dir}
@@ -96,6 +97,7 @@ export default function ContentSlide({ slide, language, revealedCount }: Props) 
               objectFit={slide.image_fit ?? 'contain'}
               positionX={slide.image_position_x}
               positionY={slide.image_position_y}
+              zoom={slide.image_zoom}
             />
           </div>
         )}
@@ -128,6 +130,7 @@ export default function ContentSlide({ slide, language, revealedCount }: Props) 
               objectFit={slide.image_fit ?? 'contain'}
               positionX={slide.image_position_x}
               positionY={slide.image_position_y}
+              zoom={slide.image_zoom}
             />
           </div>
         )}

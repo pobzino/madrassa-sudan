@@ -133,6 +133,7 @@ function createBlankSlide(type: SlideType, sequence: number): Slide {
     image_fit: 'contain',
     image_position_x: 50,
     image_position_y: 50,
+    image_zoom: 1,
     layout: null,
     title_size: 'md',
     body_size: 'md',

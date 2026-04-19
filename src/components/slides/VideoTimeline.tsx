@@ -3,17 +3,27 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
 import type { CutRegion } from '@/lib/ffmpeg-editor';
 
+export interface TimelineCheckpointMarker {
+  id: string;
+  time: number;
+  label: string;
+  kind: 'activity_gate' | 'exploration_gate';
+  changed?: boolean;
+}
+
 interface VideoTimelineProps {
   duration: number;
   currentTime: number;
   trimStart: number;
   trimEnd: number;
   cutRegions: CutRegion[];
+  checkpointMarkers?: TimelineCheckpointMarker[];
   onSeek: (time: number) => void;
   onTrimStartChange: (time: number) => void;
   onTrimEndChange: (time: number) => void;
   onCutRegionUpdate: (index: number, region: CutRegion) => void;
   onCutRegionRemove: (index: number) => void;
+  onCheckpointMove?: (id: string, time: number) => void;
 }
 
 function formatTime(seconds: number): string {
@@ -27,7 +37,8 @@ type DragTarget =
   | { type: 'trimEnd' }
   | { type: 'cutStart'; index: number }
   | { type: 'cutEnd'; index: number }
-  | { type: 'cutMove'; index: number; offsetSeconds: number };
+  | { type: 'cutMove'; index: number; offsetSeconds: number }
+  | { type: 'checkpoint'; id: string };
 
 export default function VideoTimeline({
   duration,
@@ -35,11 +46,13 @@ export default function VideoTimeline({
   trimStart,
   trimEnd,
   cutRegions,
+  checkpointMarkers = [],
   onSeek,
   onTrimStartChange,
   onTrimEndChange,
   onCutRegionUpdate,
   onCutRegionRemove,
+  onCheckpointMove,
 }: VideoTimelineProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
@@ -105,6 +118,12 @@ export default function VideoTimeline({
           }
           break;
         }
+        case 'checkpoint':
+          onCheckpointMove?.(
+            dragTarget.id,
+            Math.max(0, Math.min(duration, time))
+          );
+          break;
       }
     };
 
@@ -116,13 +135,13 @@ export default function VideoTimeline({
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     };
-  }, [dragTarget, duration, trimStart, trimEnd, cutRegions, timeFromX, onTrimStartChange, onTrimEndChange, onCutRegionUpdate]);
+  }, [dragTarget, duration, trimStart, trimEnd, cutRegions, timeFromX, onTrimStartChange, onTrimEndChange, onCutRegionUpdate, onCheckpointMove]);
 
   const handleTrackClick = useCallback((e: React.MouseEvent) => {
     if (dragTarget) return;
     // Don't seek if clicking on a handle or cut region
     const target = e.target as HTMLElement;
-    if (target.closest('[data-handle]') || target.closest('[data-cut]')) return;
+    if (target.closest('[data-handle]') || target.closest('[data-cut]') || target.closest('[data-checkpoint]')) return;
     const time = timeFromX(e.clientX);
     onSeek(time);
   }, [dragTarget, timeFromX, onSeek]);
@@ -219,6 +238,49 @@ export default function VideoTimeline({
                 </button>
               )}
             </div>
+          );
+        })}
+
+        {/* Draggable checkpoint markers */}
+        {checkpointMarkers.map((marker) => {
+          const left = pctFromTime(marker.time);
+          const isExploration = marker.kind === 'exploration_gate';
+          return (
+            <button
+              key={marker.id}
+              type="button"
+              data-checkpoint
+              aria-label={marker.label}
+              title={`${marker.label} at ${formatTime(marker.time)}${onCheckpointMove ? ' - drag to move' : ''}`}
+              className={`absolute top-1/2 z-40 h-7 w-7 -translate-y-1/2 rounded-full border-2 border-white text-white shadow-sm transition-transform hover:scale-110 active:scale-100 ${
+                onCheckpointMove ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
+              } ${
+                isExploration
+                  ? 'bg-violet-600'
+                  : 'bg-sky-600'
+              } ${
+                marker.changed ? 'ring-2 ring-amber-300' : ''
+              }`}
+              style={{ left: `calc(${left}% - 14px)` }}
+              onMouseDown={(e) => {
+                if (!onCheckpointMove) return;
+                e.stopPropagation();
+                setDragTarget({ type: 'checkpoint', id: marker.id });
+                onCheckpointMove(
+                  marker.id,
+                  Math.max(0, Math.min(duration, timeFromX(e.clientX)))
+                );
+              }}
+            >
+              <svg
+                className="mx-auto h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden
+              >
+                <path d="M12 2l2.76 5.59 6.17.9-4.46 4.35 1.05 6.14L12 16.08 6.48 18.98l1.05-6.14L3.07 8.49l6.17-.9L12 2z" />
+              </svg>
+            </button>
           );
         })}
 

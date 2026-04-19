@@ -14,6 +14,7 @@ import type { SimPayload, SimRow } from '@/lib/sim.types';
 
 const PatchSimSchema = z.object({
   clip_segments: z.array(ClipSegmentSchema).nullable().optional(),
+  events: z.array(z.unknown()).optional(),
 });
 
 // GET /api/teacher/lessons/[id]/sims/[simId] — fetch a single sim with a
@@ -63,11 +64,10 @@ export async function GET(
 }
 
 // PATCH /api/teacher/lessons/[id]/sims/[simId]
-// Non-destructive `clip_segments` edits (the teacher's cut/trim ranges from
-// the review modal). Clip segments are stored verbatim and applied at
-// playback time by `SimPlayer`; the original audio and events are never
-// modified so every edit is fully reversible. Gated on draft lessons only —
-// once the parent lesson is published, the sim is read-only.
+// Sim review edits. Clip segments are stored verbatim and applied at playback
+// time by `SimPlayer`; checkpoint edits update only the event timeline JSON.
+// Gated on draft lessons only — once the parent lesson is published, the sim
+// is read-only.
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; simId: string }> }
@@ -113,9 +113,12 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    const updates: { clip_segments?: Json | null } = {};
+    const updates: { clip_segments?: Json | null; events?: Json } = {};
     if (body.clip_segments !== undefined) {
       updates.clip_segments = body.clip_segments as unknown as Json | null;
+    }
+    if (body.events !== undefined) {
+      updates.events = body.events as unknown as Json;
     }
 
     const { data: updatedRow, error: updateError } = await supabase

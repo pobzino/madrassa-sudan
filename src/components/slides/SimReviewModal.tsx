@@ -25,9 +25,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SimPlayer, { type SimPlayerHandle } from './SimPlayer';
-import VideoTimeline from './VideoTimeline';
+import VideoTimeline, { type TimelineCheckpointMarker } from './VideoTimeline';
 import { packClipSegments, useSimClipEditor } from '@/lib/sim-clip-editor';
-import { compactSimEvents, type SimPayload, type SimRow } from '@/lib/sim.types';
+import { compactSimEvents, type SimEvent, type SimPayload, type SimRow } from '@/lib/sim.types';
 import type { SimRecording } from '@/hooks/useSimRecorder';
 import type { Slide } from '@/lib/slides.types';
 
@@ -79,6 +79,108 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+type CheckpointEvent =
+  | Extract<SimEvent, { type: 'activity_gate' }>
+  | Extract<SimEvent, { type: 'exploration_gate' }>;
+
+type CheckpointTimes = Record<string, number>;
+
+const CHECKPOINT_EPSILON_SEC = 0.05;
+const EMPTY_EVENTS: SimEvent[] = [];
+
+function isCheckpointEvent(event: SimEvent): event is CheckpointEvent {
+  return event.type === 'activity_gate' || event.type === 'exploration_gate';
+}
+
+function checkpointId(index: number): string {
+  return `checkpoint-${index}`;
+}
+
+function getCheckpointTimes(events: SimEvent[]): CheckpointTimes {
+  const times: CheckpointTimes = {};
+  let checkpointIndex = 0;
+  for (const event of events) {
+    if (!isCheckpointEvent(event)) continue;
+    times[checkpointId(checkpointIndex)] = event.t / 1000;
+    checkpointIndex += 1;
+  }
+  return times;
+}
+
+function checkpointTimesChanged(
+  sourceTimes: CheckpointTimes,
+  editedTimes: CheckpointTimes
+): boolean {
+  return Object.entries(sourceTimes).some(([id, sourceTime]) => {
+    const editedTime = editedTimes[id] ?? sourceTime;
+    return Math.abs(editedTime - sourceTime) > CHECKPOINT_EPSILON_SEC;
+  });
+}
+
+function applyCheckpointTimes(
+  events: SimEvent[],
+  checkpointTimes: CheckpointTimes
+): SimEvent[] {
+  let checkpointIndex = 0;
+  const patched = events.map((event, originalIndex) => {
+    if (!isCheckpointEvent(event)) {
+      return { event, originalIndex };
+    }
+    const nextTime = checkpointTimes[checkpointId(checkpointIndex)];
+    checkpointIndex += 1;
+    if (typeof nextTime !== 'number') {
+      return { event, originalIndex };
+    }
+    return {
+      event: {
+        ...event,
+        t: Math.max(0, Math.round(nextTime * 1000)),
+      } as SimEvent,
+      originalIndex,
+    };
+  });
+
+  return patched
+    .slice()
+    .sort((a, b) => a.event.t - b.event.t || a.originalIndex - b.originalIndex)
+    .map(({ event }) => event);
+}
+
+function getSlideTitle(slide: Slide | undefined, language: 'ar' | 'en'): string {
+  if (!slide) return '';
+  const primary = language === 'ar' ? slide.title_ar : slide.title_en;
+  const fallback = language === 'ar' ? slide.title_en : slide.title_ar;
+  return primary?.trim() || fallback?.trim() || `Slide ${slide.sequence + 1}`;
+}
+
+function getCheckpointMarkers(
+  sourceEvents: SimEvent[],
+  deck: Slide[],
+  language: 'ar' | 'en',
+  sourceTimes: CheckpointTimes,
+  editedTimes: CheckpointTimes
+): TimelineCheckpointMarker[] {
+  const markers: TimelineCheckpointMarker[] = [];
+  let checkpointIndex = 0;
+  for (const event of sourceEvents) {
+    if (!isCheckpointEvent(event)) continue;
+    const id = checkpointId(checkpointIndex);
+    const sourceTime = sourceTimes[id] ?? event.t / 1000;
+    const time = editedTimes[id] ?? sourceTime;
+    const slide = deck.find((candidate) => candidate.id === event.slide_id);
+    const prefix = event.type === 'exploration_gate' ? 'Exploration checkpoint' : 'Activity checkpoint';
+    markers.push({
+      id,
+      time,
+      kind: event.type,
+      label: `${prefix} ${checkpointIndex + 1}${slide ? `: ${getSlideTitle(slide, language)}` : ''}`,
+      changed: Math.abs(time - sourceTime) > CHECKPOINT_EPSILON_SEC,
+    });
+    checkpointIndex += 1;
+  }
+  return markers;
+}
+
 export default function SimReviewModal(props: SimReviewModalProps) {
   // ── Build the preview payload that drives <SimPlayer> ───────────────────
   //
@@ -100,20 +202,50 @@ export default function SimReviewModal(props: SimReviewModalProps) {
     return () => URL.revokeObjectURL(url);
   }, [recordingBlob]);
 
+  const recordReviewRecording =
+    props.mode === 'record-review' ? props.recording : null;
+  const recordReviewDeckSnapshot =
+    props.mode === 'record-review' ? props.deckSnapshot : null;
+  const existingPayload = props.mode !== 'record-review' ? props.payload : null;
+  const recordReviewEvents = recordReviewRecording?.events ?? null;
+  const existingEvents = existingPayload?.sim.events ?? null;
+  const sourceEvents = recordReviewEvents ?? existingEvents ?? EMPTY_EVENTS;
+
+  const sourceCheckpointTimes = useMemo(
+    () => getCheckpointTimes(sourceEvents),
+    [sourceEvents]
+  );
+  const [checkpointTimes, setCheckpointTimes] = useState<CheckpointTimes>(() =>
+    getCheckpointTimes(sourceEvents)
+  );
+
+  useEffect(() => {
+    setCheckpointTimes(getCheckpointTimes(sourceEvents));
+  }, [sourceEvents]);
+
+  const editableEvents = useMemo(
+    () => applyCheckpointTimes(sourceEvents, checkpointTimes),
+    [sourceEvents, checkpointTimes]
+  );
+  const hasCheckpointEdits = useMemo(
+    () => checkpointTimesChanged(sourceCheckpointTimes, checkpointTimes),
+    [sourceCheckpointTimes, checkpointTimes]
+  );
+
   const previewPayload: SimPayload = useMemo(() => {
-    if (props.mode === 'record-review') {
+    if (recordReviewRecording && recordReviewDeckSnapshot) {
       // Stable ISO timestamp per (recording, lessonId) — regenerating on
       // every render would invalidate downstream memos in SimPlayer.
       const now = new Date(0).toISOString();
       const sim: SimRow = {
         id: 'preview',
         lesson_id: props.lessonId,
-        duration_ms: props.recording.durationMs,
-        deck_snapshot: props.deckSnapshot,
-        events: props.recording.events,
+        duration_ms: recordReviewRecording.durationMs,
+        deck_snapshot: recordReviewDeckSnapshot,
+        events: editableEvents,
         audio_path: null,
-        audio_duration_ms: props.recording.durationMs,
-        audio_mime: props.recording.audioMime,
+        audio_duration_ms: recordReviewRecording.durationMs,
+        audio_mime: recordReviewRecording.audioMime,
         recorded_by: null,
         recorded_at: now,
         clip_segments: null,
@@ -122,16 +254,23 @@ export default function SimReviewModal(props: SimReviewModalProps) {
       };
       return { sim, audio_url: blobUrl };
     }
-    return props.payload;
-    // Edit/view modes are effectively static for the lifetime of the modal.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!existingPayload) {
+      throw new Error('Sim payload missing');
+    }
+    return {
+      ...existingPayload,
+      sim: {
+        ...existingPayload.sim,
+        events: editableEvents,
+      },
+    };
   }, [
-    props.mode,
-    props.mode === 'record-review' ? props.recording : null,
-    props.mode === 'record-review' ? props.deckSnapshot : null,
-    props.mode !== 'record-review' ? props.payload : null,
+    recordReviewRecording,
+    recordReviewDeckSnapshot,
+    existingPayload,
     props.lessonId,
     blobUrl,
+    editableEvents,
   ]);
 
   const { sim } = previewPayload;
@@ -182,6 +321,32 @@ export default function SimReviewModal(props: SimReviewModalProps) {
       ),
     [editor.trimStart, editor.trimEnd, editor.cutRegions, durationSec]
   );
+  const hasAnyEdits = editor.hasEdits || hasCheckpointEdits;
+
+  const checkpointMarkers = useMemo(
+    () =>
+      getCheckpointMarkers(
+        sourceEvents,
+        sim.deck_snapshot,
+        props.language,
+        sourceCheckpointTimes,
+        checkpointTimes
+      ),
+    [sourceEvents, sim.deck_snapshot, props.language, sourceCheckpointTimes, checkpointTimes]
+  );
+
+  const handleCheckpointMove = useCallback((id: string, time: number) => {
+    setCheckpointTimes((prev) => {
+      const nextTime = Math.max(0, Number(time.toFixed(2)));
+      if (prev[id] === nextTime) return prev;
+      return { ...prev, [id]: nextTime };
+    });
+  }, []);
+
+  const handleResetAll = useCallback(() => {
+    editor.reset();
+    setCheckpointTimes(getCheckpointTimes(sourceEvents));
+  }, [editor, sourceEvents]);
 
   // ── Save handlers per mode ──────────────────────────────────────────────
 
@@ -196,7 +361,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         : null;
       const body = JSON.stringify({
         deck_snapshot: props.deckSnapshot,
-        events: compactSimEvents(props.recording.events),
+        events: compactSimEvents(editableEvents),
         duration_ms: props.recording.durationMs,
         audio_duration_ms: props.recording.durationMs,
         audio_mime: props.recording.audioMime,
@@ -228,7 +393,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
       setSaving(false);
       setUploadProgress(null);
     }
-  }, [props, previewClips]);
+  }, [props, previewClips, editableEvents]);
 
   const handleSaveEdit = useCallback(async () => {
     if (props.mode !== 'edit') return;
@@ -243,6 +408,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
           credentials: 'include',
           body: JSON.stringify({
             clip_segments: previewClips.length > 0 ? previewClips : null,
+            events: hasCheckpointEdits ? compactSimEvents(editableEvents) : undefined,
           }),
         }
       );
@@ -257,7 +423,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
     } finally {
       setSaving(false);
     }
-  }, [props, previewClips]);
+  }, [props, previewClips, hasCheckpointEdits, editableEvents]);
 
   const handleDelete = useCallback(async () => {
     if (props.mode !== 'edit') return;
@@ -388,10 +554,10 @@ export default function SimReviewModal(props: SimReviewModalProps) {
               Cut
             </button>
 
-            {!isReadOnly && editor.hasEdits && (
+            {!isReadOnly && hasAnyEdits && (
               <button
                 type="button"
-                onClick={editor.reset}
+                onClick={handleResetAll}
                 className="px-2.5 py-1 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Reset
@@ -421,18 +587,39 @@ export default function SimReviewModal(props: SimReviewModalProps) {
             trimStart={editor.trimStart}
             trimEnd={editor.trimEnd}
             cutRegions={editor.cutRegions}
+            checkpointMarkers={checkpointMarkers}
             onSeek={handleTimelineSeek}
             onTrimStartChange={isReadOnly ? () => {} : editor.setTrimStart}
             onTrimEndChange={isReadOnly ? () => {} : editor.setTrimEnd}
             onCutRegionUpdate={isReadOnly ? () => {} : editor.updateCutRegion}
             onCutRegionRemove={isReadOnly ? () => {} : editor.removeCutRegion}
+            onCheckpointMove={isReadOnly ? undefined : handleCheckpointMove}
           />
+
+          {checkpointMarkers.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+              <span className="font-semibold text-gray-600">Checkpoints:</span>
+              {checkpointMarkers.map((marker) => (
+                <span
+                  key={marker.id}
+                  className={`rounded-full border px-2 py-0.5 ${
+                    marker.changed
+                      ? 'border-amber-200 bg-amber-50 text-amber-700'
+                      : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  {formatDuration(marker.time)}
+                </span>
+              ))}
+            </div>
+          )}
 
           {!isReadOnly && (
             <p className="text-[11px] text-gray-400 leading-tight">
               Press play to watch. Drag amber handles to trim start/end. Click
               &quot;Cut&quot; to remove a section at the playhead, then drag its red
-              edges to adjust.
+              edges to adjust. Drag blue or violet checkpoint pins to move
+              interaction pauses.
             </p>
           )}
         </div>
@@ -499,9 +686,9 @@ export default function SimReviewModal(props: SimReviewModalProps) {
               <button
                 type="button"
                 onClick={handleSaveEdit}
-                disabled={saving || !editor.hasEdits}
+                disabled={saving || !hasAnyEdits}
                 className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-1.5"
-                title={editor.hasEdits ? 'Save clip edits' : 'No edits to save'}
+                title={hasAnyEdits ? 'Save sim edits' : 'No edits to save'}
               >
                 {saving ? 'Saving…' : 'Save'}
               </button>

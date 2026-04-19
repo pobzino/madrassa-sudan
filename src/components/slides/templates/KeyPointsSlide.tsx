@@ -50,6 +50,7 @@ export default function KeyPointsSlide({ slide, language, revealedCount, onRevea
               objectFit={slide.image_fit ?? 'contain'}
               positionX={slide.image_position_x}
               positionY={slide.image_position_y}
+              zoom={slide.image_zoom}
             />
           </div>
         )}
@@ -108,6 +109,7 @@ export default function KeyPointsSlide({ slide, language, revealedCount, onRevea
                 objectFit={slide.image_fit ?? 'contain'}
                 positionX={slide.image_position_x}
                 positionY={slide.image_position_y}
+                zoom={slide.image_zoom}
               />
             ) : (
               <OwlPointing />

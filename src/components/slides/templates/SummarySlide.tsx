@@ -42,6 +42,7 @@ export default function SummarySlide({ slide, language, revealedCount, onReveal 
             objectFit={slide.image_fit ?? 'contain'}
             positionX={slide.image_position_x}
             positionY={slide.image_position_y}
+            zoom={slide.image_zoom}
           />
         ) : (
           <OwlCelebrating />
