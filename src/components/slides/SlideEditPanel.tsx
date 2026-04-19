@@ -115,37 +115,6 @@ export default function SlideEditPanel({
   const imagePositionY = slide.image_position_y ?? 50;
   const imageZoom = getSlideImageZoom(slide);
 
-  const handleTextControlKeyDownCapture = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== 'Enter' || !(event.target instanceof HTMLElement)) {
-        return;
-      }
-
-      const editable = event.target.closest('input, textarea, [contenteditable="true"]');
-      if (!editable) {
-        return;
-      }
-
-      event.stopPropagation();
-      if (editable instanceof HTMLInputElement) {
-        const inputType = editable.type;
-        const allowsEnterDefault = [
-          'button',
-          'checkbox',
-          'file',
-          'radio',
-          'range',
-          'reset',
-          'submit',
-        ].includes(inputType);
-        if (!allowsEnterDefault) {
-          event.preventDefault();
-        }
-      }
-    },
-    []
-  );
-
   const updateImagePositionFromPointer = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       const rect = event.currentTarget.getBoundingClientRect();
@@ -289,10 +258,7 @@ export default function SlideEditPanel({
   }
 
   return (
-    <div
-      className="space-y-4 p-4 overflow-y-auto h-full"
-      onKeyDownCapture={handleTextControlKeyDownCapture}
-    >
+    <div className="space-y-4 p-4 overflow-y-auto h-full">
       <h3 className="text-sm font-semibold text-gray-900">Edit Slide</h3>
 
       {slide.is_required && (

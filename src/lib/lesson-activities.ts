@@ -121,128 +121,84 @@ export function normalizeLessonTaskForm(
 export function getActivityInstructionFromSlide(slide: Slide, language: 'ar' | 'en') {
   if (language === 'ar') {
     return (
-      slide.body_ar?.trim() ||
       slide.interaction_prompt_ar?.trim() ||
+      slide.body_ar?.trim() ||
       slide.title_ar?.trim() ||
       ''
     );
   }
 
   return (
-    slide.body_en?.trim() ||
     slide.interaction_prompt_en?.trim() ||
+    slide.body_en?.trim() ||
     slide.title_en?.trim() ||
     ''
   );
 }
 
-function withSlidePromptData(
-  data: Record<string, unknown>,
-  slide: Slide
-): Record<string, unknown> {
-  return {
-    ...data,
-    prompt_ar: slide.interaction_prompt_ar || '',
-    prompt_en: slide.interaction_prompt_en || '',
-  };
-}
-
-function readTaskPrompt(
-  taskData: Record<string, unknown>,
-  key: 'prompt_ar' | 'prompt_en',
-  fallback: string
-): string {
-  const value = taskData[key];
-  return typeof value === 'string' ? value : fallback;
-}
-
 export function buildTaskDataFromSlide(slide: Slide): Record<string, unknown> | null {
   switch (slide.interaction_type) {
     case 'free_response':
-      return withSlidePromptData(
-        {
-          expected_answer_ar: slide.interaction_expected_answer_ar || '',
-          expected_answer_en: slide.interaction_expected_answer_en || '',
-        } satisfies FreeResponseData as unknown as Record<string, unknown>,
-        slide
-      );
+      return {
+        expected_answer_ar: slide.interaction_expected_answer_ar || '',
+        expected_answer_en: slide.interaction_expected_answer_en || '',
+      } satisfies FreeResponseData as unknown as Record<string, unknown>;
     case 'choose_correct':
-      return withSlidePromptData(
-        {
-          options_ar: slide.interaction_options_ar || [],
-          options_en: slide.interaction_options_en || [],
-          correct_index: slide.interaction_correct_index ?? 0,
-        } satisfies ChooseCorrectData as unknown as Record<string, unknown>,
-        slide
-      );
+      return {
+        options_ar: slide.interaction_options_ar || [],
+        options_en: slide.interaction_options_en || [],
+        correct_index: slide.interaction_correct_index ?? 0,
+      } satisfies ChooseCorrectData as unknown as Record<string, unknown>;
     case 'fill_missing_word':
-      return withSlidePromptData(
-        {
-          options_ar: slide.interaction_options_ar || [],
-          options_en: slide.interaction_options_en || [],
-          correct_index: slide.interaction_correct_index ?? 0,
-          free_entry: slide.interaction_free_entry === true,
-          expected_answer_ar: slide.interaction_expected_answer_ar || '',
-          expected_answer_en: slide.interaction_expected_answer_en || '',
-        } satisfies FillMissingWordData as unknown as Record<string, unknown>,
-        slide
-      );
+      return {
+        options_ar: slide.interaction_options_ar || [],
+        options_en: slide.interaction_options_en || [],
+        correct_index: slide.interaction_correct_index ?? 0,
+        free_entry: slide.interaction_free_entry === true,
+        expected_answer_ar: slide.interaction_expected_answer_ar || '',
+        expected_answer_en: slide.interaction_expected_answer_en || '',
+      } satisfies FillMissingWordData as unknown as Record<string, unknown>;
     case 'true_false':
-      return withSlidePromptData(
-        {
-          correct_answer: slide.interaction_true_false_answer ?? true,
-        } satisfies TrueFalseData as unknown as Record<string, unknown>,
-        slide
-      );
+      return {
+        correct_answer: slide.interaction_true_false_answer ?? true,
+      } satisfies TrueFalseData as unknown as Record<string, unknown>;
     case 'tap_to_count':
-      return withSlidePromptData(
-        {
-          count_target: slide.interaction_count_target ?? 1,
-          visual_emoji: slide.interaction_visual_emoji ?? '🍎',
-        } satisfies TapToCountData as unknown as Record<string, unknown>,
-        slide
-      );
+      return {
+        count_target: slide.interaction_count_target ?? 1,
+        visual_emoji: slide.interaction_visual_emoji ?? '🍎',
+      } satisfies TapToCountData as unknown as Record<string, unknown>;
     case 'match_pairs':
-      return withSlidePromptData(
-        {
-          pairs: (slide.interaction_items_ar || []).map((leftAr, index) => ({
-            id: `pair-${index + 1}`,
-            left_ar: leftAr,
-            left_en: slide.interaction_items_en?.[index] || '',
-            right_ar: slide.interaction_targets_ar?.[index] || '',
-            right_en: slide.interaction_targets_en?.[index] || '',
-          })),
-          shuffle_right: true,
-        } satisfies MatchPairsData as unknown as Record<string, unknown>,
-        slide
-      );
+      return {
+        pairs: (slide.interaction_items_ar || []).map((leftAr, index) => ({
+          id: `pair-${index + 1}`,
+          left_ar: leftAr,
+          left_en: slide.interaction_items_en?.[index] || '',
+          right_ar: slide.interaction_targets_ar?.[index] || '',
+          right_en: slide.interaction_targets_en?.[index] || '',
+        })),
+        shuffle_right: true,
+      } satisfies MatchPairsData as unknown as Record<string, unknown>;
     case 'sequence_order':
-      return withSlidePromptData(
-        {
-          items: (slide.interaction_items_ar || []).map((textAr, index) => ({
-            id: `step-${index + 1}`,
-            text_ar: textAr,
-            text_en: slide.interaction_items_en?.[index] || '',
-            correct_position: index,
-          })),
-          instruction_type: 'custom',
-        } satisfies SequenceOrderData as unknown as Record<string, unknown>,
-        slide
-      );
+      return {
+        items: (slide.interaction_items_ar || []).map((textAr, index) => ({
+          id: `step-${index + 1}`,
+          text_ar: textAr,
+          text_en: slide.interaction_items_en?.[index] || '',
+          correct_position: index,
+        })),
+        instruction_type: 'custom',
+      } satisfies SequenceOrderData as unknown as Record<string, unknown>;
     case 'sort_groups':
-      return withSlidePromptData(
-        {
-          groups_ar: slide.interaction_targets_ar || [],
-          groups_en: slide.interaction_targets_en || [],
-          items: (slide.interaction_items_ar || []).map((textAr, index) => ({
-            id: `item-${index + 1}`,
-            text_ar: textAr,
-            text_en: slide.interaction_items_en?.[index] || '',
-            group_index: slide.interaction_solution_map?.[index] ?? 0,
-          })),
-        } satisfies SortGroupsData as unknown as Record<string, unknown>,
-        slide
-      );
+      return {
+        groups_ar: slide.interaction_targets_ar || [],
+        groups_en: slide.interaction_targets_en || [],
+        items: (slide.interaction_items_ar || []).map((textAr, index) => ({
+          id: `item-${index + 1}`,
+          text_ar: textAr,
+          text_en: slide.interaction_items_en?.[index] || '',
+          group_index: slide.interaction_solution_map?.[index] ?? 0,
+        })),
+      } satisfies SortGroupsData as unknown as Record<string, unknown>;
     default:
       return null;
   }
@@ -523,8 +479,8 @@ export function buildSlideUpdatesFromTask(task: Pick<
     body_ar: task.instruction_ar,
     body_en: task.instruction_en,
     interaction_type: taskTypeToInteractionType(normalizedType),
-    interaction_prompt_ar: readTaskPrompt(task.task_data, 'prompt_ar', task.instruction_ar),
-    interaction_prompt_en: readTaskPrompt(task.task_data, 'prompt_en', task.instruction_en),
+    interaction_prompt_ar: task.instruction_ar,
+    interaction_prompt_en: task.instruction_en,
     interaction_expected_answer_ar: null,
     interaction_expected_answer_en: null,
     interaction_options_ar: null,
