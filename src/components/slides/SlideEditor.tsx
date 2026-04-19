@@ -1334,7 +1334,12 @@ export default function SlideEditor({
                       type="text"
                       value={noteText}
                       onChange={(e) => setNoteText(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleAddNote(); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddNote();
+                        }
+                      }}
                       placeholder="Add a note..."
                       className="flex-1 bg-white/10 text-white text-xs rounded-lg px-2.5 py-1.5 placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-white/30"
                     />
