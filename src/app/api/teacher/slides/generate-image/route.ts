@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getOpenAIClient } from "@/lib/ai/openai-client";
-import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
+import { canEditAssignedLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
 import { buildSlideImagePrompt } from "@/lib/ai/slide-image-prompt";
 
 export const maxDuration = 60;
@@ -65,7 +65,17 @@ export async function POST(request: NextRequest) {
       .eq("id", lessonId)
       .single();
 
-    if (!lesson || !canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
+    const canEdit = lesson
+      ? await canEditAssignedLesson({
+          supabase,
+          role,
+          userId: user.id,
+          lessonId,
+          lessonCreatedBy: lesson.created_by,
+        })
+      : false;
+
+    if (!lesson || !canEdit) {
       return jsonResponse({ error: "Lesson not found" }, 404);
     }
 

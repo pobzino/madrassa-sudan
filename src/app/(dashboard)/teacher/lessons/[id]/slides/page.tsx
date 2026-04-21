@@ -43,6 +43,7 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [slideDeckUpdatedAt, setSlideDeckUpdatedAt] = useState<string | null>(null);
   const [generationContext, setGenerationContext] = useState<SlideGenerationContext | null>(null);
   const [generationContextReady, setGenerationContextReady] = useState(false);
   const [slideCount, setSlideCount] = useState(
@@ -88,6 +89,10 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
     if (slidesRes?.slideDeck?.slides) {
       setSlides(slidesRes.slideDeck.slides);
     }
+
+    setSlideDeckUpdatedAt(
+      typeof slidesRes?.slideDeck?.updated_at === 'string' ? slidesRes.slideDeck.updated_at : null
+    );
 
     if (slidesRes?.slideDeck?.language_mode === 'en') {
       setLanguageMode('en');
@@ -147,12 +152,20 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
       const res = await fetch(`/api/teacher/lessons/${id}/slides`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slides }),
+        body: JSON.stringify({
+          slides,
+          language_mode: languageMode,
+          expected_updated_at: slideDeckUpdatedAt,
+        }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json();
         toast.error('Save failed: ' + (data.error || 'Unknown error'));
       } else {
+        if (Array.isArray(data.slides)) {
+          setSlides(data.slides as Slide[]);
+        }
+        setSlideDeckUpdatedAt(typeof data.updated_at === 'string' ? data.updated_at : null);
         setLastSaved(new Date().toLocaleTimeString());
       }
     } catch {
@@ -160,7 +173,7 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
     } finally {
       setSaving(false);
     }
-  }, [id, slides]);
+  }, [id, languageMode, slideDeckUpdatedAt, slides]);
 
   const handleSlideLengthPresetChange = useCallback((preset: SlideLengthPreset) => {
     const config = getSlideLengthPresetConfig(preset);

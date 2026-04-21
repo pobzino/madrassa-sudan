@@ -5,9 +5,16 @@ import {
   Pencil,
   Highlighter,
   Square,
+  SquareRoundCorner,
   Circle,
+  Triangle,
+  Diamond,
+  Star,
+  MessageSquare,
   Minus,
   MoveRight,
+  Check,
+  X,
   Zap,
   Type,
   Smile,
@@ -15,6 +22,7 @@ import {
   Undo2,
   Redo2,
   Trash2,
+  type LucideIcon,
 } from 'lucide-react';
 import type { WhiteboardAPI, WhiteboardTool } from '@/hooks/useWhiteboard';
 
@@ -37,17 +45,27 @@ const STICKERS = ['⭐', '❤️', '✅', '❌', '❓', '👆', '👍', '🔴', 
 
 const WIDTHS = [2, 4, 8];
 
-const TOOLS: { tool: WhiteboardTool; icon: typeof Pencil; label: string }[] = [
+const DRAW_TOOLS: { tool: WhiteboardTool; icon: LucideIcon; label: string }[] = [
   { tool: 'pen', icon: Pencil, label: 'Pen' },
   { tool: 'highlighter', icon: Highlighter, label: 'Highlighter' },
-  { tool: 'rect', icon: Square, label: 'Rectangle' },
-  { tool: 'circle', icon: Circle, label: 'Circle' },
-  { tool: 'line', icon: Minus, label: 'Line' },
-  { tool: 'arrow', icon: MoveRight, label: 'Arrow' },
   { tool: 'laser', icon: Zap, label: 'Laser pointer' },
   { tool: 'text', icon: Type, label: 'Text' },
   { tool: 'sticker', icon: Smile, label: 'Sticker' },
   { tool: 'eraser', icon: Eraser, label: 'Eraser' },
+];
+
+const SHAPE_TOOLS: { tool: WhiteboardTool; icon: LucideIcon; label: string }[] = [
+  { tool: 'rect', icon: Square, label: 'Rectangle' },
+  { tool: 'rounded_rect', icon: SquareRoundCorner, label: 'Rounded rectangle' },
+  { tool: 'circle', icon: Circle, label: 'Circle' },
+  { tool: 'triangle', icon: Triangle, label: 'Triangle' },
+  { tool: 'diamond', icon: Diamond, label: 'Diamond' },
+  { tool: 'star', icon: Star, label: 'Star' },
+  { tool: 'speech_bubble', icon: MessageSquare, label: 'Speech bubble' },
+  { tool: 'line', icon: Minus, label: 'Line' },
+  { tool: 'arrow', icon: MoveRight, label: 'Arrow' },
+  { tool: 'check', icon: Check, label: 'Check mark' },
+  { tool: 'cross', icon: X, label: 'Cross mark' },
 ];
 
 export default function WhiteboardToolbar({ whiteboard }: WhiteboardToolbarProps) {
@@ -85,10 +103,28 @@ export default function WhiteboardToolbar({ whiteboard }: WhiteboardToolbarProps
         </div>
       )}
 
+      {/* Shape picker */}
+      <div className="flex max-w-[calc(100vw-24px)] flex-wrap items-center justify-center gap-1 bg-black/80 backdrop-blur-md rounded-2xl px-3 py-2 shadow-2xl">
+        {SHAPE_TOOLS.map(({ tool, icon: Icon, label }) => (
+          <button
+            key={tool}
+            onClick={() => whiteboard.setTool(tool)}
+            title={label}
+            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+              settings.tool === tool
+                ? 'bg-white/30 text-white scale-105'
+                : 'text-white/70 hover:bg-white/15 hover:text-white'
+            }`}
+          >
+            <Icon className="w-[18px] h-[18px]" />
+          </button>
+        ))}
+      </div>
+
       {/* Main toolbar */}
-      <div className="flex items-center gap-1 bg-black/80 backdrop-blur-md rounded-2xl px-3 py-2 shadow-2xl">
+      <div className="flex max-w-[calc(100vw-24px)] flex-wrap items-center justify-center gap-1 bg-black/80 backdrop-blur-md rounded-2xl px-3 py-2 shadow-2xl">
         {/* Drawing tools */}
-        {TOOLS.map(({ tool, icon: Icon, label }) => (
+        {DRAW_TOOLS.map(({ tool, icon: Icon, label }) => (
           <button
             key={tool}
             onClick={() => whiteboard.setTool(tool)}

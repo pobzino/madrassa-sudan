@@ -181,6 +181,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [slides, setSlides] = useState<Slide[]>([]);
   const [slideSaving, setSlideSaving] = useState(false);
   const [slideLastSaved, setSlideLastSaved] = useState<string | null>(null);
+  const [slideDeckUpdatedAt, setSlideDeckUpdatedAt] = useState<string | null>(null);
   const [slideGenContext, setSlideGenContext] = useState<SlideGenerationContext | null>(null);
   const [slideEditorFocusId, setSlideEditorFocusId] = useState<string | null>(null);
   const [slideCount, setSlideCount] = useState(
@@ -278,6 +279,9 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     const loadedSlides = Array.isArray(slidesRes?.slideDeck?.slides)
       ? (slidesRes.slideDeck.slides as Slide[])
       : [];
+    setSlideDeckUpdatedAt(
+      typeof slidesRes?.slideDeck?.updated_at === "string" ? slidesRes.slideDeck.updated_at : null
+    );
     if (slidesRes?.slideDeck?.language_mode === "en") {
       setSlideLanguageMode("en");
     } else if (
@@ -412,17 +416,27 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         body: JSON.stringify({
           slides: slidesWithActivities,
           language_mode: slideLanguageMode,
+          expected_updated_at: slideDeckUpdatedAt,
         }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json();
         toast.error("Save failed: " + (data.error || "Unknown error"));
       } else {
+        const savedSlides = Array.isArray(data.slides)
+          ? (data.slides as Slide[])
+          : slidesWithActivities;
+        const savedTasks = Array.isArray(data.tasks)
+          ? (data.tasks as LessonTaskForm[]).map(normalizeLessonTaskForm)
+          : syncedTasks;
+        setSlides(savedSlides);
+        setLessonTasks(savedTasks);
+        setSlideDeckUpdatedAt(typeof data.updated_at === "string" ? data.updated_at : null);
         setSlideLastSaved(new Date().toLocaleTimeString());
       }
     } catch { toast.error("Save failed"); }
     finally { setSlideSaving(false); }
-  }, [id, lessonTasks, slideLanguageMode, slides]);
+  }, [id, lessonTasks, slideDeckUpdatedAt, slideLanguageMode, slides]);
 
 
   const slideGenerationBlockedReason = getCurriculumRequirementMessage(
@@ -558,6 +572,8 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, lessonTasks);
         setSlides(slidesWithActivities);
         setLessonTasks(syncedTasks);
+        let persistedSlides = slidesWithActivities;
+        let persistedTasks = syncedTasks;
 
         const slideSaveResponse = await fetch(`/api/teacher/lessons/${id}/slides`, {
           method: "PUT",
@@ -565,15 +581,28 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           body: JSON.stringify({
             slides: slidesWithActivities,
             language_mode: slideLanguageMode,
+            expected_updated_at: slideDeckUpdatedAt,
           }),
         });
+        const slideSaveData = await slideSaveResponse.json().catch(() => ({}));
 
         if (!slideSaveResponse.ok) {
-          const data = await slideSaveResponse.json().catch(() => ({}));
-          throw new Error("Slides: " + (data.error || "Failed to save slides"));
+          throw new Error("Slides: " + (slideSaveData.error || "Failed to save slides"));
         }
 
-        await syncLessonTasks(supabase, id, syncedTasks);
+        if (Array.isArray(slideSaveData.slides)) {
+          persistedSlides = slideSaveData.slides as Slide[];
+          setSlides(persistedSlides);
+        }
+        if (Array.isArray(slideSaveData.tasks)) {
+          persistedTasks = (slideSaveData.tasks as LessonTaskForm[]).map(normalizeLessonTaskForm);
+          setLessonTasks(persistedTasks);
+        }
+        setSlideDeckUpdatedAt(
+          typeof slideSaveData.updated_at === "string" ? slideSaveData.updated_at : null
+        );
+
+        await syncLessonTasks(supabase, id, persistedTasks);
         lastPersistedPublishedRef.current = form.is_published;
         if (showSuccessMessage) {
           setSaveMessage({ type: "success", text: "Saved" });
@@ -584,8 +613,8 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         lastSavedSnapshotRef.current = buildEditorSnapshot({
           form,
           assignedCohortIds: normalizedCohortIds,
-          slides: slidesWithActivities,
-          lessonTasks: syncedTasks,
+          slides: persistedSlides,
+          lessonTasks: persistedTasks,
           slideLanguageMode,
         });
         setLastSavedAt(savedAt);
@@ -605,6 +634,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       lessonTasks,
       publishReadiness,
       requiresCurriculum,
+      slideDeckUpdatedAt,
       slideLanguageMode,
       slides,
     ]

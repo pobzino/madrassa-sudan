@@ -7,7 +7,7 @@ import {
 } from "@/lib/lesson-activities";
 import type { Slide } from "@/lib/slides.types";
 import { createClient } from "@/lib/supabase/server";
-import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
+import { canEditAssignedLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
 
 export async function GET(
   _request: NextRequest,
@@ -36,15 +36,32 @@ export async function GET(
       .eq("id", lessonId)
       .single();
 
-    if (!lesson || !canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
+    const canEdit = lesson
+      ? await canEditAssignedLesson({
+          supabase,
+          role,
+          userId: user.id,
+          lessonId,
+          lessonCreatedBy: lesson.created_by,
+        })
+      : false;
+
+    if (!lesson) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (!canEdit) {
+      return NextResponse.json(
+        { error: "You do not have permission to edit this lesson." },
+        { status: 403 }
+      );
     }
 
     const { data: deck } = await supabase
       .from("lesson_slides")
       .select("*")
       .eq("lesson_id", lessonId)
-      .single();
+      .maybeSingle();
 
     return NextResponse.json({ slideDeck: deck || null });
   } catch (error) {
@@ -80,15 +97,58 @@ export async function PUT(
       .eq("id", lessonId)
       .single();
 
-    if (!lesson || !canManageLesson({ role, userId: user.id, lessonCreatedBy: lesson.created_by })) {
+    const canEdit = lesson
+      ? await canEditAssignedLesson({
+          supabase,
+          role,
+          userId: user.id,
+          lessonId,
+          lessonCreatedBy: lesson.created_by,
+        })
+      : false;
+
+    if (!lesson) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    if (!canEdit) {
+      return NextResponse.json(
+        { error: "You do not have permission to edit this lesson." },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
-    const { slides, language_mode } = body;
+    const { slides, language_mode, expected_updated_at } = body;
 
     if (!Array.isArray(slides)) {
       return NextResponse.json({ error: "slides must be an array" }, { status: 400 });
+    }
+
+    const { data: existingDeck, error: existingDeckError } = await supabase
+      .from("lesson_slides")
+      .select("updated_at")
+      .eq("lesson_id", lessonId)
+      .maybeSingle();
+
+    if (existingDeckError) {
+      console.error("Load existing slide deck error:", existingDeckError);
+      return NextResponse.json({ error: existingDeckError.message }, { status: 500 });
+    }
+
+    if (
+      typeof expected_updated_at === "string" &&
+      existingDeck?.updated_at &&
+      expected_updated_at !== existingDeck.updated_at
+    ) {
+      return NextResponse.json(
+        {
+          error: "This lesson was updated by someone else. Reload before saving.",
+          code: "SLIDE_DECK_CONFLICT",
+          updated_at: existingDeck.updated_at,
+        },
+        { status: 409 }
+      );
     }
 
     const { data: existingTasks, error: tasksError } = await supabase
@@ -112,21 +172,67 @@ export async function PUT(
     const slidesWithActivities = ensureSlidesForSupportedTasks(slides as Slide[], normalizedTasks);
     const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, normalizedTasks);
 
-    const { error: slidesError } = await supabase
-      .from("lesson_slides")
-      .upsert(
-        {
-          lesson_id: lessonId,
-          slides: slidesWithActivities as unknown as Json,
-          language_mode: language_mode || "ar",
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "lesson_id" }
-      );
+    const savedAt = new Date().toISOString();
+    let savedDeck: { slides: Json | null; updated_at: string | null } | null = null;
+    const savePayload = {
+      lesson_id: lessonId,
+      slides: slidesWithActivities as unknown as Json,
+      language_mode: language_mode || "ar",
+      updated_at: savedAt,
+    };
 
-    if (slidesError) {
-      console.error("Save slides error:", slidesError);
-      return NextResponse.json({ error: slidesError.message }, { status: 500 });
+    if (existingDeck) {
+      let saveQuery = supabase
+        .from("lesson_slides")
+        .update(savePayload)
+        .eq("lesson_id", lessonId);
+
+      if (typeof expected_updated_at === "string") {
+        saveQuery = saveQuery.eq("updated_at", expected_updated_at);
+      }
+
+      const { data: updatedDeck, error: slidesError } = await saveQuery
+        .select("slides, updated_at")
+        .maybeSingle();
+
+      if (slidesError) {
+        console.error("Save slides error:", slidesError);
+        return NextResponse.json({ error: slidesError.message }, { status: 500 });
+      }
+
+      if (!updatedDeck) {
+        return NextResponse.json(
+          {
+            error: "This lesson was updated by someone else. Reload before saving.",
+            code: "SLIDE_DECK_CONFLICT",
+          },
+          { status: 409 }
+        );
+      }
+
+      savedDeck = updatedDeck;
+    } else {
+      const { data: insertedDeck, error: slidesError } = await supabase
+        .from("lesson_slides")
+        .insert(savePayload)
+        .select("slides, updated_at")
+        .single();
+
+      if (slidesError) {
+        if (slidesError.code === "23505") {
+          return NextResponse.json(
+            {
+              error: "This lesson was updated by someone else. Reload before saving.",
+              code: "SLIDE_DECK_CONFLICT",
+            },
+            { status: 409 }
+          );
+        }
+        console.error("Save slides error:", slidesError);
+        return NextResponse.json({ error: slidesError.message }, { status: 500 });
+      }
+
+      savedDeck = insertedDeck;
     }
 
     const upsertRows = syncedTasks.map((task) => ({
@@ -176,7 +282,14 @@ export async function PUT(
       }
     }
 
-    return NextResponse.json({ success: true, slides: slidesWithActivities, tasks: syncedTasks });
+    return NextResponse.json({
+      success: true,
+      slides: (Array.isArray(savedDeck?.slides)
+        ? savedDeck.slides
+        : slidesWithActivities) as unknown as Slide[],
+      tasks: syncedTasks,
+      updated_at: savedDeck?.updated_at || savedAt,
+    });
   } catch (error) {
     console.error("Save slides error:", error);
     return NextResponse.json({ error: "Failed to save slides" }, { status: 500 });

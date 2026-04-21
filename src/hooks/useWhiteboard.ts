@@ -10,9 +10,16 @@ export type WhiteboardTool =
   | 'highlighter'
   | 'eraser'
   | 'rect'
+  | 'rounded_rect'
   | 'circle'
+  | 'triangle'
+  | 'diamond'
+  | 'star'
+  | 'speech_bubble'
   | 'line'
   | 'arrow'
+  | 'check'
+  | 'cross'
   | 'text'
   | 'sticker'
   | 'laser';
@@ -58,9 +65,16 @@ export type WhiteboardEventTool =
   | 'pen'
   | 'highlighter'
   | 'rect'
+  | 'rounded_rect'
   | 'circle'
+  | 'triangle'
+  | 'diamond'
+  | 'star'
+  | 'speech_bubble'
   | 'line'
-  | 'arrow';
+  | 'arrow'
+  | 'check'
+  | 'cross';
 
 export type WhiteboardEvent =
   | {
@@ -101,9 +115,16 @@ function isEventTool(tool: WhiteboardTool): tool is WhiteboardEventTool {
     tool === 'pen' ||
     tool === 'highlighter' ||
     tool === 'rect' ||
+    tool === 'rounded_rect' ||
     tool === 'circle' ||
+    tool === 'triangle' ||
+    tool === 'diamond' ||
+    tool === 'star' ||
+    tool === 'speech_bubble' ||
     tool === 'line' ||
-    tool === 'arrow'
+    tool === 'arrow' ||
+    tool === 'check' ||
+    tool === 'cross'
   );
 }
 
@@ -151,7 +172,7 @@ function strokeBBox(stroke: Stroke): { x1: number; y1: number; x2: number; y2: n
     return { x1: x1 - pad, y1: y1 - pad, x2: x2 + pad, y2: y2 + pad };
   }
 
-  if ((stroke.tool === 'rect' || stroke.tool === 'circle' || stroke.tool === 'line' || stroke.tool === 'arrow') && stroke.start && stroke.end) {
+  if (isBoundedStrokeTool(stroke.tool) && stroke.start && stroke.end) {
     x1 = Math.min(stroke.start.x, stroke.end.x);
     y1 = Math.min(stroke.start.y, stroke.end.y);
     x2 = Math.max(stroke.start.x, stroke.end.x);
@@ -171,6 +192,67 @@ function strokeBBox(stroke: Stroke): { x1: number; y1: number; x2: number; y2: n
   }
 
   return { x1: 0, y1: 0, x2: 0, y2: 0 };
+}
+
+function isBoundedStrokeTool(tool: WhiteboardTool): tool is Exclude<WhiteboardEventTool, 'pen' | 'highlighter'> {
+  return isEventTool(tool) && tool !== 'pen' && tool !== 'highlighter';
+}
+
+function getScaledBounds(stroke: Stroke, scaleX: number, scaleY: number) {
+  const start = stroke.start;
+  const end = stroke.end;
+  if (!start || !end) return null;
+  const x = Math.min(start.x, end.x) * scaleX;
+  const y = Math.min(start.y, end.y) * scaleY;
+  const w = Math.abs(end.x - start.x) * scaleX;
+  const h = Math.abs(end.y - start.y) * scaleY;
+  return { x, y, w, h, cx: x + w / 2, cy: y + h / 2 };
+}
+
+function applyShapeStroke(
+  ctx: CanvasRenderingContext2D,
+  stroke: Stroke,
+  scaleX: number,
+  scaleY: number
+) {
+  ctx.strokeStyle = stroke.color;
+  ctx.fillStyle = stroke.color;
+  ctx.lineWidth = stroke.width * Math.min(scaleX, scaleY);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+}
+
+function roundedRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, radius: number) {
+  const r = Math.min(radius, Math.abs(w) / 2, Math.abs(h) / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number) {
+  const outer = Math.max(radius, 1);
+  const inner = outer * 0.45;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+    const r = i % 2 === 0 ? outer : inner;
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  }
+  ctx.closePath();
 }
 
 // ── Rendering ──
@@ -210,76 +292,117 @@ export function renderStrokeToCtx(ctx: CanvasRenderingContext2D, stroke: Stroke,
     ctx.fill(path);
   }
 
-  if (stroke.tool === 'rect' && stroke.start && stroke.end) {
-    const x = Math.min(stroke.start.x, stroke.end.x) * scaleX;
-    const y = Math.min(stroke.start.y, stroke.end.y) * scaleY;
-    const w = Math.abs(stroke.end.x - stroke.start.x) * scaleX;
-    const h = Math.abs(stroke.end.y - stroke.start.y) * scaleY;
-    ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = stroke.width * Math.min(scaleX, scaleY);
-    ctx.lineJoin = 'round';
-    ctx.strokeRect(x, y, w, h);
-  }
+  if (isBoundedStrokeTool(stroke.tool) && stroke.start && stroke.end) {
+    const bounds = getScaledBounds(stroke, scaleX, scaleY);
+    if (bounds) {
+      const { x, y, w, h, cx, cy } = bounds;
+      const sx = stroke.start.x * scaleX;
+      const sy = stroke.start.y * scaleY;
+      const ex = stroke.end.x * scaleX;
+      const ey = stroke.end.y * scaleY;
+      applyShapeStroke(ctx, stroke, scaleX, scaleY);
 
-  if (stroke.tool === 'circle' && stroke.start && stroke.end) {
-    const cx = ((stroke.start.x + stroke.end.x) / 2) * scaleX;
-    const cy = ((stroke.start.y + stroke.end.y) / 2) * scaleY;
-    const rx = (Math.abs(stroke.end.x - stroke.start.x) / 2) * scaleX;
-    const ry = (Math.abs(stroke.end.y - stroke.start.y) / 2) * scaleY;
-    ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = stroke.width * Math.min(scaleX, scaleY);
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, Math.max(rx, 1), Math.max(ry, 1), 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
+      if (stroke.tool === 'rect') {
+        ctx.strokeRect(x, y, w, h);
+      }
 
-  if (stroke.tool === 'line' && stroke.start && stroke.end) {
-    ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = stroke.width * Math.min(scaleX, scaleY);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(stroke.start.x * scaleX, stroke.start.y * scaleY);
-    ctx.lineTo(stroke.end.x * scaleX, stroke.end.y * scaleY);
-    ctx.stroke();
-  }
+      if (stroke.tool === 'rounded_rect') {
+        roundedRectPath(ctx, x, y, w, h, Math.min(w, h) * 0.18);
+        ctx.stroke();
+      }
 
-  if (stroke.tool === 'arrow' && stroke.start && stroke.end) {
-    const sx = stroke.start.x * scaleX;
-    const sy = stroke.start.y * scaleY;
-    const ex = stroke.end.x * scaleX;
-    const ey = stroke.end.y * scaleY;
-    const lineWidth = stroke.width * Math.min(scaleX, scaleY);
-    const headLen = Math.max(lineWidth * 4, 14);
-    const angle = Math.atan2(ey - sy, ex - sx);
-    // Shorten the shaft slightly so it doesn't poke past the head
-    const shaftEndX = ex - Math.cos(angle) * headLen * 0.6;
-    const shaftEndY = ey - Math.sin(angle) * headLen * 0.6;
+      if (stroke.tool === 'circle') {
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, Math.max(w / 2, 1), Math.max(h / 2, 1), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
-    ctx.strokeStyle = stroke.color;
-    ctx.fillStyle = stroke.color;
-    ctx.lineWidth = lineWidth;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+      if (stroke.tool === 'triangle') {
+        ctx.beginPath();
+        ctx.moveTo(cx, y);
+        ctx.lineTo(x + w, y + h);
+        ctx.lineTo(x, y + h);
+        ctx.closePath();
+        ctx.stroke();
+      }
 
-    // Shaft
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(shaftEndX, shaftEndY);
-    ctx.stroke();
+      if (stroke.tool === 'diamond') {
+        ctx.beginPath();
+        ctx.moveTo(cx, y);
+        ctx.lineTo(x + w, cy);
+        ctx.lineTo(cx, y + h);
+        ctx.lineTo(x, cy);
+        ctx.closePath();
+        ctx.stroke();
+      }
 
-    // Arrowhead (filled triangle)
-    ctx.beginPath();
-    ctx.moveTo(ex, ey);
-    ctx.lineTo(
-      ex - headLen * Math.cos(angle - Math.PI / 6),
-      ey - headLen * Math.sin(angle - Math.PI / 6)
-    );
-    ctx.lineTo(
-      ex - headLen * Math.cos(angle + Math.PI / 6),
-      ey - headLen * Math.sin(angle + Math.PI / 6)
-    );
-    ctx.closePath();
-    ctx.fill();
+      if (stroke.tool === 'star') {
+        starPath(ctx, cx, cy, Math.min(w, h) / 2);
+        ctx.stroke();
+      }
+
+      if (stroke.tool === 'speech_bubble') {
+        const tailHeight = Math.min(Math.max(h * 0.18, 6), Math.max(h - 1, 1));
+        const bubbleHeight = Math.max(h - tailHeight, 1);
+        roundedRectPath(ctx, x, y, w, bubbleHeight, Math.min(w, bubbleHeight) * 0.14);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x + w * 0.25, y + bubbleHeight);
+        ctx.lineTo(x + w * 0.18, y + h);
+        ctx.lineTo(x + w * 0.42, y + bubbleHeight);
+        ctx.stroke();
+      }
+
+      if (stroke.tool === 'line') {
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+      }
+
+      if (stroke.tool === 'arrow') {
+        const lineWidth = stroke.width * Math.min(scaleX, scaleY);
+        const headLen = Math.max(lineWidth * 4, 14);
+        const angle = Math.atan2(ey - sy, ex - sx);
+        const shaftEndX = ex - Math.cos(angle) * headLen * 0.6;
+        const shaftEndY = ey - Math.sin(angle) * headLen * 0.6;
+
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(shaftEndX, shaftEndY);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(
+          ex - headLen * Math.cos(angle - Math.PI / 6),
+          ey - headLen * Math.sin(angle - Math.PI / 6)
+        );
+        ctx.lineTo(
+          ex - headLen * Math.cos(angle + Math.PI / 6),
+          ey - headLen * Math.sin(angle + Math.PI / 6)
+        );
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      if (stroke.tool === 'check') {
+        ctx.beginPath();
+        ctx.moveTo(x + w * 0.18, y + h * 0.55);
+        ctx.lineTo(x + w * 0.42, y + h * 0.78);
+        ctx.lineTo(x + w * 0.82, y + h * 0.25);
+        ctx.stroke();
+      }
+
+      if (stroke.tool === 'cross') {
+        ctx.beginPath();
+        ctx.moveTo(x + w * 0.2, y + h * 0.2);
+        ctx.lineTo(x + w * 0.8, y + h * 0.8);
+        ctx.moveTo(x + w * 0.8, y + h * 0.2);
+        ctx.lineTo(x + w * 0.2, y + h * 0.8);
+        ctx.stroke();
+      }
+    }
   }
 
   if (stroke.tool === 'text' && stroke.position && stroke.text) {

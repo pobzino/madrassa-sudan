@@ -7,7 +7,7 @@ import {
   compactSimEvents,
   type SimEvent,
   type SimClipSegment,
-  type SimSurfaceState,
+  type SimStrokeTool,
 } from '@/lib/sim.types';
 import type { Slide } from '@/lib/slides.types';
 
@@ -162,6 +162,46 @@ describe('applySimEvent', () => {
     state = applySimEvent(state, { t: 300, type: 'stroke_erase', slide_id: 's1', id: 'st1' });
     expect(state.slides['s1'].strokes).toHaveLength(1);
     expect(state.slides['s1'].strokes[0].id).toBe('st2');
+  });
+
+  it('handles extended shape strokes', () => {
+    const shapeTools: SimStrokeTool[] = [
+      'rounded_rect',
+      'triangle',
+      'diamond',
+      'star',
+      'speech_bubble',
+      'check',
+      'cross',
+    ];
+
+    for (const tool of shapeTools) {
+      let state = createInitialSimSurface(deck);
+      state = applySimEvent(state, {
+        t: 100,
+        type: 'stroke_start',
+        slide_id: 's1',
+        id: tool,
+        tool,
+        color: '#2563eb',
+        width: 4,
+        point: { x: 10, y: 20, pressure: 0 },
+      });
+      state = applySimEvent(state, {
+        t: 150,
+        type: 'stroke_end',
+        slide_id: 's1',
+        id: tool,
+        start: { x: 10, y: 20, pressure: 0 },
+        end: { x: 80, y: 90, pressure: 0 },
+      });
+
+      const stroke = state.slides['s1'].strokes[0];
+      expect(stroke.tool).toBe(tool);
+      expect(stroke.start).toEqual({ x: 10, y: 20, pressure: 0 });
+      expect(stroke.end).toEqual({ x: 80, y: 90, pressure: 0 });
+      expect(stroke.points).toEqual([]);
+    }
   });
 
   it('ignores events for unknown slide IDs', () => {
@@ -338,6 +378,35 @@ describe('compactSimEvents', () => {
     const spot = compacted[1] as SimEvent & { x: number; y: number };
     expect(spot.x).toBe(33.5);
     expect(spot.y).toBe(66.8);
+  });
+
+  it('rounds extended shape stroke bounds', () => {
+    const events: SimEvent[] = [
+      {
+        t: 0,
+        type: 'stroke_start',
+        slide_id: 's1',
+        id: 'shape',
+        tool: 'speech_bubble',
+        color: '#000',
+        width: 2,
+        point: { x: 10.123, y: 20.456, pressure: 0.123 },
+      },
+      {
+        t: 10,
+        type: 'stroke_end',
+        slide_id: 's1',
+        id: 'shape',
+        start: { x: 10.123, y: 20.456, pressure: 0.123 },
+        end: { x: 80.789, y: 90.111, pressure: 0.987 },
+      },
+    ];
+    const compacted = compactSimEvents(events);
+    const start = compacted[0] as Extract<SimEvent, { type: 'stroke_start' }>;
+    const end = compacted[1] as Extract<SimEvent, { type: 'stroke_end' }>;
+    expect(start.point).toEqual({ x: 10.1, y: 20.5, pressure: 0.1 });
+    expect(end.start).toEqual({ x: 10.1, y: 20.5, pressure: 0.1 });
+    expect(end.end).toEqual({ x: 80.8, y: 90.1, pressure: 1 });
   });
 
   it('handles empty events array', () => {

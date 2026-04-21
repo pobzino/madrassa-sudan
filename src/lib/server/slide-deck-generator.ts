@@ -20,7 +20,7 @@ import {
   type PolicySlide,
   type SlideLessonPhase,
 } from "../slide-generator-policy";
-import { canManageLesson, getTeacherRole } from "./teacher-lesson-access";
+import { canEditAssignedLesson, getTeacherRole } from "./teacher-lesson-access";
 
 const MAX_TRANSCRIPT_CONTEXT_CHARS = 1600;
 const MAX_CONTENT_BLOCKS = 2;
@@ -169,7 +169,17 @@ export async function generateSlidesForLesson({
     .eq("id", lessonId)
     .single();
 
-  if (!lesson || !canManageLesson({ role, userId, lessonCreatedBy: lesson.created_by })) {
+  const canEdit = lesson
+    ? await canEditAssignedLesson({
+        supabase,
+        role,
+        userId,
+        lessonId,
+        lessonCreatedBy: lesson.created_by,
+      })
+    : false;
+
+  if (!lesson || !canEdit) {
     throw new SlideGenerationError("Lesson not found", 404);
   }
 

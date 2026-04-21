@@ -20,7 +20,19 @@ import type { ExplorationWidgetType, ExplorationWidgetConfig } from '@/lib/explo
 
 export type SimStrokeTool = Extract<
   WhiteboardTool,
-  'pen' | 'highlighter' | 'rect' | 'circle' | 'line' | 'arrow'
+  | 'pen'
+  | 'highlighter'
+  | 'rect'
+  | 'rounded_rect'
+  | 'circle'
+  | 'triangle'
+  | 'diamond'
+  | 'star'
+  | 'speech_bubble'
+  | 'line'
+  | 'arrow'
+  | 'check'
+  | 'cross'
 >;
 
 /**
@@ -54,8 +66,8 @@ export type SimEvent =
       type: 'stroke_end';
       slide_id: string;
       id: string;
-      // Final shape for non-freehand tools (rect / circle / line / arrow) so
-      // replay doesn't need to replay individual point events for shapes.
+      // Final shape for non-freehand tools so replay doesn't need to replay
+      // individual point events for bounded shapes.
       start?: Point;
       end?: Point;
     }
