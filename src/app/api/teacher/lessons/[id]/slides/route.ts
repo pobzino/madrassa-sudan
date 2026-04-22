@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Json } from "@/lib/database.types";
 import {
-  ensureSlidesForSupportedTasks,
   normalizeLessonTaskForm,
-  syncTaskFormsFromSlides,
+  reconcileEditedSlidesWithTasks,
 } from "@/lib/lesson-activities";
 import type { Slide } from "@/lib/slides.types";
 import { createClient } from "@/lib/supabase/server";
@@ -169,8 +168,10 @@ export async function PUT(
       })
     );
 
-    const slidesWithActivities = ensureSlidesForSupportedTasks(slides as Slide[], normalizedTasks);
-    const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, normalizedTasks);
+    const { slides: slidesWithActivities, tasks: syncedTasks } = reconcileEditedSlidesWithTasks(
+      slides as Slide[],
+      normalizedTasks
+    );
 
     const savedAt = new Date().toISOString();
     let savedDeck: { slides: Json | null; updated_at: string | null } | null = null;

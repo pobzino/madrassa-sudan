@@ -32,8 +32,8 @@ const InteractionResultsPanel = dynamic(() => import("@/components/teacher/Inter
 import type { SimPayload } from "@/lib/sim.types";
 import type { Slide } from "@/lib/slides.types";
 import {
-  ensureSlidesForSupportedTasks,
   normalizeLessonTaskForm,
+  reconcileEditedSlidesWithTasks,
   syncTaskFormsFromSlides,
 } from "@/lib/lesson-activities";
 import type { LessonTaskForm } from "@/lib/tasks.types";
@@ -349,10 +349,9 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         task_type: String(task.task_type),
       })
     );
-    const slidesWithActivities = ensureSlidesForSupportedTasks(loadedSlides, taskForms);
-    const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, taskForms);
-    setSlides(slidesWithActivities);
-    setLessonTasks(syncedTasks);
+    const reconciled = reconcileEditedSlidesWithTasks(loadedSlides, taskForms);
+    setSlides(reconciled.slides);
+    setLessonTasks(reconciled.tasks);
 
     setLoading(false);
   }, [id]);
@@ -406,8 +405,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const handleSaveSlides = useCallback(async () => {
     setSlideSaving(true);
     try {
-      const slidesWithActivities = ensureSlidesForSupportedTasks(slides, lessonTasks);
-      const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, lessonTasks);
+      const { slides: slidesWithActivities, tasks: syncedTasks } = reconcileEditedSlidesWithTasks(
+        slides,
+        lessonTasks
+      );
       setSlides(slidesWithActivities);
       setLessonTasks(syncedTasks);
       const res = await fetch(`/api/teacher/lessons/${id}/slides`, {
@@ -568,8 +569,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           }
         }
 
-        const slidesWithActivities = ensureSlidesForSupportedTasks(slides, lessonTasks);
-        const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, lessonTasks);
+        const { slides: slidesWithActivities, tasks: syncedTasks } = reconcileEditedSlidesWithTasks(
+          slides,
+          lessonTasks
+        );
         setSlides(slidesWithActivities);
         setLessonTasks(syncedTasks);
         let persistedSlides = slidesWithActivities;

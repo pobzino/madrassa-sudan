@@ -990,3 +990,17 @@ export function ensureSlidesForSupportedTasks(
     sequence: index,
   }));
 }
+
+export function reconcileEditedSlidesWithTasks(
+  slides: Slide[],
+  currentTasks: LessonTaskForm[]
+): { slides: Slide[]; tasks: LessonTaskForm[] } {
+  // The slide editor is the source of truth for visible activity text. Derive
+  // task rows from edited slides before ensuring missing task-backed slides,
+  // otherwise stale lesson_tasks rows can overwrite fresh teacher edits.
+  const tasksFromEditedSlides = syncTaskFormsFromSlides(slides, currentTasks);
+  const slidesWithActivities = ensureSlidesForSupportedTasks(slides, tasksFromEditedSlides);
+  const syncedTasks = syncTaskFormsFromSlides(slidesWithActivities, tasksFromEditedSlides);
+
+  return { slides: slidesWithActivities, tasks: syncedTasks };
+}

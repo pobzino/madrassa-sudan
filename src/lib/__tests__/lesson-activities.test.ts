@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ensureSlidesForSupportedTasks,
   getActivityInstructionFromSlide,
+  reconcileEditedSlidesWithTasks,
   syncTaskFormsFromSlides,
 } from '@/lib/lesson-activities';
 import type { LessonTaskForm } from '@/lib/tasks.types';
@@ -141,5 +142,48 @@ describe('lesson activity slide sync', () => {
     expect(syncedSlide.body_en).toBe('Legacy instruction EN');
     expect(syncedSlide.interaction_prompt_ar).toBe('Legacy instruction AR');
     expect(syncedSlide.interaction_prompt_en).toBe('Legacy instruction EN');
+  });
+
+  it('does not overwrite edited slide text with stale task rows when reconciling for save', () => {
+    const editedSlide = makeActivitySlide({
+      title_ar: 'Edited slide AR',
+      title_en: 'Edited slide EN',
+      body_ar: 'Edited visible body AR',
+      body_en: 'Edited visible body EN',
+      interaction_prompt_ar: 'Edited prompt AR',
+      interaction_prompt_en: 'Edited prompt EN',
+      speaker_notes_ar: 'Edited speaker notes AR',
+      speaker_notes_en: 'Edited speaker notes EN',
+      interaction_options_ar: ['اختيار جديد 1', 'اختيار جديد 2'],
+      interaction_options_en: ['New choice 1', 'New choice 2'],
+    });
+    const staleTask = makeTask({
+      title_ar: 'Stale task AR',
+      title_en: 'Stale task EN',
+      instruction_ar: 'Stale instruction AR',
+      instruction_en: 'Stale instruction EN',
+      task_data: {
+        prompt_ar: 'Stale prompt AR',
+        prompt_en: 'Stale prompt EN',
+        options_ar: ['قديم 1', 'قديم 2'],
+        options_en: ['Old 1', 'Old 2'],
+        correct_index: 0,
+      },
+    });
+
+    const { slides, tasks } = reconcileEditedSlidesWithTasks([editedSlide], [staleTask]);
+
+    expect(slides[0].title_ar).toBe('Edited slide AR');
+    expect(slides[0].title_en).toBe('Edited slide EN');
+    expect(slides[0].body_ar).toBe('Edited visible body AR');
+    expect(slides[0].body_en).toBe('Edited visible body EN');
+    expect(slides[0].interaction_prompt_ar).toBe('Edited prompt AR');
+    expect(slides[0].interaction_prompt_en).toBe('Edited prompt EN');
+    expect(slides[0].speaker_notes_ar).toBe('Edited speaker notes AR');
+    expect(slides[0].speaker_notes_en).toBe('Edited speaker notes EN');
+    expect(slides[0].interaction_options_en).toEqual(['New choice 1', 'New choice 2']);
+    expect(tasks[0].title_ar).toBe('Edited slide AR');
+    expect(tasks[0].instruction_ar).toBe('Edited visible body AR');
+    expect(tasks[0].task_data.prompt_ar).toBe('Edited prompt AR');
   });
 });
