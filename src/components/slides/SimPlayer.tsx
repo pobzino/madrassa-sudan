@@ -44,6 +44,13 @@ import { slideToInteraction } from '@/lib/interactions/adapters';
 import { gradeInteraction } from '@/lib/interactions/grader';
 import { OwlCorrect, OwlWrong, OwlPointing } from '@/components/illustrations';
 
+function isEditableKeyTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(
+    target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')
+  );
+}
+
 interface SimPlayerProps {
   payload: SimPayload;
   language?: 'ar' | 'en';
@@ -1146,9 +1153,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code !== 'Space') return;
-      // Don't hijack space if user is typing in an input/textarea
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (isEditableKeyTarget(e.target)) return;
       e.preventDefault();
       if (isPlaying) handlePause();
       else handlePlay();

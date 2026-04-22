@@ -42,7 +42,8 @@ export async function GET(
     const access = await assertCanManageLesson(lessonId, user.id, supabase);
     if (!access.ok) return access.response;
 
-    const { data: row, error } = await supabase
+    const dataClient = hasServiceRoleConfig() ? createServiceClient() : supabase;
+    const { data: row, error } = await dataClient
       .from('lesson_sims')
       .select('*')
       .eq('id', simId)
@@ -113,6 +114,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
+    const dataClient = hasServiceRoleConfig() ? createServiceClient() : supabase;
     const updates: { clip_segments?: Json | null; events?: Json } = {};
     if (body.clip_segments !== undefined) {
       updates.clip_segments = body.clip_segments as unknown as Json | null;
@@ -121,7 +123,7 @@ export async function PATCH(
       updates.events = body.events as unknown as Json;
     }
 
-    const { data: updatedRow, error: updateError } = await supabase
+    const { data: updatedRow, error: updateError } = await dataClient
       .from('lesson_sims')
       .update(updates)
       .eq('id', simId)
@@ -177,7 +179,8 @@ export async function DELETE(
       );
     }
 
-    const { data: row } = await supabase
+    const dataClient = hasServiceRoleConfig() ? createServiceClient() : supabase;
+    const { data: row } = await dataClient
       .from('lesson_sims')
       .select('id, audio_path, lesson_id')
       .eq('id', simId)
@@ -198,7 +201,7 @@ export async function DELETE(
       }
     }
 
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await dataClient
       .from('lesson_sims')
       .delete()
       .eq('id', simId)

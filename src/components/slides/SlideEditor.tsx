@@ -48,6 +48,13 @@ function formatDuration(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+function isEditableKeyTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(
+    target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')
+  );
+}
+
 // ExplorationPicker is now imported from @/components/explorations/ExplorationPicker
 
 /** Live spotlight overlay for the teacher during recording. Tracks the pointer. */
@@ -931,6 +938,8 @@ export default function SlideEditor({
   useEffect(() => {
     if (!presenting) return;
     function handleKey(e: KeyboardEvent) {
+      if (isEditableKeyTarget(e.target)) return;
+
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
         e.preventDefault();
         goToNextPresentStep();

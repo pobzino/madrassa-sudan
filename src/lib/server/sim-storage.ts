@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient, hasServiceRoleConfig } from '@/lib/supabase/service';
-import { canManageLesson, getTeacherRole } from '@/lib/server/teacher-lesson-access';
+import { canEditAssignedLesson, getTeacherRole } from '@/lib/server/teacher-lesson-access';
 
 export const SIM_AUDIO_BUCKET = 'sim-audio';
 export const SIGNED_URL_TTL_SECONDS = 60 * 60 * 6; // 6h — long enough for a review session
@@ -45,9 +45,8 @@ export async function signAudioUrl(
 
 /**
  * Resolve the caller's role + the lesson's publish state, 404-ing as a single
- * opaque error when either access check fails. Returns either an ok result
- * (with `lessonPublished` for draft-only gating) or a NextResponse to return
- * directly from the handler.
+ * opaque error when either access check fails. Assigned teachers can edit sims
+ * for lessons shared through their cohorts, matching the slide editor.
  */
 export async function assertCanManageLesson(
   lessonId: string,
@@ -68,10 +67,17 @@ export async function assertCanManageLesson(
     .eq('id', lessonId)
     .single();
 
-  if (
-    !lesson ||
-    !canManageLesson({ role, userId, lessonCreatedBy: lesson.created_by })
-  ) {
+  const canEdit = lesson
+    ? await canEditAssignedLesson({
+        supabase,
+        role,
+        userId,
+        lessonId,
+        lessonCreatedBy: lesson.created_by,
+      })
+    : false;
+
+  if (!lesson || !canEdit) {
     return { ok: false, response: NextResponse.json({ error: 'Not found' }, { status: 404 }) };
   }
 

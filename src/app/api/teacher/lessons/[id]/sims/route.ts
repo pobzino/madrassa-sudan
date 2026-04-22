@@ -65,7 +65,9 @@ export async function GET(
     const access = await assertCanManageLesson(lessonId, user.id, supabase);
     if (!access.ok) return access.response;
 
-    const { data: row, error } = await supabase
+    const dataClient = hasServiceRoleConfig() ? createServiceClient() : supabase;
+
+    const { data: row, error } = await dataClient
       .from('lesson_sims')
       .select('*')
       .eq('lesson_id', lessonId)
@@ -122,6 +124,8 @@ export async function POST(
       );
     }
 
+    const dataClient = hasServiceRoleConfig() ? createServiceClient() : supabase;
+
     let body: CreateSimBody;
     try {
       const json = await request.json();
@@ -139,7 +143,7 @@ export async function POST(
 
     // Delete any existing sim for this lesson (row + audio file) so the new
     // one can take its slot under the UNIQUE(lesson_id) constraint.
-    const { data: existing } = await supabase
+    const { data: existing } = await dataClient
       .from('lesson_sims')
       .select('id, audio_path')
       .eq('lesson_id', lessonId)
@@ -155,7 +159,7 @@ export async function POST(
           console.warn('Failed to remove previous sim audio file:', err);
         }
       }
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await dataClient
         .from('lesson_sims')
         .delete()
         .eq('id', existing.id);
@@ -179,7 +183,7 @@ export async function POST(
       clip_segments: (body.clip_segments ?? null) as unknown as Json | null,
     };
 
-    const { data: insertedRow, error: insertError } = await supabase
+    const { data: insertedRow, error: insertError } = await dataClient
       .from('lesson_sims')
       .insert(insertPayload)
       .select('*')
@@ -217,7 +221,7 @@ export async function POST(
 
       if (audioBuffer.byteLength > SIM_AUDIO_MAX_BYTES) {
         // Clean up the just-inserted row since the audio is too large.
-        await supabase.from('lesson_sims').delete().eq('id', row.id);
+        await dataClient.from('lesson_sims').delete().eq('id', row.id);
         return NextResponse.json(
           { error: `Audio file too large (${Math.round(audioBuffer.byteLength / 1024 / 1024)}MB). Maximum is 100MB.` },
           { status: 413 }
@@ -236,14 +240,14 @@ export async function POST(
         console.error('Upload sim audio error:', uploadError);
         // Clean up the row so the caller can retry without violating the
         // lesson_id unique constraint.
-        await supabase.from('lesson_sims').delete().eq('id', row.id);
+        await dataClient.from('lesson_sims').delete().eq('id', row.id);
         return NextResponse.json(
           { error: `Audio upload failed: ${uploadError.message}` },
           { status: 500 }
         );
       }
 
-      const { data: updatedRow, error: patchError } = await supabase
+      const { data: updatedRow, error: patchError } = await dataClient
         .from('lesson_sims')
         .update({ audio_path: audioPath, audio_mime: mime })
         .eq('id', row.id)
@@ -259,7 +263,7 @@ export async function POST(
         } catch (cleanupErr) {
           console.warn('Failed to remove orphan sim audio after patch failure:', cleanupErr);
         }
-        await supabase.from('lesson_sims').delete().eq('id', row.id);
+        await dataClient.from('lesson_sims').delete().eq('id', row.id);
         return NextResponse.json(
           { error: patchError?.message || 'Failed to persist audio path' },
           { status: 500 }
@@ -279,7 +283,7 @@ export async function POST(
     const lessonUpdates: Record<string, unknown> = { video_duration_seconds: durationSeconds };
     if (firstSlideImage) {
       // Only set thumbnail if the lesson doesn't already have a custom one
-      const { data: currentLesson } = await supabase
+      const { data: currentLesson } = await dataClient
         .from('lessons')
         .select('thumbnail_url')
         .eq('id', lessonId)
@@ -288,7 +292,7 @@ export async function POST(
         lessonUpdates.thumbnail_url = firstSlideImage;
       }
     }
-    await supabase
+    await dataClient
       .from('lessons')
       .update(lessonUpdates)
       .eq('id', lessonId);
