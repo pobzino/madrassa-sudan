@@ -30,6 +30,7 @@ import { packClipSegments, useSimClipEditor } from '@/lib/sim-clip-editor';
 import { compactSimEvents, type SimEvent, type SimPayload, type SimRow } from '@/lib/sim.types';
 import type { SimRecording } from '@/hooks/useSimRecorder';
 import type { Slide } from '@/lib/slides.types';
+import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 
 export type SimReviewModalProps =
   | {
@@ -66,24 +67,20 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
-      const comma = result.indexOf(',');
-      resolve(comma >= 0 ? result.slice(comma + 1) : result);
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'));
-    reader.readAsDataURL(blob);
-  });
-}
-
 type CheckpointEvent =
   | Extract<SimEvent, { type: 'activity_gate' }>
   | Extract<SimEvent, { type: 'exploration_gate' }>;
 
 type CheckpointTimes = Record<string, number>;
+
+interface SimAudioUploadInstructions {
+  sim_id: string;
+  bucket: string;
+  path: string;
+  token: string;
+  signed_url: string;
+  content_type: string;
+}
 
 const CHECKPOINT_EPSILON_SEC = 0.05;
 const EMPTY_EVENTS: SimEvent[] = [];
@@ -356,36 +353,69 @@ export default function SimReviewModal(props: SimReviewModalProps) {
     setSaveError(null);
     setUploadProgress(0);
     try {
-      const audioBase64 = props.recording.audioBlob
-        ? await blobToBase64(props.recording.audioBlob)
-        : null;
-      const body = JSON.stringify({
-        deck_snapshot: props.deckSnapshot,
-        events: compactSimEvents(editableEvents),
-        duration_ms: props.recording.durationMs,
-        audio_duration_ms: props.recording.durationMs,
-        audio_mime: props.recording.audioMime,
-        audio_base64: audioBase64,
-        clip_segments: previewClips.length > 0 ? previewClips : null,
+      const audioBlob = props.recording.audioBlob;
+      let audioUpload: SimAudioUploadInstructions | null = null;
+
+      if (audioBlob) {
+        const prepareRes = await fetch(
+          `/api/teacher/lessons/${props.lessonId}/sims/audio-upload`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              audio_mime: props.recording.audioMime,
+              size_bytes: audioBlob.size,
+            }),
+          }
+        );
+
+        if (!prepareRes.ok) {
+          const body = (await prepareRes.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(body?.error || `Save failed (${prepareRes.status})`);
+        }
+
+        audioUpload = (await prepareRes.json()) as SimAudioUploadInstructions;
+        setUploadProgress(15);
+
+        const supabase = createSupabaseClient();
+        const { error: uploadError } = await supabase.storage
+          .from(audioUpload.bucket)
+          .uploadToSignedUrl(audioUpload.path, audioUpload.token, audioBlob, {
+            contentType: audioUpload.content_type,
+            upsert: true,
+          });
+
+        if (uploadError) {
+          throw new Error(`Audio upload failed: ${uploadError.message}`);
+        }
+        setUploadProgress(75);
+      }
+
+      const createRes = await fetch(`/api/teacher/lessons/${props.lessonId}/sims`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          id: audioUpload?.sim_id,
+          deck_snapshot: props.deckSnapshot,
+          events: compactSimEvents(editableEvents),
+          duration_ms: props.recording.durationMs,
+          audio_duration_ms: props.recording.durationMs,
+          audio_mime: audioUpload?.content_type ?? props.recording.audioMime,
+          audio_upload_path: audioUpload?.path,
+          audio_base64: null,
+          clip_segments: previewClips.length > 0 ? previewClips : null,
+        }),
       });
-      const saved = await new Promise<SimPayload>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', `/api/teacher/lessons/${props.lessonId}/sims`);
-        xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.withCredentials = true;
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
-        };
-        xhr.onload = () => {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            if (xhr.status >= 200 && xhr.status < 300) resolve(data as SimPayload);
-            else reject(new Error(data?.error || `Save failed (${xhr.status})`));
-          } catch { reject(new Error(`Save failed (${xhr.status})`)); }
-        };
-        xhr.onerror = () => reject(new Error('Network error during upload'));
-        xhr.send(body);
-      });
+
+      if (!createRes.ok) {
+        const body = (await createRes.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || `Save failed (${createRes.status})`);
+      }
+
+      const saved = (await createRes.json()) as SimPayload;
+      setUploadProgress(100);
       props.onSaved(saved);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Save failed');

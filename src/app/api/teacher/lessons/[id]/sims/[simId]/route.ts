@@ -15,6 +15,9 @@ import type { SimPayload, SimRow } from '@/lib/sim.types';
 const PatchSimSchema = z.object({
   clip_segments: z.array(ClipSegmentSchema).nullable().optional(),
   events: z.array(z.unknown()).optional(),
+  audio_upload_path: z.string().optional(),
+  audio_mime: z.string().nullable().optional(),
+  audio_duration_ms: z.number().int().nonnegative().nullable().optional(),
 });
 
 // GET /api/teacher/lessons/[id]/sims/[simId] — fetch a single sim with a
@@ -115,12 +118,62 @@ export async function PATCH(
     }
 
     const dataClient = hasServiceRoleConfig() ? createServiceClient() : supabase;
-    const updates: { clip_segments?: Json | null; events?: Json } = {};
+    const updates: {
+      clip_segments?: Json | null;
+      events?: Json;
+      audio_path?: string;
+      audio_mime?: string | null;
+      audio_duration_ms?: number | null;
+    } = {};
     if (body.clip_segments !== undefined) {
       updates.clip_segments = body.clip_segments as unknown as Json | null;
     }
     if (body.events !== undefined) {
       updates.events = body.events as unknown as Json;
+    }
+    if (body.audio_upload_path !== undefined) {
+      const expectedPrefix = `${lessonId}/${simId}.`;
+      if (!body.audio_upload_path.startsWith(expectedPrefix)) {
+        return NextResponse.json({ error: 'Invalid audio upload path' }, { status: 400 });
+      }
+      if (!hasServiceRoleConfig()) {
+        return NextResponse.json(
+          { error: 'Server is missing Supabase service role credentials for storage upload.' },
+          { status: 500 }
+        );
+      }
+
+      const service = createServiceClient();
+      const { data: objectExists, error: existsError } = await service.storage
+        .from(SIM_AUDIO_BUCKET)
+        .exists(body.audio_upload_path);
+      if (existsError || !objectExists) {
+        return NextResponse.json(
+          { error: existsError?.message || 'Uploaded audio file was not found' },
+          { status: 400 }
+        );
+      }
+
+      updates.audio_path = body.audio_upload_path;
+      updates.audio_mime = body.audio_mime ?? null;
+      updates.audio_duration_ms = body.audio_duration_ms ?? null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      const { data: row, error } = await dataClient
+        .from('lesson_sims')
+        .select('*')
+        .eq('id', simId)
+        .eq('lesson_id', lessonId)
+        .single();
+
+      if (error || !row) {
+        return NextResponse.json({ error: 'Sim not found' }, { status: 404 });
+      }
+
+      const simRow = row as unknown as SimRow;
+      const audioUrl = await signAudioUrl(lessonId, simRow.audio_path);
+      return NextResponse.json({ sim: simRow, audio_url: audioUrl } satisfies SimPayload);
     }
 
     const { data: updatedRow, error: updateError } = await dataClient

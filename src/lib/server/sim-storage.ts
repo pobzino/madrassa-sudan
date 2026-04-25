@@ -14,6 +14,7 @@ import { createServiceClient, hasServiceRoleConfig } from '@/lib/supabase/servic
 import { canEditAssignedLesson, getTeacherRole } from '@/lib/server/teacher-lesson-access';
 
 export const SIM_AUDIO_BUCKET = 'sim-audio';
+export const SIM_AUDIO_MAX_BYTES = 100 * 1024 * 1024;
 export const SIGNED_URL_TTL_SECONDS = 60 * 60 * 6; // 6h — long enough for a review session
 
 export const ClipSegmentSchema = z

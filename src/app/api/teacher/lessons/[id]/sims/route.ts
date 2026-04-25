@@ -6,6 +6,7 @@ import { createServiceClient, hasServiceRoleConfig } from '@/lib/supabase/servic
 import {
   ClipSegmentSchema,
   SIM_AUDIO_BUCKET,
+  SIM_AUDIO_MAX_BYTES,
   assertCanManageLesson,
   assertSimFeatureAccess,
   signAudioUrl,
@@ -18,17 +19,16 @@ export const maxDuration = 300;
 /** Server-side max duration: 45 minutes. */
 const SIM_MAX_DURATION_MS = 45 * 60 * 1000;
 
-/** Max audio file size: 100 MB (base64 ≈ 133 MB string). */
-const SIM_AUDIO_MAX_BYTES = 100 * 1024 * 1024;
-
 const CreateSimSchema = z.object({
+  id: z.string().uuid().optional(),
   deck_snapshot: z.array(z.unknown()),
   events: z.array(z.unknown()),
   duration_ms: z.number().int().nonnegative().max(SIM_MAX_DURATION_MS, 'Sim recording exceeds the 45-minute limit.'),
   audio_duration_ms: z.number().int().nonnegative().nullable().optional(),
   audio_mime: z.string().nullable().optional(),
+  audio_upload_path: z.string().optional(),
   // Base64-encoded audio body (no data: prefix). Kept inline so we can write
-  // the row + upload the audio in a single round-trip from the browser.
+  // older clients can still save. Current clients use signed direct upload.
   audio_base64: z.string().nullable().optional(),
   clip_segments: z.array(ClipSegmentSchema).nullable().optional(),
 });
@@ -141,6 +141,35 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
+    if (body.audio_upload_path !== undefined) {
+      if (!body.id) {
+        return NextResponse.json(
+          { error: 'id is required when finalizing an uploaded audio file' },
+          { status: 400 }
+        );
+      }
+      const expectedPrefix = `${lessonId}/${body.id}.`;
+      if (!body.audio_upload_path.startsWith(expectedPrefix)) {
+        return NextResponse.json({ error: 'Invalid audio upload path' }, { status: 400 });
+      }
+      if (!hasServiceRoleConfig()) {
+        return NextResponse.json(
+          { error: 'Server is missing Supabase service role credentials for storage upload.' },
+          { status: 500 }
+        );
+      }
+      const service = createServiceClient();
+      const { data: objectExists, error: existsError } = await service.storage
+        .from(SIM_AUDIO_BUCKET)
+        .exists(body.audio_upload_path);
+      if (existsError || !objectExists) {
+        return NextResponse.json(
+          { error: existsError?.message || 'Uploaded audio file was not found' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Delete any existing sim for this lesson (row + audio file) so the new
     // one can take its slot under the UNIQUE(lesson_id) constraint.
     const { data: existing } = await dataClient
@@ -173,12 +202,14 @@ export async function POST(
 
     // Insert the new row first so we have the sim id for the audio path.
     const insertPayload = {
+      ...(body.id ? { id: body.id } : {}),
       lesson_id: lessonId,
       duration_ms: body.duration_ms,
       deck_snapshot: body.deck_snapshot as unknown as Json,
       events: body.events as unknown as Json,
       audio_duration_ms: body.audio_duration_ms ?? null,
       audio_mime: body.audio_mime ?? null,
+      audio_path: body.audio_upload_path ?? null,
       recorded_by: user.id,
       clip_segments: (body.clip_segments ?? null) as unknown as Json | null,
     };
@@ -199,7 +230,6 @@ export async function POST(
 
     let row = insertedRow as unknown as SimRow;
 
-    // If audio was included, upload it and patch the row with the path.
     if (body.audio_base64 && body.audio_base64.length > 0) {
       if (!hasServiceRoleConfig()) {
         return NextResponse.json(

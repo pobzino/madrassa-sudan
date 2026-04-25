@@ -17,6 +17,12 @@ import type { SimPayload } from '@/lib/sim.types';
 import type { InteractionAnswer } from '@/lib/interactions/types';
 import type { ExplorationWidgetType, ExplorationWidgetConfig } from '@/lib/explorations/types';
 import type { SlideGenerationContext, SlideLengthPreset, SlideLanguageMode } from '@/lib/slides-generation';
+import {
+  clearSimRecordingDraft,
+  loadSimRecordingDraft,
+  saveSimRecordingDraft,
+  type SimRecordingDraft,
+} from '@/lib/sim-recording-drafts';
 
 export interface RegenerateProps {
   slideCount: number;
@@ -53,6 +59,17 @@ function isEditableKeyTarget(target: EventTarget | null) {
   return Boolean(
     target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')
   );
+}
+
+const STALE_SIM_TAB_RECHECK_MS = 10 * 60 * 1000;
+
+interface RuntimeVersionResponse {
+  version?: string | null;
+}
+
+interface SimSessionResponse {
+  sim: SimPayload | null;
+  lesson_published?: boolean;
 }
 
 // ExplorationPicker is now imported from @/components/explorations/ExplorationPicker
@@ -442,6 +459,7 @@ export default function SlideEditor({
     | { kind: 'view'; payload: SimPayload }
     | null
   >(null);
+  const [simRecoveredDraft, setSimRecoveredDraft] = useState<SimRecordingDraft | null>(null);
   // Teacher's in-progress answer on the current activity slide. Drives the
   // DnD preview panel during sim recording and is reset whenever the
   // presented slide changes so the next activity starts fresh.
@@ -474,6 +492,10 @@ export default function SlideEditor({
   const simRecordingRef = useRef(simRecording);
   const slidesRef = useRef(slides);
   const presentIndexRef = useRef(presentIndex);
+  const simSessionVersionRef = useRef<string | null>(null);
+  const staleSimTabReasonRef = useRef<string | null>(null);
+  const lastSimFreshCheckAtRef = useRef(0);
+  const lastHiddenAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     simRecordingRef.current = simRecording;
@@ -486,6 +508,87 @@ export default function SlideEditor({
   useEffect(() => {
     presentIndexRef.current = presentIndex;
   }, [presentIndex]);
+
+  const fetchRuntimeVersion = useCallback(async (): Promise<string | null> => {
+    const res = await fetch('/api/runtime/version', {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const body = (await res.json().catch(() => null)) as RuntimeVersionResponse | null;
+    const version = typeof body?.version === 'string' ? body.version.trim() : '';
+    return version.length > 0 ? version : null;
+  }, []);
+
+  const reportStaleSimTab = useCallback((message: string, interactive: boolean) => {
+    const changed = staleSimTabReasonRef.current !== message;
+    staleSimTabReasonRef.current = message;
+    if (interactive) {
+      const shouldReload = window.confirm(`${message}\n\nRefresh now?`);
+      if (shouldReload) window.location.reload();
+    } else if (changed) {
+      toast.error(message);
+    }
+  }, []);
+
+  const clearStaleSimTab = useCallback(() => {
+    staleSimTabReasonRef.current = null;
+  }, []);
+
+  const refreshSimSession = useCallback(
+    async (
+      interactive: boolean
+    ): Promise<{ ok: true; sim: SimPayload | null; lessonPublished: boolean } | { ok: false }> => {
+      if (!lessonId) return { ok: false };
+
+      try {
+        const runtimeVersion = await fetchRuntimeVersion();
+        if (!simSessionVersionRef.current) {
+          simSessionVersionRef.current = runtimeVersion;
+        } else if (
+          runtimeVersion &&
+          simSessionVersionRef.current &&
+          runtimeVersion !== simSessionVersionRef.current
+        ) {
+          reportStaleSimTab(
+            'This lesson tab is out of date after a site update. Refresh before recording so the save uses the latest version.',
+            interactive
+          );
+          return { ok: false };
+        }
+
+        const res = await fetch(`/api/teacher/lessons/${lessonId}/sims`, {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+
+        if (!res.ok) {
+          const message =
+            res.status === 401
+              ? 'Your session has expired. Refresh this lesson tab before recording.'
+              : 'This lesson tab is stale. Refresh before recording.';
+          reportStaleSimTab(message, interactive);
+          return { ok: false };
+        }
+
+        const body = (await res.json()) as SimSessionResponse;
+        const nextSim = body.sim ?? null;
+        const nextLessonPublished = body.lesson_published === true;
+        setExistingSim(nextSim);
+        setLessonPublished(nextLessonPublished);
+        clearStaleSimTab();
+        lastSimFreshCheckAtRef.current = Date.now();
+        return { ok: true, sim: nextSim, lessonPublished: nextLessonPublished };
+      } catch {
+        reportStaleSimTab(
+          'Could not verify this lesson tab. Refresh before recording.',
+          interactive
+        );
+        return { ok: false };
+      }
+    },
+    [lessonId, fetchRuntimeVersion, reportStaleSimTab, clearStaleSimTab]
+  );
 
   // Stable bridge: translate whiteboard events into sim events stamped with
   // the current slide_id. `recordSimEvent` is stable, and all other reads
@@ -586,15 +689,15 @@ export default function SlideEditor({
     setLanguage(preferredLanguage);
   }, [preferredLanguage]);
 
-  // Prevent accidental tab/window close while sim is recording
+  // Prevent accidental tab/window close while a sim is not yet safely saved.
   useEffect(() => {
-    if (!simRecording) return;
+    if (!simRecording && simReviewMode?.kind !== 'record-review') return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [simRecording]);
+  }, [simRecording, simReviewMode?.kind]);
 
   useEffect(() => {
     if (!focusedSlideId) {
@@ -886,29 +989,60 @@ export default function SlideEditor({
   // mount so the Sim toolbar button and SimReviewModal can pick the right
   // mode (edit vs view) without a second round trip.
   useEffect(() => {
+    void refreshSimSession(false);
+  }, [refreshSimSession]);
+
+  useEffect(() => {
     if (!lessonId) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/teacher/lessons/${lessonId}/sims`, {
-          credentials: 'include',
-        });
-        if (!res.ok || cancelled) return;
-        const body = (await res.json()) as {
-          sim: SimPayload | null;
-          lesson_published?: boolean;
-        };
-        if (cancelled) return;
-        setExistingSim(body.sim);
-        setLessonPublished(body.lesson_published === true);
-      } catch {
-        // Non-fatal: the Sim button just won't appear.
-      }
-    })();
+    loadSimRecordingDraft(lessonId).then((draft) => {
+      if (cancelled || !draft) return;
+      setSimRecoveredDraft(draft);
+    });
     return () => {
       cancelled = true;
     };
   }, [lessonId]);
+
+  useEffect(() => {
+    if (!lessonId || simReviewMode?.kind !== 'record-review') return;
+    void saveSimRecordingDraft({
+      lessonId,
+      language,
+      deckSnapshot: simReviewMode.deckSnapshot,
+      recording: simReviewMode.recording,
+      savedAt: Date.now(),
+    }).catch(() => {
+      toast.error('Could not back up this recording locally. Keep this tab open until it saves.');
+    });
+  }, [lessonId, language, simReviewMode]);
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        lastHiddenAtRef.current = Date.now();
+        return;
+      }
+      const hiddenAt = lastHiddenAtRef.current;
+      lastHiddenAtRef.current = null;
+      if (hiddenAt && Date.now() - hiddenAt >= STALE_SIM_TAB_RECHECK_MS) {
+        void refreshSimSession(false);
+      }
+    }
+
+    function handleFocus() {
+      if (Date.now() - lastSimFreshCheckAtRef.current >= STALE_SIM_TAB_RECHECK_MS) {
+        void refreshSimSession(false);
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [refreshSimSession]);
 
   // When the sim recorder finishes, open the review modal so the teacher can
   // scrub, trim, cut, retake, or discard before the recording is uploaded.
@@ -1126,11 +1260,13 @@ export default function SlideEditor({
 
   const startSimRecord = useCallback(async () => {
     if (!lessonId) return;
-    if (lessonPublished) {
+    const session = await refreshSimSession(true);
+    if (!session.ok) return;
+    if (session.lessonPublished) {
       toast.error('Unpublish the lesson before recording a new sim.');
       return;
     }
-    if (existingSim) {
+    if (session.sim) {
       const ok = window.confirm(
         'This lesson already has a sim recording. Starting a new recording will replace it when you save. Continue?'
       );
@@ -1144,7 +1280,7 @@ export default function SlideEditor({
     // Small delay so the fullscreen present-mode DOM renders first.
     await new Promise((r) => setTimeout(r, 100));
     await simStartRecording();
-  }, [lessonId, lessonPublished, existingSim, selectedIndex, simStartRecording]);
+  }, [lessonId, refreshSimSession, selectedIndex, simStartRecording]);
 
   // ── SimReviewModal handlers ─────────────────────────────────────────────
   // Recording was saved successfully from the review modal — sync the local
@@ -1154,28 +1290,34 @@ export default function SlideEditor({
     (payload: SimPayload) => {
       setExistingSim(payload);
       setSimReviewMode(null);
+      setSimRecoveredDraft(null);
       simReviewOpenedRef.current = null;
       simCancelRecording();
+      if (lessonId) void clearSimRecordingDraft(lessonId);
       onSimChange?.(payload);
     },
-    [simCancelRecording, onSimChange]
+    [lessonId, simCancelRecording, onSimChange]
   );
 
   // Teacher chose Discard — drop the in-memory recording and reset.
   const handleSimDiscard = useCallback(() => {
     setSimReviewMode(null);
+    setSimRecoveredDraft(null);
     simReviewOpenedRef.current = null;
     simCancelRecording();
-  }, [simCancelRecording]);
+    if (lessonId) void clearSimRecordingDraft(lessonId);
+  }, [lessonId, simCancelRecording]);
 
   // Teacher chose Retake — close the modal, reset the recorder, immediately
   // jump back into the record+present flow (mirrors video `handleRetake`).
   const handleSimRetake = useCallback(() => {
     setSimReviewMode(null);
+    setSimRecoveredDraft(null);
     simReviewOpenedRef.current = null;
     simCancelRecording();
+    if (lessonId) void clearSimRecordingDraft(lessonId);
     void startSimRecord();
-  }, [simCancelRecording, startSimRecord]);
+  }, [lessonId, simCancelRecording, startSimRecord]);
 
   // Edit-mode save — replace the cached sim with the PATCH result.
   const handleSimEditSaved = useCallback((payload: SimPayload) => {
@@ -1199,6 +1341,23 @@ export default function SlideEditor({
       payload: existingSim,
     });
   }, [existingSim, lessonPublished]);
+
+  const handleRestoreSimDraft = useCallback(() => {
+    if (!simRecoveredDraft) return;
+    setLanguage(simRecoveredDraft.language);
+    setSimReviewMode({
+      kind: 'record-review',
+      recording: simRecoveredDraft.recording,
+      deckSnapshot: simRecoveredDraft.deckSnapshot,
+    });
+    setSimRecoveredDraft(null);
+  }, [simRecoveredDraft]);
+
+  const handleDismissSimDraft = useCallback(() => {
+    if (!lessonId) return;
+    setSimRecoveredDraft(null);
+    void clearSimRecordingDraft(lessonId);
+  }, [lessonId]);
 
   const handleToggleAnswerReveal = useCallback(() => {
     setShowActivityAnswer((current) => !current);
@@ -1645,6 +1804,30 @@ export default function SlideEditor({
           regenerateProps={regenerateProps}
           lessonId={lessonId}
         />
+
+        {simRecoveredDraft && !simReviewMode && (
+          <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
+            <span className="font-medium">
+              Unsaved recording recovered ({formatDuration(simRecoveredDraft.recording.durationMs)})
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRestoreSimDraft}
+                className="rounded-md bg-amber-700 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-800"
+              >
+                Restore
+              </button>
+              <button
+                type="button"
+                onClick={handleDismissSimDraft}
+                className="rounded-md px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-1 overflow-hidden">
           {/* Thumbnail sidebar */}
