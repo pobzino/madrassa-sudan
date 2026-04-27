@@ -30,7 +30,6 @@ import { packClipSegments, useSimClipEditor } from '@/lib/sim-clip-editor';
 import { compactSimEvents, type SimEvent, type SimPayload, type SimRow } from '@/lib/sim.types';
 import type { SimRecording } from '@/hooks/useSimRecorder';
 import type { Slide } from '@/lib/slides.types';
-import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 
 export type SimReviewModalProps =
   | {
@@ -84,6 +83,45 @@ interface SimAudioUploadInstructions {
 
 const CHECKPOINT_EPSILON_SEC = 0.05;
 const EMPTY_EVENTS: SimEvent[] = [];
+
+async function readErrorText(response: Response): Promise<string> {
+  const body = await response.text().catch(() => '');
+  return body.trim().slice(0, 300);
+}
+
+async function uploadAudioBlobToSignedUrl(
+  instructions: SimAudioUploadInstructions,
+  audioBlob: Blob
+): Promise<void> {
+  const body = new FormData();
+  body.append('cacheControl', '3600');
+  body.append(
+    '',
+    audioBlob,
+    instructions.content_type.includes('mp4') ? 'recording.mp4' : 'recording.webm'
+  );
+
+  const headers = new Headers({ 'x-upsert': 'true' });
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (anonKey) {
+    headers.set('apikey', anonKey);
+  }
+
+  const response = await fetch(instructions.signed_url, {
+    method: 'PUT',
+    headers,
+    body,
+  });
+
+  if (!response.ok) {
+    const details = await readErrorText(response);
+    throw new Error(
+      details
+        ? `Audio upload failed (${response.status}): ${details}`
+        : `Audio upload failed (${response.status})`
+    );
+  }
+}
 
 function isCheckpointEvent(event: SimEvent): event is CheckpointEvent {
   return event.type === 'activity_gate' || event.type === 'exploration_gate';
@@ -378,17 +416,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         audioUpload = (await prepareRes.json()) as SimAudioUploadInstructions;
         setUploadProgress(15);
 
-        const supabase = createSupabaseClient();
-        const { error: uploadError } = await supabase.storage
-          .from(audioUpload.bucket)
-          .uploadToSignedUrl(audioUpload.path, audioUpload.token, audioBlob, {
-            contentType: audioUpload.content_type,
-            upsert: true,
-          });
-
-        if (uploadError) {
-          throw new Error(`Audio upload failed: ${uploadError.message}`);
-        }
+        await uploadAudioBlobToSignedUrl(audioUpload, audioBlob);
         setUploadProgress(75);
       }
 
@@ -418,7 +446,10 @@ export default function SimReviewModal(props: SimReviewModalProps) {
       setUploadProgress(100);
       props.onSaved(saved);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Save failed');
+      const message = err instanceof Error ? err.message : 'Save failed';
+      setSaveError(
+        `${message}. The recording is still kept in this browser; try Save again, or refresh and restore it.`
+      );
     } finally {
       setSaving(false);
       setUploadProgress(null);

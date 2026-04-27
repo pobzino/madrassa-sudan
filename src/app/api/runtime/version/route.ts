@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 function resolveRuntimeVersion(): string {
   return (
+    process.env.NEXT_PUBLIC_RUNTIME_VERSION?.trim() ||
     process.env.DEPLOY_ID?.trim() ||
     process.env.COMMIT_REF?.trim() ||
     process.env.DEPLOY_URL?.trim() ||
