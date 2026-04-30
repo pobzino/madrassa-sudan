@@ -81,6 +81,30 @@ interface SimAudioUploadInstructions {
   content_type: string;
 }
 
+type SimSaveAttemptStatus =
+  | 'review_opened'
+  | 'save_started'
+  | 'audio_upload_preparing'
+  | 'audio_upload_prepare_failed'
+  | 'audio_upload_prepared'
+  | 'audio_upload_failed'
+  | 'audio_upload_succeeded'
+  | 'finalize_started'
+  | 'finalize_failed'
+  | 'saved'
+  | 'discarded'
+  | 'retake'
+  | 'abandoned'
+  | 'failed';
+
+interface SimSaveAttemptExtras {
+  sim_id?: string | null;
+  audio_path?: string | null;
+  error_message?: string | null;
+  error_status?: number | null;
+  error_details?: Record<string, unknown>;
+}
+
 const CHECKPOINT_EPSILON_SEC = 0.05;
 const EMPTY_EVENTS: SimEvent[] = [];
 
@@ -121,6 +145,32 @@ async function uploadAudioBlobToSignedUrl(
         : `Audio upload failed (${response.status})`
     );
   }
+}
+
+function makeAttemptId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `00000000-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`;
+}
+
+function getBrowserInfo(): Record<string, unknown> {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return {};
+  }
+  return {
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    language: navigator.language,
+    online: navigator.onLine,
+    visibilityState: document.visibilityState,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    viewport: {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio,
+    },
+  };
 }
 
 function isCheckpointEvent(event: SimEvent): event is CheckpointEvent {
@@ -323,8 +373,15 @@ export default function SimReviewModal(props: SimReviewModalProps) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const saveAttemptIdRef = useRef<string | null>(null);
+  const saveAttemptOpenedRef = useRef(false);
+  const saveAttemptTerminalRef = useRef(false);
 
   const isReadOnly = props.mode === 'view';
+
+  if (props.mode === 'record-review' && !saveAttemptIdRef.current) {
+    saveAttemptIdRef.current = makeAttemptId();
+  }
 
   const togglePlayPause = useCallback(() => {
     const p = playerRef.current;
@@ -358,6 +415,96 @@ export default function SimReviewModal(props: SimReviewModalProps) {
   );
   const hasAnyEdits = editor.hasEdits || hasCheckpointEdits;
 
+  const buildSaveAttemptBody = useCallback(
+    (status: SimSaveAttemptStatus, extras: SimSaveAttemptExtras = {}) => {
+      if (props.mode !== 'record-review' || !saveAttemptIdRef.current) return null;
+      const audioBlob = props.recording.audioBlob;
+      const compactEvents = compactSimEvents(editableEvents);
+      return {
+        attempt_id: saveAttemptIdRef.current,
+        status,
+        sim_id: extras.sim_id,
+        duration_ms: props.recording.durationMs,
+        audio_duration_ms: props.recording.durationMs,
+        audio_size_bytes: audioBlob?.size ?? null,
+        audio_mime: props.recording.audioMime,
+        audio_path: extras.audio_path,
+        events_count: compactEvents.length,
+        deck_slide_count: props.deckSnapshot.length,
+        clip_segments_count: previewClips.length,
+        error_message: extras.error_message,
+        error_status: extras.error_status,
+        error_details: extras.error_details,
+        browser_info: getBrowserInfo(),
+        runtime_version: process.env.NEXT_PUBLIC_RUNTIME_VERSION || 'dev',
+        page_url: typeof window === 'undefined' ? null : window.location.href,
+      };
+    },
+    [props, editableEvents, previewClips]
+  );
+
+  const trackSaveAttempt = useCallback(
+    async (
+      status: SimSaveAttemptStatus,
+      extras: SimSaveAttemptExtras = {},
+      options: { keepalive?: boolean } = {}
+    ) => {
+      if (props.mode !== 'record-review') return;
+      const body = buildSaveAttemptBody(status, extras);
+      if (!body) return;
+      try {
+        await fetch(`/api/teacher/lessons/${props.lessonId}/sims/save-attempts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          keepalive: options.keepalive,
+          body: JSON.stringify(body),
+        });
+      } catch (error) {
+        console.warn('Failed to track sim save attempt:', error);
+      }
+    },
+    [props, buildSaveAttemptBody]
+  );
+
+  const sendSaveAttemptBeacon = useCallback(
+    (status: SimSaveAttemptStatus, extras: SimSaveAttemptExtras = {}) => {
+      if (props.mode !== 'record-review') return;
+      const body = buildSaveAttemptBody(status, extras);
+      if (!body) return;
+      const json = JSON.stringify(body);
+      const url = `/api/teacher/lessons/${props.lessonId}/sims/save-attempts`;
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        const blob = new Blob([json], { type: 'application/json' });
+        if (navigator.sendBeacon(url, blob)) return;
+      }
+      void fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        keepalive: true,
+        body: json,
+      }).catch(() => {});
+    },
+    [props, buildSaveAttemptBody]
+  );
+
+  useEffect(() => {
+    if (props.mode !== 'record-review' || saveAttemptOpenedRef.current) return;
+    saveAttemptOpenedRef.current = true;
+    void trackSaveAttempt('review_opened');
+  }, [props.mode, trackSaveAttempt]);
+
+  useEffect(() => {
+    if (props.mode !== 'record-review') return;
+    const handlePageHide = () => {
+      if (saveAttemptTerminalRef.current) return;
+      sendSaveAttemptBeacon('abandoned');
+    };
+    window.addEventListener('pagehide', handlePageHide);
+    return () => window.removeEventListener('pagehide', handlePageHide);
+  }, [props.mode, sendSaveAttemptBeacon]);
+
   const checkpointMarkers = useMemo(
     () =>
       getCheckpointMarkers(
@@ -390,11 +537,15 @@ export default function SimReviewModal(props: SimReviewModalProps) {
     setSaving(true);
     setSaveError(null);
     setUploadProgress(0);
+    let failureTracked = false;
     try {
       const audioBlob = props.recording.audioBlob;
       let audioUpload: SimAudioUploadInstructions | null = null;
 
+      await trackSaveAttempt('save_started');
+
       if (audioBlob) {
+        await trackSaveAttempt('audio_upload_preparing');
         const prepareRes = await fetch(
           `/api/teacher/lessons/${props.lessonId}/sims/audio-upload`,
           {
@@ -410,16 +561,43 @@ export default function SimReviewModal(props: SimReviewModalProps) {
 
         if (!prepareRes.ok) {
           const body = (await prepareRes.json().catch(() => null)) as { error?: string } | null;
+          await trackSaveAttempt('audio_upload_prepare_failed', {
+            error_status: prepareRes.status,
+            error_message: body?.error || `Save failed (${prepareRes.status})`,
+          });
+          failureTracked = true;
           throw new Error(body?.error || `Save failed (${prepareRes.status})`);
         }
 
         audioUpload = (await prepareRes.json()) as SimAudioUploadInstructions;
+        await trackSaveAttempt('audio_upload_prepared', {
+          sim_id: audioUpload.sim_id,
+          audio_path: audioUpload.path,
+        });
         setUploadProgress(15);
 
-        await uploadAudioBlobToSignedUrl(audioUpload, audioBlob);
+        try {
+          await uploadAudioBlobToSignedUrl(audioUpload, audioBlob);
+        } catch (error) {
+          await trackSaveAttempt('audio_upload_failed', {
+            sim_id: audioUpload.sim_id,
+            audio_path: audioUpload.path,
+            error_message: error instanceof Error ? error.message : 'Audio upload failed',
+          });
+          failureTracked = true;
+          throw error;
+        }
+        await trackSaveAttempt('audio_upload_succeeded', {
+          sim_id: audioUpload.sim_id,
+          audio_path: audioUpload.path,
+        });
         setUploadProgress(75);
       }
 
+      await trackSaveAttempt('finalize_started', {
+        sim_id: audioUpload?.sim_id,
+        audio_path: audioUpload?.path,
+      });
       const createRes = await fetch(`/api/teacher/lessons/${props.lessonId}/sims`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -439,14 +617,29 @@ export default function SimReviewModal(props: SimReviewModalProps) {
 
       if (!createRes.ok) {
         const body = (await createRes.json().catch(() => null)) as { error?: string } | null;
+        await trackSaveAttempt('finalize_failed', {
+          sim_id: audioUpload?.sim_id,
+          audio_path: audioUpload?.path,
+          error_status: createRes.status,
+          error_message: body?.error || `Save failed (${createRes.status})`,
+        });
+        failureTracked = true;
         throw new Error(body?.error || `Save failed (${createRes.status})`);
       }
 
       const saved = (await createRes.json()) as SimPayload;
+      await trackSaveAttempt('saved', {
+        sim_id: saved.sim.id,
+        audio_path: saved.sim.audio_path,
+      });
+      saveAttemptTerminalRef.current = true;
       setUploadProgress(100);
       props.onSaved(saved);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Save failed';
+      if (!failureTracked) {
+        await trackSaveAttempt('failed', { error_message: message });
+      }
       setSaveError(
         `${message}. The recording is still kept in this browser; try Save again, or refresh and restore it.`
       );
@@ -454,7 +647,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
       setSaving(false);
       setUploadProgress(null);
     }
-  }, [props, previewClips, editableEvents]);
+  }, [props, previewClips, editableEvents, trackSaveAttempt]);
 
   const handleSaveEdit = useCallback(async () => {
     if (props.mode !== 'edit') return;
@@ -507,6 +700,20 @@ export default function SimReviewModal(props: SimReviewModalProps) {
       setSaving(false);
     }
   }, [props]);
+
+  const handleDiscardRecord = useCallback(() => {
+    if (props.mode !== 'record-review') return;
+    saveAttemptTerminalRef.current = true;
+    void trackSaveAttempt('discarded', {}, { keepalive: true });
+    props.onDiscard();
+  }, [props, trackSaveAttempt]);
+
+  const handleRetakeRecord = useCallback(() => {
+    if (props.mode !== 'record-review') return;
+    saveAttemptTerminalRef.current = true;
+    void trackSaveAttempt('retake', {}, { keepalive: true });
+    props.onRetake();
+  }, [props, trackSaveAttempt]);
 
   const handleBackdropClick = useCallback(() => {
     if (saving) return;
@@ -696,7 +903,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
           <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={props.onDiscard}
+              onClick={handleDiscardRecord}
               disabled={saving}
               className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-60"
             >
@@ -704,7 +911,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
             </button>
             <button
               type="button"
-              onClick={props.onRetake}
+              onClick={handleRetakeRecord}
               disabled={saving}
               className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-60"
             >

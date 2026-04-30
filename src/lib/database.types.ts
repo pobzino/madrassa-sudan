@@ -1325,6 +1325,99 @@ export type Database = {
           },
         ]
       }
+      sim_save_attempts: {
+        Row: {
+          id: string
+          client_attempt_id: string
+          lesson_id: string | null
+          sim_id: string | null
+          user_id: string | null
+          status: string
+          duration_ms: number | null
+          audio_duration_ms: number | null
+          audio_size_bytes: number | null
+          audio_mime: string | null
+          audio_path: string | null
+          events_count: number | null
+          deck_slide_count: number | null
+          clip_segments_count: number | null
+          error_message: string | null
+          error_status: number | null
+          error_details: Json
+          browser_info: Json
+          runtime_version: string | null
+          page_url: string | null
+          last_seen_at: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_attempt_id: string
+          lesson_id?: string | null
+          sim_id?: string | null
+          user_id?: string | null
+          status?: string
+          duration_ms?: number | null
+          audio_duration_ms?: number | null
+          audio_size_bytes?: number | null
+          audio_mime?: string | null
+          audio_path?: string | null
+          events_count?: number | null
+          deck_slide_count?: number | null
+          clip_segments_count?: number | null
+          error_message?: string | null
+          error_status?: number | null
+          error_details?: Json
+          browser_info?: Json
+          runtime_version?: string | null
+          page_url?: string | null
+          last_seen_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_attempt_id?: string
+          lesson_id?: string | null
+          sim_id?: string | null
+          user_id?: string | null
+          status?: string
+          duration_ms?: number | null
+          audio_duration_ms?: number | null
+          audio_size_bytes?: number | null
+          audio_mime?: string | null
+          audio_path?: string | null
+          events_count?: number | null
+          deck_slide_count?: number | null
+          clip_segments_count?: number | null
+          error_message?: string | null
+          error_status?: number | null
+          error_details?: Json
+          browser_info?: Json
+          runtime_version?: string | null
+          page_url?: string | null
+          last_seen_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sim_save_attempts_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sim_save_attempts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lesson_content_blocks: {
         Row: {
           id: string
