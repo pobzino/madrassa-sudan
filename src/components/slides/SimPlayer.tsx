@@ -430,6 +430,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeGate, setActiveGate] = useState<AnyGate | null>(null);
+  const [activeGateIdx, setActiveGateIdx] = useState<number | null>(null);
   // Student's own answer during an active gate. Reset when the gate clears.
   const [studentAnswer, setStudentAnswer] = useState<InteractionAnswer | null>(null);
   // Feedback after the student answers during a gate.
@@ -438,6 +439,16 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   // Track result per gate index for timeline marker icons.
   const [gateResults, setGateResults] = useState<Record<number, 'correct' | 'incorrect' | 'skipped' | 'submitted'>>({});
   const activeGateIdxRef = useRef<number | null>(null);
+  const setActiveGateState = useCallback((idx: number, gate: AnyGate) => {
+    activeGateIdxRef.current = idx;
+    setActiveGateIdx(idx);
+    setActiveGate(gate);
+  }, []);
+  const clearActiveGateState = useCallback(() => {
+    activeGateIdxRef.current = null;
+    setActiveGateIdx(null);
+    setActiveGate(null);
+  }, []);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showChapters, setShowChapters] = useState(false);
@@ -456,6 +467,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const audioRef = useRef<HTMLAudioElement>(null);
   const [audioSrc, setAudioSrc] = useState(audio_url);
   const rafRef = useRef<number>(0);
+  const tickRef = useRef<() => void>(() => undefined);
   // Timer-driven playback for audio-less sims
   const timerStartRef = useRef<number>(0);
   const timerOffsetRef = useRef<number>(0);
@@ -478,14 +490,17 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     [rawTotalMs, effectiveClips]
   );
 
+  const markAudioReady = useCallback(() => {
+    setReady(true);
+    onReady?.();
+  }, [onReady]);
+
   // Audio-less sims: mark ready immediately so the play button is enabled.
   useEffect(() => {
     if (!audio_url) {
-      setReady(true);
-      onReady?.();
+      markAudioReady();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audio_url]);
+  }, [audio_url, markAudioReady]);
 
   // ── Resume position persistence (refs declared early, effects after applyAt) ──
   const resumeKey = lessonId ? `sim-resume:${lessonId}` : null;
@@ -493,6 +508,30 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
   // Keep audioSrc in sync when the prop changes (e.g. parent re-fetches).
   useEffect(() => { setAudioSrc(audio_url); }, [audio_url]);
+
+  useEffect(() => {
+    if (!audioSrc) return;
+    setReady(false);
+
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    // Browsers can satisfy cached/signed media before React receives
+    // loadedmetadata. Probe the element directly so the controls do not stay
+    // stuck in the loading state when the source is already usable.
+    if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      markAudioReady();
+      return;
+    }
+
+    const probe = () => {
+      if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
+        markAudioReady();
+      }
+    };
+    const frame = window.requestAnimationFrame(probe);
+    return () => window.cancelAnimationFrame(frame);
+  }, [audioSrc, markAudioReady]);
 
   // Proactively refresh the signed audio URL before it expires (every 5h).
   // Also retries on audio error to handle already-expired URLs.
@@ -759,7 +798,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         timerOffsetRef.current = jumpTo;
         timerStartRef.current = performance.now();
       }
-      rafRef.current = requestAnimationFrame(tick);
+      rafRef.current = requestAnimationFrame(() => tickRef.current());
       return;
     }
 
@@ -776,8 +815,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         timerOffsetRef.current = due.gate.t;
       }
       applyAt(due.gate.t, true);
-      activeGateIdxRef.current = due.idx;
-      setActiveGate(due.gate);
+      setActiveGateState(due.idx, due.gate);
       setIsPlaying(false);
       onPlayStateChange?.(false);
       rafRef.current = 0;
@@ -807,7 +845,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
     const isStillPlaying = audio ? (!audio.paused && !audio.ended) : true;
     if (isStillPlaying) {
-      rafRef.current = requestAnimationFrame(tick);
+      rafRef.current = requestAnimationFrame(() => tickRef.current());
     } else {
       rafRef.current = 0;
       if (audio?.ended) {
@@ -816,7 +854,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         applyAt(rawTotalMs, true);
       }
     }
-  }, [applyAt, effectiveClips, rawTotalMs, onPlayStateChange, findDueGate, findDueExplorationSlide, getCurrentRealMs, pausePlayback]);
+  }, [applyAt, effectiveClips, rawTotalMs, onPlayStateChange, findDueGate, findDueExplorationSlide, getCurrentRealMs, pausePlayback, setActiveGateState]);
+
+  useEffect(() => {
+    tickRef.current = tick;
+  }, [tick]);
 
   useEffect(() => {
     return () => {
@@ -835,7 +877,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       }
       timerStartRef.current = performance.now();
       setIsPlaying(true);
-      setActiveGate(null);
+      clearActiveGateState();
       onPlayStateChange?.(true);
       setAnswerFeedback(null);
       if (!rafRef.current) rafRef.current = requestAnimationFrame(tick);
@@ -852,7 +894,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     audio.play().then(
       () => {
         setIsPlaying(true);
-        setActiveGate(null);
+        clearActiveGateState();
         onPlayStateChange?.(true);
         setAnswerFeedback(null);
         if (!rafRef.current) rafRef.current = requestAnimationFrame(tick);
@@ -861,7 +903,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         setError(err instanceof Error ? err.message : 'Playback failed');
       }
     );
-  }, [effectiveClips, tick, onPlayStateChange, playbackRate]);
+  }, [clearActiveGateState, effectiveClips, tick, onPlayStateChange, playbackRate]);
 
   const handlePause = useCallback(() => {
     const audio = audioRef.current;
@@ -888,10 +930,10 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         timerStartRef.current = performance.now();
       }
       applyAt(realMs, true);
-      setActiveGate(null);
+      clearActiveGateState();
       resetGatesForTime(realMs);
     },
-    [applyAt, effectiveClips, resetGatesForTime]
+    [applyAt, clearActiveGateState, effectiveClips, resetGatesForTime]
   );
 
   const seekRealSec = useCallback(
@@ -905,10 +947,10 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         timerStartRef.current = performance.now();
       }
       applyAt(clamped * 1000, true);
-      setActiveGate(null);
+      clearActiveGateState();
       resetGatesForTime(clamped * 1000);
     },
-    [applyAt, rawTotalMs, resetGatesForTime]
+    [applyAt, clearActiveGateState, rawTotalMs, resetGatesForTime]
   );
 
   // Dismiss the current gate and resume playback. The gate's index is
@@ -1026,12 +1068,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         }),
       }).catch(() => { /* best-effort */ });
     }
-    activeGateIdxRef.current = null;
-    setActiveGate(null);
+    clearActiveGateState();
     setStudentAnswer(null);
     setAnswerFeedback(null);
     handlePlay();
-  }, [handlePlay, answerFeedback, activeExplorationSlide, lessonId, currentSlide]);
+  }, [clearActiveGateState, handlePlay, answerFeedback, activeExplorationSlide, lessonId, currentSlide]);
 
   const currentSurface: SimSlideSurface | null = currentSlide
     ? surface.slides[currentSlide.id] ?? null
@@ -1141,12 +1182,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       triggeredGatesRef.current.add(marker.idx);
       setIsPlaying(false);
       onPlayStateChange?.(false);
-      activeGateIdxRef.current = marker.idx;
       setStudentAnswer(null);
       setAnswerFeedback(null);
-      setActiveGate(gates[marker.idx]);
+      setActiveGateState(marker.idx, gates[marker.idx]);
     },
-    [applyAt, gates, onPlayStateChange]
+    [applyAt, gates, onPlayStateChange, setActiveGateState]
   );
 
   // Spacebar toggles play/pause
@@ -1178,11 +1218,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       const audio = audioRef.current;
       if (audio) audio.currentTime = realMs / 1000;
       applyAt(realMs, true);
-      setActiveGate(null);
+      clearActiveGateState();
       resetGatesForTime(realMs);
       setShowChapters(false);
     },
-    [applyAt, resetGatesForTime]
+    [applyAt, clearActiveGateState, resetGatesForTime]
   );
 
   const toggleFullscreen = useCallback(() => {
@@ -1401,10 +1441,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
           ref={audioRef}
           src={audioSrc}
           preload="auto"
-          onLoadedMetadata={() => {
-            setReady(true);
-            onReady?.();
-          }}
+          onLoadedMetadata={markAudioReady}
+          onLoadedData={markAudioReady}
+          onCanPlay={markAudioReady}
           onEnded={() => {
             setIsPlaying(false);
             onPlayStateChange?.(false);
@@ -1492,7 +1531,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
             {/* Gate markers — colored stars on the timeline */}
             {gateMarkers.map((m, i) => {
               const result = gateResults[m.idx];
-              const isActive = activeGateIdxRef.current === m.idx && !!activeGate;
+              const isActive = activeGateIdx === m.idx && !!activeGate;
               const color = result === 'correct'
                 ? 'text-emerald-500'
                 : result === 'submitted'
