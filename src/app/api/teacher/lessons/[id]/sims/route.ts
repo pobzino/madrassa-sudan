@@ -18,6 +18,7 @@ export const maxDuration = 300;
 
 /** Server-side max duration: 45 minutes. */
 const SIM_MAX_DURATION_MS = 45 * 60 * 1000;
+const AUDIO_EXISTS_RETRY_DELAYS_MS = [0, 250, 750, 1500, 3000];
 
 const CreateSimSchema = z.object({
   id: z.string().uuid().optional(),
@@ -37,6 +38,68 @@ type CreateSimBody = z.infer<typeof CreateSimSchema>;
 
 function rowToPayload(row: SimRow, audioUrl: string | null): SimPayload {
   return { sim: row, audio_url: audioUrl };
+}
+
+function byteLength(text: string): number {
+  return new TextEncoder().encode(text).length;
+}
+
+function summarizeSimSaveRequest(json: unknown, requestBodyBytes: number) {
+  const body = json && typeof json === 'object' ? (json as Record<string, unknown>) : {};
+  const events = Array.isArray(body.events) ? body.events : [];
+  const eventTypes: Record<string, number> = {};
+
+  for (const event of events) {
+    if (!event || typeof event !== 'object') continue;
+    const type = (event as { type?: unknown }).type;
+    if (typeof type !== 'string') continue;
+    eventTypes[type] = (eventTypes[type] ?? 0) + 1;
+  }
+
+  const audioBase64Length =
+    typeof body.audio_base64 === 'string' ? body.audio_base64.length : 0;
+
+  return {
+    request_body_bytes: requestBodyBytes,
+    deck_slide_count: Array.isArray(body.deck_snapshot) ? body.deck_snapshot.length : null,
+    events_count: events.length,
+    stroke_point_count: eventTypes.stroke_point ?? 0,
+    event_types: eventTypes,
+    clip_segments_count: Array.isArray(body.clip_segments) ? body.clip_segments.length : 0,
+    has_audio_upload_path: typeof body.audio_upload_path === 'string',
+    audio_base64_estimated_bytes:
+      audioBase64Length > 0 ? Math.floor((audioBase64Length * 3) / 4) : 0,
+  };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForUploadedAudioObject(path: string) {
+  const service = createServiceClient();
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < AUDIO_EXISTS_RETRY_DELAYS_MS.length; attempt += 1) {
+    const delay = AUDIO_EXISTS_RETRY_DELAYS_MS[attempt];
+    if (delay > 0) await sleep(delay);
+
+    const { data: objectExists, error } = await service.storage
+      .from(SIM_AUDIO_BUCKET)
+      .exists(path);
+
+    if (objectExists) {
+      return { ok: true as const, attempts: attempt + 1, error: null };
+    }
+
+    if (error) lastError = error;
+  }
+
+  return {
+    ok: false as const,
+    attempts: AUDIO_EXISTS_RETRY_DELAYS_MS.length,
+    error: lastError,
+  };
 }
 
 // GET /api/teacher/lessons/[id]/sims — return the (single) sim for a lesson
@@ -127,17 +190,27 @@ export async function POST(
     const dataClient = hasServiceRoleConfig() ? createServiceClient() : supabase;
 
     let body: CreateSimBody;
+    let requestStats: ReturnType<typeof summarizeSimSaveRequest> | null = null;
     try {
-      const json = await request.json();
+      const rawBody = await request.text();
+      const json = rawBody.trim() ? JSON.parse(rawBody) : {};
+      requestStats = summarizeSimSaveRequest(json, byteLength(rawBody));
       const parsed = CreateSimSchema.safeParse(json);
       if (!parsed.success) {
+        console.warn('Invalid sim save request:', {
+          lessonId,
+          userId: user.id,
+          requestStats,
+          issues: parsed.error.issues,
+        });
         return NextResponse.json(
-          { error: 'Invalid input', details: parsed.error.issues },
+          { error: 'Invalid input', details: parsed.error.issues, request_stats: requestStats },
           { status: 400 }
         );
       }
       body = parsed.data;
-    } catch {
+    } catch (error) {
+      console.warn('Invalid sim save JSON body:', { lessonId, userId: user.id, error });
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
@@ -158,13 +231,22 @@ export async function POST(
           { status: 500 }
         );
       }
-      const service = createServiceClient();
-      const { data: objectExists, error: existsError } = await service.storage
-        .from(SIM_AUDIO_BUCKET)
-        .exists(body.audio_upload_path);
-      if (existsError || !objectExists) {
+      const objectCheck = await waitForUploadedAudioObject(body.audio_upload_path);
+      if (!objectCheck.ok) {
+        console.warn('Uploaded sim audio object was not visible during finalize:', {
+          lessonId,
+          userId: user.id,
+          audio_upload_path: body.audio_upload_path,
+          attempts: objectCheck.attempts,
+          error: objectCheck.error,
+          requestStats,
+        });
         return NextResponse.json(
-          { error: existsError?.message || 'Uploaded audio file was not found' },
+          {
+            error:
+              'Audio upload did not finish. Click Save again; this recording is still kept in this browser.',
+            request_stats: requestStats,
+          },
           { status: 400 }
         );
       }
@@ -221,7 +303,7 @@ export async function POST(
       .single();
 
     if (insertError || !insertedRow) {
-      console.error('Insert sim error:', insertError);
+      console.error('Insert sim error:', { error: insertError, requestStats });
       return NextResponse.json(
         { error: insertError?.message || 'Failed to create sim' },
         { status: 500 }

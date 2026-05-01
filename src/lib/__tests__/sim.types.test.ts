@@ -339,20 +339,43 @@ describe('compactSimEvents', () => {
     expect(e.point.pressure).toBe(0.5);
   });
 
-  it('drops stroke_point events within 1px of previous', () => {
+  it('thins dense stroke_point events and preserves the final point', () => {
     const events: SimEvent[] = [
       { t: 0, type: 'stroke_start', slide_id: 's1', id: 'a', tool: 'pen', color: '#000', width: 2, point: { x: 10, y: 10, pressure: 0 } },
-      { t: 10, type: 'stroke_point', slide_id: 's1', id: 'a', point: { x: 10.3, y: 10.4, pressure: 0 } },  // within 1px → dropped
-      { t: 20, type: 'stroke_point', slide_id: 's1', id: 'a', point: { x: 12, y: 10, pressure: 0 } },       // > 1px → kept
-      { t: 30, type: 'stroke_point', slide_id: 's1', id: 'a', point: { x: 12.5, y: 10.3, pressure: 0 } },   // within 1px of 12,10 → dropped
+      { t: 10, type: 'stroke_point', slide_id: 's1', id: 'a', point: { x: 10.3, y: 10.4, pressure: 0 } },
+      { t: 20, type: 'stroke_point', slide_id: 's1', id: 'a', point: { x: 12, y: 10, pressure: 0 } },
+      { t: 30, type: 'stroke_point', slide_id: 's1', id: 'a', point: { x: 12.5, y: 10.3, pressure: 0 } },
       { t: 40, type: 'stroke_end', slide_id: 's1', id: 'a' },
     ];
     const compacted = compactSimEvents(events);
-    // start + 1 kept point + end = 3 events
+    // start + final pending point + end = 3 events
     expect(compacted).toHaveLength(3);
     expect(compacted[0].type).toBe('stroke_start');
     expect(compacted[1].type).toBe('stroke_point');
+    expect((compacted[1] as Extract<SimEvent, { type: 'stroke_point' }>).point).toEqual({
+      x: 12.5,
+      y: 10.3,
+      pressure: 0,
+    });
     expect(compacted[2].type).toBe('stroke_end');
+  });
+
+  it('keeps stroke points that move far enough or happen after the time threshold', () => {
+    const events: SimEvent[] = [
+      { t: 0, type: 'stroke_start', slide_id: 's1', id: 'a', tool: 'pen', color: '#000', width: 2, point: { x: 0, y: 0, pressure: 0 } },
+      { t: 10, type: 'stroke_point', slide_id: 's1', id: 'a', point: { x: 4, y: 0, pressure: 0 } },
+      { t: 65, type: 'stroke_point', slide_id: 's1', id: 'a', point: { x: 4.5, y: 0, pressure: 0 } },
+      { t: 70, type: 'stroke_end', slide_id: 's1', id: 'a' },
+    ];
+
+    const compacted = compactSimEvents(events);
+
+    expect(compacted.map((event) => event.type)).toEqual([
+      'stroke_start',
+      'stroke_point',
+      'stroke_point',
+      'stroke_end',
+    ]);
   });
 
   it('preserves non-stroke events unchanged', () => {

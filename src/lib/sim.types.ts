@@ -399,39 +399,104 @@ function compactPoint(p: Point): Point {
   return { x: round1(p.x), y: round1(p.y), pressure: round1(p.pressure) };
 }
 
+const MIN_STROKE_POINT_DISTANCE = 3;
+const MIN_STROKE_POINT_TIME_MS = 50;
+const MIN_STROKE_PRESSURE_DELTA = 0.1;
+const MIN_POINTER_EVENT_DISTANCE = 2;
+const MIN_POINTER_EVENT_TIME_MS = 50;
+
+function distanceSquared(a: Pick<Point, 'x' | 'y'>, b: Pick<Point, 'x' | 'y'>): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
+}
+
+type KeptStrokePoint = { point: Point; t: number };
+type StrokePointEvent = Extract<SimEvent, { type: 'stroke_point' }>;
+type PointerEvent = Extract<SimEvent, { type: 'laser' | 'spotlight_on' | 'spotlight_move' }>;
+
+function shouldKeepStrokePoint(previous: KeptStrokePoint | undefined, point: Point, t: number) {
+  if (!previous) return true;
+  if (t - previous.t >= MIN_STROKE_POINT_TIME_MS) return true;
+  if (
+    distanceSquared(previous.point, point) >=
+    MIN_STROKE_POINT_DISTANCE * MIN_STROKE_POINT_DISTANCE
+  ) {
+    return true;
+  }
+  return Math.abs(point.pressure - previous.point.pressure) >= MIN_STROKE_PRESSURE_DELTA;
+}
+
+function shouldKeepPointerEvent(previous: PointerEvent | undefined, event: PointerEvent) {
+  if (!previous) return true;
+  if (previous.slide_id !== event.slide_id || previous.type !== event.type) return true;
+  if (event.t - previous.t >= MIN_POINTER_EVENT_TIME_MS) return true;
+  return (
+    distanceSquared(previous, event) >=
+    MIN_POINTER_EVENT_DISTANCE * MIN_POINTER_EVENT_DISTANCE
+  );
+}
+
 /**
  * Compact a sim event array to reduce JSON payload size:
  * 1. Round all point coordinates to 1 decimal place.
- * 2. Drop consecutive stroke_point events that are within 1px of each other.
+ * 2. Thin dense freehand points by time, distance, and pressure.
+ * 3. Preserve the final point before stroke_end so stroke endpoints survive.
+ * 4. Thin dense laser/spotlight move events.
  *
- * This is a lossy but visually imperceptible optimization that can shrink
- * stroke-heavy sims by 30–60%.
+ * This is a lossy but visually imperceptible optimization that keeps long
+ * drawing-heavy recordings small enough to save reliably.
  */
 export function compactSimEvents(events: SimEvent[]): SimEvent[] {
   const out: SimEvent[] = [];
-  const lastPointForStroke = new Map<string, Point>();
+  const lastKeptPointForStroke = new Map<string, KeptStrokePoint>();
+  const pendingPointForStroke = new Map<string, StrokePointEvent>();
+  let lastLaserEvent: PointerEvent | undefined;
+  let lastSpotlightEvent: PointerEvent | undefined;
+
+  const flushPendingStrokePoint = (strokeId: string) => {
+    const pending = pendingPointForStroke.get(strokeId);
+    if (!pending) return;
+    const previous = lastKeptPointForStroke.get(strokeId);
+    if (
+      !previous ||
+      pending.t !== previous.t ||
+      pending.point.x !== previous.point.x ||
+      pending.point.y !== previous.point.y ||
+      pending.point.pressure !== previous.point.pressure
+    ) {
+      out.push(pending);
+      lastKeptPointForStroke.set(strokeId, { point: pending.point, t: pending.t });
+    }
+    pendingPointForStroke.delete(strokeId);
+  };
 
   for (const e of events) {
     switch (e.type) {
       case 'stroke_start': {
         const p = compactPoint(e.point);
-        lastPointForStroke.set(e.id, p);
+        lastKeptPointForStroke.set(e.id, { point: p, t: e.t });
+        pendingPointForStroke.delete(e.id);
         out.push({ ...e, point: p });
         break;
       }
       case 'stroke_point': {
         const p = compactPoint(e.point);
-        const prev = lastPointForStroke.get(e.id);
-        // Drop if within 1px of previous point (saves ~40 bytes per dropped event)
-        if (prev && Math.abs(p.x - prev.x) < 1 && Math.abs(p.y - prev.y) < 1) {
+        const patched = { ...e, point: p };
+        const prev = lastKeptPointForStroke.get(e.id);
+        if (!shouldKeepStrokePoint(prev, p, e.t)) {
+          pendingPointForStroke.set(e.id, patched);
           continue;
         }
-        lastPointForStroke.set(e.id, p);
-        out.push({ ...e, point: p });
+        pendingPointForStroke.delete(e.id);
+        lastKeptPointForStroke.set(e.id, { point: p, t: e.t });
+        out.push(patched);
         break;
       }
       case 'stroke_end': {
-        lastPointForStroke.delete(e.id);
+        flushPendingStrokePoint(e.id);
+        lastKeptPointForStroke.delete(e.id);
+        pendingPointForStroke.delete(e.id);
         const patched = { ...e } as typeof e;
         if (patched.start) patched.start = compactPoint(patched.start);
         if (patched.end) patched.end = compactPoint(patched.end);
@@ -444,12 +509,24 @@ export function compactSimEvents(events: SimEvent[]): SimEvent[] {
       case 'stroke_sticker':
         out.push({ ...e, position: compactPoint(e.position) });
         break;
-      case 'laser':
-        out.push({ ...e, x: round1(e.x), y: round1(e.y) });
+      case 'laser': {
+        const patched = { ...e, x: round1(e.x), y: round1(e.y) };
+        if (!shouldKeepPointerEvent(lastLaserEvent, patched)) continue;
+        lastLaserEvent = patched;
+        out.push(patched);
         break;
+      }
       case 'spotlight_on':
-      case 'spotlight_move':
-        out.push({ ...e, x: round1(e.x), y: round1(e.y) });
+      case 'spotlight_move': {
+        const patched = { ...e, x: round1(e.x), y: round1(e.y) };
+        if (!shouldKeepPointerEvent(lastSpotlightEvent, patched)) continue;
+        lastSpotlightEvent = patched;
+        out.push(patched);
+        break;
+      }
+      case 'spotlight_off':
+        lastSpotlightEvent = undefined;
+        out.push(e);
         break;
       default:
         out.push(e);

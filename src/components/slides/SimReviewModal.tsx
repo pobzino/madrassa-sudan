@@ -100,6 +100,7 @@ type SimSaveAttemptStatus =
 interface SimSaveAttemptExtras {
   sim_id?: string | null;
   audio_path?: string | null;
+  events_count?: number | null;
   error_message?: string | null;
   error_status?: number | null;
   error_details?: Record<string, unknown>;
@@ -170,6 +171,42 @@ function getBrowserInfo(): Record<string, unknown> {
       height: window.innerHeight,
       devicePixelRatio: window.devicePixelRatio,
     },
+  };
+}
+
+function stringByteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+function countEventsByType(events: SimEvent[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const event of events) {
+    counts[event.type] = (counts[event.type] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function buildSaveDiagnostics(
+  rawEvents: SimEvent[],
+  compactEvents: SimEvent[],
+  finalizePayloadBytes?: number
+): Record<string, unknown> {
+  const rawTypes = countEventsByType(rawEvents);
+  const compactTypes = countEventsByType(compactEvents);
+  return {
+    raw_events_count: rawEvents.length,
+    compact_events_count: compactEvents.length,
+    dropped_events_count: Math.max(0, rawEvents.length - compactEvents.length),
+    raw_stroke_point_count: rawTypes.stroke_point ?? 0,
+    compact_stroke_point_count: compactTypes.stroke_point ?? 0,
+    dropped_stroke_point_count: Math.max(
+      0,
+      (rawTypes.stroke_point ?? 0) - (compactTypes.stroke_point ?? 0)
+    ),
+    compact_event_types: compactTypes,
+    ...(finalizePayloadBytes === undefined
+      ? {}
+      : { finalize_payload_bytes: finalizePayloadBytes }),
   };
 }
 
@@ -419,7 +456,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
     (status: SimSaveAttemptStatus, extras: SimSaveAttemptExtras = {}) => {
       if (props.mode !== 'record-review' || !saveAttemptIdRef.current) return null;
       const audioBlob = props.recording.audioBlob;
-      const compactEvents = compactSimEvents(editableEvents);
+      const eventsCount = extras.events_count ?? compactSimEvents(editableEvents).length;
       return {
         attempt_id: saveAttemptIdRef.current,
         status,
@@ -429,7 +466,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         audio_size_bytes: audioBlob?.size ?? null,
         audio_mime: props.recording.audioMime,
         audio_path: extras.audio_path,
-        events_count: compactEvents.length,
+        events_count: eventsCount,
         deck_slide_count: props.deckSnapshot.length,
         clip_segments_count: previewClips.length,
         error_message: extras.error_message,
@@ -538,14 +575,25 @@ export default function SimReviewModal(props: SimReviewModalProps) {
     setSaveError(null);
     setUploadProgress(0);
     let failureTracked = false;
+    let compactEventCount: number | undefined;
+    let saveDiagnostics: Record<string, unknown> | undefined;
     try {
       const audioBlob = props.recording.audioBlob;
       let audioUpload: SimAudioUploadInstructions | null = null;
+      const compactEvents = compactSimEvents(editableEvents);
+      compactEventCount = compactEvents.length;
+      saveDiagnostics = buildSaveDiagnostics(editableEvents, compactEvents);
 
-      await trackSaveAttempt('save_started');
+      await trackSaveAttempt('save_started', {
+        events_count: compactEventCount,
+        error_details: saveDiagnostics,
+      });
 
       if (audioBlob) {
-        await trackSaveAttempt('audio_upload_preparing');
+        await trackSaveAttempt('audio_upload_preparing', {
+          events_count: compactEventCount,
+          error_details: saveDiagnostics,
+        });
         const prepareRes = await fetch(
           `/api/teacher/lessons/${props.lessonId}/sims/audio-upload`,
           {
@@ -562,8 +610,10 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         if (!prepareRes.ok) {
           const body = (await prepareRes.json().catch(() => null)) as { error?: string } | null;
           await trackSaveAttempt('audio_upload_prepare_failed', {
+            events_count: compactEventCount,
             error_status: prepareRes.status,
             error_message: body?.error || `Save failed (${prepareRes.status})`,
+            error_details: saveDiagnostics,
           });
           failureTracked = true;
           throw new Error(body?.error || `Save failed (${prepareRes.status})`);
@@ -573,6 +623,8 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         await trackSaveAttempt('audio_upload_prepared', {
           sim_id: audioUpload.sim_id,
           audio_path: audioUpload.path,
+          events_count: compactEventCount,
+          error_details: saveDiagnostics,
         });
         setUploadProgress(15);
 
@@ -582,7 +634,9 @@ export default function SimReviewModal(props: SimReviewModalProps) {
           await trackSaveAttempt('audio_upload_failed', {
             sim_id: audioUpload.sim_id,
             audio_path: audioUpload.path,
+            events_count: compactEventCount,
             error_message: error instanceof Error ? error.message : 'Audio upload failed',
+            error_details: saveDiagnostics,
           });
           failureTracked = true;
           throw error;
@@ -590,38 +644,60 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         await trackSaveAttempt('audio_upload_succeeded', {
           sim_id: audioUpload.sim_id,
           audio_path: audioUpload.path,
+          events_count: compactEventCount,
+          error_details: saveDiagnostics,
         });
         setUploadProgress(75);
       }
 
+      const createPayload = {
+        id: audioUpload?.sim_id,
+        deck_snapshot: props.deckSnapshot,
+        events: compactEvents,
+        duration_ms: props.recording.durationMs,
+        audio_duration_ms: props.recording.durationMs,
+        audio_mime: audioUpload?.content_type ?? props.recording.audioMime,
+        audio_upload_path: audioUpload?.path,
+        audio_base64: null,
+        clip_segments: previewClips.length > 0 ? previewClips : null,
+      };
+      const createBody = JSON.stringify(createPayload);
+      const finalizeDiagnostics = buildSaveDiagnostics(
+        editableEvents,
+        compactEvents,
+        stringByteLength(createBody)
+      );
       await trackSaveAttempt('finalize_started', {
         sim_id: audioUpload?.sim_id,
         audio_path: audioUpload?.path,
+        events_count: compactEventCount,
+        error_details: finalizeDiagnostics,
       });
       const createRes = await fetch(`/api/teacher/lessons/${props.lessonId}/sims`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          id: audioUpload?.sim_id,
-          deck_snapshot: props.deckSnapshot,
-          events: compactSimEvents(editableEvents),
-          duration_ms: props.recording.durationMs,
-          audio_duration_ms: props.recording.durationMs,
-          audio_mime: audioUpload?.content_type ?? props.recording.audioMime,
-          audio_upload_path: audioUpload?.path,
-          audio_base64: null,
-          clip_segments: previewClips.length > 0 ? previewClips : null,
-        }),
+        body: createBody,
       });
 
       if (!createRes.ok) {
-        const body = (await createRes.json().catch(() => null)) as { error?: string } | null;
+        const body = (await createRes.json().catch(() => null)) as {
+          error?: string;
+          details?: unknown;
+          request_stats?: unknown;
+        } | null;
         await trackSaveAttempt('finalize_failed', {
           sim_id: audioUpload?.sim_id,
           audio_path: audioUpload?.path,
+          events_count: compactEventCount,
           error_status: createRes.status,
           error_message: body?.error || `Save failed (${createRes.status})`,
+          error_details: {
+            ...finalizeDiagnostics,
+            response_error: body?.error ?? null,
+            response_details: body?.details ?? null,
+            request_stats: body?.request_stats ?? null,
+          },
         });
         failureTracked = true;
         throw new Error(body?.error || `Save failed (${createRes.status})`);
@@ -631,6 +707,8 @@ export default function SimReviewModal(props: SimReviewModalProps) {
       await trackSaveAttempt('saved', {
         sim_id: saved.sim.id,
         audio_path: saved.sim.audio_path,
+        events_count: compactEventCount,
+        error_details: finalizeDiagnostics,
       });
       saveAttemptTerminalRef.current = true;
       setUploadProgress(100);
@@ -638,7 +716,11 @@ export default function SimReviewModal(props: SimReviewModalProps) {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Save failed';
       if (!failureTracked) {
-        await trackSaveAttempt('failed', { error_message: message });
+        await trackSaveAttempt('failed', {
+          events_count: compactEventCount,
+          error_message: message,
+          error_details: saveDiagnostics,
+        });
       }
       setSaveError(
         `${message}. The recording is still kept in this browser; try Save again, or refresh and restore it.`
