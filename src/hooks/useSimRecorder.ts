@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import fixWebmDuration from 'fix-webm-duration';
 import type { SimEvent, SimEventInput } from '@/lib/sim.types';
 
 // ── IndexedDB crash-recovery helpers ─────────────────────────────────────
@@ -358,13 +359,21 @@ export function useSimRecorder(): UseSimRecorderReturn {
 
       recorder.onstop = () => {
         // Some browsers flush the last chunk slightly after stop fires.
-        setTimeout(() => {
+        setTimeout(async () => {
           const mime = audioMimeRef.current;
-          const blob =
+          let blob =
             audioChunksRef.current.length > 0
               ? new Blob(audioChunksRef.current, { type: mime })
               : null;
           const durationMs = Math.max(0, Math.round(getCurrentTimeMs()));
+
+          if (blob && mime.includes('webm') && durationMs > 0) {
+            try {
+              blob = await fixWebmDuration(blob, durationMs, { logger: false });
+            } catch (error) {
+              console.warn('Failed to patch WebM duration metadata:', error);
+            }
+          }
 
           setRecording({
             events: eventsRef.current.slice(),

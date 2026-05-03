@@ -17,6 +17,7 @@
 
 import {
   type CSSProperties,
+  type SyntheticEvent,
   forwardRef,
   memo,
   useCallback,
@@ -207,6 +208,21 @@ function formatMs(ms: number): string {
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function extractAudioUrlFromSimResponse(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const root = data as { audio_url?: unknown; sim?: unknown };
+  if (typeof root.audio_url === 'string' && root.audio_url.length > 0) {
+    return root.audio_url;
+  }
+  if (root.sim && typeof root.sim === 'object') {
+    const nested = root.sim as { audio_url?: unknown };
+    if (typeof nested.audio_url === 'string' && nested.audio_url.length > 0) {
+      return nested.audio_url;
+    }
+  }
+  return null;
 }
 
 function StrokesOverlay({ strokes }: { strokes: SimStroke[] }) {
@@ -466,6 +482,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const [audioSrc, setAudioSrc] = useState(audio_url);
+  const audioRefreshAttemptRef = useRef(0);
   const rafRef = useRef<number>(0);
   const tickRef = useRef<() => void>(() => undefined);
   // Timer-driven playback for audio-less sims
@@ -491,6 +508,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   );
 
   const markAudioReady = useCallback(() => {
+    audioRefreshAttemptRef.current = 0;
+    setError(null);
     setReady(true);
     onReady?.();
   }, [onReady]);
@@ -507,7 +526,10 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const resumeAppliedRef = useRef(false);
 
   // Keep audioSrc in sync when the prop changes (e.g. parent re-fetches).
-  useEffect(() => { setAudioSrc(audio_url); }, [audio_url]);
+  useEffect(() => {
+    audioRefreshAttemptRef.current = 0;
+    setAudioSrc(audio_url);
+  }, [audio_url]);
 
   useEffect(() => {
     if (!audioSrc) return;
@@ -535,25 +557,67 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
   // Proactively refresh the signed audio URL before it expires (every 5h).
   // Also retries on audio error to handle already-expired URLs.
-  const refreshAudioUrl = useCallback(async () => {
-    if (!lessonId) return;
-    try {
-      const res = await fetch(`/api/lessons/${lessonId}/sim`);
-      if (!res.ok) return;
-      const data = await res.json();
-      const freshUrl: string | null = data?.sim?.audio_url ?? null;
-      if (freshUrl) {
+  const refreshAudioUrl = useCallback(async (): Promise<boolean> => {
+    if (!lessonId) return false;
+    const endpoints = [`/api/lessons/${lessonId}/sim`];
+    if (sim.id) {
+      endpoints.push(`/api/teacher/lessons/${lessonId}/sims/${sim.id}`);
+    }
+
+    for (const endpoint of endpoints) {
+      try {
+        const res = await fetch(endpoint, {
+          cache: 'no-store',
+          credentials: 'include',
+        });
+        if (!res.ok) continue;
+        const freshUrl = extractAudioUrlFromSimResponse(await res.json());
+        if (!freshUrl) continue;
+
         const audio = audioRef.current;
         const currentTime = audio?.currentTime ?? 0;
         setAudioSrc(freshUrl);
-        // Restore playback position after src swap
+        setReady(false);
+        // Restore playback position after src swap.
         requestAnimationFrame(() => {
           const a = audioRef.current;
           if (a && currentTime > 0) a.currentTime = currentTime;
         });
+        return true;
+      } catch {
+        // Try the next endpoint.
       }
-    } catch { /* best-effort */ }
-  }, [lessonId]);
+    }
+    return false;
+  }, [lessonId, sim.id]);
+
+  const handleAudioError = useCallback(
+    async (event: SyntheticEvent<HTMLAudioElement, Event>) => {
+      const audio = event.currentTarget;
+      const code = audio.error?.code;
+      const msg = audio.error?.message;
+      console.warn(
+        `SimPlayer: audio failed to load (code=${code}, msg=${msg}, src=${audio.src?.substring(0, 80)})`
+      );
+
+      setReady(false);
+      setIsPlaying(false);
+      onPlayStateChange?.(false);
+
+      if (audioRefreshAttemptRef.current < 2) {
+        audioRefreshAttemptRef.current += 1;
+        const refreshed = await refreshAudioUrl();
+        if (refreshed) return;
+      }
+
+      setError(
+        language === 'ar'
+          ? 'تعذر تشغيل صوت التسجيل. حدّث الصفحة وحاول مرة أخرى. إذا استمرت المشكلة، أعد تسجيل الدرس لأن ملف الصوت قد يكون غير صالح.'
+          : 'Audio could not be played. Refresh and try again. If it still fails, retake the recording because the uploaded audio may be unreadable.'
+      );
+    },
+    [language, onPlayStateChange, refreshAudioUrl]
+  );
 
   useEffect(() => {
     if (!audio_url || !lessonId) return;
@@ -1453,18 +1517,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
             setIsPlaying(false);
             onPlayStateChange?.(false);
           }}
-          onError={(e) => {
-            const audio = e.currentTarget;
-            const code = audio.error?.code;
-            const msg = audio.error?.message;
-            console.warn(`SimPlayer: audio failed to load (code=${code}, msg=${msg}, src=${audio.src?.substring(0, 80)})`);
-            // Try refreshing the signed URL — it may have expired.
-            if (lessonId) {
-              refreshAudioUrl();
-            } else {
-              setReady(true);
-              onReady?.();
-            }
+          onError={(event) => {
+            void handleAudioError(event);
           }}
         />
       )}

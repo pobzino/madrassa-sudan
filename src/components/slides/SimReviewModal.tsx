@@ -148,6 +148,48 @@ async function uploadAudioBlobToSignedUrl(
   }
 }
 
+function verifyAudioBlobPlayable(audioBlob: Blob): Promise<void> {
+  if (typeof window === 'undefined' || typeof Audio === 'undefined') {
+    return Promise.resolve();
+  }
+  if (audioBlob.size <= 0) {
+    return Promise.reject(new Error('Recording audio is empty. Please retake the recording.'));
+  }
+
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(audioBlob);
+    const audio = new Audio();
+    let settled = false;
+    let timeout: number | null = null;
+
+    const cleanup = () => {
+      if (timeout !== null) window.clearTimeout(timeout);
+      audio.removeAttribute('src');
+      audio.load();
+      URL.revokeObjectURL(url);
+    };
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve();
+    };
+    timeout = window.setTimeout(() => {
+      finish(new Error('Recording audio could not be verified. Please retake before saving.'));
+    }, 15_000);
+
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => finish();
+    audio.oncanplay = () => finish();
+    audio.onerror = () => {
+      finish(new Error('Recording audio is unreadable in this browser. Please retake before saving.'));
+    };
+    audio.src = url;
+    audio.load();
+  });
+}
+
 function makeAttemptId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
@@ -419,6 +461,10 @@ export default function SimReviewModal(props: SimReviewModalProps) {
   if (props.mode === 'record-review' && !saveAttemptIdRef.current) {
     saveAttemptIdRef.current = makeAttemptId();
   }
+  const saveReference =
+    props.mode === 'record-review' && saveAttemptIdRef.current
+      ? saveAttemptIdRef.current.slice(0, 8)
+      : null;
 
   const togglePlayPause = useCallback(() => {
     const p = playerRef.current;
@@ -590,6 +636,24 @@ export default function SimReviewModal(props: SimReviewModalProps) {
       });
 
       if (audioBlob) {
+        try {
+          await verifyAudioBlobPlayable(audioBlob);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Recording audio could not be verified';
+          await trackSaveAttempt('failed', {
+            events_count: compactEventCount,
+            error_message: message,
+            error_details: {
+              ...saveDiagnostics,
+              stage: 'audio_blob_validation',
+              audio_size_bytes: audioBlob.size,
+              audio_type: audioBlob.type || props.recording.audioMime,
+            },
+          });
+          failureTracked = true;
+          throw error;
+        }
+
         await trackSaveAttempt('audio_upload_preparing', {
           events_count: compactEventCount,
           error_details: saveDiagnostics,
@@ -862,6 +926,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
             ref={playerRef}
             payload={previewPayload}
             language={props.language}
+            lessonId={props.lessonId}
             clipSegments={previewClips}
             hideControls
             onRealTimeChange={setCurrentTime}
@@ -975,8 +1040,28 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         </div>
 
         {saveError && (
-          <div className="mx-6 mb-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
-            {saveError}
+          <div className="mx-6 mb-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-1">
+                <p className="font-semibold">Save did not complete</p>
+                <p className="text-xs leading-relaxed text-red-700">{saveError}</p>
+                <p className="text-xs leading-relaxed text-red-700">
+                  Do not retake yet. This recording is still kept in this browser while this
+                  review window is open.
+                  {saveReference ? ` Reference: ${saveReference}` : ''}
+                </p>
+              </div>
+              {props.mode === 'record-review' && (
+                <button
+                  type="button"
+                  onClick={handleSaveRecord}
+                  disabled={saving}
+                  className="shrink-0 rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-red-300"
+                >
+                  {saving ? 'Retrying...' : 'Retry Save'}
+                </button>
+              )}
+            </div>
           </div>
         )}
 

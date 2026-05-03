@@ -1040,7 +1040,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           <div className="space-y-4">
             {lessonSim ? (
               <>
-                <SimPlayer payload={lessonSim} language="ar" showTeacherNotes />
+                <SimPlayer payload={lessonSim} language="ar" lessonId={id} showTeacherNotes />
                 <GenerateHomeworkButton lessonId={id} subjectId={form.subject_id} />
               </>
             ) : (

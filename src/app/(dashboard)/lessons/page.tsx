@@ -10,6 +10,7 @@ import { OwlThinking, OwlSad } from "@/components/illustrations";
 import type { Lesson, Subject, LessonProgress } from "@/lib/database.types";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import SlideCard from "@/components/slides/SlideCard";
+import OwlImage, { isOwlImage } from "@/components/slides/OwlImage";
 import type { Slide } from "@/lib/slides.types";
 
 const translations = {
@@ -65,6 +66,16 @@ type LessonWithProgress = Lesson & {
   subject?: Subject | null;
   first_slide?: Slide | null;
 };
+
+function isHttpImageUrl(url: string | null | undefined): url is string {
+  if (!url) return false;
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 export default function LessonsPage() {
   const router = useRouter();
@@ -481,6 +492,9 @@ function LessonCard({
     lesson.subject &&
     (language === "ar" ? lesson.subject.name_ar : lesson.subject.name_en);
   const hasProgress = progress > 0 && !completed;
+  const thumbnailUrl = lesson.thumbnail_url;
+  const hasOwlThumbnail = isOwlImage(thumbnailUrl);
+  const hasRemoteThumbnail = isHttpImageUrl(thumbnailUrl);
 
   return (
     <Link
@@ -491,9 +505,13 @@ function LessonCard({
     >
       {/* Thumbnail */}
       <div className={`relative ${compact ? "h-40" : "h-44 sm:h-48"} bg-gradient-to-br from-gray-100 to-gray-200`}>
-        {lesson.thumbnail_url ? (
+        {hasOwlThumbnail ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-emerald-100 to-lime-50">
+            <OwlImage url={thumbnailUrl!} className="w-full h-full p-8" />
+          </div>
+        ) : hasRemoteThumbnail ? (
           <Image
-            src={lesson.thumbnail_url}
+            src={thumbnailUrl}
             alt={title}
             fill
             sizes={compact ? "256px" : "(max-width:640px) 50vw, 25vw"}
