@@ -117,7 +117,14 @@ export interface UseSimRecorderReturn {
 
 function pickAudioMimeType(): string | null {
   if (typeof MediaRecorder === 'undefined') return null;
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+  // Prefer MP4/AAC where the browser supports it; it has fewer playback
+  // compatibility issues than WebM/Opus across Safari/Chrome/Edge installs.
+  const candidates = [
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
+    'audio/webm;codecs=opus',
+    'audio/webm',
+  ];
   for (const c of candidates) {
     try {
       if (MediaRecorder.isTypeSupported(c)) return c;

@@ -8,6 +8,9 @@ import {
   SIM_AUDIO_MAX_BYTES,
   assertCanManageLesson,
   assertSimFeatureAccess,
+  isAudioPathForLesson,
+  probeSignedAudioUrl,
+  signAudioUrl,
 } from '@/lib/server/sim-storage';
 
 const PrepareAudioUploadSchema = z.object({
@@ -88,5 +91,75 @@ export async function POST(
   } catch (error) {
     console.error('Prepare sim audio upload error:', error);
     return NextResponse.json({ error: 'Failed to prepare audio upload' }, { status: 500 });
+  }
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: lessonId } = await params;
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const simAccess = await assertSimFeatureAccess(user.id, supabase);
+    if (!simAccess.ok) return simAccess.response;
+
+    const access = await assertCanManageLesson(lessonId, user.id, supabase);
+    if (!access.ok) return access.response;
+
+    const audioPath = request.nextUrl.searchParams.get('path');
+    if (!isAudioPathForLesson(lessonId, audioPath)) {
+      return NextResponse.json({ error: 'Invalid audio upload path' }, { status: 400 });
+    }
+
+    if (!hasServiceRoleConfig()) {
+      return NextResponse.json(
+        { error: 'Server is missing Supabase service role credentials for storage validation.' },
+        { status: 500 }
+      );
+    }
+
+    const service = createServiceClient();
+    const { data: objectExists, error: existsError } = await service.storage
+      .from(SIM_AUDIO_BUCKET)
+      .exists(audioPath);
+
+    if (existsError || !objectExists) {
+      return NextResponse.json(
+        { error: existsError?.message || 'Uploaded audio object was not found.' },
+        { status: 404 }
+      );
+    }
+
+    const audioUrl = await signAudioUrl(lessonId, audioPath);
+    if (!audioUrl) {
+      return NextResponse.json({ error: 'Failed to sign uploaded audio for playback.' }, { status: 500 });
+    }
+
+    const probe = await probeSignedAudioUrl(audioUrl, audioPath);
+    if (!probe.ok) {
+      return NextResponse.json(
+        {
+          error: 'Uploaded audio is not a valid playable media file. Please retake before saving.',
+          probe,
+        },
+        { status: 422 }
+      );
+    }
+
+    return NextResponse.json({ audio_url: audioUrl, probe });
+  } catch (error) {
+    console.error('Validate sim audio upload error:', error);
+    return NextResponse.json({ error: 'Failed to validate audio upload' }, { status: 500 });
   }
 }

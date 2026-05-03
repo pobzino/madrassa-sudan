@@ -190,6 +190,43 @@ function verifyAudioBlobPlayable(audioBlob: Blob): Promise<void> {
   });
 }
 
+function verifyAudioUrlPlayable(audioUrl: string): Promise<void> {
+  if (typeof window === 'undefined' || typeof Audio === 'undefined') {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const audio = new Audio();
+    let settled = false;
+    let timeout: number | null = null;
+
+    const cleanup = () => {
+      if (timeout !== null) window.clearTimeout(timeout);
+      audio.removeAttribute('src');
+      audio.load();
+    };
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve();
+    };
+    timeout = window.setTimeout(() => {
+      finish(new Error('Uploaded audio could not be verified. Please retake before saving.'));
+    }, 15_000);
+
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => finish();
+    audio.oncanplay = () => finish();
+    audio.onerror = () => {
+      finish(new Error('Uploaded audio is unreadable after upload. Please retake before saving.'));
+    };
+    audio.src = audioUrl;
+    audio.load();
+  });
+}
+
 function makeAttemptId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
@@ -694,13 +731,33 @@ export default function SimReviewModal(props: SimReviewModalProps) {
 
         try {
           await uploadAudioBlobToSignedUrl(audioUpload, audioBlob);
+          const validateRes = await fetch(
+            `/api/teacher/lessons/${props.lessonId}/sims/audio-upload?path=${encodeURIComponent(audioUpload.path)}`,
+            { credentials: 'include', cache: 'no-store' }
+          );
+          const validation = (await validateRes.json().catch(() => null)) as {
+            audio_url?: string;
+            error?: string;
+            probe?: unknown;
+          } | null;
+
+          if (!validateRes.ok || !validation?.audio_url) {
+            throw new Error(
+              validation?.error || `Uploaded audio validation failed (${validateRes.status})`
+            );
+          }
+
+          await verifyAudioUrlPlayable(validation.audio_url);
         } catch (error) {
           await trackSaveAttempt('audio_upload_failed', {
             sim_id: audioUpload.sim_id,
             audio_path: audioUpload.path,
             events_count: compactEventCount,
             error_message: error instanceof Error ? error.message : 'Audio upload failed',
-            error_details: saveDiagnostics,
+            error_details: {
+              ...saveDiagnostics,
+              stage: 'post_upload_audio_validation',
+            },
           });
           failureTracked = true;
           throw error;
