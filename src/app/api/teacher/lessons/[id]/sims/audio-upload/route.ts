@@ -15,7 +15,7 @@ import {
 
 const PrepareAudioUploadSchema = z.object({
   audio_mime: z.string().nullable().optional(),
-  size_bytes: z.number().int().nonnegative().max(SIM_AUDIO_MAX_BYTES).optional(),
+  size_bytes: z.number().int().positive().max(SIM_AUDIO_MAX_BYTES).optional(),
 });
 
 export async function POST(

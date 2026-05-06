@@ -148,83 +148,10 @@ async function uploadAudioBlobToSignedUrl(
   }
 }
 
-function verifyAudioBlobPlayable(audioBlob: Blob): Promise<void> {
-  if (typeof window === 'undefined' || typeof Audio === 'undefined') {
-    return Promise.resolve();
-  }
+function assertAudioBlobCanBeSaved(audioBlob: Blob): void {
   if (audioBlob.size <= 0) {
-    return Promise.reject(new Error('Recording audio is empty. Please retake the recording.'));
+    throw new Error('Recording audio is empty. Please retake the recording.');
   }
-
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(audioBlob);
-    const audio = new Audio();
-    let settled = false;
-    let timeout: number | null = null;
-
-    const cleanup = () => {
-      if (timeout !== null) window.clearTimeout(timeout);
-      audio.removeAttribute('src');
-      audio.load();
-      URL.revokeObjectURL(url);
-    };
-    const finish = (error?: Error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      if (error) reject(error);
-      else resolve();
-    };
-    timeout = window.setTimeout(() => {
-      finish(new Error('Recording audio could not be verified. Please retake before saving.'));
-    }, 15_000);
-
-    audio.preload = 'metadata';
-    audio.onloadedmetadata = () => finish();
-    audio.oncanplay = () => finish();
-    audio.onerror = () => {
-      finish(new Error('Recording audio is unreadable in this browser. Please retake before saving.'));
-    };
-    audio.src = url;
-    audio.load();
-  });
-}
-
-function verifyAudioUrlPlayable(audioUrl: string): Promise<void> {
-  if (typeof window === 'undefined' || typeof Audio === 'undefined') {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve, reject) => {
-    const audio = new Audio();
-    let settled = false;
-    let timeout: number | null = null;
-
-    const cleanup = () => {
-      if (timeout !== null) window.clearTimeout(timeout);
-      audio.removeAttribute('src');
-      audio.load();
-    };
-    const finish = (error?: Error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      if (error) reject(error);
-      else resolve();
-    };
-    timeout = window.setTimeout(() => {
-      finish(new Error('Uploaded audio could not be verified. Please retake before saving.'));
-    }, 15_000);
-
-    audio.preload = 'metadata';
-    audio.onloadedmetadata = () => finish();
-    audio.oncanplay = () => finish();
-    audio.onerror = () => {
-      finish(new Error('Uploaded audio is unreadable after upload. Please retake before saving.'));
-    };
-    audio.src = audioUrl;
-    audio.load();
-  });
 }
 
 function makeAttemptId(): string {
@@ -660,6 +587,13 @@ export default function SimReviewModal(props: SimReviewModalProps) {
     let failureTracked = false;
     let compactEventCount: number | undefined;
     let saveDiagnostics: Record<string, unknown> | undefined;
+    const buildAttemptDetails = (
+      base: Record<string, unknown> | undefined,
+      extra: Record<string, unknown> = {}
+    ): Record<string, unknown> => ({
+      ...(base ?? {}),
+      ...extra,
+    });
     try {
       const audioBlob = props.recording.audioBlob;
       let audioUpload: SimAudioUploadInstructions | null = null;
@@ -672,104 +606,115 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         error_details: saveDiagnostics,
       });
 
-      if (audioBlob) {
-        try {
-          await verifyAudioBlobPlayable(audioBlob);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Recording audio could not be verified';
-          await trackSaveAttempt('failed', {
-            events_count: compactEventCount,
-            error_message: message,
-            error_details: {
-              ...saveDiagnostics,
-              stage: 'audio_blob_validation',
-              audio_size_bytes: audioBlob.size,
-              audio_type: audioBlob.type || props.recording.audioMime,
-            },
-          });
-          failureTracked = true;
-          throw error;
-        }
-
-        await trackSaveAttempt('audio_upload_preparing', {
+      if (!audioBlob) {
+        const message = 'No recording audio was captured. Please retake the recording.';
+        await trackSaveAttempt('failed', {
           events_count: compactEventCount,
-          error_details: saveDiagnostics,
+          error_message: message,
+          error_details: buildAttemptDetails(saveDiagnostics, {
+            stage: 'audio_blob_validation',
+            audio_size_bytes: null,
+            audio_type: props.recording.audioMime,
+          }),
         });
-        const prepareRes = await fetch(
-          `/api/teacher/lessons/${props.lessonId}/sims/audio-upload`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              audio_mime: props.recording.audioMime,
-              size_bytes: audioBlob.size,
-            }),
-          }
-        );
-
-        if (!prepareRes.ok) {
-          const body = (await prepareRes.json().catch(() => null)) as { error?: string } | null;
-          await trackSaveAttempt('audio_upload_prepare_failed', {
-            events_count: compactEventCount,
-            error_status: prepareRes.status,
-            error_message: body?.error || `Save failed (${prepareRes.status})`,
-            error_details: saveDiagnostics,
-          });
-          failureTracked = true;
-          throw new Error(body?.error || `Save failed (${prepareRes.status})`);
-        }
-
-        audioUpload = (await prepareRes.json()) as SimAudioUploadInstructions;
-        await trackSaveAttempt('audio_upload_prepared', {
-          sim_id: audioUpload.sim_id,
-          audio_path: audioUpload.path,
-          events_count: compactEventCount,
-          error_details: saveDiagnostics,
-        });
-        setUploadProgress(15);
-
-        try {
-          await uploadAudioBlobToSignedUrl(audioUpload, audioBlob);
-          const validateRes = await fetch(
-            `/api/teacher/lessons/${props.lessonId}/sims/audio-upload?path=${encodeURIComponent(audioUpload.path)}`,
-            { credentials: 'include', cache: 'no-store' }
-          );
-          const validation = (await validateRes.json().catch(() => null)) as {
-            audio_url?: string;
-            error?: string;
-            probe?: unknown;
-          } | null;
-
-          if (!validateRes.ok || !validation?.audio_url) {
-            throw new Error(
-              validation?.error || `Uploaded audio validation failed (${validateRes.status})`
-            );
-          }
-
-          await verifyAudioUrlPlayable(validation.audio_url);
-        } catch (error) {
-          await trackSaveAttempt('audio_upload_failed', {
-            sim_id: audioUpload.sim_id,
-            audio_path: audioUpload.path,
-            events_count: compactEventCount,
-            error_message: error instanceof Error ? error.message : 'Audio upload failed',
-            error_details: {
-              ...saveDiagnostics,
-              stage: 'post_upload_audio_validation',
-            },
-          });
-          failureTracked = true;
-          throw error;
-        }
-        await trackSaveAttempt('audio_upload_succeeded', {
-          sim_id: audioUpload.sim_id,
-          audio_path: audioUpload.path,
-          events_count: compactEventCount,
-          error_details: saveDiagnostics,
-        });
-        setUploadProgress(75);
+        failureTracked = true;
+        throw new Error(message);
       }
+
+      try {
+        assertAudioBlobCanBeSaved(audioBlob);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Recording audio could not be verified';
+        await trackSaveAttempt('failed', {
+          events_count: compactEventCount,
+          error_message: message,
+          error_details: buildAttemptDetails(saveDiagnostics, {
+            stage: 'audio_blob_validation',
+            audio_size_bytes: audioBlob.size,
+            audio_type: audioBlob.type || props.recording.audioMime,
+          }),
+        });
+        failureTracked = true;
+        throw error;
+      }
+
+      await trackSaveAttempt('audio_upload_preparing', {
+        events_count: compactEventCount,
+        error_details: buildAttemptDetails(saveDiagnostics, {
+          audio_validation_strategy: 'server_probe',
+        }),
+      });
+      const prepareRes = await fetch(
+        `/api/teacher/lessons/${props.lessonId}/sims/audio-upload`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            audio_mime: props.recording.audioMime,
+            size_bytes: audioBlob.size,
+          }),
+        }
+      );
+
+      if (!prepareRes.ok) {
+        const body = (await prepareRes.json().catch(() => null)) as { error?: string } | null;
+        await trackSaveAttempt('audio_upload_prepare_failed', {
+          events_count: compactEventCount,
+          error_status: prepareRes.status,
+          error_message: body?.error || `Save failed (${prepareRes.status})`,
+          error_details: buildAttemptDetails(saveDiagnostics),
+        });
+        failureTracked = true;
+        throw new Error(body?.error || `Save failed (${prepareRes.status})`);
+      }
+
+      audioUpload = (await prepareRes.json()) as SimAudioUploadInstructions;
+      await trackSaveAttempt('audio_upload_prepared', {
+        sim_id: audioUpload.sim_id,
+        audio_path: audioUpload.path,
+        events_count: compactEventCount,
+        error_details: buildAttemptDetails(saveDiagnostics),
+      });
+      setUploadProgress(15);
+
+      try {
+        await uploadAudioBlobToSignedUrl(audioUpload, audioBlob);
+        const validateRes = await fetch(
+          `/api/teacher/lessons/${props.lessonId}/sims/audio-upload?path=${encodeURIComponent(audioUpload.path)}`,
+          { credentials: 'include', cache: 'no-store' }
+        );
+        const validation = (await validateRes.json().catch(() => null)) as {
+          audio_url?: string;
+          error?: string;
+          probe?: unknown;
+        } | null;
+
+        if (!validateRes.ok || !validation?.audio_url) {
+          throw new Error(
+            validation?.error || `Uploaded audio validation failed (${validateRes.status})`
+          );
+        }
+      } catch (error) {
+        await trackSaveAttempt('audio_upload_failed', {
+          sim_id: audioUpload.sim_id,
+          audio_path: audioUpload.path,
+          events_count: compactEventCount,
+          error_message: error instanceof Error ? error.message : 'Audio upload failed',
+          error_details: buildAttemptDetails(saveDiagnostics, {
+            stage: 'post_upload_audio_validation',
+          }),
+        });
+        failureTracked = true;
+        throw error;
+      }
+      await trackSaveAttempt('audio_upload_succeeded', {
+        sim_id: audioUpload.sim_id,
+        audio_path: audioUpload.path,
+        events_count: compactEventCount,
+        error_details: buildAttemptDetails(saveDiagnostics),
+      });
+      setUploadProgress(75);
 
       const createPayload = {
         id: audioUpload?.sim_id,
@@ -792,7 +737,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         sim_id: audioUpload?.sim_id,
         audio_path: audioUpload?.path,
         events_count: compactEventCount,
-        error_details: finalizeDiagnostics,
+        error_details: buildAttemptDetails(finalizeDiagnostics),
       });
       const createRes = await fetch(`/api/teacher/lessons/${props.lessonId}/sims`, {
         method: 'POST',
@@ -813,12 +758,11 @@ export default function SimReviewModal(props: SimReviewModalProps) {
           events_count: compactEventCount,
           error_status: createRes.status,
           error_message: body?.error || `Save failed (${createRes.status})`,
-          error_details: {
-            ...finalizeDiagnostics,
+          error_details: buildAttemptDetails(finalizeDiagnostics, {
             response_error: body?.error ?? null,
             response_details: body?.details ?? null,
             request_stats: body?.request_stats ?? null,
-          },
+          }),
         });
         failureTracked = true;
         throw new Error(body?.error || `Save failed (${createRes.status})`);
@@ -829,7 +773,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         sim_id: saved.sim.id,
         audio_path: saved.sim.audio_path,
         events_count: compactEventCount,
-        error_details: finalizeDiagnostics,
+        error_details: buildAttemptDetails(finalizeDiagnostics),
       });
       saveAttemptTerminalRef.current = true;
       setUploadProgress(100);
@@ -840,7 +784,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         await trackSaveAttempt('failed', {
           events_count: compactEventCount,
           error_message: message,
-          error_details: saveDiagnostics,
+          error_details: buildAttemptDetails(saveDiagnostics),
         });
       }
       setSaveError(
