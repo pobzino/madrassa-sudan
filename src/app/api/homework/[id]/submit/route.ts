@@ -231,6 +231,60 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .eq("id", submissionId);
     }
 
+    // Snapshot this attempt into the immutable homework_attempts log so teachers
+    // can see the student's full progression across retries. We record the
+    // answers picked plus per-question correctness for auto-gradable questions.
+    let correctCount = 0;
+    const attemptAnswers = data.answers.map((answer) => {
+      const question = questions.find((q: { id: string }) => q.id === answer.question_id);
+      const savedResponse = savedResponses?.find((r) => r.question_id === answer.question_id);
+      const isAutoGradable =
+        question &&
+        (question.question_type === "multiple_choice" || question.question_type === "true_false") &&
+        question.correct_answer;
+      const isCorrect = isAutoGradable ? answer.response_text === question!.correct_answer : null;
+      if (isCorrect) correctCount += 1;
+      const pointsEarned = isAutoGradable
+        ? isCorrect
+          ? question!.points || 0
+          : 0
+        : savedResponse?.points_earned ?? null;
+      return {
+        question_id: answer.question_id,
+        response_text: answer.response_text || null,
+        response_file_urls: answer.response_file_urls || null,
+        is_correct: isCorrect,
+        points_earned: pointsEarned,
+      };
+    });
+
+    const { count: priorAttempts } = await supabase
+      .from("homework_attempts")
+      .select("id", { count: "exact", head: true })
+      .eq("assignment_id", assignmentId)
+      .eq("student_id", user.id);
+
+    const attemptNumber = (priorAttempts ?? 0) + 1;
+
+    await supabase.from("homework_attempts").insert({
+      assignment_id: assignmentId,
+      student_id: user.id,
+      submission_id: submissionId,
+      attempt_number: attemptNumber,
+      score: autoGradablePoints > 0 ? autoGradedScore : null,
+      max_score: assignment.total_points ?? null,
+      correct_count: correctCount,
+      total_questions: questions.length,
+      answers: attemptAnswers,
+      submitted_at: now.toISOString(),
+    });
+
+    // Keep attempt_count on the submission in step with the log.
+    await supabase
+      .from("homework_submissions")
+      .update({ attempt_count: attemptNumber })
+      .eq("id", submissionId);
+
     // Update student streak
     const streakDays = await updateStudentStreak(supabase, user.id);
 
@@ -243,6 +297,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         is_late: isLate,
         auto_graded_score: autoGradedScore,
         auto_gradable_points: autoGradablePoints,
+        all_questions_auto_gradable: allQuestionsAutoGradable,
+        total_points: assignment.total_points ?? 0,
+        correct_count: correctCount,
+        total_questions: questions.length,
+        attempt_number: attemptNumber,
         submitted_at: now.toISOString(),
       },
       message: "Homework submitted successfully",

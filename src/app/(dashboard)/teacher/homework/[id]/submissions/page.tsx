@@ -63,6 +63,25 @@ export default function HomeworkSubmissionsPage() {
   const [filter, setFilter] = useState<"all" | "pending" | "graded">("all");
   const [overallFeedback, setOverallFeedback] = useState("");
 
+  type AttemptAnswer = {
+    question_id: string;
+    response_text: string | null;
+    is_correct: boolean | null;
+    points_earned: number | null;
+  };
+  type AttemptRow = {
+    id: string;
+    attempt_number: number;
+    score: number | null;
+    max_score: number | null;
+    correct_count: number | null;
+    total_questions: number | null;
+    answers: AttemptAnswer[];
+    submitted_at: string;
+  };
+  const [attempts, setAttempts] = useState<AttemptRow[]>([]);
+  const [expandedAttempt, setExpandedAttempt] = useState<string | null>(null);
+
   const loadData = useCallback(async () => {
     setLoading(true);
 
@@ -112,6 +131,32 @@ export default function HomeworkSubmissionsPage() {
         const data = await response.json();
         setSubmissionDetail(data.data);
         setOverallFeedback(data.data.submission.overall_feedback || "");
+
+        // Load the full attempt history for this student on this assignment.
+        const studentId = data.data.submission.student_id as string | undefined;
+        if (studentId) {
+          const { data: attemptsData } = await supabase
+            .from("homework_attempts")
+            .select("id, attempt_number, score, max_score, correct_count, total_questions, answers, submitted_at")
+            .eq("assignment_id", assignmentId)
+            .eq("student_id", studentId)
+            .order("attempt_number", { ascending: true });
+          setAttempts(
+            (attemptsData ?? []).map((a) => ({
+              id: a.id,
+              attempt_number: a.attempt_number,
+              score: a.score,
+              max_score: a.max_score,
+              correct_count: a.correct_count,
+              total_questions: a.total_questions,
+              answers: Array.isArray(a.answers) ? (a.answers as unknown as AttemptAnswer[]) : [],
+              submitted_at: a.submitted_at,
+            }))
+          );
+        } else {
+          setAttempts([]);
+        }
+        setExpandedAttempt(null);
       }
     } catch (error) {
       console.error("Error loading submission detail:", error);
@@ -281,8 +326,9 @@ export default function HomeworkSubmissionsPage() {
         </div>
 
         {/* Grading panel */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-6">
           {selectedSubmission && submissionDetail ? (
+           <>
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -332,6 +378,98 @@ export default function HomeworkSubmissionsPage() {
                 onOverallFeedbackChange={setOverallFeedback}
               />
             </div>
+
+            {/* Attempt history — every try the student made, with the answers
+                they picked, so the teacher can see the full progression. */}
+            {attempts.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                <h3 className="font-semibold text-gray-900 mb-1">
+                  Attempts <span className="text-gray-400 font-normal">({attempts.length})</span>
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Each time {selectedSubmission.student_name.split(" ")[0]} submitted this homework.
+                </p>
+                <div className="space-y-2">
+                  {attempts.map((a) => {
+                    const isOpen = expandedAttempt === a.id;
+                    const mastered =
+                      a.score != null && a.max_score != null && a.max_score > 0 && a.score >= a.max_score;
+                    return (
+                      <div key={a.id} className="border border-gray-100 rounded-xl overflow-hidden">
+                        <button
+                          onClick={() => setExpandedAttempt(isOpen ? null : a.id)}
+                          className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm font-bold shrink-0">
+                              {a.attempt_number}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-900">
+                                Attempt {a.attempt_number}
+                                {mastered && <span className="ml-2 text-emerald-600">✓ 100%</span>}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(a.submitted_at).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-sm font-bold text-gray-900">
+                              {a.score ?? "—"}/{a.max_score ?? "—"}
+                            </span>
+                            {a.correct_count != null && a.total_questions != null && (
+                              <span className="text-xs text-gray-500">
+                                {a.correct_count}/{a.total_questions} correct
+                              </span>
+                            )}
+                            <svg
+                              className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </button>
+                        {isOpen && (
+                          <div className="px-4 pb-3 pt-1 space-y-2 bg-gray-50/60">
+                            {a.answers.map((ans, i) => {
+                              const q = submissionDetail.responses.find(
+                                (r) => r.question_id === ans.question_id
+                              );
+                              const qText = q
+                                ? q.question_text_en || q.question_text_ar
+                                : `Question ${i + 1}`;
+                              return (
+                                <div key={ans.question_id} className="flex items-start gap-2 text-sm">
+                                  {ans.is_correct === true ? (
+                                    <span className="text-emerald-600 mt-0.5">✓</span>
+                                  ) : ans.is_correct === false ? (
+                                    <span className="text-red-500 mt-0.5">✗</span>
+                                  ) : (
+                                    <span className="text-gray-300 mt-0.5">•</span>
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className="text-gray-700 truncate">{qText}</p>
+                                    <p className="text-gray-500">
+                                      {ans.response_text || <span className="italic">No answer</span>}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+           </>
           ) : (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
               <ClipboardList className="w-16 h-16 mx-auto mb-4 text-gray-300" />
