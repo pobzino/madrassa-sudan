@@ -147,13 +147,40 @@ body {
   50%      { transform: scale(1.06); }
 }
 .anim-sun { animation: sun-pulse 6s ease-in-out infinite; transform-origin: center; }
+
+/* Flapping birds that drift across a section */
+@keyframes bird-fly {
+  0%   { transform: translate(-16vw, 0); }
+  50%  { transform: translate(46vw, -26px); }
+  100% { transform: translate(116vw, 6px); }
+}
+@keyframes bird-wing-a { 0%, 100% { transform: rotate(2deg); } 50% { transform: rotate(-26deg); } }
+@keyframes bird-wing-b { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(26deg); } }
+.bird-fly   { animation: bird-fly 26s linear infinite; }
+.bird-fly-2 { animation: bird-fly 34s linear infinite; }
+.bird-fly-3 { animation: bird-fly 21s linear infinite; }
+.bird-wing-a { animation: bird-wing-a 0.5s ease-in-out infinite; transform-origin: 50% 62%; }
+.bird-wing-b { animation: bird-wing-b 0.5s ease-in-out infinite; transform-origin: 50% 62%; }
+
+/* A single leaf fluttering down through the section, on a loop */
+@keyframes leaf-fall {
+  0%   { transform: translate(0, -30px) rotate(0deg); opacity: 0; }
+  8%   { opacity: 0.85; }
+  25%  { transform: translate(34px, 160px) rotate(70deg); }
+  50%  { transform: translate(-26px, 330px) rotate(165deg); }
+  75%  { transform: translate(30px, 510px) rotate(250deg); }
+  92%  { opacity: 0.85; }
+  100% { transform: translate(-8px, 680px) rotate(320deg); opacity: 0; }
+}
+.anim-leaf-fall { animation: leaf-fall 9s ease-in-out infinite; will-change: transform; }
 .anim-cloud   { animation: cloud-drift 26s ease-in-out infinite alternate; }
 .anim-cloud-2 { animation: cloud-drift 38s ease-in-out infinite alternate; }
 .anim-sway    { animation: leaf-sway 5s ease-in-out infinite; transform-origin: bottom center; }
 .anim-butterfly { animation: butterfly-float 18s ease-in-out infinite; }
 .anim-node-glow { animation: node-glow 2.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .anim-cloud, .anim-cloud-2, .anim-sway, .anim-butterfly, .anim-node-glow, .anim-sun { animation: none !important; }
+  .anim-cloud, .anim-cloud-2, .anim-sway, .anim-butterfly, .anim-node-glow, .anim-sun,
+  .bird-fly, .bird-fly-2, .bird-fly-3, .bird-wing-a, .bird-wing-b, .anim-leaf-fall { animation: none !important; }
 }
 
 

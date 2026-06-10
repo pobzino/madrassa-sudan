@@ -6,11 +6,6 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import {
-  FloatingBook,
-  FloatingPencil,
-  FloatingTarget,
-  FloatingStar,
-  FloatingPalette,
   FloatingRocket,
   VideoIcon,
   RobotIcon,
@@ -24,17 +19,15 @@ import {
   MoonStarIcon,
   MapIcon,
   SparkleIcon,
-  BookOpenIcon,
-  RocketLaunchIcon,
   LightningIcon,
   LightbulbIcon,
   GraduationCapIcon,
   BackpackIcon,
-  TeacherIcon,
   QuestionIcon,
   PlayIcon,
   CelebrationIcon,
 } from "@/components/illustrations";
+import { LandingHeroScene, SectionScene, StepGraphic, LeafyGreenBg, TeacherScene } from "@/components/dashboard/DashboardScenes";
 
 // Helper function to render feature icons
 const FeatureIcon = ({ type, className }: { type: string; className?: string }) => {
@@ -56,16 +49,6 @@ const SubjectIcon = ({ type, className }: { type: string; className?: string }) 
     case "globe": return <GlobeIcon className={className} />;
     case "moonstar": return <MoonStarIcon className={className} />;
     case "map": return <MapIcon className={className} />;
-    default: return null;
-  }
-};
-
-// Helper function to render how it works icons
-const StepIcon = ({ type, className }: { type: string; className?: string }) => {
-  switch (type) {
-    case "sparkle": return <SparkleIcon className={className} />;
-    case "bookopen": return <BookOpenIcon className={className} />;
-    case "rocketlaunch": return <RocketLaunchIcon className={className} />;
     default: return null;
   }
 };
@@ -129,8 +112,11 @@ export default function Home() {
       howItWorks: {
         label: "كيف يعمل",
         title: "ثلاث خطوات للنجاح",
+        subtitle: "خطوات بسيطة، نتائج كبيرة. لنبدأ مغامرة التعلم!",
+        encourage: "كل خطوة تقرّبك من هدفك.",
+        encourageHighlight: "أنت تستطيع!",
         steps: [
-          { num: "1", title: "سجّل حسابك", desc: "أنشئ حساباً مجانياً في دقيقة واحدة", iconType: "sparkle" },
+          { num: "1", title: "سجّل حسابك", desc: "أنشئ حساباً مجانياً في أقل من دقيقة", iconType: "sparkle" },
           { num: "2", title: "اختر موادك", desc: "حدد صفك الدراسي والمواد التي تريد تعلمها", iconType: "bookopen" },
           { num: "3", title: "ابدأ المغامرة", desc: "تعلم، العب، واجمع النقاط والشهادات", iconType: "rocketlaunch" },
         ],
@@ -215,10 +201,13 @@ export default function Home() {
       howItWorks: {
         label: "HOW IT WORKS",
         title: "Three steps to success",
+        subtitle: "Simple steps, big results. Let's begin your learning adventure!",
+        encourage: "Every step brings you closer to your goals.",
+        encourageHighlight: "You've got this!",
         steps: [
-          { num: "1", title: "Create Account", desc: "Sign up for free in one minute", iconType: "sparkle" },
-          { num: "2", title: "Choose Subjects", desc: "Select your grade and subjects you want to learn", iconType: "bookopen" },
-          { num: "3", title: "Start Adventure", desc: "Learn, play, and collect points and certificates", iconType: "rocketlaunch" },
+          { num: "1", title: "Create Account", desc: "Sign up for free in less than a minute.", iconType: "sparkle" },
+          { num: "2", title: "Choose Subjects", desc: "Select your grade and subjects you want to learn.", iconType: "bookopen" },
+          { num: "3", title: "Start Adventure", desc: "Learn, play, and collect points and certificates.", iconType: "rocketlaunch" },
         ],
       },
       sims: {
@@ -320,53 +309,20 @@ export default function Home() {
 
       <main className="pt-14 sm:pt-16">
         {/* Hero Section */}
-        <section className="relative pt-6 sm:pt-8 pb-12 sm:pb-16 overflow-hidden">
-          {/* Background decorations */}
-          <div className="absolute inset-0 overflow-hidden">
-            {/* Soft gradient blobs - more subtle */}
-            <div className="absolute top-10 left-10 w-64 h-64 bg-violet-200/30 rounded-full blur-3xl" />
-            <div className="absolute top-20 right-10 w-72 h-72 bg-[#007229]/10 rounded-full blur-3xl" />
-            <div className="absolute bottom-0 left-1/4 w-64 h-64 bg-amber-200/30 rounded-full blur-3xl" />
-            <div className="absolute bottom-10 right-1/4 w-56 h-56 bg-[#D21034]/10 rounded-full blur-3xl" />
+        <section className="relative pt-6 sm:pt-8 overflow-hidden">
+          {/* Illustrated "learning world" backdrop with the owl trio on the hills */}
+          <LandingHeroScene />
 
-            {/* Floating decorative elements - better distributed */}
-            <div className="absolute top-24 left-[8%] w-12 h-12 animate-bounce hidden sm:block" style={{ animationDelay: "0s", animationDuration: "3s" }}>
-              <FloatingBook className="w-full h-full drop-shadow-lg" />
-            </div>
-            <div className="absolute top-32 right-[10%] w-10 h-10 animate-bounce hidden sm:block" style={{ animationDelay: "0.5s", animationDuration: "2.5s" }}>
-              <FloatingPencil className="w-full h-full drop-shadow-lg" />
-            </div>
-            <div className="absolute top-48 left-[4%] w-10 h-10 animate-bounce hidden md:block" style={{ animationDelay: "1s", animationDuration: "3.5s" }}>
-              <FloatingTarget className="w-full h-full drop-shadow-lg" />
-            </div>
-            <div className="absolute top-20 right-[5%] w-12 h-12 animate-bounce" style={{ animationDelay: "0.3s", animationDuration: "2.8s" }}>
-              <FloatingStar className="w-full h-full drop-shadow-lg" />
-            </div>
-            <div className="absolute bottom-32 left-[12%] w-10 h-10 animate-bounce hidden sm:block" style={{ animationDelay: "0.7s", animationDuration: "3.2s" }}>
-              <FloatingPalette className="w-full h-full drop-shadow-lg" />
-            </div>
-            <div className="absolute top-40 right-[4%] w-14 h-14 animate-bounce hidden md:block" style={{ animationDelay: "0.2s", animationDuration: "3s" }}>
-              <FloatingRocket className="w-full h-full drop-shadow-lg" />
-            </div>
-            {/* Extra illustrations for richness */}
-            <div className="absolute bottom-24 right-[8%] w-10 h-10 animate-bounce hidden sm:block" style={{ animationDelay: "0.4s", animationDuration: "2.6s" }}>
-              <TrophyIcon className="w-full h-full" />
-            </div>
-            <div className="absolute bottom-40 left-[6%] w-8 h-8 animate-bounce hidden md:block" style={{ animationDelay: "0.9s", animationDuration: "3.1s" }}>
-              <GamepadIcon className="w-full h-full" />
-            </div>
-          </div>
-
-          <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
+          <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 pt-4 sm:pt-8 pb-[230px] sm:pb-[300px]">
             <div className="text-center">
               {/* Main headline with colorful highlights */}
               <h1 className="font-fredoka text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-medium text-gray-900 leading-[1.15] sm:leading-[1.1] mb-4 sm:mb-6">
                 {txt.hero.title1}
                 <br />
-                <span className="relative inline-block text-violet-600">
+                <span className="relative inline-block text-amber-500">
                   {txt.hero.titleHighlight1}
                   <svg className="absolute -bottom-1 sm:-bottom-2 left-0 w-full" viewBox="0 0 200 12" fill="none">
-                    <path d="M2 8 Q 50 2 100 8 T 198 8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="text-violet-400" />
+                    <path d="M2 8 Q 50 2 100 8 T 198 8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="text-amber-400" />
                   </svg>
                 </span>
                 {" "}{txt.hero.titleAnd}{" "}
@@ -427,15 +383,16 @@ export default function Home() {
           <div className="absolute bottom-20 left-10 w-14 h-14 opacity-20 hidden sm:block">
             <LightbulbIcon className="w-full h-full text-yellow-500" />
           </div>
+          <SectionScene sky="linear-gradient(180deg,#eef5ff 0%,#eef7ef 100%)" hill="#dcefdd" hill2="#cbe9d1" clouds />
 
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6">
             <div className="text-center mb-8 sm:mb-10">
-              <span className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 bg-violet-100 text-violet-700 rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-4">
+              <span className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 bg-emerald-100 text-emerald-700 rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-4">
                 {txt.features.label}
               </span>
               <h2 className="font-fredoka text-2xl sm:text-3xl md:text-5xl font-semibold text-gray-900">
                 {txt.features.title}{" "}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-purple-600">
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#007229] to-[#00913D]">
                   {txt.features.titleHighlight}
                 </span>
               </h2>
@@ -451,7 +408,7 @@ export default function Home() {
                   <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
 
                   <div className="relative z-10">
-                    <div className="w-10 h-10 sm:w-14 sm:h-14 mb-3 sm:mb-4 text-violet-600 group-hover:text-white transition-colors">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 mb-3 sm:mb-4 text-[#007229] group-hover:text-white transition-colors">
                       <FeatureIcon type={feature.iconType} className="w-full h-full" />
                     </div>
                     <h3 className="text-sm sm:text-xl font-bold text-gray-900 group-hover:text-white mb-1 sm:mb-3 transition-colors">
@@ -475,8 +432,9 @@ export default function Home() {
           {/* Background decoration */}
           <div className="absolute inset-0">
             <div className="absolute top-40 left-20 w-64 h-64 bg-cyan-100/30 rounded-full blur-3xl hidden sm:block" />
-            <div className="absolute bottom-20 right-20 w-80 h-80 bg-violet-100/30 rounded-full blur-3xl hidden sm:block" />
+            <div className="absolute bottom-20 right-20 w-80 h-80 bg-emerald-100/30 rounded-full blur-3xl hidden sm:block" />
           </div>
+          <SectionScene sky="linear-gradient(180deg,#fff3ea 0%,#eef7ef 100%)" hill="#fbe2d4" hill2="#dcefdd" />
 
           <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6">
             <div className="text-center mb-6 sm:mb-10">
@@ -512,47 +470,64 @@ export default function Home() {
         </section>
 
         {/* How It Works */}
-        <section id="how-it-works" className="py-10 sm:py-16 bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 relative overflow-hidden">
-          {/* Decorative elements - simplified on mobile */}
-          <div className="absolute inset-0">
-            <div className="absolute top-10 left-10 w-20 sm:w-32 h-20 sm:h-32 border-4 border-white/10 rounded-full" />
-            <div className="absolute bottom-10 right-10 w-24 sm:w-48 h-24 sm:h-48 border-4 border-white/10 rounded-full" />
-          </div>
-
-          <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="text-center mb-6 sm:mb-10">
-              <span className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 bg-white/20 text-white rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-4">
+        <section id="how-it-works" className="py-12 sm:py-20 bg-gradient-to-br from-[#0a9038] via-[#00913D] to-[#06782f] relative overflow-hidden">
+          <LeafyGreenBg />
+          <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6">
+            <div className="text-center mb-9 sm:mb-14">
+              <span className="inline-block px-4 py-1.5 bg-white/15 text-white rounded-full text-xs sm:text-sm font-bold tracking-wide mb-4">
                 {txt.howItWorks.label}
               </span>
-              <h2 className="font-fredoka text-2xl sm:text-3xl md:text-5xl font-semibold text-white">
+              <h2 className="font-fredoka text-3xl sm:text-5xl font-bold text-white flex items-center justify-center gap-3 sm:gap-4">
+                <span className="text-amber-300 text-2xl sm:text-3xl">✦</span>
                 {txt.howItWorks.title}
+                <span className="text-amber-300 text-2xl sm:text-3xl">✦</span>
               </h2>
+              <p className="text-white/85 text-base sm:text-lg mt-3 max-w-xl mx-auto">{txt.howItWorks.subtitle}</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-8">
-              {txt.howItWorks.steps.map((step, i) => (
-                <div key={i} className="relative">
-                  {/* Connector line - desktop only */}
-                  {i < 2 && (
-                    <div className={`hidden md:block absolute top-16 ${isRtl ? "left-0 -translate-x-1/2" : "right-0 translate-x-1/2"} w-full h-1 border-t-4 border-dashed border-white/30`} />
-                  )}
+            <div className="relative grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-7">
+              {/* dotted line linking the badges (shows through the gaps) */}
+              <div className="hidden md:block absolute top-6 left-[16%] right-[16%] border-t-2 border-dashed border-white/40 z-0" />
 
-                  <div className="bg-white/10 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-5 sm:p-8 text-center border border-white/20 hover:bg-white/20 transition-all flex sm:block items-center gap-4 sm:gap-0">
-                    <div className="flex-shrink-0 sm:block">
-                      <div className="w-10 h-10 sm:w-14 sm:h-14 sm:mx-auto mb-0 sm:mb-4 text-white">
-                        <StepIcon type={step.iconType} className="w-full h-full" />
-                      </div>
+              {txt.howItWorks.steps.map((step, i) => {
+                const featured = i === 1;
+                const variant = i === 0 ? "account" : i === 1 ? "subjects" : "adventure";
+                return (
+                  <div key={i} className="relative pt-7">
+                    {/* number badge */}
+                    <div className={`absolute top-0 left-1/2 -translate-x-1/2 z-20 w-12 h-12 rounded-full bg-white shadow-lg flex items-center justify-center font-extrabold font-fredoka text-xl ring-4 ${featured ? "ring-amber-200 text-amber-500" : "ring-emerald-200 text-[#007229]"}`}>
+                      {step.num}
                     </div>
-                    <div className="flex-1 text-left sm:text-center">
-                      <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-full bg-white text-violet-600 font-extrabold text-sm sm:text-xl flex items-center justify-center sm:mx-auto mb-1 sm:mb-4 inline-flex sm:flex">
-                        {step.num}
+                    {/* card */}
+                    <div className={`relative z-10 overflow-hidden rounded-3xl pt-10 pb-6 px-5 text-center shadow-xl ${featured ? "bg-[#fdf4e1] md:-mt-1.5" : "bg-[#eef8ef]"}`}>
+                      <div className="relative h-28 sm:h-32 mb-2">
+                        <StepGraphic variant={variant} className="w-full h-full" />
                       </div>
-                      <h3 className="text-base sm:text-xl font-bold text-white mb-1 sm:mb-2 inline sm:block ml-2 sm:ml-0">{step.title}</h3>
-                      <p className="text-sm sm:text-base text-white/80 mt-1 sm:mt-0">{step.desc}</p>
+                      <h3 className="text-lg sm:text-xl font-bold font-fredoka text-[#007229]">{step.title}</h3>
+                      <div className={`w-8 h-1 rounded-full mx-auto my-2.5 ${featured ? "bg-amber-400" : "bg-emerald-400"}`} />
+                      <p className="text-sm sm:text-base text-gray-600 leading-snug">{step.desc}</p>
+                      {/* hill accent + sprout at the card base */}
+                      <svg className="absolute bottom-0 left-0 w-full h-9" viewBox="0 0 300 36" preserveAspectRatio="none" fill={featured ? "#f4e6c4" : "#dcefdd"}><path d="M0 18c60-16 110-8 160 4s90 6 140-8v22H0z" /></svg>
+                      <svg className="absolute bottom-1 right-4 w-5 h-7" viewBox="0 0 24 32" fill="none">
+                        <path d="M12 32V14" stroke="#6fb389" strokeWidth="2" strokeLinecap="round" />
+                        <path d="M12 18c-3-2-7-1-9 1 2 2 6 3 9 1zM12 14c3-2 7-1 9 1-2 2-6 3-9 1z" fill="#84cb9d" />
+                      </svg>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
+            </div>
+
+            {/* encouragement pill */}
+            <div className="mt-9 sm:mt-12 flex justify-center px-4">
+              <div className="inline-flex items-center gap-2.5 bg-white/12 border border-white/20 rounded-full px-5 sm:px-6 py-2.5 sm:py-3 text-white text-sm sm:text-base font-fredoka text-center">
+                <span className="text-amber-300 text-lg">★</span>
+                <span>
+                  {txt.howItWorks.encourage}{" "}
+                  <span className="text-amber-300 font-bold">{txt.howItWorks.encourageHighlight}</span>
+                </span>
+                <span className="text-emerald-200 text-lg">♥</span>
+              </div>
             </div>
           </div>
         </section>
@@ -563,6 +538,7 @@ export default function Home() {
             <div className="absolute top-20 right-20 w-72 h-72 bg-emerald-100/30 rounded-full blur-3xl hidden sm:block" />
             <div className="absolute bottom-20 left-10 w-64 h-64 bg-amber-100/30 rounded-full blur-3xl hidden sm:block" />
           </div>
+          <SectionScene sky="linear-gradient(180deg,#ecfbf4 0%,#eef5ff 100%)" hills={false} />
 
           <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6">
             <div className="text-center mb-8 sm:mb-12">
@@ -605,7 +581,7 @@ export default function Home() {
                       <div className="flex gap-2 pt-2">
                         <div className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold">1/2</div>
                         <div className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold">1/4</div>
-                        <div className="px-3 py-1.5 bg-violet-100 text-violet-700 rounded-lg text-xs font-bold">3/4</div>
+                        <div className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold">3/4</div>
                       </div>
                     </div>
                     {/* Illustration circle */}
@@ -738,7 +714,7 @@ export default function Home() {
             <div className="flex flex-wrap justify-center gap-3 sm:gap-4 mb-8">
               {txt.sims.features.map((feat, i) => {
                 const pillIcons = [
-                  <svg key="rw" className="w-4 h-4 sm:w-5 sm:h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg key="rw" className="w-4 h-4 sm:w-5 sm:h-5 text-[#007229]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061A1.125 1.125 0 0 1 21 8.689v8.122ZM11.25 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061a1.125 1.125 0 0 1 1.683.977v8.122Z" />
                   </svg>,
                   <svg key="wb" className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -748,7 +724,7 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                   </svg>,
                 ];
-                const pillBgs = ["bg-violet-50 border-violet-200", "bg-emerald-50 border-emerald-200", "bg-amber-50 border-amber-200"];
+                const pillBgs = ["bg-emerald-50 border-emerald-200", "bg-amber-50 border-amber-200", "bg-rose-50 border-rose-200"];
 
                 return (
                   <div key={i} className={`flex items-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 ${pillBgs[i]} border rounded-full`}>
@@ -778,7 +754,7 @@ export default function Home() {
         {/* For Teachers */}
         <section id="teachers" className="py-10 sm:py-16 relative">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="bg-gradient-to-br from-amber-400 via-orange-500 to-red-500 rounded-2xl sm:rounded-3xl p-6 sm:p-8 md:p-16 relative overflow-hidden">
+            <div className="bg-gradient-to-br from-[#f9b13f] to-[#ef7e2c] rounded-2xl sm:rounded-3xl p-6 sm:p-8 md:p-16 relative overflow-hidden">
               {/* Decorative elements */}
               <div className="absolute top-0 right-0 w-32 sm:w-64 h-32 sm:h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
               <div className="absolute bottom-0 left-0 w-24 sm:w-48 h-24 sm:h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
@@ -791,7 +767,7 @@ export default function Home() {
 
               <div className="relative z-10 grid md:grid-cols-2 gap-6 sm:gap-12 items-center">
                 <div className="text-white">
-                  <span className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 bg-white/20 rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-4">
+                  <span className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 bg-white/25 rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-4">
                     {txt.teachers.label}
                   </span>
                   <h2 className="font-fredoka text-2xl sm:text-3xl md:text-4xl font-semibold mb-3 sm:mb-4">{txt.teachers.title}</h2>
@@ -818,9 +794,7 @@ export default function Home() {
                 </div>
 
                 <div className="hidden md:flex items-center justify-center">
-                  <div className="w-48 h-48 text-white/90">
-                    <TeacherIcon className="w-full h-full" />
-                  </div>
+                  <TeacherScene className="w-full max-w-sm aspect-square" />
                 </div>
               </div>
             </div>
@@ -835,7 +809,7 @@ export default function Home() {
                 <h2 className="font-fredoka text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-900">
                   {txt.faq.title}
                 </h2>
-                <QuestionIcon className="w-7 h-7 sm:w-10 sm:h-10 text-violet-500" />
+                <QuestionIcon className="w-7 h-7 sm:w-10 sm:h-10 text-[#007229]" />
               </div>
             </div>
 
@@ -866,12 +840,8 @@ export default function Home() {
         </section>
 
         {/* Final CTA */}
-        <section className="py-10 sm:py-16 relative overflow-hidden">
-          {/* Background decoration */}
-          <div className="absolute inset-0">
-            <div className="absolute top-0 left-1/4 w-48 sm:w-96 h-48 sm:h-96 bg-emerald-100/50 rounded-full blur-3xl" />
-            <div className="absolute bottom-0 right-1/4 w-48 sm:w-96 h-48 sm:h-96 bg-cyan-100/50 rounded-full blur-3xl" />
-          </div>
+        <section className="py-10 sm:py-16 pb-16 sm:pb-24 relative overflow-hidden">
+          <SectionScene sky="linear-gradient(180deg,#e4efff 0%,#eef6ee 55%,#dcefdd 100%)" hill="#cfe6d3" hill2="#bfe0c6" clouds />
 
           <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 text-center">
             <div className="w-14 h-14 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6">
