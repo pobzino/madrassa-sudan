@@ -115,6 +115,13 @@ body {
   100% { transform: scale(1); opacity: 1; }
 }
 
+/* Owl glides from the previous node (offset by --owl-dx/--owl-dy) to the current one. */
+@keyframes owl-glide {
+  from { transform: translateX(-50%) translate(var(--owl-dx, 0px), var(--owl-dy, 0px)); }
+  to   { transform: translateX(-50%) translate(0px, 0px); }
+}
+
+
 .animate-pop-in {
   animation: pop-in 0.4s ease-out both;
 }

@@ -72,10 +72,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to update progress" }, { status: 500 });
       }
 
-      // Update student streak if lesson completed
-      if (completed && !existingProgress.completed) {
-        await updateStudentStreak(supabase, user.id, "lesson");
-      }
+      // Streak/total_lessons_completed is handled by the
+      // trg_lesson_progress_streak DB trigger so every completion path
+      // (sim auto-complete, mark-complete, offline sync) stays consistent.
 
       return NextResponse.json({ progress: updatedProgress });
     } else {
@@ -100,10 +99,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to create progress" }, { status: 500 });
       }
 
-      // Update student streak if lesson completed
-      if (completed) {
-        await updateStudentStreak(supabase, user.id, "lesson");
-      }
+      // Streak/total_lessons_completed is handled by the
+      // trg_lesson_progress_streak DB trigger (see migration).
 
       return NextResponse.json({ progress: newProgress });
     }
@@ -170,65 +167,3 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper function to update student streak
-async function updateStudentStreak(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-  type: "lesson" | "homework"
-) {
-  const today = new Date().toISOString().split("T")[0];
-
-  // Get or create streak record
-  const { data: existingStreak } = await supabase
-    .from("student_streaks")
-    .select("*")
-    .eq("student_id", userId)
-    .single();
-
-  if (existingStreak) {
-    const lastActivity = existingStreak.last_activity_date;
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split("T")[0];
-
-    let newStreak = existingStreak.current_streak_days;
-
-    if (lastActivity === today) {
-      // Already active today, just update counts
-    } else if (lastActivity === yesterdayStr) {
-      // Consecutive day, increment streak
-      newStreak += 1;
-    } else {
-      // Streak broken, reset to 1
-      newStreak = 1;
-    }
-
-    const updates: Record<string, unknown> = {
-      current_streak_days: newStreak,
-      longest_streak_days: Math.max(newStreak, existingStreak.longest_streak_days),
-      last_activity_date: today,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (type === "lesson") {
-      updates.total_lessons_completed = existingStreak.total_lessons_completed + 1;
-    } else {
-      updates.total_homework_completed = existingStreak.total_homework_completed + 1;
-    }
-
-    await supabase
-      .from("student_streaks")
-      .update(updates)
-      .eq("id", existingStreak.id);
-  } else {
-    // Create new streak record
-    await supabase.from("student_streaks").insert({
-      student_id: userId,
-      current_streak_days: 1,
-      longest_streak_days: 1,
-      last_activity_date: today,
-      total_lessons_completed: type === "lesson" ? 1 : 0,
-      total_homework_completed: type === "homework" ? 1 : 0,
-    });
-  }
-}

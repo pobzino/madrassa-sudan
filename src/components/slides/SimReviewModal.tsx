@@ -114,6 +114,43 @@ async function readErrorText(response: Response): Promise<string> {
   return body.trim().slice(0, 300);
 }
 
+const RETRY_BACKOFFS_MS = [1000, 3000, 6000];
+const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+function isRetryableStatus(status: number): boolean {
+  return RETRYABLE_STATUSES.has(status);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * fetch wrapper that retries the transient failures which used to lose long
+ * recordings: network blips (fetch throws "Failed to fetch") and 5xx/429
+ * responses. Non-retryable statuses (400/401/403/409/422) and successes are
+ * returned immediately so the caller's own handling still runs. Every step in
+ * the save flow is safe to retry — the audio PUT upserts the same path and the
+ * finalize POST deletes-then-inserts under a UNIQUE(lesson_id) constraint.
+ */
+async function fetchWithRetry(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  retries = RETRY_BACKOFFS_MS.length
+): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const response = await fetch(input, init);
+      if (response.ok || !isRetryableStatus(response.status) || attempt >= retries) {
+        return response;
+      }
+    } catch (error) {
+      if (attempt >= retries) throw error;
+    }
+    await delay(RETRY_BACKOFFS_MS[Math.min(attempt, RETRY_BACKOFFS_MS.length - 1)]);
+  }
+}
+
 async function uploadAudioBlobToSignedUrl(
   instructions: SimAudioUploadInstructions,
   audioBlob: Blob
@@ -132,7 +169,7 @@ async function uploadAudioBlobToSignedUrl(
     headers.set('apikey', anonKey);
   }
 
-  const response = await fetch(instructions.signed_url, {
+  const response = await fetchWithRetry(instructions.signed_url, {
     method: 'PUT',
     headers,
     body,
@@ -644,7 +681,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
           audio_validation_strategy: 'server_probe',
         }),
       });
-      const prepareRes = await fetch(
+      const prepareRes = await fetchWithRetry(
         `/api/teacher/lessons/${props.lessonId}/sims/audio-upload`,
         {
           method: 'POST',
@@ -680,7 +717,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
 
       try {
         await uploadAudioBlobToSignedUrl(audioUpload, audioBlob);
-        const validateRes = await fetch(
+        const validateRes = await fetchWithRetry(
           `/api/teacher/lessons/${props.lessonId}/sims/audio-upload?path=${encodeURIComponent(audioUpload.path)}`,
           { credentials: 'include', cache: 'no-store' }
         );
@@ -739,7 +776,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         events_count: compactEventCount,
         error_details: buildAttemptDetails(finalizeDiagnostics),
       });
-      const createRes = await fetch(`/api/teacher/lessons/${props.lessonId}/sims`, {
+      const createRes = await fetchWithRetry(`/api/teacher/lessons/${props.lessonId}/sims`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

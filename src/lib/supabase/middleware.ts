@@ -41,7 +41,6 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/dashboard") ||
     request.nextUrl.pathname.startsWith("/lessons") ||
     request.nextUrl.pathname.startsWith("/homework") ||
-    request.nextUrl.pathname.startsWith("/tutor") ||
     request.nextUrl.pathname.startsWith("/cohorts") ||
     request.nextUrl.pathname.startsWith("/progress") ||
     request.nextUrl.pathname.startsWith("/settings") ||

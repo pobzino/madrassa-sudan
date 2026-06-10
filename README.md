@@ -124,6 +124,7 @@ Millions of Sudanese children have been displaced by conflict, losing access to 
 | **[Terms of Service](./docs/TERMS.md)** | Platform rules, acceptable use, and legal agreements |
 | **[AI Safety & Moderation Guide](./docs/AI-SAFETY.md)** | How the AI tutor works, content moderation, and safety procedures |
 | **[Deployment Guide](./docs/DEPLOYMENT.md)** | Step-by-step production deployment checklist |
+| **[Learning Modes Plan](./docs/LEARNING_MODES_PLAN.md)** | Cohort-based learning and independent sequential learning implementation plan |
 
 **📖 Read these documents before deploying to production, especially if serving children.**
 

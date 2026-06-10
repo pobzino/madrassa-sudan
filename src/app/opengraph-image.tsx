@@ -171,7 +171,7 @@ export default async function Image() {
               marginTop: "16px",
             }}
           >
-            {["Interactive Lessons", "AI Tutor", "Free Forever"].map((label) => (
+            {["Interactive Lessons", "Homework & Feedback", "Free Forever"].map((label) => (
               <div
                 key={label}
                 style={{

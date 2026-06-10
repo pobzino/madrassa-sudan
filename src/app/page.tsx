@@ -102,7 +102,7 @@ export default function Home() {
         titleAnd: "و",
         titleHighlight2: "اللعب",
         title2: "لأطفال السودان",
-        subtitle: "منصة تعليمية مجانية ممتعة مع دروس تفاعلية، معلم ذكي، ومنهج سوداني معتمد",
+        subtitle: "منصة تعليمية مجانية ممتعة مع دروس تفاعلية، واجبات، ومنهج سوداني معتمد",
         cta1: "ابدأ مجاناً",
         cta2: "شاهد كيف يعمل",
       },
@@ -112,7 +112,7 @@ export default function Home() {
         titleHighlight: "ممتعة",
         items: [
           { title: "دروس ممتعة", desc: "فيديوهات تفاعلية مع رسوم متحركة تجعل التعلم مغامرة", color: "from-[#007229] to-[#00913D]", iconType: "video" },
-          { title: "المعلم الذكي", desc: "صديقك الذكي الذي يساعدك على فهم أي سؤال بالعربية", color: "from-[#D21034] to-[#E8334F]", iconType: "robot" },
+          { title: "واجبات وتقييم", desc: "واجبات ممتعة مع تقييم فوري يساعدك تعرف مستواك وتتحسّن", color: "from-[#D21034] to-[#E8334F]", iconType: "trophy" },
           { title: "الألعاب التعليمية", desc: "اختبارات وتحديات ممتعة تجعلك تتعلم وأنت تلعب", color: "from-[#005C22] to-[#007229]", iconType: "gamepad" },
           { title: "شهادات وجوائز", desc: "اجمع النقاط واحصل على شهادات وشارات تقدير", color: "from-amber-500 to-orange-600", iconType: "trophy" },
         ],
@@ -163,7 +163,6 @@ export default function Home() {
         items: [
           { q: "هل المنصة مجانية حقاً؟", a: "نعم، مجانية ١٠٠٪ لجميع الطلاب. نحن مبادرة غير ربحية." },
           { q: "ما هي المراحل المتوفرة؟", a: "نغطي المرحلة الابتدائية (١-٨)، والثانوية قريباً." },
-          { q: "كيف يعمل المعلم الذكي؟", a: "يستخدم الذكاء الاصطناعي ليشرح ويساعدك على الفهم بالعربية." },
           { q: "هل أحتاج إنترنت دائم؟", a: "نعم، تحتاج اتصال بالإنترنت لمشاهدة الدروس." },
         ],
       },
@@ -189,7 +188,7 @@ export default function Home() {
         titleAnd: "and",
         titleHighlight2: "play",
         title2: "for Sudanese kids",
-        subtitle: "A free fun learning platform with interactive lessons, AI tutor, and certified Sudanese curriculum",
+        subtitle: "A free fun learning platform with interactive lessons, homework, and certified Sudanese curriculum",
         cta1: "Start Now",
         cta2: "See How It Works",
       },
@@ -199,7 +198,7 @@ export default function Home() {
         titleHighlight: "fun way",
         items: [
           { title: "Fun Lessons", desc: "Interactive videos with animations that make learning an adventure", color: "from-[#007229] to-[#00913D]", iconType: "video" },
-          { title: "AI Tutor", desc: "Your smart friend who helps you understand any question in Arabic", color: "from-[#D21034] to-[#E8334F]", iconType: "robot" },
+          { title: "Homework & Feedback", desc: "Fun homework with instant feedback so you know your level and improve", color: "from-[#D21034] to-[#E8334F]", iconType: "trophy" },
           { title: "Learning Games", desc: "Fun quizzes and challenges that let you learn while playing", color: "from-[#005C22] to-[#007229]", iconType: "gamepad" },
           { title: "Badges & Awards", desc: "Collect points and earn certificates and achievement badges", color: "from-amber-500 to-orange-600", iconType: "trophy" },
         ],
@@ -250,7 +249,6 @@ export default function Home() {
         items: [
           { q: "Is the platform really free?", a: "Yes, 100% free for all students. We're a non-profit initiative." },
           { q: "What grade levels are available?", a: "We cover primary school (1-8), with secondary coming soon." },
-          { q: "How does the AI tutor work?", a: "It uses AI to explain and help you understand in Arabic." },
           { q: "Do I need constant internet?", a: "Yes, you need an internet connection to watch lessons." },
         ],
       },

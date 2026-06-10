@@ -43,6 +43,10 @@ export const createAssignmentSchema = z.object({
   instructions_en: z.string().optional().nullable(),
   due_at: z.string().datetime().optional().nullable(),
   is_published: z.boolean().default(false),
+  // Track B: mark this assignment as a gating "week test" and set the pass mark
+  // (percent). Defaults keep regular homework behaviour unchanged.
+  is_test: z.boolean().optional().default(false),
+  passing_score: z.number().min(0).max(100).optional().default(80),
   questions: z.array(createQuestionSchema).min(1, "At least one question is required"),
 });
 

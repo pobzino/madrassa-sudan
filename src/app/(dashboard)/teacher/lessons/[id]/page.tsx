@@ -179,8 +179,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("details");
   const [slides, setSlides] = useState<Slide[]>([]);
-  const [slideSaving, setSlideSaving] = useState(false);
-  const [slideLastSaved, setSlideLastSaved] = useState<string | null>(null);
   const [slideDeckUpdatedAt, setSlideDeckUpdatedAt] = useState<string | null>(null);
   const [slideGenContext, setSlideGenContext] = useState<SlideGenerationContext | null>(null);
   const [slideEditorFocusId, setSlideEditorFocusId] = useState<string | null>(null);
@@ -197,6 +195,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   const [submittingForReview, setSubmittingForReview] = useState(false);
   const lastPersistedPublishedRef = useRef(false);
   const autosaveTimeoutRef = useRef<number | null>(null);
+  // Always holds the latest slides so an in-flight save can tell whether the
+  // teacher kept typing during the network round-trip (used to avoid clobbering
+  // their newest text with the server's echo of the older payload).
+  const slidesRef = useRef<Slide[]>([]);
   const hasInitializedSnapshotRef = useRef(false);
   const lastSavedSnapshotRef = useRef("");
   const [lessonSim, setLessonSim] = useState<SimPayload | null>(null);
@@ -369,6 +371,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
     setLessonTasks((previous) => syncTaskFormsFromSlides(slides, previous));
   }, [slides]);
 
+  useEffect(() => {
+    slidesRef.current = slides;
+  }, [slides]);
+
   // Load slide generation context from sessionStorage
   useEffect(() => {
     try {
@@ -400,44 +406,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
       requestedSlideCount: config.slideCount,
     }));
   }, []);
-
-
-  const handleSaveSlides = useCallback(async () => {
-    setSlideSaving(true);
-    try {
-      const { slides: slidesWithActivities, tasks: syncedTasks } = reconcileEditedSlidesWithTasks(
-        slides,
-        lessonTasks
-      );
-      setSlides(slidesWithActivities);
-      setLessonTasks(syncedTasks);
-      const res = await fetch(`/api/teacher/lessons/${id}/slides`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slides: slidesWithActivities,
-          language_mode: slideLanguageMode,
-          expected_updated_at: slideDeckUpdatedAt,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error("Save failed: " + (data.error || "Unknown error"));
-      } else {
-        const savedSlides = Array.isArray(data.slides)
-          ? (data.slides as Slide[])
-          : slidesWithActivities;
-        const savedTasks = Array.isArray(data.tasks)
-          ? (data.tasks as LessonTaskForm[]).map(normalizeLessonTaskForm)
-          : syncedTasks;
-        setSlides(savedSlides);
-        setLessonTasks(savedTasks);
-        setSlideDeckUpdatedAt(typeof data.updated_at === "string" ? data.updated_at : null);
-        setSlideLastSaved(new Date().toLocaleTimeString());
-      }
-    } catch { toast.error("Save failed"); }
-    finally { setSlideSaving(false); }
-  }, [id, lessonTasks, slideDeckUpdatedAt, slideLanguageMode, slides]);
 
 
   const slideGenerationBlockedReason = getCurriculumRequirementMessage(
@@ -575,29 +543,64 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         );
         setSlides(slidesWithActivities);
         setLessonTasks(syncedTasks);
+        const sentSlides = slidesWithActivities;
         let persistedSlides = slidesWithActivities;
         let persistedTasks = syncedTasks;
 
-        const slideSaveResponse = await fetch(`/api/teacher/lessons/${id}/slides`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            slides: slidesWithActivities,
-            language_mode: slideLanguageMode,
-            expected_updated_at: slideDeckUpdatedAt,
-          }),
-        });
-        const slideSaveData = await slideSaveResponse.json().catch(() => ({}));
+        // Save the slide deck with optimistic concurrency. If another save (often
+        // the same author in a second tab, or a racing autosave) bumped the deck
+        // first, the server returns 409 with the latest version token. Rather than
+        // leaving the editor stuck — and losing the teacher's text when they reload
+        // — we adopt that token and retry once so the active edits always persist.
+        let expectedToken = slideDeckUpdatedAt;
+        let slideSaveData: {
+          slides?: unknown;
+          tasks?: unknown;
+          updated_at?: unknown;
+          error?: string;
+          code?: string;
+        } = {};
+        let concurrentEditDetected = false;
 
-        if (!slideSaveResponse.ok) {
-          throw new Error("Slides: " + (slideSaveData.error || "Failed to save slides"));
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const slideSaveResponse = await fetch(`/api/teacher/lessons/${id}/slides`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              slides: sentSlides,
+              language_mode: slideLanguageMode,
+              expected_updated_at: expectedToken,
+            }),
+          });
+          slideSaveData = await slideSaveResponse.json().catch(() => ({}));
+
+          if (slideSaveResponse.ok) break;
+
+          const isConflict =
+            slideSaveResponse.status === 409 || slideSaveData?.code === "SLIDE_DECK_CONFLICT";
+          if (isConflict && attempt === 0 && typeof slideSaveData.updated_at === "string") {
+            expectedToken = slideSaveData.updated_at;
+            concurrentEditDetected = true;
+            continue;
+          }
+          throw new Error(
+            isConflict
+              ? "Slides: This lesson was also edited elsewhere. Your version is kept here — please review the slides and save again."
+              : "Slides: " + (slideSaveData.error || "Failed to save slides")
+          );
         }
 
-        if (Array.isArray(slideSaveData.slides)) {
+        // Only adopt the server's echoed slides/tasks if the teacher has NOT kept
+        // typing while the request was in flight. setSlides(sentSlides) above made
+        // `slides` === sentSlides by reference; any new keystroke replaces that
+        // reference, so this check preserves their newest text (the next autosave
+        // round will persist it).
+        const localUnchanged = slidesRef.current === sentSlides;
+        if (Array.isArray(slideSaveData.slides) && localUnchanged) {
           persistedSlides = slideSaveData.slides as Slide[];
           setSlides(persistedSlides);
         }
-        if (Array.isArray(slideSaveData.tasks)) {
+        if (Array.isArray(slideSaveData.tasks) && localUnchanged) {
           persistedTasks = (slideSaveData.tasks as LessonTaskForm[]).map(normalizeLessonTaskForm);
           setLessonTasks(persistedTasks);
         }
@@ -607,7 +610,13 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
         await syncLessonTasks(supabase, id, persistedTasks);
         lastPersistedPublishedRef.current = form.is_published;
-        if (showSuccessMessage) {
+        if (concurrentEditDetected) {
+          setSaveMessage({
+            type: "error",
+            text: "Saved — but someone else (or another tab) had also edited this lesson, so please double-check the slides.",
+          });
+          setTimeout(() => setSaveMessage(null), 6000);
+        } else if (showSuccessMessage) {
           setSaveMessage({ type: "success", text: "Saved" });
           setTimeout(() => setSaveMessage(null), 2000);
         }
@@ -621,7 +630,6 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
           slideLanguageMode,
         });
         setLastSavedAt(savedAt);
-        setSlideLastSaved(savedAt);
         setSaveState("saved");
       } catch (err) {
         setSaveState("error");
@@ -996,8 +1004,8 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
               <SlideEditor
                 slides={slides}
                 onChange={setSlides}
-                onSave={handleSaveSlides}
-                saving={slideSaving}
+                onSave={() => void saveAll()}
+                saving={saving}
                 preferredLanguage={slideLanguageMode === "en" ? "en" : "ar"}
                 lessonId={id}
                 lessonTitle={form.title_ar || form.title_en || ""}

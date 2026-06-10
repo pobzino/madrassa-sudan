@@ -1,5 +1,6 @@
 'use client';
 
+import { Fragment } from 'react';
 import { OwlHead } from '@/components/illustrations';
 
 interface HomeworkProgressBarProps {
@@ -7,63 +8,81 @@ interface HomeworkProgressBarProps {
   answered: number;
   current: number;
   onSelect: (index: number) => void;
-  /** Per-question status for coloring dots */
+  /** Per-question status for colouring steps */
   questionStatuses?: ('unanswered' | 'answered' | 'correct' | 'incorrect')[];
 }
 
+const CheckIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+  </svg>
+);
+const XIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+
 export default function HomeworkProgressBar({
   total,
-  answered,
   current,
   onSelect,
   questionStatuses,
 }: HomeworkProgressBarProps) {
-  const pct = total > 0 ? Math.round((answered / total) * 100) : 0;
-  // Position owl at current question position along the bar
-  const owlPct = total > 1 ? (current / (total - 1)) * 100 : 50;
+  const statusOf = (idx: number) => questionStatuses?.[idx] ?? 'unanswered';
+
+  // The furthest step the learner has reached (answered/graded or the current one).
+  let reached = current;
+  for (let i = 0; i < total; i++) {
+    if (statusOf(i) !== 'unanswered') reached = Math.max(reached, i);
+  }
 
   return (
-    <div className="mb-4 sm:mb-6">
-      {/* Progress bar with walking owl */}
-      <div className="relative h-7 sm:h-8 mb-2 sm:mb-3">
-        {/* Track */}
-        <div className="absolute top-1/2 -translate-y-1/2 left-3 right-3 sm:left-4 sm:right-4 h-2.5 sm:h-3 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        {/* Owl icon walking along */}
-        <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-500 ease-out z-10"
-          style={{ left: `clamp(1.25rem, calc(0.75rem + ${owlPct} * (100% - 1.5rem) / 100), calc(100% - 1.25rem))` }}
-        >
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white shadow-md border-2 border-emerald-400 flex items-center justify-center">
-            <OwlHead className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Question dots */}
-      <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 px-1 scrollbar-hide">
+    <div className="mb-6 pt-9">
+      <div className="flex items-center px-1">
         {Array.from({ length: total }, (_, idx) => {
-          const status = questionStatuses?.[idx] || 'unanswered';
+          const status = statusOf(idx);
           const isCurrent = idx === current;
+          const correct = status === 'correct';
+          const incorrect = status === 'incorrect';
+          const done = status === 'answered' || correct;
 
-          let dotClass = 'bg-gray-100 text-gray-500';
-          if (status === 'answered') dotClass = 'bg-emerald-100 text-emerald-700';
-          if (status === 'correct') dotClass = 'bg-emerald-100 text-emerald-700';
-          if (status === 'incorrect') dotClass = 'bg-red-100 text-red-700';
-          if (isCurrent) dotClass = 'bg-emerald-600 text-white shadow-lg scale-110';
+          const circle = incorrect
+            ? 'bg-red-500 border-red-600 text-white'
+            : correct || done
+              ? 'bg-emerald-500 border-emerald-600 text-white'
+              : isCurrent
+                ? 'bg-white border-emerald-500 text-emerald-700'
+                : 'bg-white border-gray-200 text-gray-400';
 
           return (
-            <button
-              key={idx}
-              onClick={() => onSelect(idx)}
-              className={`flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold font-fredoka transition-all ${dotClass}`}
-            >
-              {idx + 1}
-            </button>
+            <Fragment key={idx}>
+              {idx > 0 && (
+                <div
+                  className={`flex-1 h-1.5 rounded-full mx-1.5 transition-colors duration-500 ${
+                    reached >= idx ? 'bg-emerald-500' : 'bg-gray-100'
+                  }`}
+                />
+              )}
+              <div className="relative shrink-0">
+                {isCurrent && (
+                  <div className="absolute left-1/2 -translate-x-1/2 -top-9 animate-bounce pointer-events-none">
+                    <div className="w-8 h-8 rounded-full bg-white shadow-md border-2 border-emerald-400 flex items-center justify-center">
+                      <OwlHead className="w-5 h-5" />
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={() => onSelect(idx)}
+                  aria-label={`Question ${idx + 1}`}
+                  className={`w-10 h-10 rounded-full border-2 flex items-center justify-center text-sm font-bold font-fredoka transition-all ${circle} ${
+                    isCurrent ? 'ring-4 ring-emerald-500/20 scale-110' : ''
+                  }`}
+                >
+                  {correct ? <CheckIcon /> : incorrect ? <XIcon /> : idx + 1}
+                </button>
+              </div>
+            </Fragment>
           );
         })}
       </div>

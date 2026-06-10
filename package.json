@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "ingest:lessons": "node scripts/ingest-lesson-embeddings.mjs",
     "inspect:slides": "node scripts/inspect-slides.mjs",
+    "test:prod-sim": "node scripts/sim-prod-smoke.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -47,8 +48,17 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "playwright": "^1.59.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.4"
-  }
+  },
+  "description": "**AI-Powered Education Platform for Displaced Sudanese Children**",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }

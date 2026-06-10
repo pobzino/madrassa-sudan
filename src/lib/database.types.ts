@@ -365,6 +365,8 @@ export type Database = {
           title_en: string | null
           total_points: number
           show_instant_feedback: boolean
+          is_test: boolean
+          passing_score: number
           updated_at: string
         }
         Insert: {
@@ -384,6 +386,8 @@ export type Database = {
           title_en?: string | null
           total_points?: number
           show_instant_feedback?: boolean
+          is_test?: boolean
+          passing_score?: number
           updated_at?: string
         }
         Update: {
@@ -403,6 +407,8 @@ export type Database = {
           title_en?: string | null
           total_points?: number
           show_instant_feedback?: boolean
+          is_test?: boolean
+          passing_score?: number
           updated_at?: string
         }
         Relationships: [
@@ -561,6 +567,7 @@ export type Database = {
           student_id: string
           submitted_at: string | null
           time_spent_seconds: number | null
+          attempt_count: number
           updated_at: string
         }
         Insert: {
@@ -577,6 +584,7 @@ export type Database = {
           student_id: string
           submitted_at?: string | null
           time_spent_seconds?: number | null
+          attempt_count?: number
           updated_at?: string
         }
         Update: {
@@ -593,6 +601,7 @@ export type Database = {
           student_id?: string
           submitted_at?: string | null
           time_spent_seconds?: number | null
+          attempt_count?: number
           updated_at?: string
         }
         Relationships: [

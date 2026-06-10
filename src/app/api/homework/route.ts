@@ -70,6 +70,8 @@ export async function POST(request: NextRequest) {
         due_at: data.due_at || null,
         total_points: totalPoints,
         is_published: data.is_published,
+        is_test: data.is_test,
+        passing_score: data.passing_score,
         created_by: user.id,
       })
       .select()

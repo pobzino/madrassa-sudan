@@ -12,6 +12,8 @@ import { getCachedUser } from "@/lib/supabase/auth-cache";
 import SlideCard from "@/components/slides/SlideCard";
 import OwlImage, { isOwlImage } from "@/components/slides/OwlImage";
 import type { Slide } from "@/lib/slides.types";
+import LearningPathTree from "@/components/learning-path/LearningPathTree";
+import { loadSubjectLearningPath, type SubjectLearningPath } from "@/lib/lessons/useLearningPath";
 
 const translations = {
   ar: {
@@ -77,6 +79,12 @@ function isHttpImageUrl(url: string | null | undefined): url is string {
   }
 }
 
+// First cohort only offers Maths and English lessons.
+function isCoreLessonSubject(subject: Subject | null | undefined): boolean {
+  const name = subject?.name_en?.toLowerCase() || "";
+  return name.includes("math") || name.includes("english");
+}
+
 export default function LessonsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -86,10 +94,12 @@ export default function LessonsPage() {
   const isRtl = language === "ar";
   const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [pathsBySubject, setPathsBySubject] = useState<Record<string, SubjectLearningPath | null>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSubject, setSelectedSubject] = useState<string>(
-    () => searchParams.get("subject") ?? "all"
+    () => searchParams.get("subject") ?? ""
   );
 
   useEffect(() => {
@@ -99,12 +109,13 @@ export default function LessonsPage() {
         router.push("/auth/login");
         return;
       }
+      setUserId(user.id);
 
       const { data: subjectsData } = await supabase
         .from("subjects")
         .select("*")
         .order("display_order");
-      if (subjectsData) setSubjects(subjectsData);
+      if (subjectsData) setSubjects(subjectsData.filter((s) => isCoreLessonSubject(s)));
 
       const { data: lessonsData } = await supabase
         .from("lessons")
@@ -132,13 +143,34 @@ export default function LessonsPage() {
     loadData();
   }, [router, supabase]);
 
-  const inProgressLessons = useMemo(
-    () =>
-      lessons.filter(
-        (l) => l.progress && !l.progress.completed && l.progress.last_position_seconds > 0
-      ),
-    [lessons]
-  );
+  // Load each core subject's published learning-path tree (Track B). Subjects
+  // without a published path stay null and fall back to the flat lesson list.
+  useEffect(() => {
+    if (!userId || subjects.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        subjects.map(
+          async (s) =>
+            [s.id, await loadSubjectLearningPath(supabase, s.id, userId, language)] as const
+        )
+      );
+      if (!cancelled) setPathsBySubject(Object.fromEntries(entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [subjects, userId, language, supabase]);
+
+  // One subject at a time. When the student hasn't picked a subject, default
+  // (during render — no effect needed) to the one they're working through, then
+  // the first with a path, then the first subject.
+  const defaultSubject = useMemo(() => {
+    const inProgress = subjects.find((s) => pathsBySubject[s.id]?.currentStepId);
+    const withPath = subjects.find((s) => pathsBySubject[s.id]);
+    return (inProgress || withPath || subjects[0])?.id ?? "";
+  }, [subjects, pathsBySubject]);
+  const effectiveSubject = selectedSubject || defaultSubject;
 
   const searchFiltered = useMemo(() => {
     if (!searchQuery) return null;
@@ -152,29 +184,15 @@ export default function LessonsPage() {
     );
   }, [lessons, searchQuery]);
 
-  const subjectFiltered = useMemo(() => {
-    if (selectedSubject === "all") return null;
-    return lessons.filter((l) => l.subject_id === selectedSubject);
-  }, [lessons, selectedSubject]);
-
-  // Group lessons by subject for the browse sections
-  const lessonsBySubject = useMemo(() => {
-    const map = new Map<string, { subject: Subject; lessons: LessonWithProgress[] }>();
-    for (const lesson of lessons) {
-      if (!lesson.subject) continue;
-      const existing = map.get(lesson.subject_id);
-      if (existing) {
-        existing.lessons.push(lesson);
-      } else {
-        map.set(lesson.subject_id, { subject: lesson.subject, lessons: [lesson] });
-      }
-    }
-    return Array.from(map.values());
-  }, [lessons]);
+  const activeSubjectLessons = useMemo(
+    () => lessons.filter((l) => l.subject_id === effectiveSubject),
+    [lessons, effectiveSubject]
+  );
 
   const getSubjectColor = (subjectId: string) => {
     const index = subjects.findIndex((s) => s.id === subjectId);
-    return SUBJECT_COLORS[index % SUBJECT_COLORS.length];
+    const safeIndex = index < 0 ? 0 : index;
+    return SUBJECT_COLORS[safeIndex % SUBJECT_COLORS.length];
   };
 
   const formatDuration = (seconds: number | null) => {
@@ -198,15 +216,14 @@ export default function LessonsPage() {
   const isCompleted = (lesson: LessonWithProgress) =>
     lesson.progress?.completed === true;
 
-  // Which list to render
+  // One subject at a time: search overlays results; otherwise show the selected
+  // subject's path (or a flat list fallback if it has no published path).
   const showSearchResults = searchQuery.length > 0;
-  const showSubjectFilter = !showSearchResults && selectedSubject !== "all";
-  const showBrowse = !showSearchResults && !showSubjectFilter;
-  const displayList = showSearchResults
-    ? searchFiltered
-    : showSubjectFilter
-      ? subjectFiltered
-      : null;
+  const activeSubject = subjects.find((s) => s.id === effectiveSubject) || null;
+  const activePath = activeSubject ? pathsBySubject[activeSubject.id] : null;
+  // The path lookup runs after lessons load; until the active subject's entry
+  // resolves, show the loader rather than flashing the flat-grid fallback.
+  const pathsResolved = !activeSubject || activeSubject.id in pathsBySubject;
 
   if (loading) {
     return (
@@ -249,21 +266,11 @@ export default function LessonsPage() {
         </div>
       </div>
 
-      {/* Subject chips */}
+      {/* Subject switcher */}
       <div className="flex gap-2 overflow-x-auto pb-4 -mx-4 px-4 scrollbar-hide">
-        <button
-          onClick={() => { setSelectedSubject("all"); setSearchQuery(""); }}
-          className={`flex-shrink-0 px-5 py-2.5 rounded-full text-base font-semibold font-fredoka transition-all ${
-            selectedSubject === "all" && !searchQuery
-              ? "bg-gray-900 text-white shadow-sm"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          }`}
-        >
-          {t.allSubjects}
-        </button>
         {subjects.map((subject) => {
           const colors = getSubjectColor(subject.id);
-          const active = selectedSubject === subject.id && !searchQuery;
+          const active = effectiveSubject === subject.id && !searchQuery;
           return (
             <button
               key={subject.id}
@@ -280,183 +287,64 @@ export default function LessonsPage() {
         })}
       </div>
 
-      {/* Search or filter results */}
-      {displayList !== null && (
-        <>
-          {displayList.length === 0 ? (
-            <div className="text-center py-16">
-              <OwlSad className="w-20 h-20 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">{t.noLessonsFound}</h3>
-              <p className="text-sm text-gray-500">{t.tryAdjusting}</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {displayList.map((lesson) => (
-                <LessonCard
-                  key={lesson.id}
-                  lesson={lesson}
-                  language={language}
-                  t={t}
-                  isRtl={isRtl}
-                  color={getSubjectColor(lesson.subject_id)}
-                  progress={getProgress(lesson)}
-                  completed={isCompleted(lesson)}
-                  duration={formatDuration(lesson.video_duration_seconds)}
-                  firstSlide={lesson.first_slide}
-                />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Browse mode — sectioned by subject */}
-      {showBrowse && (
-        <div className="space-y-8">
-          {/* Continue Watching */}
-          {inProgressLessons.length > 0 && (
-            <section>
-              <h2 className="text-lg font-bold font-fredoka text-gray-900 mb-3 flex items-center gap-2">
-                <span className="w-1 h-5 bg-amber-400 rounded-full" />
-                {t.continueWatching}
-              </h2>
-              <HorizontalScroll isRtl={isRtl}>
-                {inProgressLessons.map((lesson) => (
-                  <LessonCard
-                    key={lesson.id}
-                    lesson={lesson}
-                    language={language}
-                    t={t}
-                    isRtl={isRtl}
-                    color={getSubjectColor(lesson.subject_id)}
-                    progress={getProgress(lesson)}
-                    completed={false}
-                    duration={formatDuration(lesson.video_duration_seconds)}
-                    firstSlide={lesson.first_slide}
-                    compact
-                  />
-                ))}
-              </HorizontalScroll>
-            </section>
-          )}
-
-          {/* Per-subject sections */}
-          {lessonsBySubject.map(({ subject, lessons: subjectLessons }) => {
-            const color = getSubjectColor(subject.id);
-            return (
-              <section key={subject.id}>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-lg font-bold font-fredoka text-gray-900 flex items-center gap-2">
-                    <span className={`w-1 h-5 ${color.bg} rounded-full`} />
-                    {language === "ar" ? subject.name_ar : subject.name_en}
-                    <span className="text-sm font-normal text-gray-400 ml-1">
-                      {subjectLessons.length}
-                    </span>
-                  </h2>
-                  {subjectLessons.length > 5 && (
-                    <button
-                      onClick={() => setSelectedSubject(subject.id)}
-                      className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
-                    >
-                      {t.seeAll}
-                    </button>
-                  )}
-                </div>
-                <HorizontalScroll isRtl={isRtl}>
-                  {subjectLessons.map((lesson) => (
-                    <LessonCard
-                      key={lesson.id}
-                      lesson={lesson}
-                      language={language}
-                      t={t}
-                      isRtl={isRtl}
-                      color={color}
-                      progress={getProgress(lesson)}
-                      completed={isCompleted(lesson)}
-                      duration={formatDuration(lesson.video_duration_seconds)}
-                      firstSlide={lesson.first_slide}
-                      compact
-                    />
-                  ))}
-                </HorizontalScroll>
-              </section>
-            );
-          })}
-
-          {lessonsBySubject.length === 0 && (
-            <div className="text-center py-16">
-              <OwlSad className="w-20 h-20 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">{t.noLessonsFound}</h3>
-            </div>
-          )}
+      {/* Search results */}
+      {showSearchResults ? (
+        searchFiltered && searchFiltered.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {searchFiltered.map((lesson) => (
+              <LessonCard
+                key={lesson.id}
+                lesson={lesson}
+                language={language}
+                t={t}
+                isRtl={isRtl}
+                color={getSubjectColor(lesson.subject_id)}
+                progress={getProgress(lesson)}
+                completed={isCompleted(lesson)}
+                duration={formatDuration(lesson.video_duration_seconds)}
+                firstSlide={lesson.first_slide}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16">
+            <OwlSad className="w-20 h-20 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">{t.noLessonsFound}</h3>
+            <p className="text-sm text-gray-500">{t.tryAdjusting}</p>
+          </div>
+        )
+      ) : !pathsResolved ? (
+        /* Path still loading — avoid flashing the flat-grid fallback. */
+        <div className="flex items-center justify-center py-20">
+          <OwlThinking className="w-16 h-16" />
         </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Horizontal Scroll Container ─── */
-
-function HorizontalScroll({ children, isRtl }: { children: React.ReactNode; isRtl: boolean }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
-  const checkScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const { scrollLeft, scrollWidth, clientWidth } = el;
-    if (isRtl) {
-      setCanScrollLeft(scrollLeft < -1);
-      setCanScrollRight(Math.abs(scrollLeft) + clientWidth < scrollWidth - 1);
-    } else {
-      setCanScrollLeft(scrollLeft > 1);
-      setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 1);
-    }
-  };
-
-  useEffect(() => {
-    checkScroll();
-    const el = scrollRef.current;
-    if (el) el.addEventListener("scroll", checkScroll, { passive: true });
-    return () => el?.removeEventListener("scroll", checkScroll);
-  });
-
-  const scroll = (dir: "left" | "right") => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const amount = el.clientWidth * 0.75;
-    el.scrollBy({ left: dir === "right" ? amount : -amount, behavior: "smooth" });
-  };
-
-  return (
-    <div className="relative group">
-      <div
-        ref={scrollRef}
-        className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide scroll-smooth"
-        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-      >
-        {children}
-      </div>
-      {canScrollLeft && (
-        <button
-          onClick={() => scroll("left")}
-          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 w-9 h-9 bg-white border border-gray-200 rounded-full shadow-lg flex items-center justify-center text-gray-600 hover:bg-gray-50 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-      )}
-      {canScrollRight && (
-        <button
-          onClick={() => scroll("right")}
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 w-9 h-9 bg-white border border-gray-200 rounded-full shadow-lg flex items-center justify-center text-gray-600 hover:bg-gray-50 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
+      ) : activePath ? (
+        /* The selected subject's gated learning path. Keyed per subject so each
+           keeps its own owl + selection state instead of sharing one instance. */
+        <LearningPathTree key={activePath.pathId} path={activePath} language={language} />
+      ) : activeSubjectLessons.length > 0 ? (
+        /* Fallback: a subject with no published path shows a flat lesson grid. */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {activeSubjectLessons.map((lesson) => (
+            <LessonCard
+              key={lesson.id}
+              lesson={lesson}
+              language={language}
+              t={t}
+              isRtl={isRtl}
+              color={getSubjectColor(lesson.subject_id)}
+              progress={getProgress(lesson)}
+              completed={isCompleted(lesson)}
+              duration={formatDuration(lesson.video_duration_seconds)}
+              firstSlide={lesson.first_slide}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-16">
+          <OwlSad className="w-20 h-20 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">{t.noLessonsFound}</h3>
+        </div>
       )}
     </div>
   );
@@ -499,7 +387,7 @@ function LessonCard({
   return (
     <Link
       href={`/lessons/${lesson.id}`}
-      className={`group bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-lg hover:border-gray-200 transition-all flex-shrink-0 ${
+      className={`group/card bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-lg hover:border-gray-200 transition-all flex-shrink-0 ${
         compact ? "w-64 sm:w-72" : ""
       }`}
     >
@@ -551,7 +439,7 @@ function LessonCard({
         )}
 
         {/* Hover play */}
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover/card:opacity-100 transition-opacity">
           <div className="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
             <svg className="w-7 h-7 text-gray-900 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5.14v14l11-7-11-7z" />
@@ -562,7 +450,7 @@ function LessonCard({
 
       {/* Info */}
       <div className="p-4">
-        <h3 className="text-base font-semibold font-fredoka text-gray-900 line-clamp-2 leading-snug group-hover:text-emerald-700 transition-colors mb-2">
+        <h3 className="text-base font-semibold font-fredoka text-gray-900 line-clamp-2 leading-snug group-hover/card:text-emerald-700 transition-colors mb-2">
           {title}
         </h3>
         <div className="flex items-center gap-2 flex-wrap">

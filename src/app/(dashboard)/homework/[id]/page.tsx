@@ -39,6 +39,13 @@ const translations = {
     submittedDesc: "لقد أرسلت هذا الواجب بنجاح",
     graded: "تم التصحيح",
     score: "الدرجة",
+    weekTest: "اختبار الأسبوع",
+    toPass: "للنجاح",
+    testPassed: "أحسنت! لقد نجحت",
+    testFailed: "لم تنجح هذه المرة",
+    unlockedNext: "تم فتح الأسبوع التالي!",
+    retakeTest: "أعد المحاولة",
+    retaking: "جاري التحضير...",
     feedback: "ملاحظات المعلم",
     correct: "صحيح",
     incorrect: "خطأ",
@@ -86,6 +93,13 @@ const translations = {
     submittedDesc: "You have successfully submitted this homework",
     graded: "Graded",
     score: "Score",
+    weekTest: "Week Test",
+    toPass: "to pass",
+    testPassed: "Great job! You passed",
+    testFailed: "Not quite this time",
+    unlockedNext: "Next week unlocked!",
+    retakeTest: "Retake test",
+    retaking: "Preparing…",
     feedback: "Teacher Feedback",
     correct: "Correct",
     incorrect: "Incorrect",
@@ -176,6 +190,7 @@ export default function HomeworkAssignmentPage() {
   const [responses, setResponses] = useState<HomeworkResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [retaking, setRetaking] = useState(false);
 
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<ResponseMap>({});
@@ -503,6 +518,9 @@ export default function HomeworkAssignmentPage() {
       const result = await response.json();
       if (result.streakDays) setStreakDays(result.streakDays);
 
+      const isTestAssignment = assignment?.is_test === true;
+      let testPassedNow = false;
+
       if (userId) {
         const { data: submissionData } = await supabase
           .from("homework_submissions")
@@ -522,14 +540,33 @@ export default function HomeworkAssignmentPage() {
           if (responsesData) {
             setResponses(responsesData);
           }
+
+          const graded = submissionData.status === "graded" || submissionData.status === "returned";
+          const totalPts = assignment?.total_points ?? 0;
+          const passMark = assignment?.passing_score ?? 80;
+          testPassedNow =
+            graded && submissionData.score != null && totalPts > 0 && submissionData.score >= (passMark / 100) * totalPts;
         }
       }
 
-      playComplete();
-      setOwlMood('celebrating');
-      setShowCompletionCard(true);
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 3000);
+      if (isTestAssignment) {
+        // Tests use the inline pass/fail banner (with Retake), not the generic
+        // "points / Back to Homework" completion modal. Only celebrate on a pass.
+        if (testPassedNow) {
+          playComplete();
+          setOwlMood("celebrating");
+          setShowConfetti(true);
+          setTimeout(() => setShowConfetti(false), 3000);
+        } else {
+          setOwlMood("thinking");
+        }
+      } else {
+        playComplete();
+        setOwlMood("celebrating");
+        setShowCompletionCard(true);
+        setShowConfetti(true);
+        setTimeout(() => setShowConfetti(false), 3000);
+      }
     } catch (error) {
       console.error("Homework submission failed:", error);
     } finally {
@@ -558,6 +595,33 @@ export default function HomeworkAssignmentPage() {
 
   const isSubmitted = submission?.status === "submitted" || submission?.status === "graded" || submission?.status === "returned";
   const isGraded = submission?.status === "graded" || submission?.status === "returned";
+
+  // Track B: gating "week test" presentation.
+  const isTest = assignment?.is_test === true;
+  const passMark = assignment?.passing_score ?? 80;
+  const testPassed =
+    isTest &&
+    isGraded &&
+    submission?.score != null &&
+    (assignment?.total_points ?? 0) > 0 &&
+    submission.score >= (passMark / 100) * (assignment!.total_points);
+  const testFailed = isTest && isGraded && !testPassed;
+
+  const handleRetakeTest = async () => {
+    setRetaking(true);
+    try {
+      const res = await fetch(`/api/homework/${assignmentId}/retake`, { method: "POST" });
+      if (res.ok) {
+        // Reload so the page re-enters the taking flow with a fresh attempt.
+        window.location.reload();
+        return;
+      }
+    } catch {
+      // fall through to reset the button
+    }
+    setRetaking(false);
+  };
+
   const currentQ = questions[currentQuestion];
   const currentResponse = currentQ ? getResponse(currentQ.id) : undefined;
   const currentFileDisplays = currentQ ? fileDisplays[currentQ.id] || [] : [];
@@ -669,6 +733,52 @@ export default function HomeworkAssignmentPage() {
 
       {/* Main content */}
       <div className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        {/* Track B: week-test banner / pass-fail result */}
+        {isTest && (
+          <div
+            className={`rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 flex items-center gap-3 sm:gap-4 ${
+              testPassed
+                ? "bg-emerald-50 border border-emerald-200"
+                : testFailed
+                  ? "bg-red-50 border border-red-200"
+                  : "bg-amber-50 border border-amber-200"
+            }`}
+          >
+            {testPassed ? (
+              <OwlCelebrating className="w-12 h-12 sm:w-14 sm:h-14 shrink-0" />
+            ) : testFailed ? (
+              <OwlEncouraging className="w-12 h-12 sm:w-14 sm:h-14 shrink-0" />
+            ) : (
+              <OwlPointing className="w-12 h-12 sm:w-14 sm:h-14 shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p
+                className={`font-bold font-fredoka text-base sm:text-lg ${
+                  testPassed ? "text-emerald-800" : testFailed ? "text-red-800" : "text-amber-800"
+                }`}
+              >
+                {testPassed ? t.testPassed : testFailed ? t.testFailed : t.weekTest}
+              </p>
+              <p
+                className={`text-sm ${
+                  testPassed ? "text-emerald-700" : testFailed ? "text-red-700" : "text-amber-700"
+                }`}
+              >
+                {testPassed ? t.unlockedNext : `${passMark}% ${t.toPass}`}
+              </p>
+            </div>
+            {testFailed && (
+              <button
+                onClick={handleRetakeTest}
+                disabled={retaking}
+                className="shrink-0 px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-60"
+              >
+                {retaking ? t.retaking : t.retakeTest}
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Teacher feedback (if graded) */}
         {isGraded && submission?.feedback && (
           <div className="bg-[#007229]/10 border border-emerald-200 rounded-2xl p-3.5 sm:p-5 mb-4 sm:mb-6">

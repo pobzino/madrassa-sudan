@@ -105,10 +105,11 @@ export default function DashboardPage() {
 
       const { data: subjectsData } = await supabase.from("subjects").select("*").order("display_order");
       if (subjectsData) {
-        // Filter to only show Math, English, and Science on dashboard
+        // Only Maths and English are live for the first cohort. Science is hidden
+        // for now so students aren't confused into thinking it's available yet.
         const coreSubjects = subjectsData.filter((s) => {
           const name = s.name_en?.toLowerCase() || "";
-          return name.includes("math") || name.includes("english") || name.includes("science");
+          return name.includes("math") || name.includes("english");
         });
         setSubjects(coreSubjects);
       }
@@ -242,7 +243,7 @@ export default function DashboardPage() {
               <h2 className="text-xl font-bold text-gray-900 font-fredoka">{t.subjects}</h2>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               {subjects.map((subject, index) => (
                 <Link
                   key={subject.id}

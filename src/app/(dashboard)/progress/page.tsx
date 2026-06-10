@@ -183,12 +183,18 @@ export default function ProgressPage() {
       }
 
       // Fetch subjects and lesson progress
-      const { data: subjects } = await supabase
+      const { data: allSubjects } = await supabase
         .from("subjects")
         .select("*")
         .order("display_order");
 
-      if (subjects) {
+      // Only show Maths, English, and Science in the By Subject breakdown.
+      const subjects = (allSubjects || []).filter((s) => {
+        const name = s.name_en?.toLowerCase() || "";
+        return name.includes("math") || name.includes("english") || name.includes("science");
+      });
+
+      if (subjects.length > 0) {
         const progressBySubject = await Promise.all(
           subjects.map(async (subject) => {
             // Get total lessons for subject
@@ -314,44 +320,40 @@ export default function ProgressPage() {
         <div className="mb-8">
           <h2 className="text-xl font-semibold font-fredoka text-gray-900 mb-4">{t.overview}</h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm animate-pop-in">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center">
-                  {Icons.book}
-                </div>
-                <span className="text-base text-gray-500">{t.lessonsCompleted}</span>
+            <div className="relative overflow-hidden bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg shadow-violet-500/30 animate-pop-in">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="relative">
+                <div className="text-white/80 mb-1">{Icons.book}</div>
+                <p className="text-5xl font-bold font-fredoka">{stats.lessons}</p>
+                <p className="text-white/80 text-base font-medium font-fredoka">{t.lessonsCompleted}</p>
               </div>
-              <p className="text-5xl font-bold font-fredoka text-gray-900">{stats.lessons}</p>
             </div>
 
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm animate-pop-in" style={{ animationDelay: "0.1s" }}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-xl bg-emerald-100 text-[#007229] flex items-center justify-center">
-                  {Icons.clipboard}
-                </div>
-                <span className="text-base text-gray-500">{t.homeworkCompleted}</span>
+            <div className="relative overflow-hidden bg-gradient-to-br from-[#007229] to-[#00913D] rounded-2xl p-6 text-white shadow-lg shadow-[#007229]/30 animate-pop-in" style={{ animationDelay: "0.1s" }}>
+              <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="relative">
+                <div className="text-white/80 mb-1">{Icons.clipboard}</div>
+                <p className="text-5xl font-bold font-fredoka">{stats.homework}</p>
+                <p className="text-white/80 text-base font-medium font-fredoka">{t.homeworkCompleted}</p>
               </div>
-              <p className="text-5xl font-bold font-fredoka text-gray-900">{stats.homework}</p>
             </div>
 
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm animate-pop-in" style={{ animationDelay: "0.2s" }}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
-                  {Icons.fire}
-                </div>
-                <span className="text-base text-gray-500">{t.currentStreak}</span>
+            <div className="relative overflow-hidden bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl p-6 text-white shadow-lg shadow-orange-500/30 animate-pop-in" style={{ animationDelay: "0.2s" }}>
+              <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="relative">
+                <div className="text-white/80 mb-1">{Icons.fire}</div>
+                <p className="text-5xl font-bold font-fredoka">{stats.streak}</p>
+                <p className="text-white/80 text-base font-medium font-fredoka">{t.currentStreak}</p>
               </div>
-              <p className="text-5xl font-bold font-fredoka text-gray-900">{stats.streak}</p>
             </div>
 
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm animate-pop-in" style={{ animationDelay: "0.3s" }}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
-                  {Icons.star}
-                </div>
-                <span className="text-base text-gray-500">{t.totalPoints}</span>
+            <div className="relative overflow-hidden bg-gradient-to-br from-amber-500 to-yellow-500 rounded-2xl p-6 text-white shadow-lg shadow-amber-500/30 animate-pop-in" style={{ animationDelay: "0.3s" }}>
+              <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="relative">
+                <div className="text-white/80 mb-1">{Icons.star}</div>
+                <p className="text-5xl font-bold font-fredoka">{stats.points}</p>
+                <p className="text-white/80 text-base font-medium font-fredoka">{t.totalPoints}</p>
               </div>
-              <p className="text-5xl font-bold font-fredoka text-gray-900">{stats.points}</p>
             </div>
           </div>
         </div>
