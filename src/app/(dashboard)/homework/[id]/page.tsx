@@ -49,6 +49,10 @@ const translations = {
     feedback: "ملاحظات المعلم",
     correct: "صحيح",
     incorrect: "خطأ",
+    correctBig: "أحسنت! 🎉",
+    correctSub: "إجابة صحيحة! واصل التقدم!",
+    tryAgainBig: "ليست صحيحة تماماً",
+    tryAgainSub: "حاول مرة أخرى — أنت تستطيع!",
     yourAnswer: "إجابتك",
     correctAnswer: "الإجابة الصحيحة",
     teacherComment: "تعليق المعلم",
@@ -103,6 +107,10 @@ const translations = {
     feedback: "Teacher Feedback",
     correct: "Correct",
     incorrect: "Incorrect",
+    correctBig: "Correct! 🎉",
+    correctSub: "You got it! Keep going!",
+    tryAgainBig: "Not quite!",
+    tryAgainSub: "Have another go — you can do it!",
     yourAnswer: "Your answer",
     correctAnswer: "Correct answer",
     teacherComment: "Teacher comment",
@@ -805,22 +813,22 @@ export default function HomeworkAssignmentPage() {
 
         {/* Question card */}
         {currentQ && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="bg-white rounded-3xl shadow-md border border-gray-100 overflow-hidden">
             {/* Question header */}
-            <div className="px-3.5 py-3 sm:p-5 border-b border-gray-100 bg-gray-50">
+            <div className="px-4 py-3 sm:px-6 sm:py-4 bg-gradient-to-r from-[#007229] to-[#00913D]">
               <div className="flex items-center justify-between">
-                <span className="text-sm sm:text-base font-semibold font-fredoka text-gray-500">
+                <span className="text-sm sm:text-base font-bold font-fredoka text-white">
                   {t.question} {currentQuestion + 1} {t.of} {questions.length}
                 </span>
-                <span className="text-sm sm:text-base font-semibold font-fredoka text-[#007229]">
+                <span className="px-2.5 py-1 rounded-full bg-white/20 text-white text-xs sm:text-sm font-bold font-fredoka">
                   {currentQ.points} {t.points}
                 </span>
               </div>
             </div>
 
             {/* Question content */}
-            <div className="p-3.5 sm:p-6">
-              <p className="text-lg sm:text-xl font-semibold font-fredoka text-gray-900 mb-3 sm:mb-4">
+            <div className="p-4 sm:p-6">
+              <p className="text-xl sm:text-2xl font-bold font-fredoka text-gray-900 mb-4 sm:mb-5 leading-snug">
                 {language === "ar" ? currentQ.question_text_ar : currentQ.question_text_en || currentQ.question_text_ar}
               </p>
 
@@ -855,46 +863,50 @@ export default function HomeworkAssignmentPage() {
 
               {/* Answer input based on type */}
               {currentQ.question_type === "multiple_choice" && currentQ.options && (
-                <div className="space-y-2 sm:space-y-3">
+                <div className="space-y-3">
                   {(currentQ.options as string[]).map((option, idx) => {
                     const isSelected = answers[currentQ.id] === option;
                     const isCorrectOption = isGraded && option === currentQ.correct_answer;
                     const isWrongSelection = isGraded && isSelected && option !== currentQ.correct_answer;
+                    const letter = String.fromCharCode(65 + idx);
+
+                    let cardCls: string;
+                    let badgeCls: string;
+                    let badge: React.ReactNode = letter;
+                    if (isGraded && isCorrectOption) {
+                      cardCls = "bg-emerald-50 border-emerald-500 text-emerald-900";
+                      badgeCls = "bg-emerald-500 text-white";
+                      badge = Icons.check;
+                    } else if (isGraded && isWrongSelection) {
+                      cardCls = "bg-red-50 border-red-500 text-red-900";
+                      badgeCls = "bg-red-500 text-white";
+                      badge = Icons.x;
+                    } else if (isGraded) {
+                      cardCls = "bg-gray-50 border-gray-200 text-gray-500";
+                      badgeCls = "bg-gray-200 text-gray-500";
+                    } else if (isSelected) {
+                      cardCls = "bg-emerald-500 border-emerald-600 text-white shadow-md shadow-emerald-500/30";
+                      badgeCls = "bg-white text-emerald-700";
+                    } else {
+                      cardCls = "bg-white border-gray-200 text-gray-800 hover:border-emerald-300 hover:bg-emerald-50/40";
+                      badgeCls = "bg-gray-100 text-gray-500";
+                    }
 
                     return (
                       <button
                         key={idx}
                         onClick={() => !isSubmitted && handleAnswerChange(currentQ.id, option)}
                         disabled={isSubmitted}
-                        className={`w-full p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border-2 text-left transition-all active:scale-[0.98] ${
-                          isGraded
-                            ? isCorrectOption
-                              ? "bg-emerald-100 border-emerald-500 text-emerald-800"
-                              : isWrongSelection
-                                ? "bg-red-100 border-red-500 text-red-800"
-                                : "bg-gray-50 border-gray-200 text-gray-600"
-                            : isSelected
-                              ? "bg-[#007229]/10 border-emerald-500 shadow-sm"
-                              : "bg-gray-50 border-gray-200 hover:bg-gray-100"
-                        } ${isSubmitted ? "cursor-default" : "cursor-pointer"}`}
+                        className={`w-full p-4 sm:p-5 rounded-2xl border-2 text-left transition-all active:scale-[0.98] flex items-center gap-3 sm:gap-4 ${cardCls} ${
+                          isSubmitted ? "cursor-default" : "cursor-pointer"
+                        }`}
                       >
-                        <div className="flex items-center gap-2.5 sm:gap-3">
-                          <span className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 text-sm sm:text-base font-fredoka ${
-                            isGraded
-                              ? isCorrectOption
-                                ? "border-emerald-500 bg-[#007229]/100 text-white"
-                                : isWrongSelection
-                                  ? "border-red-500 bg-red-500 text-white"
-                                  : "border-gray-300"
-                              : isSelected
-                                ? "border-emerald-500 bg-[#007229]/100 text-white"
-                                : "border-gray-300"
-                          }`}>
-                            {isGraded && isCorrectOption && Icons.check}
-                            {isGraded && isWrongSelection && Icons.x}
-                          </span>
-                          <span className="text-sm sm:text-base font-medium">{option}</span>
-                        </div>
+                        <span
+                          className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0 text-base sm:text-lg font-bold font-fredoka ${badgeCls}`}
+                        >
+                          {badge}
+                        </span>
+                        <span className="text-base sm:text-lg font-semibold font-fredoka">{option}</span>
                       </button>
                     );
                   })}
@@ -916,43 +928,50 @@ export default function HomeworkAssignmentPage() {
                         key={option.value}
                         onClick={() => !isSubmitted && handleAnswerChange(currentQ.id, option.value)}
                         disabled={isSubmitted}
-                        className={`w-full p-4 sm:p-6 rounded-xl sm:rounded-2xl border-2 text-center transition-all active:scale-[0.97] ${
+                        className={`w-full p-5 sm:p-7 rounded-2xl border-2 text-center transition-all active:scale-[0.97] ${
                           isGraded
                             ? isCorrectOption
-                              ? "bg-emerald-100 border-emerald-500 text-emerald-800"
+                              ? "bg-emerald-50 border-emerald-500 text-emerald-900"
                               : isWrongSelection
-                                ? "bg-red-100 border-red-500 text-red-800"
-                                : "bg-gray-50 border-gray-200 text-gray-600"
+                                ? "bg-red-50 border-red-500 text-red-900"
+                                : "bg-gray-50 border-gray-200 text-gray-500"
                             : isSelected
-                              ? "bg-[#007229]/10 border-emerald-500 shadow-sm"
-                              : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                              ? "bg-emerald-500 border-emerald-600 text-white shadow-md shadow-emerald-500/30"
+                              : "bg-white border-gray-200 text-gray-800 hover:border-emerald-300 hover:bg-emerald-50/40"
                         } ${isSubmitted ? "cursor-default" : "cursor-pointer"}`}
                       >
-                        <span className="text-base sm:text-lg font-bold font-fredoka">{option.label}</span>
+                        <span className="text-lg sm:text-xl font-bold font-fredoka">{option.label}</span>
                       </button>
                     );
                   })}
                 </div>
               )}
 
-              {/* Instant feedback (when show_instant_feedback enabled) */}
-              {!isGraded && instantFeedback[currentQ.id] && (
-                <div className={`mt-3 p-3 rounded-xl animate-pop-in flex items-center gap-2 ${
-                  instantFeedback[currentQ.id] === 'correct'
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'bg-red-50 text-red-700'
-                }`}>
-                  {instantFeedback[currentQ.id] === 'correct' ? (
-                    <>
-                      <OwlCorrect className="w-8 h-8 flex-shrink-0" />
-                      <span className="font-semibold font-fredoka">{t.correct}</span>
-                    </>
-                  ) : (
-                    <>
-                      <OwlEncouraging className="w-8 h-8 flex-shrink-0" />
-                      <span className="font-semibold font-fredoka">{t.incorrect}</span>
-                    </>
-                  )}
+              {/* Instant feedback (when show_instant_feedback enabled) — a big,
+                  colourful, celebratory moment for correct answers. */}
+              {!isGraded && instantFeedback[currentQ.id] === 'correct' && (
+                <div className="mt-4 relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-400 to-[#00913D] p-4 sm:p-5 text-white shadow-lg shadow-emerald-500/30 animate-pop-in">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                  <span className="absolute top-2 right-3 text-xl animate-bounce">✨</span>
+                  <span className="absolute bottom-2 right-10 text-base animate-bounce" style={{ animationDelay: "0.2s" }}>⭐</span>
+                  <div className="relative flex items-center gap-3 sm:gap-4">
+                    <OwlCelebrating className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 animate-bounce" />
+                    <div>
+                      <p className="text-xl sm:text-2xl font-extrabold font-fredoka leading-tight">{t.correctBig}</p>
+                      <p className="text-white/90 text-sm font-fredoka">{t.correctSub}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {!isGraded && instantFeedback[currentQ.id] === 'incorrect' && (
+                <div className="mt-4 relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-300 to-orange-400 p-4 sm:p-5 text-white shadow-lg shadow-orange-400/30 animate-pop-in">
+                  <div className="relative flex items-center gap-3 sm:gap-4">
+                    <OwlEncouraging className="w-14 h-14 sm:w-16 sm:h-16 shrink-0" />
+                    <div>
+                      <p className="text-lg sm:text-xl font-bold font-fredoka leading-tight">{t.tryAgainBig}</p>
+                      <p className="text-white/90 text-sm font-fredoka">{t.tryAgainSub}</p>
+                    </div>
+                  </div>
                 </div>
               )}
 
