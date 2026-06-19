@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getLessonPublishReadiness } from "@/lib/lessons/publish-readiness";
+import { linkLessonToLearningPath } from "@/lib/lessons/path-autolink";
 import type { Slide } from "@/lib/slides.types";
 
 export async function PATCH(
@@ -39,6 +40,7 @@ export async function PATCH(
         id,
         grade_level,
         curriculum_topic,
+        subject_id,
         subject:subjects (
           name_ar,
           name_en
@@ -101,6 +103,18 @@ export async function PATCH(
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+
+    // Keep the student lesson tree in sync. Best-effort — never block publishing.
+    try {
+      await linkLessonToLearningPath(
+        supabase,
+        lessonId,
+        (lesson as { subject_id?: string | null }).subject_id,
+        { createdBy: user.id }
+      );
+    } catch (linkError) {
+      console.error("Auto-link lesson to learning path failed:", linkError);
     }
 
     return NextResponse.json({ success: true });

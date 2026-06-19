@@ -3,6 +3,7 @@
 import { useCallback, useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
@@ -19,6 +20,12 @@ interface Subject {
   id: string;
   name_ar: string;
   name_en: string;
+}
+
+interface WeekOption {
+  id: string;
+  label: string;
+  subjectId: string;
 }
 
 function CreateHomeworkContent() {
@@ -53,6 +60,8 @@ function CreateHomeworkContent() {
   const [aiQuestionCount, setAiQuestionCount] = useState(6);
   const [generating, setGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [pathWeeks, setPathWeeks] = useState<WeekOption[]>([]);
+  const [selectedWeek, setSelectedWeek] = useState("");
 
   const loadData = useCallback(async () => {
     const supabase = createClient();
@@ -88,6 +97,51 @@ function CreateHomeworkContent() {
       .order("display_order");
 
     setSubjects(subjectsData || []);
+
+    // Learning-path weeks, for week-based homework generation.
+    // The learning_path_* tables aren't in database.types.ts yet.
+    const sb = supabase as unknown as SupabaseClient;
+    const { data: paths } = await sb
+      .from("learning_paths")
+      .select("id, subject_id, title_ar, title_en")
+      .eq("is_published", true)
+      .returns<Array<{ id: string; subject_id: string; title_ar: string; title_en: string | null }>>();
+
+    if (paths && paths.length > 0) {
+      const subjectNameById = new Map(
+        (subjectsData || []).map((s) => [s.id, s.name_en || s.name_ar])
+      );
+      const { data: weeksData } = await sb
+        .from("learning_path_weeks")
+        .select("id, path_id, week_number, title_ar, title_en")
+        .in(
+          "path_id",
+          paths.map((p) => p.id)
+        )
+        .order("week_number", { ascending: true })
+        .returns<
+          Array<{
+            id: string;
+            path_id: string;
+            week_number: number;
+            title_ar: string;
+            title_en: string | null;
+          }>
+        >();
+
+      const pathById = new Map(paths.map((p) => [p.id, p]));
+      const options: WeekOption[] = (weeksData || []).map((w) => {
+        const path = pathById.get(w.path_id);
+        const subjectName = path ? subjectNameById.get(path.subject_id) || "" : "";
+        const weekTitle = w.title_en || w.title_ar || `Week ${w.week_number}`;
+        return {
+          id: w.id,
+          subjectId: path?.subject_id || "",
+          label: `${subjectName ? `${subjectName} — ` : ""}Week ${w.week_number}: ${weekTitle}`,
+        };
+      });
+      setPathWeeks(options);
+    }
 
     // Prefill from AI-generated homework (via sessionStorage)
     if (isPrefill && prefillLessonId && !assignmentId) {
@@ -275,6 +329,60 @@ function CreateHomeworkContent() {
     } catch (err) {
       console.error("AI generation failed:", err);
       setAiError("Failed to generate questions. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function generateFromWeek() {
+    if (!selectedWeek) {
+      setAiError("Select a week to generate homework from.");
+      return;
+    }
+
+    setGenerating(true);
+    setAiError(null);
+
+    try {
+      const res = await fetch("/api/teacher/homework/generate-from-week", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          week_id: selectedWeek,
+          num_questions: aiQuestionCount,
+        }),
+      });
+
+      const text = await res.text();
+      const lastLine = text.trim().split("\n").pop() || "";
+      const data = JSON.parse(lastLine);
+
+      if (data.error) {
+        setAiError(data.error);
+        return;
+      }
+
+      if (!titleAr && data.title_ar) setTitleAr(data.title_ar);
+      if (!titleEn && data.title_en) setTitleEn(data.title_en);
+      if (data.subject_id) setSelectedSubject(data.subject_id);
+
+      const generated: CreateQuestionInput[] = (data.questions || []).map(
+        (q: Record<string, unknown>, i: number) => ({
+          question_type: q.question_type as CreateQuestionInput["question_type"],
+          question_text_ar: q.question_text_ar as string,
+          question_text_en: (q.question_text_en as string) || null,
+          options: (q.options as string[]) || null,
+          correct_answer: (q.correct_answer as string) || null,
+          points: (q.points as number) || 10,
+          display_order: (q.display_order as number) || i + 1,
+        })
+      );
+
+      setQuestions(generated);
+      setShowAiPanel(false);
+    } catch (err) {
+      console.error("Week homework generation failed:", err);
+      setAiError("Failed to generate homework for this week. Please try again.");
     } finally {
       setGenerating(false);
     }
@@ -563,6 +671,43 @@ function CreateHomeworkContent() {
               </p>
 
               <div className="space-y-3">
+                {pathWeeks.length > 0 && (
+                  <div className="p-3 bg-white/70 border border-violet-200 rounded-xl">
+                    <label className="block text-sm font-medium text-violet-800 mb-1">
+                      Generate from a learning-path week
+                    </label>
+                    <p className="text-xs text-violet-600 mb-2">
+                      Builds one homework covering all the lessons in the chosen week.
+                    </p>
+                    <div className="flex gap-2 flex-col sm:flex-row">
+                      <select
+                        value={selectedWeek}
+                        onChange={(e) => setSelectedWeek(e.target.value)}
+                        className="flex-1 px-4 py-2 border border-violet-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 bg-white text-sm"
+                      >
+                        <option value="">Select a week…</option>
+                        {pathWeeks.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={generateFromWeek}
+                        disabled={generating || !selectedWeek}
+                        className="px-4 py-2 bg-violet-600 text-white rounded-xl hover:bg-violet-700 disabled:opacity-50 transition-colors text-sm font-medium whitespace-nowrap"
+                      >
+                        {generating ? "Generating…" : "Generate from week"}
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3 mt-4">
+                      <div className="flex-1 h-px bg-violet-200" />
+                      <span className="text-xs text-violet-500 uppercase tracking-wide">or</span>
+                      <div className="flex-1 h-px bg-violet-200" />
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-violet-800 mb-1">
                     Topic (optional)

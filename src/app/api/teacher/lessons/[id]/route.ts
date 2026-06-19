@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { canManageLesson, getTeacherRole } from '@/lib/server/teacher-lesson-access'
 import { getLessonPublishReadiness } from '@/lib/lessons/publish-readiness'
+import { linkLessonToLearningPath } from '@/lib/lessons/path-autolink'
 import type { Slide } from '@/lib/slides.types'
 
 const QuizSettingsSchema = z.object({
@@ -236,6 +237,20 @@ export async function PATCH(
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 })
+  }
+
+  // On a fresh publish, keep the student lesson tree in sync. Best-effort.
+  if (updates.is_published === true && !lesson.is_published) {
+    try {
+      await linkLessonToLearningPath(
+        supabase,
+        lessonId,
+        (updatedLesson as { subject_id?: string | null }).subject_id,
+        { createdBy: user.id }
+      )
+    } catch (linkError) {
+      console.error('Auto-link lesson to learning path failed:', linkError)
+    }
   }
 
   return NextResponse.json({ lesson: updatedLesson })
