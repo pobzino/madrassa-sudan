@@ -145,6 +145,13 @@ export function TeacherHomeworkList({
               >
                 Edit
               </Link>
+              <Link
+                href={`/teacher/homework/${assignment.id}/print`}
+                target="_blank"
+                className="px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Print worksheet
+              </Link>
               {onDelete && (
                 <button
                   onClick={() => onDelete?.(assignment.id)}

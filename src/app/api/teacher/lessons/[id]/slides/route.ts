@@ -202,10 +202,19 @@ export async function PUT(
       }
 
       if (!updatedDeck) {
+        // Someone (or the same teacher's sim recording) bumped updated_at
+        // between our pre-read and this write. Return the current timestamp so
+        // the client can offer to overwrite without losing the teacher's edits.
+        const { data: current } = await supabase
+          .from("lesson_slides")
+          .select("updated_at")
+          .eq("lesson_id", lessonId)
+          .maybeSingle();
         return NextResponse.json(
           {
             error: "This lesson was updated by someone else. Reload before saving.",
             code: "SLIDE_DECK_CONFLICT",
+            updated_at: current?.updated_at ?? null,
           },
           { status: 409 }
         );

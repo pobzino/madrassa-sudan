@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use, useCallback } from 'react';
+import { useEffect, useState, use, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -39,6 +39,12 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
   const searchParams = useSearchParams();
   const { loading: authLoading } = useTeacherGuard();
   const [slides, setSlides] = useState<Slide[]>([]);
+  // Always-current slides, so the save handler can send the latest edits and
+  // detect whether the teacher typed anything during the save round-trip.
+  const slidesRef = useRef<Slide[]>([]);
+  useEffect(() => {
+    slidesRef.current = slides;
+  }, [slides]);
   const [lessonTitle, setLessonTitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -147,33 +153,61 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
   }, [id]);
 
   const handleSave = useCallback(async () => {
+    // Snapshot exactly what we send so we can tell if the teacher keeps typing
+    // during the round-trip (and must not clobber those in-flight edits).
+    const sentSlides = slidesRef.current;
     setSaving(true);
     try {
-      const res = await fetch(`/api/teacher/lessons/${id}/slides`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slides,
-          language_mode: languageMode,
-          expected_updated_at: slideDeckUpdatedAt,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error('Save failed: ' + (data.error || 'Unknown error'));
-      } else {
-        if (Array.isArray(data.slides)) {
+      const attempt = async (
+        expectedUpdatedAt: string | null,
+        isRetry: boolean
+      ): Promise<void> => {
+        const res = await fetch(`/api/teacher/lessons/${id}/slides`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slides: sentSlides,
+            language_mode: languageMode,
+            expected_updated_at: expectedUpdatedAt,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          // A conflict is usually self-inflicted (this teacher's own sim
+          // recording bumped the deck). Rather than force a reload that loses
+          // their work, keep their edits and overwrite once using the latest
+          // server timestamp.
+          if (
+            data.code === 'SLIDE_DECK_CONFLICT' &&
+            !isRetry &&
+            typeof data.updated_at === 'string'
+          ) {
+            setSlideDeckUpdatedAt(data.updated_at);
+            toast.message('This lesson changed elsewhere — keeping your version.');
+            return attempt(data.updated_at, true);
+          }
+          toast.error('Save failed: ' + (data.error || 'Unknown error'));
+          return;
+        }
+
+        // Only adopt the server's reconciled deck if the teacher hasn't edited
+        // since we sent the save — otherwise we'd wipe what they just typed
+        // (the "body text disappears then comes back" bug).
+        if (Array.isArray(data.slides) && slidesRef.current === sentSlides) {
           setSlides(data.slides as Slide[]);
         }
         setSlideDeckUpdatedAt(typeof data.updated_at === 'string' ? data.updated_at : null);
         setLastSaved(new Date().toLocaleTimeString());
-      }
+      };
+
+      await attempt(slideDeckUpdatedAt, false);
     } catch {
       toast.error('Save failed');
     } finally {
       setSaving(false);
     }
-  }, [id, languageMode, slideDeckUpdatedAt, slides]);
+  }, [id, languageMode, slideDeckUpdatedAt]);
 
   const handleSlideLengthPresetChange = useCallback((preset: SlideLengthPreset) => {
     const config = getSlideLengthPresetConfig(preset);

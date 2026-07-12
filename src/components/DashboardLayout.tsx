@@ -39,6 +39,7 @@ const translations = {
     manageLessons: "إدارة الدروس",
     manageHomework: "إدارة الواجبات",
     manageClasses: "إدارة الفصول",
+    learningPath: "مسار التعلم",
     studentView: "عرض الطالب",
     admin: "الإدارة",
     // Common
@@ -65,6 +66,7 @@ const translations = {
     manageLessons: "Manage Lessons",
     manageHomework: "Manage Homework",
     manageClasses: "Manage Classes",
+    learningPath: "Learning Path",
     studentView: "Student View",
     admin: "Admin",
     // Common
@@ -211,6 +213,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const teacherNavItems = [
     { href: "/teacher", label: t.teacherDashboard, icon: <HomeNavIcon className="w-5 h-5" /> },
     { href: "/teacher/lessons", label: t.manageLessons, icon: <BookNavIcon className="w-5 h-5" /> },
+    { href: "/teacher/learning-path", label: t.learningPath, icon: <ChartNavIcon className="w-5 h-5" /> },
     { href: "/teacher/homework", label: t.manageHomework, icon: <ClipboardNavIcon className="w-5 h-5" /> },
     { href: "/teacher/cohorts", label: t.manageClasses, icon: <UsersNavIcon className="w-5 h-5" /> },
     ...(profile?.role === "admin"

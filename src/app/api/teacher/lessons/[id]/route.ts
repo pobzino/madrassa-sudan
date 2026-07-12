@@ -239,15 +239,22 @@ export async function PATCH(
     return NextResponse.json({ error: updateError.message }, { status: 500 })
   }
 
-  // On a fresh publish, keep the student lesson tree in sync. Best-effort.
-  if (updates.is_published === true && !lesson.is_published) {
+  // Keep the student lesson tree in sync whenever the lesson is published —
+  // not only on the fresh publish transition. linkLessonToLearningPath is
+  // idempotent (it skips lessons already on the path), so running it on every
+  // save of a published lesson also back-fills lessons that were published
+  // before auto-linking existed, or that slipped through. Best-effort.
+  if ((updatedLesson as { is_published?: boolean | null }).is_published === true) {
     try {
-      await linkLessonToLearningPath(
+      const result = await linkLessonToLearningPath(
         supabase,
         lessonId,
         (updatedLesson as { subject_id?: string | null }).subject_id,
         { createdBy: user.id }
       )
+      if (!result.linked && result.reason && result.reason !== 'already-linked') {
+        console.error('Auto-link lesson to learning path skipped:', result.reason)
+      }
     } catch (linkError) {
       console.error('Auto-link lesson to learning path failed:', linkError)
     }

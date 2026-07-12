@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Ruler,
   SlidersHorizontal,
@@ -49,6 +49,8 @@ interface SlideToolbarProps {
   onSave: () => void;
   onPresent: () => void;
   onRecordSim?: () => void;
+  /** Microphone selector, rendered next to the Record button. */
+  micPicker?: ReactNode;
   /** Open the lesson's single sim for review/edit/view. Only shown when `hasSim` is true. */
   onOpenSim?: () => void;
   /** Whether the lesson already has a recorded sim. Gates the Sim button visibility. */
@@ -68,6 +70,7 @@ export default function SlideToolbar({
   onSave,
   onPresent,
   onRecordSim,
+  micPicker,
   onOpenSim,
   hasSim,
   saving,
@@ -256,6 +259,7 @@ export default function SlideToolbar({
               Record
             </button>
           )}
+          {onRecordSim && micPicker}
 
           {/* View recorded sim */}
           {onOpenSim && hasSim && (

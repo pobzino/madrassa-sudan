@@ -295,12 +295,6 @@ export default function SlideEditPanel({
     >
       <h3 className="text-sm font-semibold text-gray-900">Edit Slide</h3>
 
-      {slide.is_required && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          This slide is part of the required lesson skeleton and cannot be deleted or changed into another type.
-        </div>
-      )}
-
       {/* Type */}
       <div>
         <label className={labelClass}>Slide Type</label>

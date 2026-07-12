@@ -51,11 +51,6 @@ export default function SlideThumbnail({
             <GripVertical className="w-3 h-3 text-white" />
           </div>
         )}
-        {slide.is_required && (
-          <div className="absolute top-1 right-1 rounded-full bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-semibold text-white">
-            Locked
-          </div>
-        )}
       </div>
     </div>
   );

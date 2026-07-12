@@ -18,6 +18,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import fixWebmDuration from 'fix-webm-duration';
 import type { SimEvent, SimEventInput } from '@/lib/sim.types';
 
+// Persist the teacher's chosen mic so they don't have to re-pick every time.
+const MIC_DEVICE_STORAGE_KEY = 'sim-mic-device-id';
+
 // ── IndexedDB crash-recovery helpers ─────────────────────────────────────
 const IDB_NAME = 'sim-recovery';
 const IDB_STORE = 'partials';
@@ -98,6 +101,18 @@ export interface UseSimRecorderReturn {
   recording: SimRecording | null;
   /** Mic input level 0-100. Updated ~15 Hz while recording. */
   audioLevel: number;
+  /** Available audio input devices (labels only populate after mic permission). */
+  audioDevices: MediaDeviceInfo[];
+  /** Currently selected mic deviceId, or null to use the system default. */
+  selectedDeviceId: string | null;
+  /** Choose a mic; the choice is persisted to localStorage for next time. */
+  setSelectedDeviceId: (deviceId: string | null) => void;
+  /** Re-scan available audio input devices. */
+  refreshDevices: () => Promise<void>;
+  /** Briefly open the mic to reveal device labels, then re-scan. */
+  primeDeviceLabels: () => Promise<void>;
+  /** True when the mic has stayed near-silent for several seconds while recording. */
+  lowInputWarning: boolean;
   /** Recovered events from a previous crashed session (events only, no audio). */
   recoveredEvents: SimEvent[] | null;
   /** Accept recovered events as a partial recording (no audio). */
@@ -145,8 +160,79 @@ export function useSimRecorder(): UseSimRecorderReturn {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [recording, setRecording] = useState<SimRecording | null>(null);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceIdState] = useState<string | null>(null);
+  const [lowInputWarning, setLowInputWarning] = useState(false);
   const [recoveredEvents, setRecoveredEvents] = useState<SimEvent[] | null>(null);
   const recoveryIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Kept in a ref so startRecording reads the latest choice without re-creating.
+  const selectedDeviceIdRef = useRef<string | null>(null);
+  // Tracks when the input first dropped near-silent, to debounce the warning.
+  const lowLevelSinceRef = useRef<number | null>(null);
+
+  const refreshDevices = useCallback(async () => {
+    try {
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const mics = all.filter((d) => d.kind === 'audioinput');
+      setAudioDevices(mics);
+      // If the remembered mic is no longer plugged in, fall back to the default.
+      setSelectedDeviceIdState((prev) => {
+        if (prev && !mics.some((m) => m.deviceId === prev)) {
+          selectedDeviceIdRef.current = null;
+          return null;
+        }
+        return prev;
+      });
+    } catch {
+      // enumeration is best-effort
+    }
+  }, []);
+
+  // Device labels stay blank until the page has been granted mic access once.
+  // Call this when opening the mic picker so real names ("MacBook Pro
+  // Microphone", "iPhone Microphone") show up before the first recording.
+  const primeDeviceLabels = useCallback(async () => {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) return;
+      const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      probe.getTracks().forEach((t) => t.stop());
+    } catch {
+      // permission denied — labels just stay generic
+    }
+    await refreshDevices();
+  }, [refreshDevices]);
+
+  const setSelectedDeviceId = useCallback((deviceId: string | null) => {
+    selectedDeviceIdRef.current = deviceId;
+    setSelectedDeviceIdState(deviceId);
+    try {
+      if (deviceId) localStorage.setItem(MIC_DEVICE_STORAGE_KEY, deviceId);
+      else localStorage.removeItem(MIC_DEVICE_STORAGE_KEY);
+    } catch {
+      // storage may be unavailable (private mode) — ignore
+    }
+  }, []);
+
+  // Load the remembered mic, do an initial scan, and react to devices being
+  // plugged/unplugged. Labels stay blank until the first mic permission grant.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(MIC_DEVICE_STORAGE_KEY);
+      if (stored) {
+        selectedDeviceIdRef.current = stored;
+        setSelectedDeviceIdState(stored);
+      }
+    } catch {
+      // ignore
+    }
+    refreshDevices();
+    const md = navigator.mediaDevices;
+    if (!md?.addEventListener) return;
+    md.addEventListener('devicechange', refreshDevices);
+    return () => md.removeEventListener('devicechange', refreshDevices);
+  }, [refreshDevices]);
 
   // Check for recovery data on mount
   useEffect(() => {
@@ -273,7 +359,9 @@ export function useSimRecorder(): UseSimRecorderReturn {
     mediaRecorderRef.current = null;
     stopRequestedRef.current = false;
     pauseStartedAtRef.current = null;
+    lowLevelSinceRef.current = null;
     setAudioLevel(0);
+    setLowInputWarning(false);
   }, []);
 
   useEffect(() => {
@@ -293,6 +381,8 @@ export function useSimRecorder(): UseSimRecorderReturn {
     accumulatedPausedMsRef.current = 0;
     pauseStartedAtRef.current = null;
     stopRequestedRef.current = false;
+    lowLevelSinceRef.current = null;
+    setLowInputWarning(false);
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setErrorMessage('Your browser does not support microphone access.');
@@ -306,11 +396,47 @@ export function useSimRecorder(): UseSimRecorderReturn {
     setState('preparing');
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: false,
-      });
+      // Explicit constraints + the teacher's chosen device. Bare `audio: true`
+      // lets the OS default win, which on macOS is often a dead/virtual input
+      // (e.g. Continuity "iPhone Microphone"), producing a silent recording.
+      const baseAudio: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      };
+      const chosenId = selectedDeviceIdRef.current;
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: chosenId ? { ...baseAudio, deviceId: { exact: chosenId } } : baseAudio,
+          video: false,
+        });
+      } catch (err) {
+        // The remembered device may be gone/busy — fall back to the default mic
+        // rather than failing the whole recording.
+        const name = err instanceof DOMException ? err.name : '';
+        if (
+          chosenId &&
+          (name === 'OverconstrainedError' ||
+            name === 'NotFoundError' ||
+            name === 'NotReadableError')
+        ) {
+          setSelectedDeviceId(null);
+          stream = await navigator.mediaDevices.getUserMedia({ audio: baseAudio, video: false });
+        } else {
+          throw err;
+        }
+      }
       micStreamRef.current = stream;
+
+      // Permission is now granted, so device labels are available — populate the
+      // picker, and remember which mic actually got used.
+      refreshDevices();
+      const activeId = stream.getAudioTracks()[0]?.getSettings().deviceId;
+      if (!selectedDeviceIdRef.current && activeId) {
+        selectedDeviceIdRef.current = activeId;
+        setSelectedDeviceIdState(activeId);
+      }
 
       // Set up audio level metering via AnalyserNode
       try {
@@ -328,7 +454,22 @@ export function useSimRecorder(): UseSimRecorderReturn {
           let sum = 0;
           for (let i = 0; i < buf.length; i++) sum += buf[i];
           const avg = sum / buf.length;
-          setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
+          const level = Math.min(100, Math.round((avg / 128) * 100));
+          setAudioLevel(level);
+          // Warn the teacher if the mic stays near-silent while recording — the
+          // classic "wrong input selected, nothing is being captured" case.
+          if (stateRef.current === 'recording') {
+            if (level < 2) {
+              if (lowLevelSinceRef.current === null) {
+                lowLevelSinceRef.current = performance.now();
+              } else if (performance.now() - lowLevelSinceRef.current > 4000) {
+                setLowInputWarning(true);
+              }
+            } else {
+              lowLevelSinceRef.current = null;
+              setLowInputWarning(false);
+            }
+          }
         }, 67); // ~15 Hz
       } catch {
         // Metering is optional — don't block recording
@@ -456,7 +597,7 @@ export function useSimRecorder(): UseSimRecorderReturn {
         );
       }
     }
-  }, [cleanup, getCurrentTimeMs]);
+  }, [cleanup, getCurrentTimeMs, refreshDevices, setSelectedDeviceId]);
 
   // ── Pause / resume ────────────────────────────────────────────────────────
 
@@ -538,6 +679,12 @@ export function useSimRecorder(): UseSimRecorderReturn {
     errorMessage,
     recording,
     audioLevel,
+    audioDevices,
+    selectedDeviceId,
+    setSelectedDeviceId,
+    refreshDevices,
+    primeDeviceLabels,
+    lowInputWarning,
     recoveredEvents,
     acceptRecovery,
     dismissRecovery,

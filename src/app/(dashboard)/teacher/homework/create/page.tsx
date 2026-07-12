@@ -28,6 +28,12 @@ interface WeekOption {
   subjectId: string;
 }
 
+interface LessonOption {
+  id: string;
+  label: string;
+  subjectId: string;
+}
+
 function CreateHomeworkContent() {
   const { loading: authLoading } = useTeacherGuard();
   const router = useRouter();
@@ -62,6 +68,8 @@ function CreateHomeworkContent() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [pathWeeks, setPathWeeks] = useState<WeekOption[]>([]);
   const [selectedWeek, setSelectedWeek] = useState("");
+  const [lessonOptions, setLessonOptions] = useState<LessonOption[]>([]);
+  const [selectedLesson, setSelectedLesson] = useState("");
 
   const loadData = useCallback(async () => {
     const supabase = createClient();
@@ -97,6 +105,30 @@ function CreateHomeworkContent() {
       .order("display_order");
 
     setSubjects(subjectsData || []);
+
+    // Published lessons, for single-lesson homework generation.
+    const { data: lessonsData } = await supabase
+      .from("lessons")
+      .select("id, title_ar, title_en, subject_id")
+      .eq("is_published", true)
+      .order("created_at", { ascending: false });
+
+    if (lessonsData) {
+      const subjectNames = new Map(
+        (subjectsData || []).map((s) => [s.id, s.name_en || s.name_ar])
+      );
+      setLessonOptions(
+        lessonsData.map((l) => {
+          const subjectName = l.subject_id ? subjectNames.get(l.subject_id) || "" : "";
+          const title = l.title_ar || l.title_en || "Untitled lesson";
+          return {
+            id: l.id,
+            subjectId: l.subject_id || "",
+            label: `${subjectName ? `${subjectName} — ` : ""}${title}`,
+          };
+        })
+      );
+    }
 
     // Learning-path weeks, for week-based homework generation.
     // The learning_path_* tables aren't in database.types.ts yet.
@@ -388,6 +420,60 @@ function CreateHomeworkContent() {
     }
   }
 
+  async function generateFromLesson() {
+    if (!selectedLesson) {
+      setAiError("Select a lesson to generate homework from.");
+      return;
+    }
+
+    setGenerating(true);
+    setAiError(null);
+
+    try {
+      const res = await fetch("/api/teacher/homework/generate-from-lesson", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lesson_id: selectedLesson,
+          num_questions: aiQuestionCount,
+        }),
+      });
+
+      const text = await res.text();
+      const lastLine = text.trim().split("\n").pop() || "";
+      const data = JSON.parse(lastLine);
+
+      if (data.error) {
+        setAiError(data.error);
+        return;
+      }
+
+      if (!titleAr && data.title_ar) setTitleAr(data.title_ar);
+      if (!titleEn && data.title_en) setTitleEn(data.title_en);
+      if (data.subject_id) setSelectedSubject(data.subject_id);
+
+      const generated: CreateQuestionInput[] = (data.questions || []).map(
+        (q: Record<string, unknown>, i: number) => ({
+          question_type: q.question_type as CreateQuestionInput["question_type"],
+          question_text_ar: q.question_text_ar as string,
+          question_text_en: (q.question_text_en as string) || null,
+          options: (q.options as string[]) || null,
+          correct_answer: (q.correct_answer as string) || null,
+          points: (q.points as number) || 10,
+          display_order: (q.display_order as number) || i + 1,
+        })
+      );
+
+      setQuestions(generated);
+      setShowAiPanel(false);
+    } catch (err) {
+      console.error("Lesson homework generation failed:", err);
+      setAiError("Failed to generate homework for this lesson. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   async function saveAssignment(publish: boolean) {
     if (!selectedCohort || !titleAr || questions.length === 0) {
       setError("Please fill in all required fields and add at least one question");
@@ -671,6 +757,42 @@ function CreateHomeworkContent() {
               </p>
 
               <div className="space-y-3">
+                {lessonOptions.length > 0 && (
+                  <div className="p-3 bg-white/70 border border-violet-200 rounded-xl">
+                    <label className="block text-sm font-medium text-violet-800 mb-1">
+                      Generate from a specific lesson
+                    </label>
+                    <p className="text-xs text-violet-600 mb-2">
+                      Builds homework straight from one lesson&apos;s slides or sim recording.
+                    </p>
+                    <div className="flex gap-2 flex-col sm:flex-row">
+                      <select
+                        value={selectedLesson}
+                        onChange={(e) => setSelectedLesson(e.target.value)}
+                        className="flex-1 px-4 py-2 border border-violet-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 bg-white text-sm"
+                      >
+                        <option value="">Select a lesson…</option>
+                        {lessonOptions.map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={generateFromLesson}
+                        disabled={generating || !selectedLesson}
+                        className="px-4 py-2 bg-violet-600 text-white rounded-xl hover:bg-violet-700 disabled:opacity-50 transition-colors text-sm font-medium whitespace-nowrap"
+                      >
+                        {generating ? "Generating…" : "Generate from lesson"}
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3 mt-4">
+                      <div className="flex-1 h-px bg-violet-200" />
+                      <span className="text-xs text-violet-500 uppercase tracking-wide">or</span>
+                      <div className="flex-1 h-px bg-violet-200" />
+                    </div>
+                  </div>
+                )}
                 {pathWeeks.length > 0 && (
                   <div className="p-3 bg-white/70 border border-violet-200 rounded-xl">
                     <label className="block text-sm font-medium text-violet-800 mb-1">
