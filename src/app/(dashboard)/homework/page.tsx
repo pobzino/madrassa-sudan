@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { OwlThinking, OwlStreak } from "@/components/illustrations";
+import { MeadowBackdrop, StudyOwl } from "@/components/dashboard/DashboardScenes";
 import { StudentHomeworkList } from "@/components/homework/HomeworkList";
 import type { HomeworkAssignment, HomeworkSubmission, Subject } from "@/lib/database.types";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
@@ -176,27 +177,60 @@ export default function HomeworkPage() {
     );
   }
 
+  // A 5-day streak goal: filled steps up to today's streak, trophy at the end.
+  const streakGoal = 5;
+  const streakReached = Math.min(streakDays, streakGoal);
+
   return (
-    <div className="max-w-4xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+   <div className="relative min-h-screen">
+    <MeadowBackdrop />
+    <div className="relative z-10 max-w-4xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
       {/* Header */}
-      <div className="flex items-center gap-2.5 sm:gap-3 mb-5 sm:mb-8">
-        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/30">
-          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-          </svg>
+      <div className="flex items-start justify-between gap-3 mb-5 sm:mb-8">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-[#007229] to-[#00913D] flex items-center justify-center text-white shadow-lg shadow-[#007229]/30">
+            <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold font-fredoka text-gray-900">{t.homework}</h1>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-bold font-fredoka text-gray-900">{t.homework}</h1>
+        <StudyOwl className="hidden sm:block w-44 h-28 -mt-2 shrink-0" />
       </div>
 
-      {/* Streak banner */}
+      {/* Streak banner with a 5-day goal stepper */}
       {streakDays > 0 && (
-        <div className="flex items-center gap-2.5 sm:gap-3 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-3 sm:p-4 mb-4 sm:mb-6">
-          <OwlStreak className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0" />
-          <div>
-            <p className="text-base sm:text-lg font-bold font-fredoka text-amber-700">
-              🔥 {streakDays} {t.streak}
-            </p>
-            <p className="text-xs sm:text-sm text-amber-600">{t.streakKeepGoing}</p>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-3 sm:p-4 mb-4 sm:mb-6">
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+            <OwlStreak className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0" />
+            <div>
+              <p className="text-base sm:text-lg font-bold font-fredoka text-amber-700">
+                🔥 {streakDays} {t.streak}
+              </p>
+              <p className="text-xs sm:text-sm text-amber-600">{t.streakKeepGoing}</p>
+            </div>
+          </div>
+          {/* stepper */}
+          <div className="flex items-center flex-1 min-w-0">
+            {Array.from({ length: streakGoal }, (_, i) => {
+              const n = i + 1;
+              const done = n <= streakReached;
+              return (
+                <div key={n} className="flex items-center flex-1 last:flex-none">
+                  <span
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold font-fredoka shrink-0 ${
+                      done ? "bg-amber-400 text-white shadow-sm" : "bg-white text-amber-400 border-2 border-amber-200"
+                    }`}
+                  >
+                    {n}
+                  </span>
+                  {n < streakGoal && (
+                    <span className={`flex-1 h-1 mx-1 rounded-full ${n < streakReached ? "bg-amber-400" : "bg-amber-200/70"} border-dashed`} />
+                  )}
+                </div>
+              );
+            })}
+            <span className="ml-2 text-2xl sm:text-3xl" title="Streak goal">{streakReached >= streakGoal ? "🏆" : "🏆"}</span>
           </div>
         </div>
       )}
@@ -245,5 +279,6 @@ export default function HomeworkPage() {
       {/* Homework List */}
       <StudentHomeworkList homework={homeworkList} isLoading={loading} />
     </div>
+   </div>
   );
 }

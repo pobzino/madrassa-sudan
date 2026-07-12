@@ -53,6 +53,10 @@ const translations = {
     correctSub: "إجابة صحيحة! واصل التقدم!",
     tryAgainBig: "ليست صحيحة تماماً",
     tryAgainSub: "حاول مرة أخرى — أنت تستطيع!",
+    allCorrect: "ممتاز! كل الإجابات صحيحة! 🌟",
+    keepTrying: "محاولة جيدة — لنحصل عليها كلها!",
+    correctOf: "صحيحة",
+    tryAgain: "حاول مرة أخرى",
     yourAnswer: "إجابتك",
     correctAnswer: "الإجابة الصحيحة",
     teacherComment: "تعليق المعلم",
@@ -62,8 +66,8 @@ const translations = {
     saved: "تم الحفظ",
     prev: "السابق",
     next: "التالي",
-    confirmSubmit: "هل أنت متأكد من إرسال الواجب؟",
-    confirmSubmitDesc: "لن تتمكن من تعديل إجاباتك بعد الإرسال",
+    confirmSubmit: "إرسال إجاباتك؟",
+    confirmSubmitDesc: "سنتحقق منها ونعرض لك نتيجتك.",
     cancel: "إلغاء",
     yes: "نعم، أرسل",
     trueLabel: "صح",
@@ -111,6 +115,10 @@ const translations = {
     correctSub: "You got it! Keep going!",
     tryAgainBig: "Not quite!",
     tryAgainSub: "Have another go — you can do it!",
+    allCorrect: "Perfect! All correct! 🌟",
+    keepTrying: "Good try — let's get them all!",
+    correctOf: "correct",
+    tryAgain: "Try Again",
     yourAnswer: "Your answer",
     correctAnswer: "Correct answer",
     teacherComment: "Teacher comment",
@@ -120,8 +128,8 @@ const translations = {
     saved: "Saved",
     prev: "Previous",
     next: "Next",
-    confirmSubmit: "Submit this homework?",
-    confirmSubmitDesc: "You won't be able to edit your answers after submission",
+    confirmSubmit: "Submit your answers?",
+    confirmSubmitDesc: "We'll check them and show how you did.",
     cancel: "Cancel",
     yes: "Yes, Submit",
     trueLabel: "True",
@@ -214,13 +222,12 @@ export default function HomeworkAssignmentPage() {
   const fileAnswersRef = useRef<FileAnswerMap>({});
 
   // Engagement features
-  const { playCorrect, playIncorrect, playComplete, playTap } = useActivitySounds();
+  const { playComplete, playTap } = useActivitySounds();
   const [owlMood, setOwlMood] = useState<OwlMood>('thinking');
   const [showCompletionCard, setShowCompletionCard] = useState(false);
   const [streakDays, setStreakDays] = useState(0);
   const [soundMuted, setSoundMuted] = useState(false);
   const [revealedHints, setRevealedHints] = useState<Record<string, number>>({});
-  const [instantFeedback, setInstantFeedback] = useState<Record<string, 'correct' | 'incorrect'>>({});
 
   // Initialize mute from localStorage
   useEffect(() => {
@@ -409,25 +416,10 @@ export default function HomeworkAssignmentPage() {
   const handleAnswerChange = (questionId: string, value: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
     answersRef.current = { ...answersRef.current, [questionId]: value };
+    // No instant correctness feedback (sound or banner): revealing right/wrong on
+    // each tap turns homework into a guessing game. Feedback comes after submit.
     playTap();
-    setOwlMood('excited');
-
-    // Instant feedback for auto-gradable types
-    if (assignment?.show_instant_feedback) {
-      const q = questions.find(qq => qq.id === questionId);
-      if (q && (q.question_type === 'multiple_choice' || q.question_type === 'true_false') && q.correct_answer) {
-        if (value === q.correct_answer) {
-          setInstantFeedback(prev => ({ ...prev, [questionId]: 'correct' }));
-          setOwlMood('correct');
-          playCorrect();
-        } else {
-          setInstantFeedback(prev => ({ ...prev, [questionId]: 'incorrect' }));
-          setOwlMood('wrong');
-          playIncorrect();
-        }
-      }
-    }
-
+    setOwlMood('thinking');
     scheduleDraftSave(questionId);
   };
 
@@ -527,7 +519,10 @@ export default function HomeworkAssignmentPage() {
       if (result.streakDays) setStreakDays(result.streakDays);
 
       const isTestAssignment = assignment?.is_test === true;
+      const autoGradableNow = result?.data?.all_questions_auto_gradable === true;
+      const totalPts = assignment?.total_points ?? 0;
       let testPassedNow = false;
+      let masteredNow = false;
 
       if (userId) {
         const { data: submissionData } = await supabase
@@ -550,16 +545,17 @@ export default function HomeworkAssignmentPage() {
           }
 
           const graded = submissionData.status === "graded" || submissionData.status === "returned";
-          const totalPts = assignment?.total_points ?? 0;
           const passMark = assignment?.passing_score ?? 80;
           testPassedNow =
             graded && submissionData.score != null && totalPts > 0 && submissionData.score >= (passMark / 100) * totalPts;
+          masteredNow =
+            graded && autoGradableNow && submissionData.score != null && totalPts > 0 && submissionData.score >= totalPts;
         }
       }
 
       if (isTestAssignment) {
         // Tests use the inline pass/fail banner (with Retake), not the generic
-        // "points / Back to Homework" completion modal. Only celebrate on a pass.
+        // completion modal. Only celebrate on a pass.
         if (testPassedNow) {
           playComplete();
           setOwlMood("celebrating");
@@ -569,11 +565,18 @@ export default function HomeworkAssignmentPage() {
           setOwlMood("thinking");
         }
       } else {
-        playComplete();
-        setOwlMood("celebrating");
+        // Regular homework: show the result card. Celebrate only at 100% mastery;
+        // otherwise it's an encouraging "try again" (auto-gradable) or a calm
+        // "submitted, awaiting teacher" (has questions a teacher must grade).
         setShowCompletionCard(true);
-        setShowConfetti(true);
-        setTimeout(() => setShowConfetti(false), 3000);
+        if (masteredNow || !autoGradableNow) {
+          playComplete();
+          setOwlMood("celebrating");
+          setShowConfetti(true);
+          setTimeout(() => setShowConfetti(false), 3000);
+        } else {
+          setOwlMood("thinking");
+        }
       }
     } catch (error) {
       console.error("Homework submission failed:", error);
@@ -607,15 +610,34 @@ export default function HomeworkAssignmentPage() {
   // Track B: gating "week test" presentation.
   const isTest = assignment?.is_test === true;
   const passMark = assignment?.passing_score ?? 80;
+  const totalPts = assignment?.total_points ?? 0;
   const testPassed =
     isTest &&
     isGraded &&
     submission?.score != null &&
-    (assignment?.total_points ?? 0) > 0 &&
-    submission.score >= (passMark / 100) * (assignment!.total_points);
+    totalPts > 0 &&
+    submission.score >= (passMark / 100) * totalPts;
   const testFailed = isTest && isGraded && !testPassed;
 
-  const handleRetakeTest = async () => {
+  // Regular homework "practice to mastery": auto-gradable assignments can be
+  // retried until the student reaches 100%. No correct answers are ever shown.
+  const allAutoGradable =
+    questions.length > 0 &&
+    questions.every(
+      (q) =>
+        (q.question_type === "multiple_choice" || q.question_type === "true_false") &&
+        q.correct_answer != null
+    );
+  const correctCount = questions.filter((q) => {
+    const r = getResponse(q.id);
+    return r?.points_earned != null && r.points_earned > 0;
+  }).length;
+  const homeworkMastered =
+    !isTest && isGraded && allAutoGradable && submission?.score != null && totalPts > 0 && submission.score >= totalPts;
+  const homeworkCanRetry =
+    !isTest && isGraded && allAutoGradable && submission?.score != null && totalPts > 0 && submission.score < totalPts;
+
+  const handleRetry = async () => {
     setRetaking(true);
     try {
       const res = await fetch(`/api/homework/${assignmentId}/retake`, { method: "POST" });
@@ -777,11 +799,47 @@ export default function HomeworkAssignmentPage() {
             </div>
             {testFailed && (
               <button
-                onClick={handleRetakeTest}
+                onClick={handleRetry}
                 disabled={retaking}
                 className="shrink-0 px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-60"
               >
                 {retaking ? t.retaking : t.retakeTest}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Regular homework result banner: mastered (100%) or "try again". */}
+        {!isTest && isGraded && allAutoGradable && (
+          <div
+            className={`rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 flex items-center gap-3 sm:gap-4 ${
+              homeworkMastered ? "bg-emerald-50 border border-emerald-200" : "bg-amber-50 border border-amber-200"
+            }`}
+          >
+            {homeworkMastered ? (
+              <OwlCelebrating className="w-12 h-12 sm:w-14 sm:h-14 shrink-0" />
+            ) : (
+              <OwlEncouraging className="w-12 h-12 sm:w-14 sm:h-14 shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p
+                className={`font-bold font-fredoka text-base sm:text-lg ${
+                  homeworkMastered ? "text-emerald-800" : "text-amber-800"
+                }`}
+              >
+                {homeworkMastered ? t.allCorrect : t.keepTrying}
+              </p>
+              <p className={`text-sm ${homeworkMastered ? "text-emerald-700" : "text-amber-700"}`}>
+                {correctCount}/{questions.length} {t.correctOf}
+              </p>
+            </div>
+            {homeworkCanRetry && (
+              <button
+                onClick={handleRetry}
+                disabled={retaking}
+                className="shrink-0 px-4 py-2 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition-colors disabled:opacity-60"
+              >
+                {retaking ? t.retaking : t.tryAgain}
               </button>
             )}
           </div>
@@ -866,18 +924,21 @@ export default function HomeworkAssignmentPage() {
                 <div className="space-y-3">
                   {(currentQ.options as string[]).map((option, idx) => {
                     const isSelected = answers[currentQ.id] === option;
-                    const isCorrectOption = isGraded && option === currentQ.correct_answer;
-                    const isWrongSelection = isGraded && isSelected && option !== currentQ.correct_answer;
+                    // We never reveal the correct option to students (keeps retries
+                    // from becoming a guessing game). On a graded view we only mark
+                    // the student's OWN choice as right or wrong.
+                    const selectedCorrect = isGraded && isSelected && option === currentQ.correct_answer;
+                    const selectedWrong = isGraded && isSelected && option !== currentQ.correct_answer;
                     const letter = String.fromCharCode(65 + idx);
 
                     let cardCls: string;
                     let badgeCls: string;
                     let badge: React.ReactNode = letter;
-                    if (isGraded && isCorrectOption) {
+                    if (selectedCorrect) {
                       cardCls = "bg-emerald-50 border-emerald-500 text-emerald-900";
                       badgeCls = "bg-emerald-500 text-white";
                       badge = Icons.check;
-                    } else if (isGraded && isWrongSelection) {
+                    } else if (selectedWrong) {
                       cardCls = "bg-red-50 border-red-500 text-red-900";
                       badgeCls = "bg-red-500 text-white";
                       badge = Icons.x;
@@ -920,8 +981,9 @@ export default function HomeworkAssignmentPage() {
                     { value: "false", label: t.falseLabel },
                   ].map((option) => {
                     const isSelected = answers[currentQ.id] === option.value;
-                    const isCorrectOption = isGraded && option.value === currentQ.correct_answer;
-                    const isWrongSelection = isGraded && isSelected && option.value !== currentQ.correct_answer;
+                    // Mark only the student's own choice; never reveal the answer.
+                    const selectedCorrect = isGraded && isSelected && option.value === currentQ.correct_answer;
+                    const selectedWrong = isGraded && isSelected && option.value !== currentQ.correct_answer;
 
                     return (
                       <button
@@ -930,9 +992,9 @@ export default function HomeworkAssignmentPage() {
                         disabled={isSubmitted}
                         className={`w-full p-5 sm:p-7 rounded-2xl border-2 text-center transition-all active:scale-[0.97] ${
                           isGraded
-                            ? isCorrectOption
+                            ? selectedCorrect
                               ? "bg-emerald-50 border-emerald-500 text-emerald-900"
-                              : isWrongSelection
+                              : selectedWrong
                                 ? "bg-red-50 border-red-500 text-red-900"
                                 : "bg-gray-50 border-gray-200 text-gray-500"
                             : isSelected
@@ -947,34 +1009,6 @@ export default function HomeworkAssignmentPage() {
                 </div>
               )}
 
-              {/* Instant feedback (when show_instant_feedback enabled) — a big,
-                  colourful, celebratory moment for correct answers. */}
-              {!isGraded && instantFeedback[currentQ.id] === 'correct' && (
-                <div className="mt-4 relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-400 to-[#00913D] p-4 sm:p-5 text-white shadow-lg shadow-emerald-500/30 animate-pop-in">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                  <span className="absolute top-2 right-3 text-xl animate-bounce">✨</span>
-                  <span className="absolute bottom-2 right-10 text-base animate-bounce" style={{ animationDelay: "0.2s" }}>⭐</span>
-                  <div className="relative flex items-center gap-3 sm:gap-4">
-                    <OwlCelebrating className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 animate-bounce" />
-                    <div>
-                      <p className="text-xl sm:text-2xl font-extrabold font-fredoka leading-tight">{t.correctBig}</p>
-                      <p className="text-white/90 text-sm font-fredoka">{t.correctSub}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {!isGraded && instantFeedback[currentQ.id] === 'incorrect' && (
-                <div className="mt-4 relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-300 to-orange-400 p-4 sm:p-5 text-white shadow-lg shadow-orange-400/30 animate-pop-in">
-                  <div className="relative flex items-center gap-3 sm:gap-4">
-                    <OwlEncouraging className="w-14 h-14 sm:w-16 sm:h-16 shrink-0" />
-                    <div>
-                      <p className="text-lg sm:text-xl font-bold font-fredoka leading-tight">{t.tryAgainBig}</p>
-                      <p className="text-white/90 text-sm font-fredoka">{t.tryAgainSub}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {currentQ.question_type === "short_answer" && (
                 <div>
                   <input
@@ -985,13 +1019,6 @@ export default function HomeworkAssignmentPage() {
                     placeholder={t.typeAnswer}
                     className="w-full px-3.5 sm:px-5 py-3 sm:py-4 bg-gray-50 border-2 border-gray-200 rounded-xl sm:rounded-2xl text-base sm:text-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
-                  {isGraded && currentQ.correct_answer && (
-                    <div className="mt-3 p-3 bg-[#007229]/10 rounded-xl">
-                      <p className="text-sm text-[#007229]">
-                        <span className="font-medium">{t.correctAnswer}:</span> {currentQ.correct_answer}
-                      </p>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -1157,6 +1184,19 @@ export default function HomeworkAssignmentPage() {
           score={isGraded ? submission?.score : undefined}
           streakDays={streakDays}
           isGraded={isGraded}
+          correctCount={isGraded && allAutoGradable ? correctCount : undefined}
+          isMastered={homeworkMastered}
+          canRetry={homeworkCanRetry}
+          retrying={retaking}
+          onRetry={handleRetry}
+          questionResults={
+            isGraded && allAutoGradable
+              ? questions.map((q) => {
+                  const r = getResponse(q.id);
+                  return r?.points_earned != null && r.points_earned > 0 ? "correct" : "incorrect";
+                })
+              : undefined
+          }
           onClose={() => setShowCompletionCard(false)}
         />
       )}

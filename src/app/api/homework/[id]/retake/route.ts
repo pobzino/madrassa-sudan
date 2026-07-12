@@ -1,8 +1,14 @@
-// Track B: retake a failed gating "week test".
+// Retry a homework attempt.
 // POST /api/homework/[id]/retake — resets the student's submission so they can
-// attempt the test again. Only valid for assignments flagged is_test whose
-// current submission is graded/returned and below the passing threshold. This
-// preserves the UNIQUE(assignment_id, student_id) constraint (one row, reset).
+// attempt the assignment again, preserving the UNIQUE(assignment_id, student_id)
+// constraint (one row, reset). The prior attempt is already snapshotted in
+// homework_attempts at submit time, so resetting loses nothing.
+//
+// Eligible when EITHER:
+//   • the assignment is a gating "week test" (is_test) that has been graded and
+//     not yet passed (≥ passing_score), OR
+//   • the assignment is regular auto-gradable homework that has been graded and
+//     not yet mastered (< 100%). Students retry until they reach full marks.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -26,18 +32,12 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
     const { data: assignment } = await supabase
       .from("homework_assignments")
-      .select("id, is_test, passing_score, total_points")
+      .select("id, is_test, passing_score, total_points, homework_questions(question_type, correct_answer)")
       .eq("id", assignmentId)
       .single();
 
     if (!assignment) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
-    }
-    if (!assignment.is_test) {
-      return NextResponse.json(
-        { error: "Only tests can be retaken" },
-        { status: 400 }
-      );
     }
 
     const { data: submission } = await supabase
@@ -52,26 +52,56 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     }
 
     const isGraded = submission.status === "graded" || submission.status === "returned";
-    const threshold = ((assignment.passing_score ?? 80) / 100) * (assignment.total_points ?? 0);
-    const passed =
-      submission.score != null &&
-      (assignment.total_points ?? 0) > 0 &&
-      submission.score >= threshold;
-
     if (!isGraded) {
       return NextResponse.json(
-        { error: "This test has not been graded yet" },
-        { status: 400 }
-      );
-    }
-    if (passed) {
-      return NextResponse.json(
-        { error: "You have already passed this test" },
+        { error: "This attempt has not been graded yet" },
         { status: 400 }
       );
     }
 
-    // Clear the prior answers and reset the submission to a fresh attempt.
+    const totalPoints = assignment.total_points ?? 0;
+    const questions = (assignment.homework_questions ?? []) as {
+      question_type: string;
+      correct_answer: string | null;
+    }[];
+    const allAutoGradable =
+      questions.length > 0 &&
+      questions.every(
+        (q) =>
+          (q.question_type === "multiple_choice" || q.question_type === "true_false") &&
+          q.correct_answer
+      );
+
+    if (assignment.is_test) {
+      // Gating test: retry only if not yet passed.
+      const threshold = ((assignment.passing_score ?? 80) / 100) * totalPoints;
+      const passed = submission.score != null && totalPoints > 0 && submission.score >= threshold;
+      if (passed) {
+        return NextResponse.json(
+          { error: "You have already passed this test" },
+          { status: 400 }
+        );
+      }
+    } else {
+      // Regular homework: retry only auto-gradable assignments that aren't mastered.
+      if (!allAutoGradable) {
+        return NextResponse.json(
+          { error: "This homework cannot be retried" },
+          { status: 400 }
+        );
+      }
+      const mastered = submission.score != null && totalPoints > 0 && submission.score >= totalPoints;
+      if (mastered) {
+        return NextResponse.json(
+          { error: "You have already completed this homework" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Clear the prior answers and reset the submission to a fresh attempt. The
+    // attempt itself is preserved in homework_attempts; attempt_count is bumped
+    // by the submit route on the next submission.
     await supabase.from("homework_responses").delete().eq("submission_id", submission.id);
 
     const { error: resetError } = await supabase
@@ -83,7 +113,6 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         graded_at: null,
         feedback: null,
         overall_feedback: null,
-        attempt_count: (submission.attempt_count ?? 0) + 1,
         updated_at: new Date().toISOString(),
       })
       .eq("id", submission.id);

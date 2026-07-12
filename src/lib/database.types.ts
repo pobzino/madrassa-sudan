@@ -347,6 +347,51 @@ export type Database = {
           },
         ]
       }
+      homework_attempts: {
+        Row: {
+          id: string
+          assignment_id: string
+          student_id: string
+          submission_id: string | null
+          attempt_number: number
+          score: number | null
+          max_score: number | null
+          correct_count: number | null
+          total_questions: number | null
+          answers: Json
+          submitted_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          assignment_id: string
+          student_id: string
+          submission_id?: string | null
+          attempt_number: number
+          score?: number | null
+          max_score?: number | null
+          correct_count?: number | null
+          total_questions?: number | null
+          answers?: Json
+          submitted_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          assignment_id?: string
+          student_id?: string
+          submission_id?: string | null
+          attempt_number?: number
+          score?: number | null
+          max_score?: number | null
+          correct_count?: number | null
+          total_questions?: number | null
+          answers?: Json
+          submitted_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       homework_assignments: {
         Row: {
           allow_late_submission: boolean

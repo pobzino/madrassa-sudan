@@ -1457,13 +1457,6 @@ export const OwlBye = ({ className = "" }: { className?: string }) => (
 // Owl with math symbols - for math subject
 export const OwlMath = ({ className = "" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 72 64" fill="none">
-    {/* Math symbols floating around */}
-    <text x="8" y="20" fontSize="12" fill="#007229" fontWeight="bold">+</text>
-    <text x="60" y="16" fontSize="12" fill="#D21034" fontWeight="bold">=</text>
-    <text x="4" y="50" fontSize="10" fill="#F59E0B" fontWeight="bold">÷</text>
-    <text x="64" y="48" fontSize="12" fill="#007229" fontWeight="bold">×</text>
-    <text x="58" y="58" fontSize="10" fill="#D21034" fontWeight="bold">π</text>
-
     {/* Ear tufts */}
     <ellipse cx="18" cy="18" rx="5" ry="7" fill="#a01028" />
     <ellipse cx="54" cy="18" rx="5" ry="7" fill="#a01028" />
@@ -1570,12 +1563,6 @@ export const OwlScience = ({ className = "" }: { className?: string }) => (
 // Owl with ABC letters - for English/language subject
 export const OwlEnglish = ({ className = "" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 72 64" fill="none">
-    {/* Floating letters */}
-    <text x="6" y="18" fontSize="14" fill="#D21034" fontWeight="bold" fontFamily="serif">A</text>
-    <text x="60" y="22" fontSize="12" fill="#007229" fontWeight="bold" fontFamily="serif">B</text>
-    <text x="62" y="50" fontSize="14" fill="#F59E0B" fontWeight="bold" fontFamily="serif">C</text>
-    <text x="4" y="48" fontSize="10" fill="#007229" fontWeight="bold" fontFamily="serif">abc</text>
-
     {/* Ear tufts */}
     <ellipse cx="18" cy="18" rx="5" ry="7" fill="#a01028" />
     <ellipse cx="54" cy="18" rx="5" ry="7" fill="#a01028" />

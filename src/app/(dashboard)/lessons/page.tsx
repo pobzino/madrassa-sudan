@@ -13,6 +13,7 @@ import SlideCard from "@/components/slides/SlideCard";
 import OwlImage, { isOwlImage } from "@/components/slides/OwlImage";
 import type { Slide } from "@/lib/slides.types";
 import LearningPathTree from "@/components/learning-path/LearningPathTree";
+import LessonsBackground from "@/components/learning-path/LessonsBackground";
 import { loadSubjectLearningPath, type SubjectLearningPath } from "@/lib/lessons/useLearningPath";
 
 const translations = {
@@ -236,8 +237,14 @@ export default function LessonsPage() {
     );
   }
 
+  // The illustrated "learning world" backdrop only frames the path view (not the
+  // search-results / flat-grid cards, where it would crowd the cards).
+  const showPathScene = !showSearchResults && pathsResolved && Boolean(activePath);
+
   return (
-    <div className={`max-w-7xl mx-auto px-4 sm:px-6 py-6 ${isRtl ? "text-right" : ""}`}>
+    <div className={`relative min-h-screen ${isRtl ? "text-right" : ""}`}>
+      {showPathScene && <LessonsBackground subjectName={activeSubject?.name_en} />}
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-6">
       {/* Search bar */}
       <div className="mb-5">
         <div className="relative max-w-xl">
@@ -346,6 +353,7 @@ export default function LessonsPage() {
           <h3 className="text-lg font-semibold text-gray-900 mb-1">{t.noLessonsFound}</h3>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -53,22 +53,35 @@ const PencilIcon = ({ className = "w-6 h-6" }: { className?: string }) => (
   </svg>
 );
 
+function Sparkle({ className = "" }: { className?: string }) {
+  return (
+    <span className={`absolute -top-1.5 -right-1.5 text-amber-300 drop-shadow-sm ${className}`}>
+      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2l2.2 5.8L20 10l-5.8 2.2L12 18l-2.2-5.8L4 10l5.8-2.2z" />
+      </svg>
+    </span>
+  );
+}
+
 function NodeDisc({ node, isCurrent }: { node: TreeNode; isCurrent: boolean }) {
   if (node.kind === "lesson") {
     const { state } = node.step;
     const completed = state === "completed";
     const locked = state === "locked";
     return (
-      <div
-        className={`w-16 h-16 rounded-full flex items-center justify-center shadow-md border-b-4 transition-transform ${
-          completed
-            ? "bg-emerald-500 border-emerald-700 text-white"
-            : locked
-              ? "bg-gray-200 border-gray-300 text-gray-400"
-              : "bg-[#007229] border-[#005C22] text-white hover:scale-110"
-        } ${isCurrent ? "ring-4 ring-[#007229]/30" : ""}`}
-      >
-        {completed ? <CheckIcon /> : locked ? <LockIcon /> : <PlayIcon className="w-7 h-7 ml-0.5" />}
+      <div className="relative">
+        <div
+          className={`w-16 h-16 rounded-full flex items-center justify-center shadow-md border-b-4 transition-transform ${
+            completed
+              ? "bg-gradient-to-b from-emerald-400 to-emerald-500 border-emerald-700 text-white"
+              : locked
+                ? "bg-gradient-to-b from-slate-100 to-slate-300 border-slate-400 text-slate-400"
+                : "bg-gradient-to-b from-[#0a8a33] to-[#007229] border-[#005C22] text-white hover:scale-110"
+          } ${isCurrent ? "ring-4 ring-[#007229]/30" : ""}`}
+        >
+          {completed ? <CheckIcon /> : locked ? <LockIcon /> : <PlayIcon className="w-7 h-7 ml-0.5" />}
+        </div>
+        {completed && <Sparkle />}
       </div>
     );
   }
@@ -77,18 +90,21 @@ function NodeDisc({ node, isCurrent }: { node: TreeNode; isCurrent: boolean }) {
   const failed = s === "failed";
   const locked = s === "locked";
   return (
-    <div
-      className={`w-16 h-16 rounded-2xl rotate-45 flex items-center justify-center shadow-md border-b-4 transition-transform ${
-        passed
-          ? "bg-amber-400 border-amber-600 text-white"
-          : failed
-            ? "bg-red-500 border-red-700 text-white hover:scale-110"
-            : locked
-              ? "bg-gray-200 border-gray-300 text-gray-400"
-              : "bg-amber-400 border-amber-600 text-white hover:scale-110"
-      } ${isCurrent ? "ring-4 ring-amber-300/50" : ""}`}
-    >
-      <span className="-rotate-45">{passed ? <StarIcon /> : locked ? <LockIcon /> : <PencilIcon />}</span>
+    <div className="relative">
+      <div
+        className={`w-16 h-16 rounded-2xl rotate-45 flex items-center justify-center shadow-md border-b-4 transition-transform ${
+          passed
+            ? "bg-gradient-to-b from-amber-300 to-amber-400 border-amber-600 text-white"
+            : failed
+              ? "bg-gradient-to-b from-red-400 to-red-500 border-red-700 text-white hover:scale-110"
+              : locked
+                ? "bg-gradient-to-b from-slate-100 to-slate-300 border-slate-400 text-slate-400"
+                : "bg-gradient-to-b from-amber-300 to-amber-400 border-amber-600 text-white hover:scale-110"
+        } ${isCurrent ? "ring-4 ring-amber-300/50" : ""}`}
+      >
+        <span className="-rotate-45">{passed ? <StarIcon /> : locked ? <LockIcon /> : <PencilIcon />}</span>
+      </div>
+      {passed && <Sparkle />}
     </div>
   );
 }
@@ -222,7 +238,9 @@ export default function LearningPathTree({
   return (
     <div ref={containerRef} className="relative w-full" style={{ height: totalH }}>
       <div className="relative w-full" style={{ height: totalH }}>
-        {/* The winding road */}
+        {/* The winding road — a solid white surface with a soft drop shadow and a
+            faint edge so it stays crisp and high-contrast over the colourful
+            illustrated hills (not just on a white page). */}
         <svg
           className="absolute inset-0 pointer-events-none"
           width={W}
@@ -230,8 +248,18 @@ export default function LearningPathTree({
           viewBox={`0 0 ${W} ${totalH}`}
           fill="none"
         >
-          <path d={d} stroke="#eef0f2" strokeWidth={20} strokeLinecap="round" strokeLinejoin="round" />
-          <path d={d} stroke="#d9dde2" strokeWidth={3} strokeLinecap="round" strokeDasharray="2 13" />
+          <defs>
+            <filter id="roadShadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#3b3a55" floodOpacity="0.18" />
+            </filter>
+          </defs>
+          {/* casing + white surface (shadowed as one) */}
+          <g filter="url(#roadShadow)">
+            <path d={d} stroke="#e3e7ee" strokeWidth={24} strokeLinecap="round" strokeLinejoin="round" />
+            <path d={d} stroke="#ffffff" strokeWidth={18} strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+          {/* dashed centre "footsteps" */}
+          <path d={d} stroke="#b6bdc9" strokeWidth={3} strokeLinecap="round" strokeDasharray="2 13" />
         </svg>
 
         {placed.map(({ node, x, y }) => {
@@ -241,6 +269,16 @@ export default function LearningPathTree({
 
           return (
             <div key={node.id} className="absolute" style={{ left: x, top: y }}>
+              {/* Soft spotlight glow behind the current node so the owl pops */}
+              {isSelected && (
+                <div
+                  className="anim-node-glow absolute left-1/2 top-1/2 w-28 h-28 rounded-full pointer-events-none"
+                  style={{
+                    transform: "translate(-50%, -50%)",
+                    background: "radial-gradient(circle, rgba(255,224,130,0.6), rgba(255,224,130,0) 70%)",
+                  }}
+                />
+              )}
               {/* Owl rides the selected node — glides in from where it was */}
               {isSelected && (
                 <div
@@ -278,10 +316,18 @@ export default function LearningPathTree({
                 )}
               </div>
               {/* Label below (+ Open CTA on the selected node) */}
-              <div className="absolute left-1/2 -translate-x-1/2 top-[40px] text-center" style={{ width: labelWidth }}>
+              <div
+                className="absolute left-1/2 -translate-x-1/2 top-[40px] text-center"
+                style={{
+                  width: labelWidth,
+                  // Soft white halo keeps labels legible over the illustrated hills.
+                  textShadow:
+                    '0 0 6px rgba(255,255,255,0.95), 0 1px 2px rgba(255,255,255,0.95)',
+                }}
+              >
                 <p
-                  className={`text-[11px] font-medium font-fredoka leading-tight line-clamp-2 ${
-                    label.muted ? "text-gray-400" : "text-gray-600"
+                  className={`text-[11px] font-semibold font-fredoka leading-tight line-clamp-2 ${
+                    label.muted ? "text-gray-400" : "text-gray-700"
                   }`}
                 >
                   {label.title}
@@ -291,6 +337,7 @@ export default function LearningPathTree({
                   <Link
                     href={href}
                     className="mt-1.5 inline-block px-3.5 py-1 rounded-full bg-[#007229] text-white text-[11px] font-bold font-fredoka shadow-sm hover:bg-[#005C22] transition-colors animate-pop-in"
+                    style={{ textShadow: "none" }}
                   >
                     {ctaFor(node)}
                   </Link>
