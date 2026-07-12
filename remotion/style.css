@@ -1,0 +1,15 @@
+/*
+ * Remotion-only overrides, imported AFTER the app's globals.css.
+ *
+ * CSS animations/transitions run on wall-clock time inside the render
+ * browser and do not sync with Remotion's frame clock, so every captured
+ * frame would show them at an arbitrary (usually initial) point. Force
+ * everything to its final state; the slide entrance animation is
+ * reimplemented deterministically in LessonVideo.tsx.
+ */
+*,
+*::before,
+*::after {
+  animation: none !important;
+  transition: none !important;
+}

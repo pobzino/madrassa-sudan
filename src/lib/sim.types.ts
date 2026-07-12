@@ -152,6 +152,98 @@ export function clipDurationMs(
   return sum;
 }
 
+// ── Clip math ───────────────────────────────────────────────────────────────
+// Shared by SimPlayer (live playback) and the Remotion lesson-video
+// composition (MP4 export) so both project the exact same timeline.
+
+/** Normalize clip segments: drop empties, sort by start, merge overlaps. */
+export function normalizeClips(
+  clips: SimClipSegment[] | null | undefined
+): SimClipSegment[] {
+  if (!clips || clips.length === 0) return [];
+  const valid = clips
+    .filter((c) => c.end > c.start)
+    .slice()
+    .sort((a, b) => a.start - b.start);
+  const merged: SimClipSegment[] = [];
+  for (const c of valid) {
+    const last = merged[merged.length - 1];
+    if (last && c.start <= last.end) {
+      last.end = Math.max(last.end, c.end);
+    } else {
+      merged.push({ start: c.start, end: c.end });
+    }
+  }
+  return merged;
+}
+
+/**
+ * Convert a virtual (clipped) time in ms to the real underlying audio time
+ * in ms. Virtual time skips over cut ranges; this adds them back.
+ */
+export function virtualToRealMs(
+  virtualMs: number,
+  clipsSec: SimClipSegment[]
+): number {
+  let real = virtualMs;
+  for (const c of clipsSec) {
+    const startMs = c.start * 1000;
+    if (real >= startMs) {
+      real += (c.end - c.start) * 1000;
+    } else {
+      break;
+    }
+  }
+  return real;
+}
+
+/** Inverse of virtualToRealMs — real ms → virtual ms, clamped inside cuts. */
+export function realToVirtualMs(
+  realMs: number,
+  clipsSec: SimClipSegment[]
+): number {
+  let virtual = realMs;
+  for (const c of clipsSec) {
+    const startMs = c.start * 1000;
+    const endMs = c.end * 1000;
+    if (realMs >= endMs) {
+      virtual -= endMs - startMs;
+    } else if (realMs >= startMs) {
+      virtual -= realMs - startMs;
+      break;
+    } else {
+      break;
+    }
+  }
+  return Math.max(0, virtual);
+}
+
+/**
+ * If `realMs` lies inside a cut range, return the range's end (in ms) so the
+ * caller can seek past it. Otherwise return null.
+ */
+export function cutEndIfInside(
+  realMs: number,
+  clipsSec: SimClipSegment[]
+): number | null {
+  for (const c of clipsSec) {
+    const startMs = c.start * 1000;
+    const endMs = c.end * 1000;
+    if (realMs >= startMs && realMs < endMs) return endMs;
+    if (realMs < startMs) return null;
+  }
+  return null;
+}
+
+/** Drop events whose `t` falls inside any cut range. */
+export function filterClippedEvents(
+  events: SimEvent[],
+  clipsSec: SimClipSegment[]
+): SimEvent[] {
+  if (clipsSec.length === 0) return events;
+  return events.filter((e) => cutEndIfInside(e.t, clipsSec) === null);
+}
+
 /** Row shape returned by the API (mirrors `public.lesson_sims`). */
 export interface SimRow {
   id: string;

@@ -41,6 +41,7 @@ const translations = {
     prevLesson: "الدرس السابق",
     completed: "مكتمل",
     markComplete: "تحديد كمكتمل",
+    downloadVideo: "تحميل الفيديو",
     question: "سؤال",
     submit: "إرسال",
     correct: "إجابة صحيحة!",
@@ -61,6 +62,7 @@ const translations = {
     prevLesson: "Previous Lesson",
     completed: "Completed",
     markComplete: "Mark Complete",
+    downloadVideo: "Download video",
     question: "Question",
     submit: "Submit",
     correct: "Correct!",
@@ -85,6 +87,11 @@ const Icons = {
   check: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+  ),
+  download: (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
     </svg>
   ),
   chevronRight: (
@@ -179,6 +186,11 @@ export default function LessonPlayerPage() {
   // that were uploaded as full-frame video before the sim recorder existed).
   const [lessonSim, setLessonSim] = useState<SimPayload | null>(null);
   const [legacyVideoUrl, setLegacyVideoUrl] = useState<string | null>(null);
+
+  // MP4 the student can save for offline viewing: the teacher-exported sim
+  // render (lessons.video_url_720p) or, for pre-sim lessons, the legacy
+  // full-frame video probed from the lesson-videos bucket.
+  const downloadVideoUrl = lesson?.video_url_720p || legacyVideoUrl;
 
   // Question/quiz state
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
@@ -575,20 +587,35 @@ export default function LessonPlayerPage() {
             </div>
           </div>
 
-          {/* Completion status */}
-          {progress?.completed ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-[#007229]/10 text-[#007229] rounded-full text-sm font-medium">
-              {Icons.check}
-              <span>{t.completed}</span>
-            </div>
-          ) : (
-            <button
-              onClick={handleMarkComplete}
-              className="px-4 py-2 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors text-sm font-medium shadow-lg shadow-[#007229]/20"
-            >
-              {t.markComplete}
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Download the exported lesson MP4 (teacher-rendered sim, or a
+                legacy full-frame video for pre-sim lessons). Hidden offline —
+                the file lives in Supabase storage. */}
+            {downloadVideoUrl && !isOfflineMode && (
+              <a
+                href={`${downloadVideoUrl}${downloadVideoUrl.includes("?") ? "&" : "?"}download=`}
+                className="flex items-center gap-2 px-3 py-1.5 text-gray-600 border border-gray-200 rounded-xl hover:text-[#007229] hover:border-[#007229]/30 hover:bg-[#007229]/5 transition-colors text-sm font-medium"
+              >
+                {Icons.download}
+                <span>{t.downloadVideo}</span>
+              </a>
+            )}
+
+            {/* Completion status */}
+            {progress?.completed ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-[#007229]/10 text-[#007229] rounded-full text-sm font-medium">
+                {Icons.check}
+                <span>{t.completed}</span>
+              </div>
+            ) : (
+              <button
+                onClick={handleMarkComplete}
+                className="px-4 py-2 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors text-sm font-medium shadow-lg shadow-[#007229]/20"
+              >
+                {t.markComplete}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

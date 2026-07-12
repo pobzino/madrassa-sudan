@@ -23,6 +23,7 @@ import {
   MAX_GENERATED_SLIDE_COUNT,
 } from '@/lib/slides-generation';
 import SlideGenerateButton from './SlideGenerateButton';
+import ExportVideoButton from './ExportVideoButton';
 import type { RegenerateProps } from './SlideEditor';
 
 export interface InteractiveSlideRequest {
@@ -286,6 +287,11 @@ export default function SlideToolbar({
             </svg>
             Present
           </button>
+
+          {/* Export the recorded sim as a downloadable MP4 */}
+          {lessonId && hasSim && (
+            <ExportVideoButton lessonId={lessonId} language={language} />
+          )}
 
           {/* Save */}
           <button
