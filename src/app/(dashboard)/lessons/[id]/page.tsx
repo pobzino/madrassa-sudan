@@ -467,6 +467,8 @@ export default function LessonPlayerPage() {
         .maybeSingle();
       if (progressData) {
         setProgress(progressData);
+        furthestSecRef.current = progressData.last_position_seconds ?? 0;
+        watchTimeSecRef.current = progressData.total_watch_time_seconds ?? 0;
       }
 
       // Fetch adjacent lessons
@@ -536,6 +538,12 @@ export default function LessonPlayerPage() {
 
   // Sim progress tracking — debounced upsert on playback percentage changes.
   const lastSimPctRef = useRef(0);
+  // Furthest point reached / total watch time, kept in refs rather than read
+  // out of `progress`: this callback writes that state, so depending on it
+  // would give the callback a new identity after every write and defeat
+  // SimPlayer's memo mid-playback.
+  const furthestSecRef = useRef(0);
+  const watchTimeSecRef = useRef(0);
   const simDurationSec = lessonSim?.sim?.duration_ms ? Math.ceil(lessonSim.sim.duration_ms / 1000) : lesson?.video_duration_seconds || 0;
   const handleSimProgress = useCallback(async (pct: number) => {
     if (!userId || !lessonId) return;
@@ -546,11 +554,13 @@ export default function LessonPlayerPage() {
     const isCompleted = pct >= 80;
     const positionSec = Math.floor((pct / 100) * simDurationSec);
     // Keep both counters monotonic: re-watching a lesson from the start must not
-    // rewind "how much of this lesson has been seen" (the ref resets to 0 on
-    // every mount, so without this a rewatch would report 10% for a lesson the
-    // student had already watched to the end).
-    const furthestSec = Math.max(positionSec, progress?.last_position_seconds ?? 0);
-    const watchTimeSec = Math.max(positionSec, progress?.total_watch_time_seconds ?? 0);
+    // rewind "how much of this lesson has been seen" (the bucket ref resets to 0
+    // on every mount, so without this a rewatch would report 10% for a lesson
+    // the student had already watched to the end).
+    const furthestSec = Math.max(positionSec, furthestSecRef.current);
+    const watchTimeSec = Math.max(positionSec, watchTimeSecRef.current);
+    furthestSecRef.current = furthestSec;
+    watchTimeSecRef.current = watchTimeSec;
 
     const progressData = {
       student_id: userId,
@@ -588,7 +598,7 @@ export default function LessonPlayerPage() {
     if (pct >= 99 && practiceAssignmentId && !practicePassed) {
       router.push(`/practice/${practiceAssignmentId}?from=lesson`);
     }
-  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practicePassed, router, progress?.last_position_seconds, progress?.total_watch_time_seconds]);
+  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practicePassed, router]);
 
   // Close progress gate and let sim handle replay
   const handleRewatchQuiz = useCallback(() => {

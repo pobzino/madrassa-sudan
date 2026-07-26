@@ -397,14 +397,12 @@ export async function POST(
       row = updatedRow as unknown as SimRow;
     }
 
-    // Populate the lesson's video_duration_seconds from the sim duration so
-    // progress bars on the student lessons list work correctly.
-    // Also auto-set the thumbnail from the first slide's image if none exists.
-    const durationSeconds = Math.ceil(body.duration_ms / 1000);
+    // Auto-set the thumbnail from the first slide's image if none exists.
+    // (lessons.video_duration_seconds follows the sim's duration_ms via the
+    // trg_sync_lesson_video_duration trigger, so it is not written here.)
     const firstSlideImage = Array.isArray(body.deck_snapshot) && body.deck_snapshot.length > 0
       ? (body.deck_snapshot[0] as { image_url?: string })?.image_url ?? null
       : null;
-    const lessonUpdates: Record<string, unknown> = { video_duration_seconds: durationSeconds };
     if (firstSlideImage) {
       // Only set thumbnail if the lesson doesn't already have a custom one
       const { data: currentLesson } = await dataClient
@@ -413,13 +411,12 @@ export async function POST(
         .eq('id', lessonId)
         .single();
       if (!currentLesson?.thumbnail_url) {
-        lessonUpdates.thumbnail_url = firstSlideImage;
+        await dataClient
+          .from('lessons')
+          .update({ thumbnail_url: firstSlideImage })
+          .eq('id', lessonId);
       }
     }
-    await dataClient
-      .from('lessons')
-      .update(lessonUpdates)
-      .eq('id', lessonId);
 
     const audioUrl = await signAudioUrl(lessonId, row.audio_path);
     return NextResponse.json(rowToPayload(row, audioUrl), { status: 201 });

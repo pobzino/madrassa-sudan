@@ -1,5 +1,7 @@
 "use client";
 
+import ProgressBar from "@/components/ui/ProgressBar";
+
 // Top bar of the Practice player: progress track + hearts. Hearts reflect the
 // mistake budget for passing (never a lockout — losing them all just means the
 // retry screen at the end will suggest another go).
@@ -31,12 +33,7 @@ export default function PracticeHud({ current, total, hearts, maxHearts, onExit,
         </button>
       )}
 
-      <div className="h-4 flex-1 overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-        <div
-          className="h-full rounded-full bg-[var(--primary)] transition-[width] duration-500 ease-out"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      <ProgressBar percent={pct} height="lg" className="flex-1" />
 
       <div className="flex shrink-0 items-center gap-1" aria-label={`${hearts}/${maxHearts}`}>
         {Array.from({ length: maxHearts }, (_, i) => {

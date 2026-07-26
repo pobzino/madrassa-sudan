@@ -43,8 +43,6 @@ export interface PathInput {
 export interface LessonProgressInput {
   completed: boolean;
   started: boolean;
-  /** How much of the recording has been watched, 0–100. 0 when unknown. */
-  watchedPercent?: number;
 }
 
 /** A homework_submissions row joined to its assignment, for a test. */
@@ -71,8 +69,6 @@ export interface StepResult {
   practiceState: StepPracticeState;
   /** Whether the lesson video/sim itself has been watched to completion. */
   lessonWatched: boolean;
-  /** How much of the recording has been watched, 0–100. */
-  watchedPercent: number;
 }
 
 export interface WeekResult {
@@ -112,19 +108,6 @@ function isTestFailed(result: TestResultInput | undefined): boolean {
  * video alone is not enough. A step without one keeps the original rule:
  * lesson_progress.completed.
  */
-/**
- * How much of the recording the student has seen, 0–100. A lesson whose video
- * is done reads 100 even when its duration is unknown (nullable on `lessons`),
- * so a watched lesson never renders as 0%.
- */
-function watchedPercentOf(lesson: LessonProgressInput | undefined): number {
-  if (!lesson) return 0;
-  if (lesson.completed) return 100;
-  const pct = lesson.watchedPercent ?? 0;
-  if (!Number.isFinite(pct) || pct <= 0) return 0;
-  return Math.min(100, Math.round(pct));
-}
-
 function stepIsCompleted(step: PathStepInput, progress: StudentProgressInput): boolean {
   if (step.practiceAssignmentId) {
     return isTestPassed(progress.testResults[step.practiceAssignmentId]);
@@ -224,7 +207,6 @@ export function evaluatePath(
         practiceAssignmentId: step.practiceAssignmentId ?? null,
         practiceState,
         lessonWatched: lesson?.completed === true,
-        watchedPercent: watchedPercentOf(lesson),
       };
     });
 

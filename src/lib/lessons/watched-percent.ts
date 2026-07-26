@@ -19,13 +19,3 @@ export function watchedPercent(
   if (position <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((position / durationSeconds) * 100)));
 }
-
-/** Coarse buckets for wording/colour, so the same thresholds are used everywhere. */
-export type WatchedBand = "not-started" | "started" | "most" | "finished";
-
-export function watchedBand(percent: number, completed = false): WatchedBand {
-  if (completed || percent >= 100) return "finished";
-  if (percent >= 80) return "most";
-  if (percent > 0) return "started";
-  return "not-started";
-}

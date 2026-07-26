@@ -198,15 +198,8 @@ export async function PATCH(
     }
 
     const row = updatedRow as unknown as SimRow;
-    // Keep the lesson's cached duration in step with the recording. It is what
-    // the student/teacher progress bars divide by, so leaving it at the length
-    // of the *original* take makes "% watched" wrong for every edited lesson.
-    if (updates.duration_ms !== undefined) {
-      await dataClient
-        .from('lessons')
-        .update({ video_duration_seconds: Math.ceil(updates.duration_ms / 1000) })
-        .eq('id', lessonId);
-    }
+    // (lessons.video_duration_seconds follows duration_ms via the
+    // trg_sync_lesson_video_duration trigger — no sync needed here.)
 
     const audioUrl = await signAudioUrl(lessonId, row.audio_path);
     const payload: SimPayload = { sim: row, audio_url: audioUrl };

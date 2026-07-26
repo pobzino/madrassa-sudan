@@ -21,10 +21,19 @@ interface Student {
   full_name: string;
   avatar_url: string | null;
   enrolled_at: string;
-  lessons_completed: number;
-  lessons_in_progress: number;
   homework_submitted: number;
   lessons: LessonWatch[];
+}
+
+/** Single source for how a lesson's watch state is coloured and worded. */
+function watchStatus(lesson: LessonWatch) {
+  if (lesson.completed) {
+    return { tone: "brand" as const, textClass: "text-[var(--primary)]", label: "Completed" };
+  }
+  if (lesson.percent > 0) {
+    return { tone: "amber" as const, textClass: "text-amber-600", label: `${lesson.percent}% watched` };
+  }
+  return { tone: "amber" as const, textClass: "text-gray-400", label: "Not started" };
 }
 
 interface PendingStudent {
@@ -245,31 +254,15 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
         : Promise.resolve({ data: [] as never[] }),
     ]);
 
-    const durationByLesson = new Map(lessonRows.map((l) => [l.id, l.video_duration_seconds ?? null]));
-    const titleByLesson = new Map(
-      lessonRows.map((l) => [l.id, l.title_ar || l.title_en || ""])
+    // Progress rows are already scoped to the assigned lessons, so walking
+    // `lessonRows` per student covers every lesson — including the untouched
+    // ones, which simply have no row — and keeps them in assigned order.
+    const progressByKey = new Map(
+      (progressRows ?? []).map((row) => {
+        const r = row as unknown as { student_id: string; lesson_id: string };
+        return [`${r.student_id}:${r.lesson_id}`, r] as const;
+      })
     );
-    const progressByStudent = new Map<string, LessonWatch[]>();
-    for (const row of progressRows ?? []) {
-      const r = row as unknown as {
-        student_id: string;
-        lesson_id: string;
-        completed: boolean;
-        last_position_seconds: number | null;
-      };
-      const list = progressByStudent.get(r.student_id) ?? [];
-      list.push({
-        lessonId: r.lesson_id,
-        title: titleByLesson.get(r.lesson_id) || "",
-        completed: r.completed === true,
-        percent: watchedPercent(
-          r.last_position_seconds,
-          durationByLesson.get(r.lesson_id),
-          r.completed === true
-        ),
-      });
-      progressByStudent.set(r.student_id, list);
-    }
 
     const homeworkByStudent = new Map<string, number>();
     for (const row of submissionRows ?? []) {
@@ -277,31 +270,25 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
       homeworkByStudent.set(sid, (homeworkByStudent.get(sid) ?? 0) + 1);
     }
 
-    const studentsData: Student[] = enrolled.map(({ profile, enrolled_at }) => {
-      const watched = progressByStudent.get(profile.id) ?? [];
-      // Untouched assigned lessons round out the list so the teacher sees the
-      // whole picture, not only the lessons that happen to have a progress row.
-      const seen = new Set(watched.map((w) => w.lessonId));
-      const rest: LessonWatch[] = assignedLessonIds
-        .filter((lid) => !seen.has(lid))
-        .map((lid) => ({
-          lessonId: lid,
-          title: titleByLesson.get(lid) || "",
-          completed: false,
-          percent: 0,
-        }));
-      const lessons = [...watched, ...rest].sort((a, b) => b.percent - a.percent);
-      return {
-        id: profile.id,
-        full_name: profile.full_name,
-        avatar_url: profile.avatar_url,
-        enrolled_at,
-        lessons_completed: lessons.filter((l) => l.completed).length,
-        lessons_in_progress: lessons.filter((l) => !l.completed && l.percent > 0).length,
-        homework_submitted: homeworkByStudent.get(profile.id) ?? 0,
-        lessons,
-      };
-    });
+    const studentsData: Student[] = enrolled.map(({ profile, enrolled_at }) => ({
+      id: profile.id,
+      full_name: profile.full_name,
+      avatar_url: profile.avatar_url,
+      enrolled_at,
+      homework_submitted: homeworkByStudent.get(profile.id) ?? 0,
+      lessons: lessonRows.map((lesson) => {
+        const p = progressByKey.get(`${profile.id}:${lesson.id}`) as
+          | { completed: boolean; last_position_seconds: number | null }
+          | undefined;
+        const completed = p?.completed === true;
+        return {
+          lessonId: lesson.id,
+          title: lesson.title_ar || lesson.title_en || "",
+          completed,
+          percent: watchedPercent(p?.last_position_seconds, lesson.video_duration_seconds, completed),
+        };
+      }),
+    }));
     setStudents(studentsData);
 
     // Get assignments for this cohort
@@ -714,6 +701,10 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
                 <tbody className="divide-y divide-gray-100">
                   {students.map((student) => {
                     const expanded = expandedStudentId === student.id;
+                    const completedCount = student.lessons.filter((l) => l.completed).length;
+                    const inProgressCount = student.lessons.filter(
+                      (l) => !l.completed && l.percent > 0
+                    ).length;
                     return (
                     <Fragment key={student.id}>
                     <tr className="hover:bg-gray-50">
@@ -734,10 +725,10 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
                           className="flex items-center gap-1.5 text-left hover:text-gray-900 transition-colors disabled:cursor-default"
                         >
                           <span>
-                            {student.lessons_completed} completed
-                            {student.lessons_in_progress > 0 && (
+                            {completedCount} completed
+                            {inProgressCount > 0 && (
                               <span className="text-amber-600">
-                                {" "}· {student.lessons_in_progress} in progress
+                                {" "}· {inProgressCount} in progress
                               </span>
                             )}
                           </span>
@@ -766,35 +757,25 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
                       <tr className="bg-gray-50/70">
                         <td colSpan={4} className="px-6 py-4">
                           <div className="grid gap-2.5 sm:grid-cols-2">
-                            {student.lessons.map((lesson) => (
-                              <div key={lesson.lessonId} className="flex items-center gap-3">
-                                <span className="w-44 shrink-0 truncate text-sm text-gray-700" title={lesson.title}>
-                                  {lesson.title || "—"}
-                                </span>
-                                <ProgressBar
-                                  percent={lesson.percent}
-                                  tone={lesson.completed ? "brand" : lesson.percent > 0 ? "amber" : "gray"}
-                                  height="sm"
-                                  className="flex-1"
-                                  label={`${lesson.title} — ${lesson.percent}% watched`}
-                                />
-                                <span
-                                  className={`w-24 shrink-0 text-right text-xs font-medium ${
-                                    lesson.completed
-                                      ? "text-[var(--primary)]"
-                                      : lesson.percent > 0
-                                        ? "text-amber-600"
-                                        : "text-gray-400"
-                                  }`}
-                                >
-                                  {lesson.completed
-                                    ? "Completed"
-                                    : lesson.percent > 0
-                                      ? `${lesson.percent}% watched`
-                                      : "Not started"}
-                                </span>
-                              </div>
-                            ))}
+                            {student.lessons.map((lesson) => {
+                              const status = watchStatus(lesson);
+                              return (
+                                <div key={lesson.lessonId} className="flex items-center gap-3">
+                                  <span className="w-44 shrink-0 truncate text-sm text-gray-700" title={lesson.title}>
+                                    {lesson.title || "—"}
+                                  </span>
+                                  <ProgressBar
+                                    percent={lesson.percent}
+                                    tone={status.tone}
+                                    className="flex-1"
+                                    label={`${lesson.title} — ${status.label}`}
+                                  />
+                                  <span className={`w-24 shrink-0 text-right text-xs font-medium ${status.textClass}`}>
+                                    {status.label}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
                         </td>
                       </tr>

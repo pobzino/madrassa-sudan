@@ -66,6 +66,14 @@ function Sparkle({ className = "" }: { className?: string }) {
 }
 
 /**
+ * Part-way through the recording: worth showing a ring, a "N% watched" label and
+ * a Continue (rather than Open) CTA. `in_progress` already excludes locked and
+ * completed steps, and a percent above 0 implies the lesson was started.
+ */
+const isPartlyWatched = (step: TreeStep) =>
+  step.state === "in_progress" && step.watchedPercent > 0;
+
+/**
  * Ring around a lesson disc showing how much of the recording has been watched.
  * Only drawn part-way through — a completed node already reads as done via the
  * check + sparkle, and an untouched one should stay clean.
@@ -101,11 +109,9 @@ function NodeDisc({ node, isCurrent }: { node: TreeNode; isCurrent: boolean }) {
     const { state } = node.step;
     const completed = state === "completed";
     const locked = state === "locked";
-    const watched = node.step.watchedPercent;
-    const showRing = !completed && !locked && watched > 0;
     return (
       <div className="relative">
-        {showRing && <WatchedRing percent={watched} />}
+        {isPartlyWatched(node.step) && <WatchedRing percent={node.step.watchedPercent} />}
         <div
           className={`w-16 h-16 rounded-full flex items-center justify-center shadow-md border-b-4 transition-transform ${
             completed
@@ -246,14 +252,12 @@ export default function LearningPathTree({
 
   const labelFor = (node: TreeNode) => {
     if (node.kind === "lesson") {
-      const { state, watchedPercent } = node.step;
       // Part-way through: say how far, so a half-watched lesson is obvious at a
       // glance instead of looking identical to an untouched one.
-      const partial = state !== "completed" && state !== "locked" && watchedPercent > 0;
       return {
         title: node.step.title,
-        sub: partial ? t.watched(watchedPercent) : (null as string | null),
-        muted: state === "locked",
+        sub: isPartlyWatched(node.step) ? t.watched(node.step.watchedPercent) : (null as string | null),
+        muted: node.step.state === "locked",
       };
     }
     const s = node.week.testState;
@@ -265,11 +269,7 @@ export default function LearningPathTree({
   };
   // Call-to-action shown on the selected node to actually open the lesson/test.
   const ctaFor = (node: TreeNode): string => {
-    if (node.kind === "lesson") {
-      const { state, watchedPercent } = node.step;
-      const partial = state !== "completed" && state !== "locked" && watchedPercent > 0;
-      return partial ? t.resume : t.open;
-    }
+    if (node.kind === "lesson") return isPartlyWatched(node.step) ? t.resume : t.open;
     if (node.week.testState === "failed") return t.retake;
     if (node.week.testState === "passed") return t.open;
     return t.startTest;
