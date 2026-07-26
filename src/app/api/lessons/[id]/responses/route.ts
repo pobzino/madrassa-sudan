@@ -94,7 +94,7 @@ export async function POST(
   const retryAllowed =
     question.allow_retry &&
     quizSettings.allow_retries &&
-    (quizSettings.max_attempts == null || !existingResponse || existingResponse.attempt_number < quizSettings.max_attempts)
+    (quizSettings.max_attempts == null || !existingResponse || (existingResponse.attempt_number ?? 1) < quizSettings.max_attempts)
 
   if (existingResponse && !retryAllowed) {
     return NextResponse.json(
@@ -117,7 +117,7 @@ export async function POST(
       timestamp: new Date().toISOString()
     })
 
-    const newAttemptNumber = existingResponse.attempt_number + 1
+    const newAttemptNumber = (existingResponse.attempt_number ?? 1) + 1
 
     const { data: updatedResponse, error: updateError } = await supabase
       .from('lesson_question_responses')
@@ -165,7 +165,7 @@ export async function POST(
     question.allow_retry &&
     quizSettings.allow_retries &&
     !is_correct &&
-    (quizSettings.max_attempts == null || responseData.attempt_number < quizSettings.max_attempts)
+    (quizSettings.max_attempts == null || (responseData.attempt_number ?? 1) < quizSettings.max_attempts)
 
   return NextResponse.json({
     response: responseData,
@@ -201,7 +201,7 @@ async function updateLessonProgress(
 
   const questionsAnswered = responses.length
   const questionsCorrect = responses.filter((response) => response.is_correct).length
-  const totalAttempts = responses.reduce((sum, response) => sum + response.attempt_number, 0)
+  const totalAttempts = responses.reduce((sum, response) => sum + (response.attempt_number ?? 1), 0)
 
   const { data: lesson } = await supabase
     .from('lessons')

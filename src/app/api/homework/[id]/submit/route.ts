@@ -54,20 +54,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Assignment not found or not published" }, { status: 404 });
     }
 
-    // Check if student is in the cohort
-    const { data: cohortMembership } = await supabase
-      .from("cohort_students")
-      .select("id")
-      .eq("cohort_id", assignment.cohort_id)
-      .eq("student_id", user.id)
-      .eq("is_active", true)
-      .single();
+    // Practice assignments are global (cohort_id is null) — any signed-in
+    // student may submit. Cohort homework still requires active enrollment.
+    if (assignment.cohort_id) {
+      const { data: cohortMembership } = await supabase
+        .from("cohort_students")
+        .select("id")
+        .eq("cohort_id", assignment.cohort_id)
+        .eq("student_id", user.id)
+        .eq("is_active", true)
+        .single();
 
-    if (!cohortMembership) {
-      return NextResponse.json(
-        { error: "You are not enrolled in this class" },
-        { status: 403 }
-      );
+      if (!cohortMembership) {
+        return NextResponse.json(
+          { error: "You are not enrolled in this class" },
+          { status: 403 }
+        );
+      }
     }
 
     // Check if already submitted
@@ -177,8 +180,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Auto-grade multiple choice and true/false questions
+    // Auto-grade objective questions. Practices (is_practice) also auto-grade
+    // short answers with a forgiving comparison (numbers, Arabic-Indic digits);
+    // regular homework keeps the original exact MC/TF-only behaviour.
     const questions = assignment.homework_questions || [];
+    const isPractice = !!assignment.is_practice;
+    const isAutoGradable = (q: { question_type: string; correct_answer: string | null }) =>
+      !!q.correct_answer &&
+      (q.question_type === "multiple_choice" ||
+        q.question_type === "true_false" ||
+        (isPractice && q.question_type === "short_answer"));
+    const isCorrectAnswer = (
+      q: { correct_answer: string | null },
+      response: string | null | undefined
+    ) => {
+      if (!response || !q.correct_answer) return false;
+      return isPractice
+        ? practiceAnswerMatches(response, q.correct_answer)
+        : response === q.correct_answer;
+    };
+
     let autoGradedScore = 0;
     let autoGradablePoints = 0;
 
@@ -186,15 +207,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const question = questions.find((q: { id: string }) => q.id === answer.question_id);
       const savedResponse = savedResponses?.find((r) => r.question_id === answer.question_id);
 
-      if (
-        question &&
-        savedResponse &&
-        (question.question_type === "multiple_choice" || question.question_type === "true_false") &&
-        question.correct_answer
-      ) {
+      if (question && savedResponse && isAutoGradable(question)) {
         autoGradablePoints += question.points || 0;
 
-        const isCorrect = answer.response_text === question.correct_answer;
+        const isCorrect = isCorrectAnswer(question, answer.response_text);
         const pointsEarned = isCorrect ? (question.points || 0) : 0;
         autoGradedScore += pointsEarned;
 
@@ -207,10 +223,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Update submission with auto-graded score
-    const allQuestionsAutoGradable = questions.every(
-      (q: { question_type: string; correct_answer: string | null }) =>
-        (q.question_type === "multiple_choice" || q.question_type === "true_false") && q.correct_answer
-    );
+    const allQuestionsAutoGradable = questions.every(isAutoGradable);
 
     if (allQuestionsAutoGradable && autoGradablePoints > 0) {
       await supabase
@@ -238,13 +251,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const attemptAnswers = data.answers.map((answer) => {
       const question = questions.find((q: { id: string }) => q.id === answer.question_id);
       const savedResponse = savedResponses?.find((r) => r.question_id === answer.question_id);
-      const isAutoGradable =
-        question &&
-        (question.question_type === "multiple_choice" || question.question_type === "true_false") &&
-        question.correct_answer;
-      const isCorrect = isAutoGradable ? answer.response_text === question!.correct_answer : null;
+      const autoGradable = !!question && isAutoGradable(question);
+      const isCorrect = autoGradable ? isCorrectAnswer(question!, answer.response_text) : null;
       if (isCorrect) correctCount += 1;
-      const pointsEarned = isAutoGradable
+      const pointsEarned = autoGradable
         ? isCorrect
           ? question!.points || 0
           : 0
@@ -355,20 +365,22 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
     }
 
-    // Check if student is in the cohort
-    const { data: cohortMembership } = await supabase
-      .from("cohort_students")
-      .select("id")
-      .eq("cohort_id", assignment.cohort_id)
-      .eq("student_id", user.id)
-      .eq("is_active", true)
-      .single();
+    // Practice assignments have no cohort; enrollment only applies otherwise.
+    if (assignment.cohort_id) {
+      const { data: cohortMembership } = await supabase
+        .from("cohort_students")
+        .select("id")
+        .eq("cohort_id", assignment.cohort_id)
+        .eq("student_id", user.id)
+        .eq("is_active", true)
+        .single();
 
-    if (!cohortMembership) {
-      return NextResponse.json(
-        { error: "You are not enrolled in this class" },
-        { status: 403 }
-      );
+      if (!cohortMembership) {
+        return NextResponse.json(
+          { error: "You are not enrolled in this class" },
+          { status: 403 }
+        );
+      }
     }
 
     // Get or create submission
@@ -480,6 +492,28 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       { status: 500 }
     );
   }
+}
+
+// Arabic-Indic (٠-٩) and Eastern Arabic (۰-۹) digits → Latin, so a child
+// typing ٤٥ matches a stored answer of 45.
+function normalizeDigits(value: string): string {
+  return value
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0));
+}
+
+// Forgiving comparison for practice answers: trims, ignores case, understands
+// numbers (including Arabic-Indic digits and decimal commas).
+function practiceAnswerMatches(response: string, correct: string): boolean {
+  const r = normalizeDigits(response).trim();
+  const c = normalizeDigits(correct).trim();
+  if (r === c) return true;
+  const rn = Number(r.replace(",", "."));
+  const cn = Number(c.replace(",", "."));
+  if (r !== "" && c !== "" && Number.isFinite(rn) && Number.isFinite(cn)) {
+    return Math.abs(rn - cn) < 1e-9;
+  }
+  return r.toLowerCase() === c.toLowerCase();
 }
 
 // Helper function to update student streak — returns current streak days

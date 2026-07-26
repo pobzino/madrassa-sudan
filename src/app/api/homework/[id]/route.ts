@@ -49,22 +49,36 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const isAdmin = profile?.role === "admin";
 
     if (!isAdmin) {
-      const { data: cohortAccess } = await supabase
-        .from("cohort_teachers")
-        .select("id")
-        .eq("cohort_id", assignment.cohort_id)
-        .eq("teacher_id", user.id)
-        .single();
-
-      if (!cohortAccess) {
-        // Check if user is a student in the cohort
-        const { data: studentAccess } = await supabase
-          .from("cohort_students")
+      // Practices have no cohort: any teacher can open them (to vet), any
+      // student can open them once published. Cohort homework keeps the
+      // original enrollment checks.
+      let teacherAccess = false;
+      if (assignment.cohort_id) {
+        const { data: cohortAccess } = await supabase
+          .from("cohort_teachers")
           .select("id")
           .eq("cohort_id", assignment.cohort_id)
-          .eq("student_id", user.id)
-          .eq("is_active", true)
+          .eq("teacher_id", user.id)
           .single();
+        teacherAccess = !!cohortAccess;
+      } else {
+        teacherAccess = profile?.role === "teacher";
+      }
+
+      if (!teacherAccess) {
+        let studentAccess = false;
+        if (assignment.cohort_id) {
+          const { data: cohortStudent } = await supabase
+            .from("cohort_students")
+            .select("id")
+            .eq("cohort_id", assignment.cohort_id)
+            .eq("student_id", user.id)
+            .eq("is_active", true)
+            .single();
+          studentAccess = !!cohortStudent;
+        } else {
+          studentAccess = !!assignment.is_practice && !!assignment.is_published;
+        }
 
         if (!studentAccess) {
           return NextResponse.json({ error: "You don't have access to this assignment" }, { status: 403 });
@@ -172,8 +186,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
     }
 
-    // Check teacher has access to this cohort
-    if (profile.role !== "admin") {
+    // Check teacher has access to this cohort. Practices (no cohort) are
+    // shared content: any teacher may edit them (vetting), matching RLS.
+    if (profile.role !== "admin" && existingAssignment.cohort_id) {
       const { data: cohortAccess } = await supabase
         .from("cohort_teachers")
         .select("id")
@@ -274,8 +289,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // If publishing for the first time, create submission records
-    if (data.is_published && !existingAssignment.is_published) {
+    // If publishing for the first time, create submission records. Practices
+    // have no cohort roster — submissions are created lazily on first attempt.
+    if (data.is_published && !existingAssignment.is_published && existingAssignment.cohort_id) {
       const { data: cohortStudents } = await supabase
         .from("cohort_students")
         .select("student_id")
@@ -340,8 +356,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
     }
 
-    // Check teacher has access to this cohort
-    if (profile.role !== "admin") {
+    // Check teacher has access to this cohort. Practices (no cohort) are
+    // shared content: any teacher may edit them (vetting), matching RLS.
+    if (profile.role !== "admin" && existingAssignment.cohort_id) {
       const { data: cohortAccess } = await supabase
         .from("cohort_teachers")
         .select("id")

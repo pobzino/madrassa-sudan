@@ -141,10 +141,10 @@ export async function POST(request: NextRequest) {
       placement: {
         grade: recommendedGrade,
         confidence,
-        questionsAnswered: attempt.questions_answered,
-        questionsCorrect: attempt.questions_correct,
-        accuracy: attempt.questions_answered > 0
-          ? Math.round((attempt.questions_correct / attempt.questions_answered) * 100)
+        questionsAnswered: attempt.questions_answered ?? 0,
+        questionsCorrect: attempt.questions_correct ?? 0,
+        accuracy: (attempt.questions_answered ?? 0) > 0
+          ? Math.round(((attempt.questions_correct ?? 0) / (attempt.questions_answered ?? 1)) * 100)
           : 0,
       },
       recommendedLessons: recommendedLessons || [],

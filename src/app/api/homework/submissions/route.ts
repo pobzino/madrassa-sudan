@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
     }
 
-    if (!isAdmin) {
+    if (!isAdmin && assignment.cohort_id) {
       const { data: cohortAccess } = await supabase
         .from("cohort_teachers")
         .select("id")
@@ -246,7 +246,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
     }
 
-    if (profile.role !== "admin") {
+    if (profile.role !== "admin" && assignment.cohort_id) {
       const { data: cohortAccess } = await supabase
         .from("cohort_teachers")
         .select("id")

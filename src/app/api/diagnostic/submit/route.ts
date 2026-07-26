@@ -60,8 +60,8 @@ export async function POST(request: NextRequest) {
     const { data: updatedAttempt } = await supabase
       .from('diagnostic_attempts')
       .update({
-        questions_answered: attempt.questions_answered + 1,
-        questions_correct: attempt.questions_correct + (isCorrect ? 1 : 0),
+        questions_answered: (attempt.questions_answered ?? 0) + 1,
+        questions_correct: (attempt.questions_correct ?? 0) + (isCorrect ? 1 : 0),
       })
       .eq('id', attemptId)
       .select()
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if we should end the assessment (10 questions or no more questions)
-    const shouldComplete = !nextQuestion || updatedAttempt!.questions_answered >= 10;
+    const shouldComplete = !nextQuestion || (updatedAttempt!.questions_answered ?? 0) >= 10;
 
     return NextResponse.json({
       correct: isCorrect,

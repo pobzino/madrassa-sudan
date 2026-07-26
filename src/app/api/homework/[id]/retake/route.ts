@@ -32,7 +32,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
     const { data: assignment } = await supabase
       .from("homework_assignments")
-      .select("id, is_test, passing_score, total_points, homework_questions(question_type, correct_answer)")
+      .select("id, is_test, is_practice, passing_score, total_points, homework_questions(question_type, correct_answer)")
       .eq("id", assignmentId)
       .single();
 
@@ -64,11 +64,14 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       question_type: string;
       correct_answer: string | null;
     }[];
+    const isPractice = !!assignment.is_practice;
     const allAutoGradable =
       questions.length > 0 &&
       questions.every(
         (q) =>
-          (q.question_type === "multiple_choice" || q.question_type === "true_false") &&
+          (q.question_type === "multiple_choice" ||
+            q.question_type === "true_false" ||
+            (isPractice && q.question_type === "short_answer")) &&
           q.correct_answer
       );
 
