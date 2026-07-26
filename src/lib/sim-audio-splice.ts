@@ -6,15 +6,24 @@
  *
  * Pairs with the pure timeline maths in `@/lib/sim-splice`. Runs in ffmpeg.wasm
  * — the same instance `trimAndCut` uses.
+ *
+ * Implementation note: the head/patch/tail are joined in ONE filter_complex
+ * pass rather than encoded separately and stitched with the concat demuxer.
+ * Concatenating separately-encoded Opus streams leaves each part's pre-skip in
+ * place, which adds ~17ms of drift per join and can click audibly; a single
+ * decode→concat→encode pass measured exact (45.008s where stream-copy concat
+ * gave 45.051s) and re-encodes only once.
  */
 
 import { fetchFile } from '@ffmpeg/util';
 import { getFFmpeg } from '@/lib/ffmpeg-editor';
 
 const OUTPUT_MIME = 'audio/webm';
-// Opus at 96k is transparent enough for speech and keeps lessons small on the
+// Opus at 96k mono is transparent for speech and keeps lessons small on the
 // slow connections students are on.
 const ENCODE_ARGS = ['-vn', '-c:a', 'libopus', '-b:a', '96k', '-ar', '48000', '-ac', '1'];
+/** Ignore sub-frame slivers of head/tail so we don't emit empty filter inputs. */
+const EDGE_EPSILON_SEC = 0.05;
 
 export interface SpliceAudioParams {
   /** The sim's current audio. */
@@ -34,6 +43,57 @@ export interface SpliceAudioResult {
   blob: Blob;
   mime: string;
   durationMs: number;
+}
+
+export interface SpliceFilterGraph {
+  /** filter_complex expression, or null when the patch replaces everything. */
+  filter: string | null;
+  /** Label to -map, or null when the output is just the re-encoded patch. */
+  mapLabel: string | null;
+  keepsHead: boolean;
+  keepsTail: boolean;
+}
+
+/**
+ * Build the filter graph joining [original head] + [patch] + [original tail].
+ * Input 0 is the original, input 1 the patch. Exported for unit tests — a
+ * wrong graph string is otherwise only discoverable by ear.
+ */
+export function buildSpliceFilterGraph(
+  startSec: number,
+  endSec: number,
+  durationSec: number
+): SpliceFilterGraph {
+  const keepsHead = startSec > EDGE_EPSILON_SEC;
+  const keepsTail = endSec < durationSec - EDGE_EPSILON_SEC;
+
+  // The retake replaces the entire recording: no graph needed.
+  if (!keepsHead && !keepsTail) {
+    return { filter: null, mapLabel: null, keepsHead, keepsTail };
+  }
+
+  const parts: string[] = [];
+  const segments: string[] = [];
+
+  if (keepsHead && keepsTail) {
+    // The original is consumed twice, so it must be split first.
+    parts.push('[0:a]asplit=2[s0][s1]');
+    parts.push(`[s0]atrim=start=0:end=${startSec.toFixed(3)},asetpts=PTS-STARTPTS[head]`);
+    parts.push(`[s1]atrim=start=${endSec.toFixed(3)},asetpts=PTS-STARTPTS[tail]`);
+    parts.push('[1:a]asetpts=PTS-STARTPTS[mid]');
+    segments.push('[head]', '[mid]', '[tail]');
+  } else if (keepsHead) {
+    parts.push(`[0:a]atrim=start=0:end=${startSec.toFixed(3)},asetpts=PTS-STARTPTS[head]`);
+    parts.push('[1:a]asetpts=PTS-STARTPTS[mid]');
+    segments.push('[head]', '[mid]');
+  } else {
+    parts.push('[1:a]asetpts=PTS-STARTPTS[mid]');
+    parts.push(`[0:a]atrim=start=${endSec.toFixed(3)},asetpts=PTS-STARTPTS[tail]`);
+    segments.push('[mid]', '[tail]');
+  }
+
+  parts.push(`${segments.join('')}concat=n=${segments.length}:v=0:a=1[out]`);
+  return { filter: parts.join(';'), mapLabel: '[out]', keepsHead, keepsTail };
 }
 
 /** Measure a blob's real duration. WebM from MediaRecorder often lies, so decode it. */
@@ -77,10 +137,7 @@ export async function measureAudioDurationMs(blob: Blob): Promise<number> {
   });
 }
 
-/**
- * Rebuild the sim audio as head + patch + tail. Any of head/tail may be empty
- * (replacing from the very start, or through to the end).
- */
+/** Rebuild the sim audio as head + patch + tail in a single ffmpeg pass. */
 export async function spliceSimAudio({
   original,
   patch,
@@ -95,80 +152,34 @@ export async function spliceSimAudio({
   const ffmpeg = await getFFmpeg();
   onProgress?.(0.1);
 
-  const hasHead = startSec > 0.05;
-  const hasTail = endSec < durationSec - 0.05;
-
+  const graph = buildSpliceFilterGraph(startSec, endSec, durationSec);
   const written: string[] = [];
-  const write = async (name: string, blob: Blob) => {
-    await ffmpeg.writeFile(name, await fetchFile(blob));
-    written.push(name);
-  };
-
   const progressHandler = ({ progress }: { progress: number }) => {
     onProgress?.(0.2 + Math.min(Math.max(progress, 0), 1) * 0.7);
   };
   ffmpeg.on('progress', progressHandler);
 
   try {
-    await write('splice-src.webm', original);
-    await write('splice-patch-src.webm', patch);
+    await ffmpeg.writeFile('splice-src.webm', await fetchFile(original));
+    written.push('splice-src.webm');
+    await ffmpeg.writeFile('splice-patch.webm', await fetchFile(patch));
+    written.push('splice-patch.webm');
 
-    const parts: string[] = [];
+    const args = graph.filter
+      ? [
+          '-i', 'splice-src.webm',
+          '-i', 'splice-patch.webm',
+          '-filter_complex', graph.filter,
+          '-map', graph.mapLabel as string,
+          ...ENCODE_ARGS,
+          '-y', 'splice-out.webm',
+        ]
+      : ['-i', 'splice-patch.webm', ...ENCODE_ARGS, '-y', 'splice-out.webm'];
 
-    if (hasHead) {
-      await ffmpeg.exec([
-        '-i', 'splice-src.webm',
-        '-ss', '0',
-        '-to', startSec.toFixed(3),
-        ...ENCODE_ARGS,
-        '-y', 'splice-head.webm',
-      ]);
-      written.push('splice-head.webm');
-      parts.push('splice-head.webm');
-    }
+    await ffmpeg.exec(args);
+    written.push('splice-out.webm');
 
-    // Always re-encode the patch so every part shares codec parameters and the
-    // concat demuxer can stream-copy them together.
-    await ffmpeg.exec([
-      '-i', 'splice-patch-src.webm',
-      ...ENCODE_ARGS,
-      '-y', 'splice-mid.webm',
-    ]);
-    written.push('splice-mid.webm');
-    parts.push('splice-mid.webm');
-
-    if (hasTail) {
-      await ffmpeg.exec([
-        '-i', 'splice-src.webm',
-        '-ss', endSec.toFixed(3),
-        ...ENCODE_ARGS,
-        '-y', 'splice-tail.webm',
-      ]);
-      written.push('splice-tail.webm');
-      parts.push('splice-tail.webm');
-    }
-
-    let outputName: string;
-    if (parts.length === 1) {
-      outputName = parts[0];
-    } else {
-      await ffmpeg.writeFile(
-        'splice-concat.txt',
-        new TextEncoder().encode(parts.map((p) => `file '${p}'`).join('\n'))
-      );
-      written.push('splice-concat.txt');
-      await ffmpeg.exec([
-        '-f', 'concat',
-        '-safe', '0',
-        '-i', 'splice-concat.txt',
-        '-c', 'copy',
-        '-y', 'splice-out.webm',
-      ]);
-      written.push('splice-out.webm');
-      outputName = 'splice-out.webm';
-    }
-
-    const data = await ffmpeg.readFile(outputName);
+    const data = await ffmpeg.readFile('splice-out.webm');
     const blob = new Blob([typeof data === 'string' ? data : (data as BlobPart)], {
       type: OUTPUT_MIME,
     });

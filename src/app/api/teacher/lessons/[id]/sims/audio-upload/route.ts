@@ -15,6 +15,12 @@ import {
 const PrepareAudioUploadSchema = z.object({
   audio_mime: z.string().nullable().optional(),
   size_bytes: z.number().int().positive().max(SIM_AUDIO_MAX_BYTES).optional(),
+  /**
+   * Replacing the audio of an existing sim (a spliced patch take) rather than
+   * creating a new one. The object gets a versioned name under the same sim id
+   * so the original audio survives until the new one is saved and verified.
+   */
+  sim_id: z.string().uuid().optional(),
 });
 
 export async function POST(
@@ -64,8 +70,32 @@ export async function POST(
 
     const mime = parsed.data.audio_mime || 'audio/webm';
     const extFromMime = mime.includes('mp4') ? 'mp4' : 'webm';
-    const simId = randomUUID();
-    const audioPath = `${lessonId}/${simId}.${extFromMime}`;
+
+    let simId: string;
+    let audioPath: string;
+    if (parsed.data.sim_id) {
+      // Patch upload for an existing sim: verify it belongs to this lesson,
+      // then write a versioned sibling object. The PATCH route accepts any
+      // `${lessonId}/${simId}.*` path, so the original stays intact as a
+      // fallback until the sim row points at the new file.
+      const service = createServiceClient();
+      const { data: existing, error: existingError } = await service
+        .from('lesson_sims')
+        .select('id')
+        .eq('id', parsed.data.sim_id)
+        .eq('lesson_id', lessonId)
+        .maybeSingle();
+
+      if (existingError || !existing) {
+        return NextResponse.json({ error: 'Sim not found for this lesson' }, { status: 404 });
+      }
+
+      simId = parsed.data.sim_id;
+      audioPath = `${lessonId}/${simId}.${Date.now()}.${extFromMime}`;
+    } else {
+      simId = randomUUID();
+      audioPath = `${lessonId}/${simId}.${extFromMime}`;
+    }
 
     const service = createServiceClient();
     const { data: signedUpload, error: signedUploadError } = await service.storage
