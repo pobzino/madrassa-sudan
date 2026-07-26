@@ -545,12 +545,18 @@ export default function LessonPlayerPage() {
     lastSimPctRef.current = bucket;
     const isCompleted = pct >= 80;
     const positionSec = Math.floor((pct / 100) * simDurationSec);
+    // Keep both counters monotonic: re-watching a lesson from the start must not
+    // rewind "how much of this lesson has been seen" (the ref resets to 0 on
+    // every mount, so without this a rewatch would report 10% for a lesson the
+    // student had already watched to the end).
+    const furthestSec = Math.max(positionSec, progress?.last_position_seconds ?? 0);
+    const watchTimeSec = Math.max(positionSec, progress?.total_watch_time_seconds ?? 0);
 
     const progressData = {
       student_id: userId,
       lesson_id: lessonId,
-      last_position_seconds: positionSec,
-      total_watch_time_seconds: positionSec,
+      last_position_seconds: furthestSec,
+      total_watch_time_seconds: watchTimeSec,
       questions_answered: answeredQuestions.size,
       questions_correct: correctQuestions.size,
       // On a practice-gated lesson, playback never owns completion — passing the
@@ -582,7 +588,7 @@ export default function LessonPlayerPage() {
     if (pct >= 99 && practiceAssignmentId && !practicePassed) {
       router.push(`/practice/${practiceAssignmentId}?from=lesson`);
     }
-  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practicePassed, router]);
+  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practicePassed, router, progress?.last_position_seconds, progress?.total_watch_time_seconds]);
 
   // Close progress gate and let sim handle replay
   const handleRewatchQuiz = useCallback(() => {

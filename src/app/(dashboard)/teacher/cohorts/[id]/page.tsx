@@ -1,10 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState, use } from "react";
+import { Fragment, useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
-import { Users, BookOpen, ClipboardList, Plus } from "lucide-react";
+import { Users, BookOpen, ClipboardList, Plus, ChevronDown } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
+import { watchedPercent } from "@/lib/lessons/watched-percent";
+import ProgressBar from "@/components/ui/ProgressBar";
+
+/** How far a student got through one assigned lesson. */
+interface LessonWatch {
+  lessonId: string;
+  title: string;
+  completed: boolean;
+  percent: number;
+}
 
 interface Student {
   id: string;
@@ -12,7 +22,9 @@ interface Student {
   avatar_url: string | null;
   enrolled_at: string;
   lessons_completed: number;
+  lessons_in_progress: number;
   homework_submitted: number;
+  lessons: LessonWatch[];
 }
 
 interface PendingStudent {
@@ -40,6 +52,7 @@ interface AssignedLesson {
   grade_level: number;
   is_published: boolean;
   updated_at: string;
+  video_duration_seconds: number | null;
 }
 
 interface Cohort {
@@ -57,6 +70,7 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
   const [cohort, setCohort] = useState<Cohort | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [pendingStudents, setPendingStudents] = useState<PendingStudent[]>([]);
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [assignedLessons, setAssignedLessons] = useState<AssignedLesson[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,7 +156,8 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
           title_en,
           grade_level,
           is_published,
-          updated_at
+          updated_at,
+          video_duration_seconds
         )
       `)
       .eq("cohort_id", id)
@@ -201,40 +216,92 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
     });
     setPendingStudents(pendingList);
 
-    const studentsData: Student[] = [];
-    for (const cs of cohortStudents || []) {
-      const profile = cs.profiles as unknown as { id: string; full_name: string; avatar_url: string | null };
-      if (profile) {
-        // Get lesson progress count
-        let lessonProgressQuery = supabase
-          .from("lesson_progress")
-          .select("*", { count: "exact", head: true })
-          .eq("student_id", profile.id)
-          .eq("completed", true);
+    // Progress for every student in one pass. This used to be two count queries
+    // per student (an N+1 that also told us nothing beyond "completed"); now we
+    // read the rows once and tally locally, which is what lets us show how far
+    // through each lesson a student actually is.
+    const enrolled = (cohortStudents || [])
+      .map((cs) => ({
+        profile: cs.profiles as unknown as { id: string; full_name: string; avatar_url: string | null },
+        enrolled_at: cs.enrolled_at,
+      }))
+      .filter((row) => Boolean(row.profile));
+    const studentIds = enrolled.map((row) => row.profile.id);
 
-        if (assignedLessonIds.length > 0) {
-          lessonProgressQuery = lessonProgressQuery.in("lesson_id", assignedLessonIds);
-        }
+    const [{ data: progressRows }, { data: submissionRows }] = await Promise.all([
+      studentIds.length && assignedLessonIds.length
+        ? supabase
+            .from("lesson_progress")
+            .select("student_id, lesson_id, completed, last_position_seconds")
+            .in("student_id", studentIds)
+            .in("lesson_id", assignedLessonIds)
+        : Promise.resolve({ data: [] as never[] }),
+      studentIds.length
+        ? supabase
+            .from("homework_submissions")
+            .select("student_id")
+            .in("student_id", studentIds)
+            .in("status", ["submitted", "graded"])
+        : Promise.resolve({ data: [] as never[] }),
+    ]);
 
-        const { count: lessonsCount } = await lessonProgressQuery;
-
-        // Get homework submissions count
-        const { count: homeworkCount } = await supabase
-          .from("homework_submissions")
-          .select("*", { count: "exact", head: true })
-          .eq("student_id", profile.id)
-          .in("status", ["submitted", "graded"]);
-
-        studentsData.push({
-          id: profile.id,
-          full_name: profile.full_name,
-          avatar_url: profile.avatar_url,
-          enrolled_at: cs.enrolled_at,
-          lessons_completed: lessonsCount || 0,
-          homework_submitted: homeworkCount || 0,
-        });
-      }
+    const durationByLesson = new Map(lessonRows.map((l) => [l.id, l.video_duration_seconds ?? null]));
+    const titleByLesson = new Map(
+      lessonRows.map((l) => [l.id, l.title_ar || l.title_en || ""])
+    );
+    const progressByStudent = new Map<string, LessonWatch[]>();
+    for (const row of progressRows ?? []) {
+      const r = row as unknown as {
+        student_id: string;
+        lesson_id: string;
+        completed: boolean;
+        last_position_seconds: number | null;
+      };
+      const list = progressByStudent.get(r.student_id) ?? [];
+      list.push({
+        lessonId: r.lesson_id,
+        title: titleByLesson.get(r.lesson_id) || "",
+        completed: r.completed === true,
+        percent: watchedPercent(
+          r.last_position_seconds,
+          durationByLesson.get(r.lesson_id),
+          r.completed === true
+        ),
+      });
+      progressByStudent.set(r.student_id, list);
     }
+
+    const homeworkByStudent = new Map<string, number>();
+    for (const row of submissionRows ?? []) {
+      const sid = (row as unknown as { student_id: string }).student_id;
+      homeworkByStudent.set(sid, (homeworkByStudent.get(sid) ?? 0) + 1);
+    }
+
+    const studentsData: Student[] = enrolled.map(({ profile, enrolled_at }) => {
+      const watched = progressByStudent.get(profile.id) ?? [];
+      // Untouched assigned lessons round out the list so the teacher sees the
+      // whole picture, not only the lessons that happen to have a progress row.
+      const seen = new Set(watched.map((w) => w.lessonId));
+      const rest: LessonWatch[] = assignedLessonIds
+        .filter((lid) => !seen.has(lid))
+        .map((lid) => ({
+          lessonId: lid,
+          title: titleByLesson.get(lid) || "",
+          completed: false,
+          percent: 0,
+        }));
+      const lessons = [...watched, ...rest].sort((a, b) => b.percent - a.percent);
+      return {
+        id: profile.id,
+        full_name: profile.full_name,
+        avatar_url: profile.avatar_url,
+        enrolled_at,
+        lessons_completed: lessons.filter((l) => l.completed).length,
+        lessons_in_progress: lessons.filter((l) => !l.completed && l.percent > 0).length,
+        homework_submitted: homeworkByStudent.get(profile.id) ?? 0,
+        lessons,
+      };
+    });
     setStudents(studentsData);
 
     // Get assignments for this cohort
@@ -645,8 +712,11 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {students.map((student) => (
-                    <tr key={student.id} className="hover:bg-gray-50">
+                  {students.map((student) => {
+                    const expanded = expandedStudentId === student.id;
+                    return (
+                    <Fragment key={student.id}>
+                    <tr className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-semibold">
@@ -655,7 +725,29 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
                           <span className="font-medium text-gray-900">{student.full_name}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-gray-600">{student.lessons_completed} completed</td>
+                      <td className="px-6 py-4 text-gray-600">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedStudentId(expanded ? null : student.id)}
+                          disabled={student.lessons.length === 0}
+                          aria-expanded={expanded}
+                          className="flex items-center gap-1.5 text-left hover:text-gray-900 transition-colors disabled:cursor-default"
+                        >
+                          <span>
+                            {student.lessons_completed} completed
+                            {student.lessons_in_progress > 0 && (
+                              <span className="text-amber-600">
+                                {" "}· {student.lessons_in_progress} in progress
+                              </span>
+                            )}
+                          </span>
+                          {student.lessons.length > 0 && (
+                            <ChevronDown
+                              className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+                            />
+                          )}
+                        </button>
+                      </td>
                       <td className="px-6 py-4 text-gray-600">{student.homework_submitted} submitted</td>
                       <td className="px-6 py-4 text-gray-500 text-sm">
                         <div className="flex items-center justify-between gap-2">
@@ -670,7 +762,46 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    {expanded && (
+                      <tr className="bg-gray-50/70">
+                        <td colSpan={4} className="px-6 py-4">
+                          <div className="grid gap-2.5 sm:grid-cols-2">
+                            {student.lessons.map((lesson) => (
+                              <div key={lesson.lessonId} className="flex items-center gap-3">
+                                <span className="w-44 shrink-0 truncate text-sm text-gray-700" title={lesson.title}>
+                                  {lesson.title || "—"}
+                                </span>
+                                <ProgressBar
+                                  percent={lesson.percent}
+                                  tone={lesson.completed ? "brand" : lesson.percent > 0 ? "amber" : "gray"}
+                                  height="sm"
+                                  className="flex-1"
+                                  label={`${lesson.title} — ${lesson.percent}% watched`}
+                                />
+                                <span
+                                  className={`w-24 shrink-0 text-right text-xs font-medium ${
+                                    lesson.completed
+                                      ? "text-[var(--primary)]"
+                                      : lesson.percent > 0
+                                        ? "text-amber-600"
+                                        : "text-gray-400"
+                                  }`}
+                                >
+                                  {lesson.completed
+                                    ? "Completed"
+                                    : lesson.percent > 0
+                                      ? `${lesson.percent}% watched`
+                                      : "Not started"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             )}

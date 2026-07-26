@@ -200,6 +200,16 @@ export async function PATCH(
 
     const row = updatedRow as unknown as SimRow;
 
+    // Keep the lesson's cached duration in step with the recording. It is what
+    // the student/teacher progress bars divide by, so leaving it at the length
+    // of the *original* take makes "% watched" wrong for every edited lesson.
+    if (updates.duration_ms !== undefined) {
+      await dataClient
+        .from('lessons')
+        .update({ video_duration_seconds: Math.ceil(updates.duration_ms / 1000) })
+        .eq('id', lessonId);
+    }
+
     // The update just pushed the previous state into version history (trigger).
     // Splicing in a patch also leaves a new audio object behind each time, so
     // bound the history's storage here as well as on restore — otherwise a tutor
