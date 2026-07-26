@@ -9,6 +9,7 @@ import {
   assertSimFeatureAccess,
   signAudioUrl,
 } from '@/lib/server/sim-storage';
+import { pruneSimVersionAudio } from '@/lib/server/sim-versions';
 import type { Json } from '@/lib/database.types';
 import type { SimPayload, SimRow } from '@/lib/sim.types';
 
@@ -198,6 +199,15 @@ export async function PATCH(
     }
 
     const row = updatedRow as unknown as SimRow;
+
+    // The update just pushed the previous state into version history (trigger).
+    // Splicing in a patch also leaves a new audio object behind each time, so
+    // bound the history's storage here as well as on restore — otherwise a tutor
+    // fixing several slides would accumulate recordings indefinitely.
+    if (updates.audio_path && hasServiceRoleConfig()) {
+      await pruneSimVersionAudio(createServiceClient(), lessonId, row.audio_path);
+    }
+
     const audioUrl = await signAudioUrl(lessonId, row.audio_path);
     const payload: SimPayload = { sim: row, audio_url: audioUrl };
     return NextResponse.json(payload);
