@@ -17,9 +17,9 @@ const CheckIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
   </svg>
 );
-const XIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+const HeartIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 21s-6.7-4.18-9.24-7.33C.52 10.9 1.08 6.79 4.22 5.25 6.08 4.34 8.33 4.76 9.82 6.2L12 8.29l2.18-2.09c1.49-1.44 3.74-1.86 5.6-.95 3.14 1.54 3.7 5.65 1.46 8.42C18.7 16.82 12 21 12 21z" />
   </svg>
 );
 
@@ -48,7 +48,7 @@ export default function HomeworkProgressBar({
           const done = status === 'answered' || correct;
 
           const circle = incorrect
-            ? 'bg-red-500 border-red-600 text-white'
+            ? 'bg-amber-400 border-amber-500 text-white'
             : correct || done
               ? 'bg-emerald-500 border-emerald-600 text-white'
               : isCurrent
@@ -79,7 +79,7 @@ export default function HomeworkProgressBar({
                     isCurrent ? 'ring-4 ring-emerald-500/20 scale-110' : ''
                   }`}
                 >
-                  {correct ? <CheckIcon /> : incorrect ? <XIcon /> : idx + 1}
+                  {correct ? <CheckIcon /> : incorrect ? <HeartIcon /> : idx + 1}
                 </button>
               </div>
             </Fragment>

@@ -6,6 +6,10 @@ import {
 } from "../../src/lib/server/slide-deck-generator";
 import type { SlideGenerationContext } from "../../src/lib/slides-generation";
 
+function logSlideJob(level: "log" | "warn" | "error", message: string, details: Record<string, unknown> = {}) {
+  console[level](JSON.stringify({ message, ...details }));
+}
+
 export async function handler(event: {
   headers: Record<string, string | undefined>;
   body: string | null;
@@ -22,7 +26,9 @@ export async function handler(event: {
   try {
     payload = event.body ? (JSON.parse(event.body) as Record<string, unknown>) : null;
   } catch (error) {
-    console.error("Background slide generation received invalid JSON:", error);
+    logSlideJob("error", "Background slide generation received invalid JSON", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return {
       statusCode: 400,
       body: JSON.stringify({ error: "Invalid background generation payload" }),
@@ -32,10 +38,11 @@ export async function handler(event: {
   const requestSecret =
     event.headers["x-slide-job-secret"] ||
     event.headers["X-Slide-Job-Secret"] ||
-    (typeof payload?.internalSecret === "string" ? payload.internalSecret : "");
+    (typeof payload?.internalSecret === "string" ? payload.internalSecret : "") ||
+    "";
   const accessToken = typeof payload?.accessToken === "string" ? payload.accessToken : "";
 
-  console.log("Background slide generation invoked", {
+  logSlideJob("log", "Background slide generation invoked", {
     hasServiceRoleKey: Boolean(serviceRoleKey),
     hasPublishableKey: Boolean(publishableKey),
     hasRequestSecret: Boolean(requestSecret),
@@ -56,10 +63,10 @@ export async function handler(event: {
   let authenticatedUserId: string | null = null;
 
   if (usesInternalSecret) {
-    console.log("Background slide generation authenticated via internal secret");
+      logSlideJob("log", "Background slide generation authenticated via internal secret");
   } else {
     if (!publishableKey || !accessToken) {
-      console.error("Background slide generation missing auth token", {
+      logSlideJob("error", "Background slide generation missing auth token", {
         hasPublishableKey: Boolean(publishableKey),
         hasAccessToken: Boolean(accessToken),
         headerKeys: Object.keys(event.headers || {}),
@@ -84,7 +91,9 @@ export async function handler(event: {
     } = await authClient.auth.getUser(accessToken);
 
     if (authError || !user) {
-      console.error("Background slide generation access token verification failed", authError);
+      logSlideJob("error", "Background slide generation access token verification failed", {
+        error: authError?.message ?? null,
+      });
       return {
         statusCode: 401,
         body: JSON.stringify({ error: "Unauthorized" }),
@@ -92,13 +101,13 @@ export async function handler(event: {
     }
 
     authenticatedUserId = user.id;
-    console.log("Background slide generation authenticated via access token", {
+    logSlideJob("log", "Background slide generation authenticated via access token", {
       userId: authenticatedUserId,
     });
   }
 
   if (!requestSecret && !accessToken) {
-    console.error("Background slide generation unauthorized", {
+    logSlideJob("error", "Background slide generation unauthorized", {
       hasServiceRoleKey: Boolean(serviceRoleKey),
       hasRequestSecret: Boolean(requestSecret),
       hasAccessToken: Boolean(accessToken),
@@ -128,7 +137,7 @@ export async function handler(event: {
       : null;
 
   if (!lessonId || !userId || slideCount == null) {
-    console.error("Background slide generation missing payload fields", {
+    logSlideJob("error", "Background slide generation missing payload fields", {
       lessonId,
       userId,
       slideCount,
@@ -141,7 +150,7 @@ export async function handler(event: {
   }
 
   if (authenticatedUserId && authenticatedUserId !== userId) {
-    console.error("Background slide generation user mismatch", {
+    logSlideJob("error", "Background slide generation user mismatch", {
       authenticatedUserId,
       userId,
     });
@@ -160,11 +169,12 @@ export async function handler(event: {
   );
 
   try {
-    console.log("Background slide generation started", {
+    logSlideJob("log", "Background slide generation started", {
       lessonId,
       userId,
       slideCount,
       languageMode,
+      queuedAt: typeof payload?.queuedAt === "string" ? payload.queuedAt : null,
     });
 
     // Skip speaker notes — they'll be enriched by a follow-up request
@@ -179,7 +189,7 @@ export async function handler(event: {
       skipSpeakerNotes: true,
     });
 
-    console.log("Background slide generation completed", {
+    logSlideJob("log", "Background slide generation completed", {
       lessonId,
       userId,
       slideCount,
@@ -191,7 +201,15 @@ export async function handler(event: {
       body: JSON.stringify({ queued: true }),
     };
   } catch (error) {
-    console.error("Background slide generation failed:", error);
+    logSlideJob("error", "Background slide generation failed", {
+      lessonId,
+      userId,
+      slideCount,
+      languageMode,
+      error: error instanceof Error ? error.message : String(error),
+      errorName: error instanceof Error ? error.name : null,
+      status: error instanceof SlideGenerationError ? error.status : null,
+    });
 
     if (error instanceof SlideGenerationError) {
       return {

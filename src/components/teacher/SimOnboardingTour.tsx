@@ -202,7 +202,7 @@ const ALL_STEPS: TourStep[] = [
     target: '[data-tour="sim-tab"]',
     title: 'Review Your Sim',
     content:
-      'After saving, your recorded sim appears in this tab. You can play it back and generate homework questions from the lesson content.',
+      'After saving, your recorded sim appears in this tab. You can play it back and generate practice questions from the lesson content.',
     placement: 'bottom',
     skipBeacon: true,
     data: { segment: 'post-recording' },

@@ -456,6 +456,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
   const saveAttemptIdRef = useRef<string | null>(null);
   const saveAttemptOpenedRef = useRef(false);
   const saveAttemptTerminalRef = useRef(false);
+  const saveAttemptTelemetryDisabledRef = useRef(false);
 
   const isReadOnly = props.mode === 'view';
 
@@ -533,19 +534,27 @@ export default function SimReviewModal(props: SimReviewModalProps) {
       extras: SimSaveAttemptExtras = {},
       options: { keepalive?: boolean } = {}
     ) => {
-      if (props.mode !== 'record-review') return;
+      if (props.mode !== 'record-review' || saveAttemptTelemetryDisabledRef.current) return;
       const body = buildSaveAttemptBody(status, extras);
       if (!body) return;
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 1500);
       try {
-        await fetch(`/api/teacher/lessons/${props.lessonId}/sims/save-attempts`, {
+        const response = await fetch(`/api/teacher/lessons/${props.lessonId}/sims/save-attempts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           keepalive: options.keepalive,
+          signal: controller.signal,
           body: JSON.stringify(body),
         });
-      } catch (error) {
-        console.warn('Failed to track sim save attempt:', error);
+        if (!response.ok && response.status >= 500) {
+          saveAttemptTelemetryDisabledRef.current = true;
+        }
+      } catch {
+        saveAttemptTelemetryDisabledRef.current = true;
+      } finally {
+        window.clearTimeout(timeout);
       }
     },
     [props, buildSaveAttemptBody]
@@ -553,7 +562,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
 
   const sendSaveAttemptBeacon = useCallback(
     (status: SimSaveAttemptStatus, extras: SimSaveAttemptExtras = {}) => {
-      if (props.mode !== 'record-review') return;
+      if (props.mode !== 'record-review' || saveAttemptTelemetryDisabledRef.current) return;
       const body = buildSaveAttemptBody(status, extras);
       if (!body) return;
       const json = JSON.stringify(body);
@@ -568,7 +577,15 @@ export default function SimReviewModal(props: SimReviewModalProps) {
         credentials: 'include',
         keepalive: true,
         body: json,
-      }).catch(() => {});
+      })
+        .then((response) => {
+          if (!response.ok && response.status >= 500) {
+            saveAttemptTelemetryDisabledRef.current = true;
+          }
+        })
+        .catch(() => {
+          saveAttemptTelemetryDisabledRef.current = true;
+        });
     },
     [props, buildSaveAttemptBody]
   );
@@ -678,7 +695,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
       await trackSaveAttempt('audio_upload_preparing', {
         events_count: compactEventCount,
         error_details: buildAttemptDetails(saveDiagnostics, {
-          audio_validation_strategy: 'server_probe',
+          audio_validation_strategy: 'object_exists',
         }),
       });
       const prepareRes = await fetchWithRetry(

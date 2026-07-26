@@ -30,7 +30,7 @@ export function LanguageSelector() {
 
           {/* Title - Both languages */}
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            مرحباً بكم في مدرسة أمل
+            مرحباً بكم في مدرسة آمال
           </h1>
           <p className="text-lg text-gray-600 mb-8">
             Welcome to Amal School

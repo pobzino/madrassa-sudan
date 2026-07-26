@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { OwlExcited } from "@/components/illustrations";
+import DownloadButton from "@/components/lessons/DownloadButton";
+import LessonComputerDownloadButton from "@/components/lessons/LessonComputerDownloadButton";
 import type {
   SubjectLearningPath,
   TreeWeek,
@@ -334,13 +336,30 @@ export default function LearningPathTree({
                 </p>
                 {label.sub && <p className="text-[10px] font-medium text-amber-500">{label.sub}</p>}
                 {isSelected && href && (
-                  <Link
-                    href={href}
-                    className="mt-1.5 inline-block px-3.5 py-1 rounded-full bg-[#007229] text-white text-[11px] font-bold font-fredoka shadow-sm hover:bg-[#005C22] transition-colors animate-pop-in"
+                  <div
+                    className="mt-1.5 inline-flex items-center justify-center gap-1.5 animate-pop-in"
                     style={{ textShadow: "none" }}
                   >
-                    {ctaFor(node)}
-                  </Link>
+                    <Link
+                      href={href}
+                      className="inline-block px-3.5 py-1 rounded-full bg-[#007229] text-white text-[11px] font-bold font-fredoka shadow-sm hover:bg-[#005C22] transition-colors"
+                    >
+                      {ctaFor(node)}
+                    </Link>
+                    {node.kind === "lesson" && (
+                      <>
+                        <LessonComputerDownloadButton
+                          lessonId={node.step.lessonId}
+                          title={node.step.title}
+                          videoUrl={node.step.videoUrl}
+                          language={language}
+                          iconOnly
+                          className="w-8 h-8 rounded-full bg-white text-gray-600 hover:text-[#007229] shadow-sm flex items-center justify-center transition-colors"
+                        />
+                        <DownloadButton lessonId={node.step.lessonId} size="sm" className="shadow-sm" />
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

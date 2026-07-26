@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { OwlThinking, OwlStreak } from "@/components/illustrations";
 import { MeadowBackdrop, StudyOwl } from "@/components/dashboard/DashboardScenes";
@@ -13,13 +12,13 @@ import { getCachedUser } from "@/lib/supabase/auth-cache";
 
 const translations = {
   ar: {
-    homework: "الواجبات",
+    homework: "التدريب",
     all: "الكل",
     pending: "قيد الانتظار",
     submitted: "مُرسل",
     graded: "مُصحح",
-    noHomework: "لا توجد واجبات",
-    noHomeworkDesc: "عندما يعطيك معلمك واجبات، ستظهر هنا",
+    noHomework: "لا يوجد تدريب",
+    noHomeworkDesc: "عندما يضيف معلمك تدريباً، سيظهر هنا",
     back: "العودة",
     subject: "المادة",
     allSubjects: "جميع المواد",
@@ -28,13 +27,13 @@ const translations = {
     streakKeepGoing: "استمر!",
   },
   en: {
-    homework: "Homework",
+    homework: "Practice",
     all: "All",
     pending: "Pending",
     submitted: "Submitted",
     graded: "Graded",
-    noHomework: "No homework",
-    noHomeworkDesc: "When your teacher assigns homework, it will appear here",
+    noHomework: "No practice yet",
+    noHomeworkDesc: "When your teacher assigns practice, it will appear here",
     back: "Back",
     subject: "Subject",
     allSubjects: "All Subjects",

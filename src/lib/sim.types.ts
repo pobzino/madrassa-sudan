@@ -12,7 +12,7 @@
  */
 
 import type { Slide } from '@/lib/slides.types';
-import type { WhiteboardTool, Point } from '@/hooks/useWhiteboard';
+import type { WhiteboardTool, Point, Stroke } from '@/hooks/useWhiteboard';
 import type { InteractionAnswer } from '@/lib/interactions/types';
 import type { ExplorationWidgetType, ExplorationWidgetConfig } from '@/lib/explorations/types';
 
@@ -478,6 +478,27 @@ export function applySimEvent(
 /** Build a fresh empty surface for the given deck. */
 export function createInitialSimSurface(deck: Slide[]): SimSurfaceState {
   return initialSurface(deck);
+}
+
+/**
+ * Map a projected SimStroke to the whiteboard renderer's Stroke shape so it
+ * can be drawn with `renderStrokeToCtx`. Shared by SimPlayer's overlay and
+ * the video exporters.
+ */
+export function simStrokeToStroke(stroke: SimStroke): Stroke {
+  return {
+    id: stroke.id,
+    tool: stroke.tool,
+    color: stroke.color,
+    width: stroke.width,
+    points: stroke.points,
+    start: stroke.start,
+    end: stroke.end,
+    text: stroke.text,
+    position: stroke.position,
+    fontSize: stroke.font_size,
+    emoji: stroke.emoji,
+  };
 }
 
 // ── Payload optimization ─────────────────────────────────────────────────────

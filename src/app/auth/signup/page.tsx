@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { UserRole } from "@/lib/database.types";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { GraduationCapIcon, TeacherIcon } from "@/components/illustrations";
 import { getAuthCallbackUrl } from "@/lib/site-url";
 
 // Icons for role selection
@@ -36,15 +35,50 @@ const RoleIcons = {
 const translations = {
   ar: {
     createAccount: "إنشاء حساب",
-    joinSubtitle: "انضم إلى مدرسة أمل اليوم",
+    joinSubtitle: "انضم إلى مدرسة آمال اليوم",
     fullNameLabel: "الاسم الكامل",
     fullNamePlaceholder: "أحمد محمد",
     emailLabel: "البريد الإلكتروني",
+    emailLoginHint: "يُستخدم لتسجيل الدخول وتأكيد الحساب. الواتساب هو جهة التواصل الأساسية.",
     passwordLabel: "كلمة المرور",
     iAmA: "أنا...",
     student: "طالب",
-    teacher: "معلم",
+    teacher: "معلم / متطوع",
     parent: "ولي أمر",
+    parentDetailsTitle: "معلومات ولي الأمر",
+    programmeTitle: "معلومات البرنامج",
+    programmeDesc: "يغطي البرنامج الرياضيات واللغة الإنجليزية. يتعلم الأطفال عبر الموقع وحصص زوم عند الحاجة، باستخدام هاتف إن لم يتوفر جهاز آخر.",
+    parentProfessionLabel: "المهنة / العمل",
+    professionPlaceholder: "مثال: معلم، ممرض، عمل حر",
+    whatsappLabel: "رقم الواتساب (جهة التواصل الأساسية)",
+    whatsappPlaceholder: "+249...",
+    eligibilityTitle: "أسئلة الأهلية",
+    sudaneseDescentLabel: "هل أنت من أصل سوداني؟",
+    affectedByWarLabel: "هل تأثر طفلك بالحرب في السودان؟",
+    missedSchoolingLabel: "هل فات طفلك تعليم كثير؟",
+    outOfSchoolLabel: "هل كان طفلك خارج المدرسة؟ اذكر المدة أو الظروف",
+    outOfSchoolPlaceholder: "مثال: خارج المدرسة منذ ٦ أشهر بسبب النزوح",
+    childrenLabel: "عدد الأطفال المؤهلين وأعمارهم",
+    childrenPlaceholder: "مثال: طفلان، ٦ و٩ سنوات",
+    accessLabel: "هل يستطيع الطفل استخدام الموقع أو حصص زوم؟",
+    accessPlaceholder: "مثال: نعم، عبر هاتف ولي الأمر",
+    teacherDetailsTitle: "معلومات المعلم / المتطوع",
+    locationLabel: "الموقع (المدينة / الدولة)",
+    educationLabel: "الخلفية التعليمية",
+    educationPlaceholder: "المؤهل، الخبرة، المواد التي تعرفها",
+    involvementLabel: "كيف تريد المساعدة؟",
+    hoursLabel: "كم ساعة تقريباً في الأسبوع؟",
+    hoursPlaceholder: "مثال: ٣-٥ ساعات",
+    volunteerInfoDesc: "نستخدم هذه المعلومات لتوجيهك إلى التدريس، التقنية، المحتوى، العمليات، أو التواصل.",
+    yes: "نعم",
+    no: "لا",
+    unsure: "لست متأكداً",
+    involvementTeaching: "التدريس",
+    involvementTech: "التقنية والمنصة",
+    involvementContent: "المحتوى والفيديو",
+    involvementOps: "العمليات",
+    involvementOutreach: "التواصل",
+    involvementOther: "أخرى",
     createAccountBtn: "إنشاء حساب",
     creatingAccount: "جاري إنشاء الحساب...",
     consentLabel: "أوافق على",
@@ -67,11 +101,46 @@ const translations = {
     fullNameLabel: "Full Name",
     fullNamePlaceholder: "Ahmed Mohamed",
     emailLabel: "Email Address",
+    emailLoginHint: "Used for login and verification. WhatsApp remains the primary contact channel.",
     passwordLabel: "Password",
     iAmA: "I am a...",
     student: "Student",
-    teacher: "Teacher",
+    teacher: "Teacher / Volunteer",
     parent: "Parent",
+    parentDetailsTitle: "Parent information",
+    programmeTitle: "Programme information",
+    programmeDesc: "The programme covers Maths and English. Children learn through the website and Zoom lessons where needed, using a phone if that is the device available.",
+    parentProfessionLabel: "Profession / occupation",
+    professionPlaceholder: "e.g. teacher, nurse, self-employed",
+    whatsappLabel: "WhatsApp number (primary contact)",
+    whatsappPlaceholder: "+249...",
+    eligibilityTitle: "Eligibility questions",
+    sudaneseDescentLabel: "Are you of Sudanese descent?",
+    affectedByWarLabel: "Has your child been affected by the war in Sudan?",
+    missedSchoolingLabel: "Has your child missed significant schooling?",
+    outOfSchoolLabel: "Has your child been out of school? Duration / circumstances",
+    outOfSchoolPlaceholder: "e.g. out of school for 6 months because of displacement",
+    childrenLabel: "Number of eligible children and their ages",
+    childrenPlaceholder: "e.g. 2 children, ages 6 and 9",
+    accessLabel: "Can your child access the website or Zoom lessons?",
+    accessPlaceholder: "e.g. Yes, using a parent's phone",
+    teacherDetailsTitle: "Teacher / volunteer information",
+    locationLabel: "Location (city / country)",
+    educationLabel: "Educational background",
+    educationPlaceholder: "Qualifications, experience, subjects you know",
+    involvementLabel: "Where would you like to help?",
+    hoursLabel: "Roughly how many hours per week?",
+    hoursPlaceholder: "e.g. 3-5 hours",
+    volunteerInfoDesc: "We use this to route you into teaching, tech, content, operations, or outreach.",
+    yes: "Yes",
+    no: "No",
+    unsure: "Unsure",
+    involvementTeaching: "Teaching",
+    involvementTech: "Tech & platform",
+    involvementContent: "Content & video",
+    involvementOps: "Operations",
+    involvementOutreach: "Outreach",
+    involvementOther: "Other",
     createAccountBtn: "Create Account",
     creatingAccount: "Creating account...",
     consentLabel: "I agree to the",
@@ -90,11 +159,23 @@ const translations = {
   },
 };
 
+type YesNoAnswer = "" | "yes" | "no" | "unsure";
+type InvolvementArea = "teaching" | "tech_platform" | "content_video" | "operations" | "outreach" | "other";
+
+function getInitialSignupRole(): UserRole {
+  if (typeof window === "undefined") {
+    return "student";
+  }
+
+  const requestedRole = new URLSearchParams(window.location.search).get("role");
+  return requestedRole === "teacher" || requestedRole === "parent" ? requestedRole : "student";
+}
+
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<UserRole>("student");
+  const [role, setRole] = useState<UserRole>(() => getInitialSignupRole());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -102,9 +183,22 @@ export default function SignupPage() {
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
   const [consentGiven, setConsentGiven] = useState(false);
+  const [parentProfession, setParentProfession] = useState("");
+  const [parentWhatsapp, setParentWhatsapp] = useState("");
+  const [sudaneseDescent, setSudaneseDescent] = useState<YesNoAnswer>("");
+  const [affectedByWar, setAffectedByWar] = useState<YesNoAnswer>("");
+  const [missedSchooling, setMissedSchooling] = useState<YesNoAnswer>("");
+  const [outOfSchoolDetails, setOutOfSchoolDetails] = useState("");
+  const [eligibleChildren, setEligibleChildren] = useState("");
+  const [accessLogistics, setAccessLogistics] = useState("");
+  const [teacherWhatsapp, setTeacherWhatsapp] = useState("");
+  const [teacherLocation, setTeacherLocation] = useState("");
+  const [educationalBackground, setEducationalBackground] = useState("");
+  const [involvementAreas, setInvolvementAreas] = useState<InvolvementArea[]>([]);
+  const [weeklyHours, setWeeklyHours] = useState("");
   const router = useRouter();
   const supabase = createClient();
-  const { language, isRtl } = useLanguage();
+  const { language } = useLanguage();
   const t = translations[language];
 
   const roleOptions = [
@@ -112,6 +206,29 @@ export default function SignupPage() {
     { id: "teacher" as UserRole, label: t.teacher, icon: RoleIcons.teacher },
     { id: "parent" as UserRole, label: t.parent, icon: RoleIcons.parent },
   ];
+
+  const yesNoOptions: Array<{ value: Exclude<YesNoAnswer, "">; label: string }> = [
+    { value: "yes", label: t.yes },
+    { value: "no", label: t.no },
+    { value: "unsure", label: t.unsure },
+  ];
+
+  const involvementOptions: Array<{ value: InvolvementArea; label: string }> = [
+    { value: "teaching", label: t.involvementTeaching },
+    { value: "tech_platform", label: t.involvementTech },
+    { value: "content_video", label: t.involvementContent },
+    { value: "operations", label: t.involvementOps },
+    { value: "outreach", label: t.involvementOutreach },
+    { value: "other", label: t.involvementOther },
+  ];
+
+  const toggleInvolvementArea = (area: InvolvementArea) => {
+    setInvolvementAreas((prev) =>
+      prev.includes(area)
+        ? prev.filter((item) => item !== area)
+        : [...prev, area]
+    );
+  };
 
   const getRedirectUrl = () => (
     typeof window !== "undefined"
@@ -126,14 +243,59 @@ export default function SignupPage() {
     setResendError(null);
     setResendMessage(null);
 
-    const { error } = await supabase.auth.signUp({
-      email,
+    if (role === "teacher" && involvementAreas.length === 0) {
+      setError(
+        language === "ar"
+          ? "اختر مجالاً واحداً على الأقل للمساعدة."
+          : "Choose at least one area where you would like to help."
+      );
+      setLoading(false);
+      return;
+    }
+
+    const parentDetails =
+      role === "parent"
+        ? {
+            profession: parentProfession.trim(),
+            whatsapp_number: parentWhatsapp.trim(),
+            eligibility: {
+              sudanese_descent: sudaneseDescent,
+              child_affected_by_war: affectedByWar,
+              child_missed_significant_schooling: missedSchooling,
+              out_of_school_details: outOfSchoolDetails.trim(),
+            },
+            eligible_children: eligibleChildren.trim(),
+            access_logistics: accessLogistics.trim(),
+            programme_acknowledged: true,
+          }
+        : null;
+
+    const teacherDetails =
+      role === "teacher"
+        ? {
+            whatsapp_number: teacherWhatsapp.trim(),
+            location: teacherLocation.trim(),
+            educational_background: educationalBackground.trim(),
+            involvement_areas: involvementAreas,
+            weekly_hours: weeklyHours.trim(),
+          }
+        : null;
+
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
       password,
       options: {
         emailRedirectTo: getRedirectUrl(),
         data: {
           full_name: fullName,
           role: role,
+          preferred_language: language,
+          phone: role === "parent" ? parentWhatsapp.trim() : role === "teacher" ? teacherWhatsapp.trim() : null,
+          signup_details: {
+            role,
+            parent: parentDetails,
+            teacher_volunteer: teacherDetails,
+          },
           consent_given_at: new Date().toISOString(),
         },
       },
@@ -142,6 +304,10 @@ export default function SignupPage() {
     if (error) {
       setError(error.message);
       setLoading(false);
+    } else if (data.session) {
+      // Email confirmation is disabled — user is signed in immediately.
+      router.push("/dashboard");
+      router.refresh();
     } else {
       setSuccess(true);
     }
@@ -215,7 +381,7 @@ export default function SignupPage() {
       {/* Grid Background */}
       <div className="absolute inset-0 grid-pattern opacity-60 pointer-events-none" />
 
-      <div className="max-w-md w-full mx-4 bg-white rounded-3xl shadow-xl border border-gray-100 p-8 sm:p-12 relative z-10 animate-fade-up">
+      <div className="max-w-2xl w-full mx-4 bg-white rounded-3xl shadow-xl border border-gray-100 p-8 sm:p-12 relative z-10 animate-fade-up">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">{t.createAccount}</h1>
           <p className="text-gray-500">{t.joinSubtitle}</p>
@@ -263,6 +429,9 @@ export default function SignupPage() {
                 dir="ltr"
                 style={{ textAlign: "left" }}
               />
+              {(role === "parent" || role === "teacher") && (
+                <p className="mt-1.5 text-xs text-gray-500">{t.emailLoginHint}</p>
+              )}
             </div>
 
             <div>
@@ -307,6 +476,213 @@ export default function SignupPage() {
                 ))}
               </div>
             </div>
+
+            {role === "parent" && (
+              <div className="space-y-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+                <div>
+                  <h2 className="text-sm font-bold text-gray-900">{t.parentDetailsTitle}</h2>
+                  <p className="mt-1 text-xs leading-relaxed text-emerald-800">{t.programmeDesc}</p>
+                </div>
+
+                <div>
+                  <label htmlFor="parentProfession" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    {t.parentProfessionLabel}
+                  </label>
+                  <input
+                    id="parentProfession"
+                    type="text"
+                    value={parentProfession}
+                    onChange={(e) => setParentProfession(e.target.value)}
+                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                    placeholder={t.professionPlaceholder}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="parentWhatsapp" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    {t.whatsappLabel}
+                  </label>
+                  <input
+                    id="parentWhatsapp"
+                    type="tel"
+                    required
+                    value={parentWhatsapp}
+                    onChange={(e) => setParentWhatsapp(e.target.value)}
+                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                    placeholder={t.whatsappPlaceholder}
+                    dir="ltr"
+                    style={{ textAlign: "left" }}
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-gray-900">{t.eligibilityTitle}</h3>
+                  {[
+                    { id: "sudaneseDescent", label: t.sudaneseDescentLabel, value: sudaneseDescent, setter: setSudaneseDescent },
+                    { id: "affectedByWar", label: t.affectedByWarLabel, value: affectedByWar, setter: setAffectedByWar },
+                    { id: "missedSchooling", label: t.missedSchoolingLabel, value: missedSchooling, setter: setMissedSchooling },
+                  ].map((field) => (
+                    <label key={field.id} htmlFor={field.id} className="block">
+                      <span className="block text-sm font-semibold text-gray-700 mb-1.5">{field.label}</span>
+                      <select
+                        id={field.id}
+                        required
+                        value={field.value}
+                        onChange={(e) => field.setter(e.target.value as YesNoAnswer)}
+                        className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                      >
+                        <option value="">{language === "ar" ? "اختر" : "Select"}</option>
+                        {yesNoOptions.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+
+                <div>
+                  <label htmlFor="outOfSchoolDetails" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    {t.outOfSchoolLabel}
+                  </label>
+                  <textarea
+                    id="outOfSchoolDetails"
+                    rows={3}
+                    value={outOfSchoolDetails}
+                    onChange={(e) => setOutOfSchoolDetails(e.target.value)}
+                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all resize-none"
+                    placeholder={t.outOfSchoolPlaceholder}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="eligibleChildren" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    {t.childrenLabel}
+                  </label>
+                  <input
+                    id="eligibleChildren"
+                    type="text"
+                    required
+                    value={eligibleChildren}
+                    onChange={(e) => setEligibleChildren(e.target.value)}
+                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                    placeholder={t.childrenPlaceholder}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="accessLogistics" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    {t.accessLabel}
+                  </label>
+                  <textarea
+                    id="accessLogistics"
+                    rows={3}
+                    required
+                    value={accessLogistics}
+                    onChange={(e) => setAccessLogistics(e.target.value)}
+                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all resize-none"
+                    placeholder={t.accessPlaceholder}
+                  />
+                </div>
+              </div>
+            )}
+
+            {role === "teacher" && (
+              <div className="space-y-4 rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
+                <div>
+                  <h2 className="text-sm font-bold text-gray-900">{t.teacherDetailsTitle}</h2>
+                  <p className="mt-1 text-xs leading-relaxed text-blue-800">{t.volunteerInfoDesc}</p>
+                </div>
+
+                <div>
+                  <label htmlFor="teacherWhatsapp" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    {t.whatsappLabel}
+                  </label>
+                  <input
+                    id="teacherWhatsapp"
+                    type="tel"
+                    required
+                    value={teacherWhatsapp}
+                    onChange={(e) => setTeacherWhatsapp(e.target.value)}
+                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                    placeholder={t.whatsappPlaceholder}
+                    dir="ltr"
+                    style={{ textAlign: "left" }}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="teacherLocation" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    {t.locationLabel}
+                  </label>
+                  <input
+                    id="teacherLocation"
+                    type="text"
+                    required
+                    value={teacherLocation}
+                    onChange={(e) => setTeacherLocation(e.target.value)}
+                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                    placeholder={language === "ar" ? "القاهرة، مصر" : "Cairo, Egypt"}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="educationalBackground" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    {t.educationLabel}
+                  </label>
+                  <textarea
+                    id="educationalBackground"
+                    rows={3}
+                    required
+                    value={educationalBackground}
+                    onChange={(e) => setEducationalBackground(e.target.value)}
+                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all resize-none"
+                    placeholder={t.educationPlaceholder}
+                  />
+                </div>
+
+                <div>
+                  <span className="block text-sm font-semibold text-gray-700 mb-2">{t.involvementLabel}</span>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {involvementOptions.map((option) => {
+                      const checked = involvementAreas.includes(option.value);
+                      return (
+                        <label
+                          key={option.value}
+                          className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+                            checked
+                              ? "border-[var(--primary)] bg-emerald-50 text-[var(--primary)]"
+                              : "border-gray-200 bg-white text-gray-700"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleInvolvementArea(option.value)}
+                            className="h-4 w-4 rounded border-gray-300 accent-[var(--primary)]"
+                          />
+                          {option.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="weeklyHours" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    {t.hoursLabel}
+                  </label>
+                  <input
+                    id="weeklyHours"
+                    type="text"
+                    required
+                    value={weeklyHours}
+                    onChange={(e) => setWeeklyHours(e.target.value)}
+                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                    placeholder={t.hoursPlaceholder}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Consent Checkbox */}

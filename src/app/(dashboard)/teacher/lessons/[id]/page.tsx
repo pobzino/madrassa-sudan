@@ -1076,7 +1076,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
   );
 }
 
-/* ─── Generate Homework Button ─── */
+/* ─── Generate Practice Button ─── */
 
 function GenerateHomeworkButton({ lessonId, subjectId }: { lessonId: string; subjectId: string }) {
   const router = useRouter();
@@ -1118,7 +1118,7 @@ function GenerateHomeworkButton({ lessonId, subjectId }: { lessonId: string; sub
       router.push(`/teacher/homework/create?lesson=${lessonId}&prefill=1`);
     } catch (err) {
       console.error("generate-homework error:", err);
-      setError("Failed to generate homework. Please try again.");
+      setError("Failed to generate practice. Please try again.");
     } finally {
       setGenerating(false);
     }
@@ -1127,9 +1127,9 @@ function GenerateHomeworkButton({ lessonId, subjectId }: { lessonId: string; sub
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between">
       <div>
-        <p className="text-sm font-medium text-gray-900">Generate Homework</p>
+        <p className="text-sm font-medium text-gray-900">Generate Practice</p>
         <p className="text-xs text-gray-500">
-          Auto-create homework questions from this lesson&apos;s slide content using AI
+          Auto-create practice questions from this lesson&apos;s slide content using AI
         </p>
       </div>
       <div className="flex items-center gap-3">
@@ -1145,7 +1145,7 @@ function GenerateHomeworkButton({ lessonId, subjectId }: { lessonId: string; sub
               Generating...
             </>
           ) : (
-            "Generate Homework"
+            "Generate Practice"
           )}
         </button>
       </div>

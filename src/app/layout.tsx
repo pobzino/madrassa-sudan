@@ -4,6 +4,7 @@ import "./globals.css";
 import { LanguageWrapper } from "@/components/LanguageWrapper";
 import { getSiteUrl } from "@/lib/site-url";
 import { Toaster } from "sonner";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -34,7 +35,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
-  title: "مدرسة أمل | Amal School",
+  title: "مدرسة آمال | Amal School",
   description: "AI-powered online learning platform providing educational continuity for Sudanese children affected by conflict. Access quality education anywhere, anytime.",
   keywords: ["Sudan", "education", "online learning", "AI tutor", "refugee education", "Arabic", "children"],
   manifest: "/manifest.json",
@@ -47,7 +48,7 @@ export const metadata: Metadata = {
     "mobile-web-app-capable": "yes",
   },
   openGraph: {
-    title: "مدرسة أمل | Amal School",
+    title: "مدرسة آمال | Amal School",
     description: "Quality education for every Sudanese child, anywhere in the world.",
     type: "website",
     siteName: "Amal School",
@@ -55,7 +56,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "مدرسة أمل | Amal School",
+    title: "مدرسة آمال | Amal School",
     description: "Quality education for every Sudanese child, anywhere in the world.",
   },
 };
@@ -73,11 +74,7 @@ export default function RootLayout({
           {children}
         </LanguageWrapper>
         <Toaster position="top-center" richColors closeButton />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(regs){regs.forEach(function(r){r.unregister()})});caches.keys().then(function(k){k.forEach(function(n){caches.delete(n)})})}`,
-          }}
-        />
+        <ServiceWorkerRegister />
       </body>
     </html>
   );

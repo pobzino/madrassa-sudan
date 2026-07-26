@@ -24,8 +24,8 @@ import HomeworkCompletionCard from "@/components/homework/HomeworkCompletionCard
 const translations = {
   ar: {
     loading: "جاري التحميل...",
-    notFound: "الواجب غير موجود",
-    backToHomework: "العودة للواجبات",
+    notFound: "التدريب غير موجود",
+    backToHomework: "العودة للتدريب",
     question: "سؤال",
     of: "من",
     points: "نقطة",
@@ -33,10 +33,10 @@ const translations = {
     optional: "اختياري",
     typeAnswer: "اكتب إجابتك هنا...",
     selectOption: "اختر إجابة",
-    submit: "إرسال الواجب",
+    submit: "إرسال التدريب",
     submitting: "جاري الإرسال...",
     submitted: "تم الإرسال",
-    submittedDesc: "لقد أرسلت هذا الواجب بنجاح",
+    submittedDesc: "لقد أرسلت هذا التدريب بنجاح",
     graded: "تم التصحيح",
     score: "الدرجة",
     weekTest: "اختبار الأسبوع",
@@ -86,8 +86,8 @@ const translations = {
   },
   en: {
     loading: "Loading...",
-    notFound: "Homework not found",
-    backToHomework: "Back to Homework",
+    notFound: "Practice not found",
+    backToHomework: "Back to Practice",
     question: "Question",
     of: "of",
     points: "points",
@@ -95,10 +95,10 @@ const translations = {
     optional: "Optional",
     typeAnswer: "Type your answer here...",
     selectOption: "Select an answer",
-    submit: "Submit Homework",
+    submit: "Submit Practice",
     submitting: "Submitting...",
     submitted: "Submitted",
-    submittedDesc: "You have successfully submitted this homework",
+    submittedDesc: "You have successfully submitted this practice",
     graded: "Graded",
     score: "Score",
     weekTest: "Week Test",
@@ -189,6 +189,7 @@ const Icons = {
 type ResponseMap = { [questionId: string]: string };
 type FileAnswerMap = Record<string, string[]>;
 type FileDisplayMap = Record<string, { ref: string; url: string; name: string }[]>;
+type AnswerFeedbackMap = Record<string, "correct" | "incorrect">;
 
 export default function HomeworkAssignmentPage() {
   const params = useParams();
@@ -228,6 +229,7 @@ export default function HomeworkAssignmentPage() {
   const [streakDays, setStreakDays] = useState(0);
   const [soundMuted, setSoundMuted] = useState(false);
   const [revealedHints, setRevealedHints] = useState<Record<string, number>>({});
+  const [answerFeedback, setAnswerFeedback] = useState<AnswerFeedbackMap>({});
 
   // Initialize mute from localStorage
   useEffect(() => {
@@ -416,10 +418,26 @@ export default function HomeworkAssignmentPage() {
   const handleAnswerChange = (questionId: string, value: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
     answersRef.current = { ...answersRef.current, [questionId]: value };
-    // No instant correctness feedback (sound or banner): revealing right/wrong on
-    // each tap turns homework into a guessing game. Feedback comes after submit.
+
     playTap();
-    setOwlMood('thinking');
+    const question = questions.find((candidate) => candidate.id === questionId);
+    const canCheckNow =
+      question &&
+      !isSubmitted &&
+      (question.question_type === "multiple_choice" || question.question_type === "true_false") &&
+      question.correct_answer != null;
+
+    if (canCheckNow) {
+      const isCorrectNow = value === question.correct_answer;
+      setAnswerFeedback((prev) => ({ ...prev, [questionId]: isCorrectNow ? "correct" : "incorrect" }));
+      setOwlMood(isCorrectNow ? "correct" : "encouraging");
+      if (isCorrectNow) {
+        setShowConfetti(true);
+        window.setTimeout(() => setShowConfetti(false), 900);
+      }
+    } else {
+      setOwlMood('thinking');
+    }
     scheduleDraftSave(questionId);
   };
 
@@ -864,6 +882,9 @@ export default function HomeworkAssignmentPage() {
             if (isGraded && response) {
               return response.points_earned != null && response.points_earned > 0 ? 'correct' : 'incorrect';
             }
+            if (answerFeedback[q.id]) {
+              return answerFeedback[q.id];
+            }
             const hasAnswer = Boolean(answers[q.id]?.trim() || fileAnswers[q.id]?.length);
             return hasAnswer ? 'answered' : 'unanswered';
           })}
@@ -924,25 +945,26 @@ export default function HomeworkAssignmentPage() {
                 <div className="space-y-3">
                   {(currentQ.options as string[]).map((option, idx) => {
                     const isSelected = answers[currentQ.id] === option;
-                    // We never reveal the correct option to students (keeps retries
-                    // from becoming a guessing game). On a graded view we only mark
-                    // the student's OWN choice as right or wrong.
-                    const selectedCorrect = isGraded && isSelected && option === currentQ.correct_answer;
-                    const selectedWrong = isGraded && isSelected && option !== currentQ.correct_answer;
+                    const feedback = answerFeedback[currentQ.id];
+                    const shouldRevealCorrect = Boolean(feedback || isGraded);
+                    const isCorrectOption = option === currentQ.correct_answer;
+                    const selectedCorrect = shouldRevealCorrect && isSelected && isCorrectOption;
+                    const selectedWrong = shouldRevealCorrect && isSelected && !isCorrectOption;
+                    const revealedCorrect = shouldRevealCorrect && !isSelected && isCorrectOption;
                     const letter = String.fromCharCode(65 + idx);
 
                     let cardCls: string;
                     let badgeCls: string;
                     let badge: React.ReactNode = letter;
-                    if (selectedCorrect) {
+                    if (selectedCorrect || revealedCorrect) {
                       cardCls = "bg-emerald-50 border-emerald-500 text-emerald-900";
                       badgeCls = "bg-emerald-500 text-white";
                       badge = Icons.check;
                     } else if (selectedWrong) {
-                      cardCls = "bg-red-50 border-red-500 text-red-900";
-                      badgeCls = "bg-red-500 text-white";
-                      badge = Icons.x;
-                    } else if (isGraded) {
+                      cardCls = "bg-amber-50 border-amber-400 text-amber-900";
+                      badgeCls = "bg-amber-400 text-white";
+                      badge = "↺";
+                    } else if (shouldRevealCorrect) {
                       cardCls = "bg-gray-50 border-gray-200 text-gray-500";
                       badgeCls = "bg-gray-200 text-gray-500";
                     } else if (isSelected) {
@@ -971,6 +993,11 @@ export default function HomeworkAssignmentPage() {
                       </button>
                     );
                   })}
+                  {!isSubmitted && answerFeedback[currentQ.id] === "incorrect" && currentQ.correct_answer && (
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm sm:text-base text-emerald-800 animate-pop-in">
+                      <span className="font-semibold">{t.correctAnswer}:</span> {currentQ.correct_answer}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -981,9 +1008,12 @@ export default function HomeworkAssignmentPage() {
                     { value: "false", label: t.falseLabel },
                   ].map((option) => {
                     const isSelected = answers[currentQ.id] === option.value;
-                    // Mark only the student's own choice; never reveal the answer.
-                    const selectedCorrect = isGraded && isSelected && option.value === currentQ.correct_answer;
-                    const selectedWrong = isGraded && isSelected && option.value !== currentQ.correct_answer;
+                    const feedback = answerFeedback[currentQ.id];
+                    const shouldRevealCorrect = Boolean(feedback || isGraded);
+                    const isCorrectOption = option.value === currentQ.correct_answer;
+                    const selectedCorrect = shouldRevealCorrect && isSelected && isCorrectOption;
+                    const selectedWrong = shouldRevealCorrect && isSelected && !isCorrectOption;
+                    const revealedCorrect = shouldRevealCorrect && !isSelected && isCorrectOption;
 
                     return (
                       <button
@@ -992,11 +1022,15 @@ export default function HomeworkAssignmentPage() {
                         disabled={isSubmitted}
                         className={`w-full p-5 sm:p-7 rounded-2xl border-2 text-center transition-all active:scale-[0.97] ${
                           isGraded
-                            ? selectedCorrect
+                            ? selectedCorrect || revealedCorrect
                               ? "bg-emerald-50 border-emerald-500 text-emerald-900"
                               : selectedWrong
-                                ? "bg-red-50 border-red-500 text-red-900"
+                                ? "bg-amber-50 border-amber-400 text-amber-900"
                                 : "bg-gray-50 border-gray-200 text-gray-500"
+                            : revealedCorrect
+                              ? "bg-emerald-50 border-emerald-500 text-emerald-900"
+                              : selectedWrong
+                                ? "bg-amber-50 border-amber-400 text-amber-900"
                             : isSelected
                               ? "bg-emerald-500 border-emerald-600 text-white shadow-md shadow-emerald-500/30"
                               : "bg-white border-gray-200 text-gray-800 hover:border-emerald-300 hover:bg-emerald-50/40"
@@ -1006,6 +1040,12 @@ export default function HomeworkAssignmentPage() {
                       </button>
                     );
                   })}
+                  {!isSubmitted && answerFeedback[currentQ.id] === "incorrect" && currentQ.correct_answer && (
+                    <div className="col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm sm:text-base text-emerald-800 animate-pop-in">
+                      <span className="font-semibold">{t.correctAnswer}:</span>{" "}
+                      {currentQ.correct_answer === "true" ? t.trueLabel : t.falseLabel}
+                    </div>
+                  )}
                 </div>
               )}
 

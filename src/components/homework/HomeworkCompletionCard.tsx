@@ -43,7 +43,7 @@ const translations = {
     streak: 'يوم متتالي!',
     tryAgain: 'حاول مرة أخرى',
     preparing: 'جاري التحضير…',
-    backToHomework: 'العودة للواجبات',
+    backToHomework: 'العودة للتدريب',
     close: 'إغلاق',
   },
   en: {
@@ -59,7 +59,7 @@ const translations = {
     streak: 'Day Streak!',
     tryAgain: 'Try Again',
     preparing: 'Preparing…',
-    backToHomework: 'Back to Homework',
+    backToHomework: 'Back to Practice',
     close: 'Close',
   },
 };
@@ -81,16 +81,15 @@ export default function HomeworkCompletionCard({
   onClose,
 }: HomeworkCompletionCardProps) {
   const t = translations[language];
+  const displayScore = score ?? totalPoints;
   const [starCount, setStarCount] = useState(0);
   // Celebrate (confetti) only on mastery or when there's nothing left to retry.
   const [showConfetti, setShowConfetti] = useState(isMastered || (isGraded && !canRetry) || !isGraded);
-
-  const displayScore = score ?? totalPoints;
+  const displayedStarCount = displayScore <= 0 ? 0 : starCount;
 
   // Animated star count-up
   useEffect(() => {
     if (displayScore <= 0) {
-      setStarCount(0);
       return;
     }
     const steps = 20;
@@ -159,7 +158,7 @@ export default function HomeworkCompletionCard({
                     <svg className="w-7 h-7 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                     </svg>
-                    <span className="text-3xl font-bold font-fredoka text-gray-900 tabular-nums">{starCount}</span>
+                    <span className="text-3xl font-bold font-fredoka text-gray-900 tabular-nums">{displayedStarCount}</span>
                     <span className="text-lg text-gray-400 font-fredoka">/ {totalPoints}</span>
                   </div>
                   <p className="text-xs text-gray-500">{t.pointsEarned}</p>

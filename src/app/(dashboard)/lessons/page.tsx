@@ -15,6 +15,8 @@ import type { Slide } from "@/lib/slides.types";
 import LearningPathTree from "@/components/learning-path/LearningPathTree";
 import LessonsBackground from "@/components/learning-path/LessonsBackground";
 import { loadSubjectLearningPath, type SubjectLearningPath } from "@/lib/lessons/useLearningPath";
+import DownloadButton from "@/components/lessons/DownloadButton";
+import LessonComputerDownloadButton from "@/components/lessons/LessonComputerDownloadButton";
 
 const translations = {
   ar: {
@@ -438,6 +440,18 @@ function LessonCard({
             </svg>
           </span>
         )}
+
+        <div className={`absolute top-2 z-10 flex items-center gap-1.5 ${isRtl ? "right-2" : "left-2"}`}>
+          <LessonComputerDownloadButton
+            lessonId={lesson.id}
+            title={title}
+            videoUrl={lesson.video_url_720p}
+            language={language}
+            iconOnly
+            className="w-8 h-8 rounded-full bg-white/95 text-gray-600 hover:bg-white hover:text-[#007229] shadow-sm flex items-center justify-center transition-colors"
+          />
+          <DownloadButton lessonId={lesson.id} size="sm" className="shadow-sm" />
+        </div>
 
         {/* Progress bar */}
         {hasProgress && (

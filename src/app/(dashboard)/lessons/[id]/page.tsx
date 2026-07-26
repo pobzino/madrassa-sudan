@@ -15,6 +15,7 @@ import type {
   Subject,
 } from "@/lib/database.types";
 import type { Slide } from "@/lib/slides.types";
+import type { SlideLanguageMode } from "@/lib/slides-generation";
 import type { SimPayload } from "@/lib/sim.types";
 import dynamic from "next/dynamic";
 
@@ -25,6 +26,7 @@ import { Confetti } from "@/components/illustrations";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { getOfflineLesson, getCachedSimAudio, queueProgressUpdate } from "@/lib/offline/db";
 import ProgressGateModal from "@/components/lessons/ProgressGateModal";
+import SimVideoExportButton from "@/components/lessons/SimVideoExportButton";
 import {
   getSlideInteractionStorageKey,
   readStoredSlideInteractionResponses,
@@ -161,6 +163,16 @@ function mapSlideResponsesToStoredState(
   }, {});
 }
 
+function pickLocalizedText(
+  contentLanguage: "ar" | "en",
+  arabicText: string | null | undefined,
+  englishText: string | null | undefined
+) {
+  return contentLanguage === "ar"
+    ? arabicText || englishText || ""
+    : englishText || arabicText || "";
+}
+
 export default function LessonPlayerPage() {
   const params = useParams();
   const lessonId = params.id as string;
@@ -198,7 +210,10 @@ export default function LessonPlayerPage() {
 
   // Slide interaction state (used by SimPlayer for savedResponses)
   const [slideDeck, setSlideDeck] = useState<Slide[]>([]);
+  const [slideLanguageMode, setSlideLanguageMode] = useState<SlideLanguageMode | null>(null);
   const [slideInteractionResponses, setSlideInteractionResponses] = useState<StoredSlideInteractionResponses>({});
+  const lessonContentLanguage =
+    slideLanguageMode === "ar" || slideLanguageMode === "en" ? slideLanguageMode : language;
 
   // Progress gate state
   const [showProgressGate, setShowProgressGate] = useState(false);
@@ -253,6 +268,7 @@ export default function LessonPlayerPage() {
             if (Array.isArray(offlineLesson.slides)) {
               setSlideDeck(offlineLesson.slides as Slide[]);
             }
+            setSlideLanguageMode(null);
 
             setQuestions(offlineLesson.questions as LessonQuestion[]);
             setLoading(false);
@@ -307,6 +323,14 @@ export default function LessonPlayerPage() {
       if (Array.isArray(slidesRes?.slideDeck?.slides)) {
         setSlideDeck(slidesRes.slideDeck.slides as Slide[]);
       }
+      const loadedSlideLanguageMode = slidesRes?.slideDeck?.language_mode;
+      setSlideLanguageMode(
+        loadedSlideLanguageMode === "ar" ||
+          loadedSlideLanguageMode === "en" ||
+          loadedSlideLanguageMode === "both"
+          ? loadedSlideLanguageMode
+          : null
+      );
 
       if (Array.isArray(slideResponsesRes?.responses)) {
         const mappedResponses = mapSlideResponsesToStoredState(
@@ -577,10 +601,12 @@ export default function LessonPlayerPage() {
             </Link>
             <div className="flex-1">
               <h1 className="text-gray-900 font-semibold">
-                {language === "ar" ? lesson.title_ar : lesson.title_en}
+                {pickLocalizedText(lessonContentLanguage, lesson.title_ar, lesson.title_en)}
               </h1>
               <div className="flex items-center gap-2 text-sm text-gray-500">
-                {subject && <span>{language === "ar" ? subject.name_ar : subject.name_en}</span>}
+                {subject && (
+                  <span>{pickLocalizedText(lessonContentLanguage, subject.name_ar, subject.name_en)}</span>
+                )}
                 <span>•</span>
                 <span>{t.grade} {lesson.grade_level}</span>
               </div>
@@ -588,18 +614,29 @@ export default function LessonPlayerPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Download the exported lesson MP4 (teacher-rendered sim, or a
-                legacy full-frame video for pre-sim lessons). Hidden offline —
-                the file lives in Supabase storage. */}
-            {downloadVideoUrl && !isOfflineMode && (
-              <a
-                href={`${downloadVideoUrl}${downloadVideoUrl.includes("?") ? "&" : "?"}download=`}
-                className="flex items-center gap-2 px-3 py-1.5 text-gray-600 border border-gray-200 rounded-xl hover:text-[#007229] hover:border-[#007229]/30 hover:bg-[#007229]/5 transition-colors text-sm font-medium"
-              >
-                {Icons.download}
-                <span>{t.downloadVideo}</span>
-              </a>
-            )}
+            {/* Download the lesson as MP4. Pre-rendered videos (legacy
+                lessons or batch-produced files) download instantly via a
+                direct link; otherwise the sim is rendered to MP4 right in
+                the browser — nothing is stored server-side. Hidden offline:
+                slide images may not be cached locally. */}
+            {!isOfflineMode &&
+              (downloadVideoUrl ? (
+                <a
+                  href={`${downloadVideoUrl}${downloadVideoUrl.includes("?") ? "&" : "?"}download=`}
+                  className="flex items-center gap-2 px-3 py-1.5 text-gray-600 border border-gray-200 rounded-xl hover:text-[#007229] hover:border-[#007229]/30 hover:bg-[#007229]/5 transition-colors text-sm font-medium"
+                >
+                  {Icons.download}
+                  <span>{t.downloadVideo}</span>
+                </a>
+              ) : lessonSim ? (
+                <SimVideoExportButton
+                  getPayload={() => lessonSim}
+                  language={lessonContentLanguage}
+                  label={t.downloadVideo}
+                  filename={pickLocalizedText(lessonContentLanguage, lesson.title_ar, lesson.title_en) || "lesson"}
+                  className="flex items-center gap-2 px-3 py-1.5 text-gray-600 border border-gray-200 rounded-xl hover:text-[#007229] hover:border-[#007229]/30 hover:bg-[#007229]/5 transition-colors text-sm font-medium"
+                />
+              ) : null)}
 
             {/* Completion status */}
             {progress?.completed ? (
@@ -625,7 +662,7 @@ export default function LessonPlayerPage() {
           empty state. */}
       {lessonSim && canAccessSims ? (
         <div className="mx-auto max-w-6xl px-3 py-2">
-          <SimPlayer payload={lessonSim} language={language} lessonId={lessonId} savedResponses={slideInteractionResponses} onProgress={handleSimProgress} />
+          <SimPlayer payload={lessonSim} language={lessonContentLanguage} lessonId={lessonId} savedResponses={slideInteractionResponses} onProgress={handleSimProgress} />
         </div>
       ) : legacyVideoUrl ? (
         <div className="relative bg-black aspect-video max-h-[70vh] mx-auto">
@@ -693,7 +730,7 @@ export default function LessonPlayerPage() {
             {/* Description - right-aligned on desktop */}
             {(lesson.description_ar || lesson.description_en) && (
               <p className="text-sm text-gray-500 sm:ml-auto sm:text-right max-w-md leading-relaxed">
-                {language === "ar" ? lesson.description_ar : lesson.description_en}
+                {pickLocalizedText(lessonContentLanguage, lesson.description_ar, lesson.description_en)}
               </p>
             )}
           </div>
@@ -708,7 +745,7 @@ export default function LessonPlayerPage() {
                 >
                   <span className={`flex-shrink-0 text-gray-400 group-hover:text-gray-600 ${isRtl ? "rotate-180" : ""}`}>{Icons.chevronLeft}</span>
                   <span className="truncate text-sm">
-                    {language === "ar" ? adjacentLessons.prev.title_ar : (adjacentLessons.prev.title_en || adjacentLessons.prev.title_ar)}
+                    {pickLocalizedText(lessonContentLanguage, adjacentLessons.prev.title_ar, adjacentLessons.prev.title_en)}
                   </span>
                 </Link>
               ) : (
@@ -721,7 +758,7 @@ export default function LessonPlayerPage() {
                   className="group flex items-center gap-2 px-4 py-2.5 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-sm min-w-0 max-w-[45%]"
                 >
                   <span className="truncate text-sm">
-                    {language === "ar" ? adjacentLessons.next.title_ar : (adjacentLessons.next.title_en || adjacentLessons.next.title_ar)}
+                    {pickLocalizedText(lessonContentLanguage, adjacentLessons.next.title_ar, adjacentLessons.next.title_en)}
                   </span>
                   <span className={`flex-shrink-0 ${isRtl ? "rotate-180" : ""}`}>{Icons.chevronRight}</span>
                 </Link>

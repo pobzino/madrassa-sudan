@@ -19,7 +19,7 @@ function shouldUseBackgroundGeneration(request: NextRequest) {
 }
 
 type QueueOutcome =
-  | { ok: true }
+  | { ok: true; queuedAt: string }
   | { ok: false; status: number; message: string };
 
 async function queueBackgroundGeneration({
@@ -49,6 +49,7 @@ async function queueBackgroundGeneration({
   }
 
   const backgroundUrl = new URL("/.netlify/functions/generate-slides-background", request.url);
+  const queuedAt = new Date().toISOString();
 
   // Netlify background functions acknowledge with 202 almost instantly.
   // Use a short timeout so we never block the parent route beyond the
@@ -73,6 +74,7 @@ async function queueBackgroundGeneration({
         languageMode,
         generationContext,
         internalSecret,
+        queuedAt,
         accessToken,
       }),
     });
@@ -93,12 +95,12 @@ async function queueBackgroundGeneration({
       };
     }
 
-    return { ok: true };
+    return { ok: true, queuedAt };
   } catch (error) {
     if ((error as Error).name === "AbortError") {
       console.warn("Background slide queue fetch timed out; returning 202 optimistically");
       // Trust that the background worker received the invocation.
-      return { ok: true };
+      return { ok: true, queuedAt };
     }
     console.error("Background slide queue fetch errored:", error);
     return {
@@ -170,7 +172,7 @@ export async function POST(
       });
 
       if (outcome.ok) {
-        return NextResponse.json({ queued: true }, { status: 202 });
+        return NextResponse.json({ queued: true, queued_at: outcome.queuedAt }, { status: 202 });
       }
 
       // Never fall through to inline generation in production — it would

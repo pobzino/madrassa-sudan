@@ -1994,7 +1994,7 @@ export type Database = {
         | "submitted"
         | "graded"
         | "returned"
-      user_role: "student" | "teacher" | "admin"
+      user_role: "student" | "teacher" | "parent" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never

@@ -1,0 +1,54 @@
+<svg width="420" height="120" viewBox="0 0 420 120" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="amal school signature">
+  <defs>
+    <style>
+      .amal-script { font-family: 'Segoe Script', 'Brush Script MT', 'Comic Sans MS', cursive; }
+      .amal-sub { font-family: 'Fredoka', system-ui, sans-serif; letter-spacing: 0.18em; }
+    </style>
+  </defs>
+
+  <!-- Owl mascot (64x64 source, placed left) -->
+  <g transform="translate(8,28) scale(0.95)">
+    <!-- Ear tufts -->
+    <ellipse cx="14" cy="18" rx="5" ry="7" fill="#a01028"/>
+    <ellipse cx="50" cy="18" rx="5" ry="7" fill="#a01028"/>
+    <!-- Main body -->
+    <ellipse cx="32" cy="38" rx="24" ry="24" fill="#D21034"/>
+    <!-- Facial disc -->
+    <ellipse cx="32" cy="34" rx="18" ry="14" fill="#E8334F"/>
+    <!-- Belly -->
+    <ellipse cx="32" cy="52" rx="12" ry="8" fill="#FFF5F5"/>
+    <!-- Eyes -->
+    <ellipse cx="23" cy="32" rx="8" ry="9" fill="white"/>
+    <ellipse cx="41" cy="32" rx="8" ry="9" fill="white"/>
+    <circle cx="25" cy="32" r="5" fill="#000000"/>
+    <circle cx="27" cy="30" r="2" fill="white"/>
+    <circle cx="39" cy="32" r="5" fill="#000000"/>
+    <circle cx="41" cy="30" r="2" fill="white"/>
+    <!-- Beak -->
+    <ellipse cx="32" cy="42" rx="4" ry="3" fill="#F59E0B"/>
+    <path d="M28 42 Q32 48 36 42" fill="#E08A05"/>
+    <!-- Graduation cap band -->
+    <path d="M12 16c0-2 9-4 20-4s20 2 20 4v3c0 1-9 2-20 2s-20-1-20-2v-3z" fill="#1a1a1a"/>
+    <!-- Mortarboard top -->
+    <path d="M8 12l24-6 24 6-24 8-24-8z" fill="#007229"/>
+    <path d="M8 12l24 8 24-8" stroke="#005C22" stroke-width="1" fill="none"/>
+    <!-- Button -->
+    <circle cx="32" cy="10" r="2.5" fill="#1a1a1a"/>
+    <!-- Tassel -->
+    <path d="M32 10 Q40 14 44 22" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+    <ellipse cx="45" cy="24" rx="3" ry="4" fill="#F59E0B"/>
+    <!-- Feet -->
+    <ellipse cx="24" cy="60" rx="4" ry="2.5" fill="#F59E0B"/>
+    <ellipse cx="40" cy="60" rx="4" ry="2.5" fill="#F59E0B"/>
+  </g>
+
+  <!-- Signature wordmark -->
+  <text x="92" y="62" class="amal-script" font-size="52" font-style="italic" fill="#007229">amal</text>
+
+  <!-- Signature flourish underline -->
+  <path d="M90 76 C 130 88, 190 88, 230 74 C 250 67, 262 70, 276 80"
+        stroke="#D21034" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+
+  <!-- Sub-label -->
+  <text x="94" y="98" class="amal-sub" font-size="13" font-weight="600" fill="#1a1a1a" opacity="0.75">SCHOOL</text>
+</svg>

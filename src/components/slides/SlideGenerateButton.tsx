@@ -40,7 +40,7 @@ export default function SlideGenerateButton({
 
   const tryRecoverSavedSlides = useCallback(
     async (generationStartedAtMs: number): Promise<Slide[] | null> => {
-      const maxAttempts = 40;
+      const maxAttempts = 80;
 
       setProgress('Checking for saved slides...');
       onGeneratingChange?.(true, 'Checking for saved slides...');
@@ -161,7 +161,11 @@ export default function SlideGenerateButton({
 
       // Background generation queued (202) — poll for saved slides
       if (data.queued) {
-        const recoveredSlides = await tryRecoverSavedSlides(generationStartedAtMs);
+        const serverQueuedAtMs =
+          typeof data.queued_at === 'string' ? Date.parse(data.queued_at) : Number.NaN;
+        const recoveredSlides = await tryRecoverSavedSlides(
+          Number.isFinite(serverQueuedAtMs) ? serverQueuedAtMs : generationStartedAtMs
+        );
         if (recoveredSlides && recoveredSlides.length > 0) {
           setError('');
           onGenerated(recoveredSlides);

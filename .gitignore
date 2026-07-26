@@ -48,3 +48,6 @@ next-env.d.ts
 
 # playwright
 .playwright-cli/
+
+# ad-hoc fixtures for src/app/dev/video-export-test (generate from a local lesson)
+/public/video-export-fixture*

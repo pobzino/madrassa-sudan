@@ -9,7 +9,6 @@ import {
   SIM_AUDIO_MAX_BYTES,
   assertCanManageLesson,
   assertSimFeatureAccess,
-  probeSignedAudioUrl,
   signAudioUrl,
 } from '@/lib/server/sim-storage';
 import type { SimPayload, SimRow } from '@/lib/sim.types';
@@ -257,30 +256,10 @@ export async function POST(
         return NextResponse.json(
           {
             error:
-              'Audio upload could not be signed for validation. Click Save again; this recording is still kept in this browser.',
+              'Audio upload could not be signed for playback. Click Save again; this recording is still kept in this browser.',
             request_stats: requestStats,
           },
           { status: 400 }
-        );
-      }
-
-      const audioProbe = await probeSignedAudioUrl(audioUrl, body.audio_upload_path);
-      if (!audioProbe.ok) {
-        console.warn('Uploaded sim audio failed server validation:', {
-          lessonId,
-          userId: user.id,
-          audio_upload_path: body.audio_upload_path,
-          probe: audioProbe,
-          requestStats,
-        });
-        return NextResponse.json(
-          {
-            error:
-              'Uploaded audio is not a valid playable media file. Please retake before saving.',
-            probe: audioProbe,
-            request_stats: requestStats,
-          },
-          { status: 422 }
         );
       }
     }

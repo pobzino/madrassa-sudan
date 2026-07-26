@@ -24,6 +24,29 @@ type AdminUser = {
   role: string;
   is_approved: boolean;
   preferred_language?: string | null;
+  contact_phone?: string | null;
+  signup_details?: {
+    role?: string;
+    parent?: {
+      profession?: string;
+      whatsapp_number?: string;
+      eligibility?: {
+        sudanese_descent?: string;
+        child_affected_by_war?: string;
+        child_missed_significant_schooling?: string;
+        out_of_school_details?: string;
+      };
+      eligible_children?: string;
+      access_logistics?: string;
+    } | null;
+    teacher_volunteer?: {
+      whatsapp_number?: string;
+      location?: string;
+      educational_background?: string;
+      involvement_areas?: string[];
+      weekly_hours?: string;
+    } | null;
+  } | null;
   created_at: string;
 };
 
@@ -61,9 +84,72 @@ function roleBadge(role: string) {
   const colors: Record<string, string> = {
     admin: "bg-purple-100 text-purple-700",
     teacher: "bg-blue-100 text-blue-700",
+    parent: "bg-pink-100 text-pink-700",
     student: "bg-emerald-100 text-emerald-700",
   };
   return colors[role] || "bg-gray-100 text-gray-600";
+}
+
+function formatYesNo(value: string | undefined) {
+  if (value === "yes") return "Yes";
+  if (value === "no") return "No";
+  if (value === "unsure") return "Unsure";
+  return null;
+}
+
+function formatInvolvementArea(value: string) {
+  const labels: Record<string, string> = {
+    teaching: "Teaching",
+    tech_platform: "Tech & platform",
+    content_video: "Content & video",
+    operations: "Operations",
+    outreach: "Outreach",
+    other: "Other",
+  };
+  return labels[value] || value;
+}
+
+function UserSignupDetails({ user }: { user: AdminUser }) {
+  const parent = user.signup_details?.parent;
+  const volunteer = user.signup_details?.teacher_volunteer;
+
+  if (!parent && !volunteer && !user.contact_phone) return null;
+
+  return (
+    <div className="mt-2 grid gap-1.5 text-xs text-gray-600">
+      {user.contact_phone && (
+        <p><span className="font-medium text-gray-700">WhatsApp:</span> {user.contact_phone}</p>
+      )}
+      {parent && (
+        <>
+          {parent.profession && <p><span className="font-medium text-gray-700">Profession:</span> {parent.profession}</p>}
+          {parent.eligible_children && <p><span className="font-medium text-gray-700">Children:</span> {parent.eligible_children}</p>}
+          {parent.access_logistics && <p><span className="font-medium text-gray-700">Access:</span> {parent.access_logistics}</p>}
+          <p>
+            <span className="font-medium text-gray-700">Eligibility:</span>{" "}
+            Sudanese descent: {formatYesNo(parent.eligibility?.sudanese_descent) || "-"};{" "}
+            affected by war: {formatYesNo(parent.eligibility?.child_affected_by_war) || "-"};{" "}
+            missed schooling: {formatYesNo(parent.eligibility?.child_missed_significant_schooling) || "-"}
+          </p>
+          {parent.eligibility?.out_of_school_details && (
+            <p><span className="font-medium text-gray-700">Out of school:</span> {parent.eligibility.out_of_school_details}</p>
+          )}
+        </>
+      )}
+      {volunteer && (
+        <>
+          {volunteer.location && <p><span className="font-medium text-gray-700">Location:</span> {volunteer.location}</p>}
+          {volunteer.weekly_hours && <p><span className="font-medium text-gray-700">Hours/week:</span> {volunteer.weekly_hours}</p>}
+          {volunteer.involvement_areas && volunteer.involvement_areas.length > 0 && (
+            <p><span className="font-medium text-gray-700">Areas:</span> {volunteer.involvement_areas.map(formatInvolvementArea).join(", ")}</p>
+          )}
+          {volunteer.educational_background && (
+            <p><span className="font-medium text-gray-700">Education:</span> {volunteer.educational_background}</p>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 function lessonStatus(lesson: AdminLesson) {
@@ -84,7 +170,7 @@ export default function AdminPage() {
   // Members state
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
-  const [userFilter, setUserFilter] = useState<"all" | "pending" | "student" | "teacher" | "admin">("all");
+  const [userFilter, setUserFilter] = useState<"all" | "pending" | "student" | "teacher" | "parent" | "admin">("all");
 
   // Classes state
   const [cohorts, setCohorts] = useState<AdminCohort[]>([]);
@@ -144,7 +230,7 @@ export default function AdminPage() {
   const loadUsers = useCallback(async () => {
     setLoadingUsers(true);
     try {
-      const apiFilter = userFilter === "all" || userFilter === "student" || userFilter === "teacher" || userFilter === "admin"
+      const apiFilter = userFilter === "all" || userFilter === "student" || userFilter === "teacher" || userFilter === "parent" || userFilter === "admin"
         ? "all"
         : userFilter;
       const res = await fetch(`/api/admin/users?filter=${apiFilter}`);
@@ -336,7 +422,7 @@ export default function AdminPage() {
   const filteredUsers =
     userFilter === "pending"
       ? users.filter((u) => !u.is_approved)
-      : userFilter === "student" || userFilter === "teacher" || userFilter === "admin"
+      : userFilter === "student" || userFilter === "teacher" || userFilter === "parent" || userFilter === "admin"
         ? users.filter((u) => u.role === userFilter)
         : users;
 
@@ -442,7 +528,7 @@ export default function AdminPage() {
         <div className="space-y-4">
           {/* Filter Bar */}
           <div className="flex flex-wrap gap-2">
-            {(["all", "pending", "student", "teacher", "admin"] as const).map((f) => (
+            {(["all", "pending", "student", "teacher", "parent", "admin"] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setUserFilter(f)}
@@ -478,7 +564,7 @@ export default function AdminPage() {
               {filteredUsers.map((user) => (
                 <div
                   key={user.id}
-                  className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-center justify-between gap-4"
+                  className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-start justify-between gap-4"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-gray-900 truncate">
@@ -497,6 +583,7 @@ export default function AdminPage() {
                         Joined {new Date(user.created_at).toLocaleDateString()}
                       </span>
                     </div>
+                    <UserSignupDetails user={user} />
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {/* Role Change Dropdown */}
@@ -509,6 +596,7 @@ export default function AdminPage() {
                       >
                         <option value="student">Student</option>
                         <option value="teacher">Teacher</option>
+                        <option value="parent">Parent</option>
                         <option value="admin">Admin</option>
                       </select>
                       <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />

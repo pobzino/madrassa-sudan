@@ -160,6 +160,7 @@ export async function downloadLesson(
       questions: questionsRes.data ?? [],
       tasks: tasksRes.data ?? [],
       thumbnailUrl: lesson.thumbnail_url,
+      videoUrl: lesson.video_url_720p,
       audioSize,
       downloadedAt: new Date().toISOString(),
     };

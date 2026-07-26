@@ -49,6 +49,7 @@ export interface TreeStep {
   title: string;
   thumbnailUrl: string | null;
   durationSeconds: number | null;
+  videoUrl: string | null;
 }
 
 export interface TreeWeek {
@@ -117,7 +118,7 @@ export async function loadSubjectLearningPath(
     lessonIds.length
       ? supabase
           .from("lessons")
-          .select("id, title_ar, title_en, thumbnail_url, video_duration_seconds")
+          .select("id, title_ar, title_en, thumbnail_url, video_duration_seconds, video_url_720p")
           .in("id", lessonIds)
       : Promise.resolve({ data: [] as never[] }),
     lessonIds.length
@@ -156,6 +157,7 @@ export async function loadSubjectLearningPath(
         title_en: string;
         thumbnail_url: string | null;
         video_duration_seconds: number | null;
+        video_url_720p: string | null;
       },
     ])
   );
@@ -246,6 +248,7 @@ export async function loadSubjectLearningPath(
           title,
           thumbnailUrl: lesson?.thumbnail_url ?? null,
           durationSeconds: lesson?.video_duration_seconds ?? null,
+          videoUrl: lesson?.video_url_720p ?? null,
         };
       }),
     };

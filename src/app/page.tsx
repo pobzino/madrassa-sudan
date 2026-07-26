@@ -160,7 +160,7 @@ export default function Home() {
       footer: {
         tagline: "نبني مستقبل السودان، طفل بطفل",
         links: { privacy: "الخصوصية", contact: "تواصل معنا", donate: "تبرّع" },
-        copyright: "© ٢٠٢٦ مدرسة أمل",
+        copyright: "© ٢٠٢٦ مدرسة آمال",
       },
     },
     en: {
@@ -174,7 +174,7 @@ export default function Home() {
         titleAnd: "and",
         titleHighlight2: "play",
         title2: "for Sudanese kids",
-        subtitle: "A free fun learning platform with interactive lessons, homework, and certified Sudanese curriculum",
+        subtitle: "A free fun learning platform with interactive lessons, practice, and certified Sudanese curriculum",
         cta1: "Start Now",
         cta2: "See How It Works",
       },
@@ -184,7 +184,7 @@ export default function Home() {
         titleHighlight: "fun way",
         items: [
           { title: "Fun Lessons", desc: "Interactive videos with animations that make learning an adventure", color: "from-[#007229] to-[#00913D]", iconType: "video" },
-          { title: "Homework & Feedback", desc: "Fun homework with instant feedback so you know your level and improve", color: "from-[#D21034] to-[#E8334F]", iconType: "trophy" },
+          { title: "Practice & Feedback", desc: "Fun practice with instant feedback so you know your level and improve", color: "from-[#D21034] to-[#E8334F]", iconType: "trophy" },
           { title: "Learning Games", desc: "Fun quizzes and challenges that let you learn while playing", color: "from-[#005C22] to-[#007229]", iconType: "gamepad" },
           { title: "Badges & Awards", desc: "Collect points and earn certificates and achievement badges", color: "from-amber-500 to-orange-600", iconType: "trophy" },
         ],

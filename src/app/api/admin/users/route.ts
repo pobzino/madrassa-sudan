@@ -1,5 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
+
+type UserMetadata = Record<string, unknown>;
+
+async function loadAuthMetadataByUserId() {
+  const metadataByUserId = new Map<string, UserMetadata>();
+
+  if (!hasServiceRoleConfig()) {
+    return metadataByUserId;
+  }
+
+  try {
+    const service = createServiceClient();
+    const { data, error } = await service.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+
+    if (error) {
+      console.warn("Admin users metadata lookup failed:", error.message);
+      return metadataByUserId;
+    }
+
+    for (const authUser of data.users) {
+      metadataByUserId.set(authUser.id, authUser.user_metadata as UserMetadata);
+    }
+  } catch (error) {
+    console.warn("Admin users metadata lookup failed:", error);
+  }
+
+  return metadataByUserId;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,7 +60,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from("profiles")
-      .select("id, full_name, role, is_approved, preferred_language, created_at")
+      .select("id, full_name, role, is_approved, preferred_language, phone, created_at")
       .order("created_at", { ascending: false });
 
     if (filter === "pending") {
@@ -48,7 +80,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ users });
+    const metadataByUserId = await loadAuthMetadataByUserId();
+    const enrichedUsers = (users || []).map((profile) => {
+      const metadata = metadataByUserId.get(profile.id) || {};
+      return {
+        ...profile,
+        signup_details: metadata.signup_details ?? null,
+        contact_phone: profile.phone ?? metadata.phone ?? null,
+      };
+    });
+
+    return NextResponse.json({ users: enrichedUsers });
   } catch (error) {
     console.error("Admin users GET error:", error);
     return NextResponse.json(

@@ -25,6 +25,7 @@ export interface OfflineLesson {
   questions: unknown[];
   tasks: unknown[];
   thumbnailUrl: string | null;
+  videoUrl?: string | null;
   audioSize: number; // bytes
   downloadedAt: string; // ISO date
 }

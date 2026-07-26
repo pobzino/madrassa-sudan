@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ClipboardList, BookOpen } from "lucide-react";
+import { ClipboardList, BookOpen, FileDown } from "lucide-react";
 import { OwlPointing, OwlThinking, OwlCelebrating, OwlMedal, OwlEncouraging } from "@/components/illustrations";
 import type { AssignmentWithStats, SubmissionQueueItem } from "@/lib/homework.types";
 
@@ -148,9 +148,10 @@ export function TeacherHomeworkList({
               <Link
                 href={`/teacher/homework/${assignment.id}/print`}
                 target="_blank"
-                className="px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
               >
-                Print worksheet
+                <FileDown className="h-4 w-4" />
+                PDF / Print
               </Link>
               {onDelete && (
                 <button
@@ -201,8 +202,8 @@ export function StudentHomeworkList({ homework, isLoading }: StudentHomeworkList
     return (
       <div className="text-center py-16">
         <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">No homework assigned</h3>
-        <p className="text-gray-500">When your teacher assigns homework, it will appear here</p>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">No practice yet</h3>
+        <p className="text-gray-500">When your teacher assigns practice, it will appear here</p>
       </div>
     );
   }
