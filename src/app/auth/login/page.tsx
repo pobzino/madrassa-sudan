@@ -5,13 +5,15 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { loginIdentifierToEmail } from "@/lib/whatsapp-login";
 import { getAuthCallbackUrl } from "@/lib/site-url";
 
 const translations = {
   ar: {
     welcomeBack: "مرحباً بعودتك",
     signInSubtitle: "سجّل الدخول لمتابعة رحلة التعلم",
-    emailLabel: "البريد الإلكتروني",
+    emailLabel: "البريد الإلكتروني أو رقم الواتساب",
+    parentLoginHint: "أولياء الأمور: أدخل رقم الواتساب الذي سجّلت به.",
     passwordLabel: "كلمة المرور",
     signIn: "تسجيل الدخول",
     signingIn: "جاري تسجيل الدخول...",
@@ -27,7 +29,8 @@ const translations = {
   en: {
     welcomeBack: "Welcome Back",
     signInSubtitle: "Sign in to continue your learning journey",
-    emailLabel: "Email Address",
+    emailLabel: "Email or WhatsApp number",
+    parentLoginHint: "Parents: enter the WhatsApp number you signed up with.",
     passwordLabel: "Password",
     signIn: "Sign In",
     signingIn: "Signing in...",
@@ -69,7 +72,8 @@ export default function LoginPage() {
     setResendMessage(null);
 
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      // Parents may type their WhatsApp number instead of an email.
+      email: loginIdentifierToEmail(email),
       password,
     });
 
@@ -142,16 +146,18 @@ export default function LoginPage() {
               <input
                 id="email"
                 name="email"
-                type="email"
+                type="text"
+                inputMode="email"
                 autoComplete="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="block w-full px-4 py-3 bg-gray-50 border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:bg-white transition-all"
-                placeholder="name@example.com"
+                placeholder="name@example.com / +249..."
                 dir="ltr"
                 style={{ textAlign: "left" }}
               />
+              <p className="mt-1.5 text-xs text-gray-500">{t.parentLoginHint}</p>
             </div>
 
             <div>

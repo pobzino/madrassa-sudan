@@ -7,6 +7,7 @@ import Link from "next/link";
 import type { UserRole } from "@/lib/database.types";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getAuthCallbackUrl } from "@/lib/site-url";
+import { whatsappDigits, whatsappLoginEmail } from "@/lib/whatsapp-login";
 
 // Icons for role selection
 const RoleIcons = {
@@ -56,12 +57,33 @@ const translations = {
     sudaneseDescentLabel: "هل أنت من أصل سوداني؟",
     affectedByWarLabel: "هل تأثر طفلك بالحرب في السودان؟",
     missedSchoolingLabel: "هل فات طفلك تعليم كثير؟",
-    outOfSchoolLabel: "هل كان طفلك خارج المدرسة؟ اذكر المدة أو الظروف",
-    outOfSchoolPlaceholder: "مثال: خارج المدرسة منذ ٦ أشهر بسبب النزوح",
-    childrenLabel: "عدد الأطفال المؤهلين وأعمارهم",
-    childrenPlaceholder: "مثال: طفلان، ٦ و٩ سنوات",
-    accessLabel: "هل يستطيع الطفل استخدام الموقع أو حصص زوم؟",
-    accessPlaceholder: "مثال: نعم، عبر هاتف ولي الأمر",
+    outOfSchoolLabel: "هل كان طفلك خارج المدرسة؟",
+    outOfSchoolDurationLabel: "منذ متى؟",
+    durationLt6m: "أقل من ٦ أشهر",
+    duration6to12m: "من ٦ إلى ١٢ شهراً",
+    duration1to2y: "من سنة إلى سنتين",
+    durationGt2y: "أكثر من سنتين",
+    outOfSchoolDetailsLabel: "الظروف (اختياري)",
+    outOfSchoolPlaceholder: "مثال: خارج المدرسة بسبب النزوح",
+    childrenCountLabel: "عدد الأطفال المؤهلين",
+    childrenAgesLabel: "أعمار الأطفال",
+    childWord: "طفل",
+    agePlaceholder: "العمر",
+    canAccessWebsiteLabel: "هل يمكنكم استخدام الموقع؟",
+    canAccessZoomLabel: "هل يمكن للطفل حضور حصص زوم؟",
+    deviceLabel: "ما الجهاز المتاح للطفل؟ (الهاتف يكفي تماماً)",
+    devicePhone: "هاتف",
+    deviceTablet: "جهاز لوحي",
+    deviceComputer: "حاسوب",
+    deviceShared: "جهاز مشترك مع العائلة",
+    accessNotesLabel: "ملاحظات عن الاتصال والأجهزة (اختياري)",
+    accessPlaceholder: "مثال: الإنترنت ضعيف أحياناً",
+    countryLabel: "الدولة الحالية",
+    countryPlaceholder: "مصر",
+    cityLabel: "المدينة",
+    cityPlaceholder: "القاهرة",
+    emailOptionalLabel: "البريد الإلكتروني (اختياري)",
+    parentNoEmailHint: "لا تملك بريداً إلكترونياً؟ لا مشكلة — ستسجّل الدخول برقم الواتساب وكلمة المرور.",
     teacherDetailsTitle: "معلومات المعلم / المتطوع",
     locationLabel: "الموقع (المدينة / الدولة)",
     educationLabel: "الخلفية التعليمية",
@@ -118,12 +140,33 @@ const translations = {
     sudaneseDescentLabel: "Are you of Sudanese descent?",
     affectedByWarLabel: "Has your child been affected by the war in Sudan?",
     missedSchoolingLabel: "Has your child missed significant schooling?",
-    outOfSchoolLabel: "Has your child been out of school? Duration / circumstances",
-    outOfSchoolPlaceholder: "e.g. out of school for 6 months because of displacement",
-    childrenLabel: "Number of eligible children and their ages",
-    childrenPlaceholder: "e.g. 2 children, ages 6 and 9",
-    accessLabel: "Can your child access the website or Zoom lessons?",
-    accessPlaceholder: "e.g. Yes, using a parent's phone",
+    outOfSchoolLabel: "Has your child been out of school?",
+    outOfSchoolDurationLabel: "For how long?",
+    durationLt6m: "Less than 6 months",
+    duration6to12m: "6–12 months",
+    duration1to2y: "1–2 years",
+    durationGt2y: "More than 2 years",
+    outOfSchoolDetailsLabel: "Circumstances (optional)",
+    outOfSchoolPlaceholder: "e.g. out of school because of displacement",
+    childrenCountLabel: "Number of eligible children",
+    childrenAgesLabel: "Children's ages",
+    childWord: "Child",
+    agePlaceholder: "Age",
+    canAccessWebsiteLabel: "Can you access the website?",
+    canAccessZoomLabel: "Can your child join Zoom lessons?",
+    deviceLabel: "What device will your child use? (a phone is perfectly fine)",
+    devicePhone: "Phone",
+    deviceTablet: "Tablet",
+    deviceComputer: "Computer",
+    deviceShared: "Shared family device",
+    accessNotesLabel: "Notes about connection and devices (optional)",
+    accessPlaceholder: "e.g. internet is sometimes weak",
+    countryLabel: "Current country",
+    countryPlaceholder: "Egypt",
+    cityLabel: "City",
+    cityPlaceholder: "Cairo",
+    emailOptionalLabel: "Email Address (optional)",
+    parentNoEmailHint: "No email? No problem — you'll log in with your WhatsApp number and password.",
     teacherDetailsTitle: "Teacher / volunteer information",
     locationLabel: "Location (city / country)",
     educationLabel: "Educational background",
@@ -188,9 +231,17 @@ export default function SignupPage() {
   const [sudaneseDescent, setSudaneseDescent] = useState<YesNoAnswer>("");
   const [affectedByWar, setAffectedByWar] = useState<YesNoAnswer>("");
   const [missedSchooling, setMissedSchooling] = useState<YesNoAnswer>("");
+  const [outOfSchool, setOutOfSchool] = useState<YesNoAnswer>("");
+  const [outOfSchoolDuration, setOutOfSchoolDuration] = useState("");
   const [outOfSchoolDetails, setOutOfSchoolDetails] = useState("");
-  const [eligibleChildren, setEligibleChildren] = useState("");
-  const [accessLogistics, setAccessLogistics] = useState("");
+  const [childrenCount, setChildrenCount] = useState(1);
+  const [childrenAges, setChildrenAges] = useState<string[]>([""]);
+  const [canAccessWebsite, setCanAccessWebsite] = useState<YesNoAnswer>("");
+  const [canAccessZoom, setCanAccessZoom] = useState<YesNoAnswer>("");
+  const [deviceType, setDeviceType] = useState("");
+  const [accessNotes, setAccessNotes] = useState("");
+  const [parentCountry, setParentCountry] = useState("");
+  const [parentCity, setParentCity] = useState("");
   const [teacherWhatsapp, setTeacherWhatsapp] = useState("");
   const [teacherLocation, setTeacherLocation] = useState("");
   const [educationalBackground, setEducationalBackground] = useState("");
@@ -230,6 +281,20 @@ export default function SignupPage() {
     );
   };
 
+  const updateChildrenCount = (count: number) => {
+    const clamped = Math.min(Math.max(count, 1), 8);
+    setChildrenCount(clamped);
+    setChildrenAges((prev) => {
+      const next = prev.slice(0, clamped);
+      while (next.length < clamped) next.push("");
+      return next;
+    });
+  };
+
+  const updateChildAge = (index: number, value: string) => {
+    setChildrenAges((prev) => prev.map((age, i) => (i === index ? value : age)));
+  };
+
   const getRedirectUrl = () => (
     typeof window !== "undefined"
       ? `${window.location.origin}/auth/callback`
@@ -262,10 +327,20 @@ export default function SignupPage() {
               sudanese_descent: sudaneseDescent,
               child_affected_by_war: affectedByWar,
               child_missed_significant_schooling: missedSchooling,
+              out_of_school: outOfSchool,
+              out_of_school_duration: outOfSchoolDuration,
               out_of_school_details: outOfSchoolDetails.trim(),
             },
-            eligible_children: eligibleChildren.trim(),
-            access_logistics: accessLogistics.trim(),
+            children_count: childrenCount,
+            children_ages: childrenAges.filter(Boolean),
+            access: {
+              can_access_website: canAccessWebsite,
+              can_access_zoom: canAccessZoom,
+              device_type: deviceType,
+              notes: accessNotes.trim(),
+            },
+            country: parentCountry.trim(),
+            city: parentCity.trim(),
             programme_acknowledged: true,
           }
         : null;
@@ -281,8 +356,23 @@ export default function SignupPage() {
           }
         : null;
 
+    // Parents may sign up without an email: derive a stable login identifier
+    // from the WhatsApp number instead (they log in with number + password).
+    const trimmedEmail = email.trim();
+    if (role === "parent" && !trimmedEmail && whatsappDigits(parentWhatsapp).length < 7) {
+      setError(
+        language === "ar"
+          ? "أدخل بريداً إلكترونياً أو رقم واتساب صحيحاً."
+          : "Enter an email address or a valid WhatsApp number."
+      );
+      setLoading(false);
+      return;
+    }
+    const loginEmail =
+      role === "parent" && !trimmedEmail ? whatsappLoginEmail(parentWhatsapp) : trimmedEmail;
+
     const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
+      email: loginEmail,
       password,
       options: {
         emailRedirectTo: getRedirectUrl(),
@@ -304,7 +394,63 @@ export default function SignupPage() {
     if (error) {
       setError(error.message);
       setLoading(false);
-    } else if (data.session) {
+      return;
+    }
+
+    // Persist the application details for the team's review queue. Best-effort:
+    // the account exists either way and the same details live in user metadata.
+    if (data.session && (role === "parent" || role === "teacher")) {
+      try {
+        await fetch("/api/applications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            role === "parent"
+              ? {
+                  role,
+                  parent: {
+                    parent_name: fullName.trim(),
+                    profession: parentProfession.trim(),
+                    whatsapp: parentWhatsapp.trim(),
+                    email: trimmedEmail || null,
+                    sudanese_descent: sudaneseDescent,
+                    child_war_affected: affectedByWar,
+                    missed_schooling: missedSchooling,
+                    out_of_school: outOfSchool,
+                    out_of_school_duration: outOfSchoolDuration,
+                    out_of_school_details: outOfSchoolDetails.trim(),
+                    children_count: childrenCount,
+                    children_ages: childrenAges.filter(Boolean),
+                    can_access_website: canAccessWebsite,
+                    can_access_zoom: canAccessZoom,
+                    device_type: deviceType,
+                    access_notes: accessNotes.trim(),
+                    country: parentCountry.trim(),
+                    city: parentCity.trim(),
+                    preferred_language: language,
+                  },
+                }
+              : {
+                  role,
+                  volunteer: {
+                    name: fullName.trim(),
+                    whatsapp: teacherWhatsapp.trim(),
+                    email: trimmedEmail,
+                    location_city: teacherLocation.trim(),
+                    education_background: educationalBackground.trim(),
+                    areas: involvementAreas,
+                    hours_per_week: weeklyHours.trim(),
+                    preferred_language: language,
+                  },
+                }
+          ),
+        });
+      } catch (applicationError) {
+        console.error("Failed to save application details:", applicationError);
+      }
+    }
+
+    if (data.session) {
       // Email confirmation is disabled — user is signed in immediately.
       router.push("/dashboard");
       router.refresh();
@@ -414,14 +560,14 @@ export default function SignupPage() {
 
             <div>
               <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-1.5">
-                {t.emailLabel}
+                {role === "parent" ? t.emailOptionalLabel : t.emailLabel}
               </label>
               <input
                 id="email"
                 name="email"
                 type="email"
                 autoComplete="email"
-                required
+                required={role !== "parent"}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="block w-full px-4 py-3 bg-gray-50 border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:bg-white transition-all"
@@ -429,7 +575,10 @@ export default function SignupPage() {
                 dir="ltr"
                 style={{ textAlign: "left" }}
               />
-              {(role === "parent" || role === "teacher") && (
+              {role === "parent" && (
+                <p className="mt-1.5 text-xs text-gray-500">{t.parentNoEmailHint}</p>
+              )}
+              {role === "teacher" && (
                 <p className="mt-1.5 text-xs text-gray-500">{t.emailLoginHint}</p>
               )}
             </div>
@@ -540,48 +689,179 @@ export default function SignupPage() {
                   ))}
                 </div>
 
-                <div>
-                  <label htmlFor="outOfSchoolDetails" className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    {t.outOfSchoolLabel}
+                <div className="space-y-3">
+                  <label htmlFor="outOfSchool" className="block">
+                    <span className="block text-sm font-semibold text-gray-700 mb-1.5">{t.outOfSchoolLabel}</span>
+                    <select
+                      id="outOfSchool"
+                      required
+                      value={outOfSchool}
+                      onChange={(e) => setOutOfSchool(e.target.value as YesNoAnswer)}
+                      className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                    >
+                      <option value="">{language === "ar" ? "اختر" : "Select"}</option>
+                      <option value="yes">{t.yes}</option>
+                      <option value="no">{t.no}</option>
+                    </select>
                   </label>
-                  <textarea
-                    id="outOfSchoolDetails"
-                    rows={3}
-                    value={outOfSchoolDetails}
-                    onChange={(e) => setOutOfSchoolDetails(e.target.value)}
-                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all resize-none"
-                    placeholder={t.outOfSchoolPlaceholder}
-                  />
+
+                  {outOfSchool === "yes" && (
+                    <>
+                      <label htmlFor="outOfSchoolDuration" className="block">
+                        <span className="block text-sm font-semibold text-gray-700 mb-1.5">{t.outOfSchoolDurationLabel}</span>
+                        <select
+                          id="outOfSchoolDuration"
+                          required
+                          value={outOfSchoolDuration}
+                          onChange={(e) => setOutOfSchoolDuration(e.target.value)}
+                          className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                        >
+                          <option value="">{language === "ar" ? "اختر" : "Select"}</option>
+                          <option value="lt_6m">{t.durationLt6m}</option>
+                          <option value="6_12m">{t.duration6to12m}</option>
+                          <option value="1_2y">{t.duration1to2y}</option>
+                          <option value="gt_2y">{t.durationGt2y}</option>
+                        </select>
+                      </label>
+                      <label htmlFor="outOfSchoolDetails" className="block">
+                        <span className="block text-sm font-semibold text-gray-700 mb-1.5">{t.outOfSchoolDetailsLabel}</span>
+                        <textarea
+                          id="outOfSchoolDetails"
+                          rows={2}
+                          value={outOfSchoolDetails}
+                          onChange={(e) => setOutOfSchoolDetails(e.target.value)}
+                          className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all resize-none"
+                          placeholder={t.outOfSchoolPlaceholder}
+                        />
+                      </label>
+                    </>
+                  )}
                 </div>
 
                 <div>
-                  <label htmlFor="eligibleChildren" className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    {t.childrenLabel}
-                  </label>
-                  <input
-                    id="eligibleChildren"
-                    type="text"
-                    required
-                    value={eligibleChildren}
-                    onChange={(e) => setEligibleChildren(e.target.value)}
-                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
-                    placeholder={t.childrenPlaceholder}
-                  />
+                  <span className="block text-sm font-semibold text-gray-700 mb-1.5">{t.childrenCountLabel}</span>
+                  <div className="flex items-center gap-3" dir="ltr">
+                    <button
+                      type="button"
+                      onClick={() => updateChildrenCount(childrenCount - 1)}
+                      className="w-11 h-11 rounded-xl border border-gray-200 bg-white text-xl font-bold text-gray-600 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
+                      aria-label="-"
+                    >
+                      −
+                    </button>
+                    <span className="w-10 text-center text-lg font-bold text-gray-900">{childrenCount}</span>
+                    <button
+                      type="button"
+                      onClick={() => updateChildrenCount(childrenCount + 1)}
+                      className="w-11 h-11 rounded-xl border border-gray-200 bg-white text-xl font-bold text-gray-600 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
+                      aria-label="+"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
 
                 <div>
-                  <label htmlFor="accessLogistics" className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    {t.accessLabel}
+                  <span className="block text-sm font-semibold text-gray-700 mb-1.5">{t.childrenAgesLabel}</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {childrenAges.map((age, index) => (
+                      <select
+                        key={index}
+                        required
+                        value={age}
+                        onChange={(e) => updateChildAge(index, e.target.value)}
+                        aria-label={`${t.childWord} ${index + 1}`}
+                        className="block w-full px-3 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                      >
+                        <option value="">{t.agePlaceholder}</option>
+                        {Array.from({ length: 15 }, (_, i) => i + 4).map((n) => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {[
+                    { id: "canAccessWebsite", label: t.canAccessWebsiteLabel, value: canAccessWebsite, setter: setCanAccessWebsite },
+                    { id: "canAccessZoom", label: t.canAccessZoomLabel, value: canAccessZoom, setter: setCanAccessZoom },
+                  ].map((field) => (
+                    <label key={field.id} htmlFor={field.id} className="block">
+                      <span className="block text-sm font-semibold text-gray-700 mb-1.5">{field.label}</span>
+                      <select
+                        id={field.id}
+                        required
+                        value={field.value}
+                        onChange={(e) => field.setter(e.target.value as YesNoAnswer)}
+                        className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                      >
+                        <option value="">{language === "ar" ? "اختر" : "Select"}</option>
+                        {yesNoOptions.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+
+                  <label htmlFor="deviceType" className="block">
+                    <span className="block text-sm font-semibold text-gray-700 mb-1.5">{t.deviceLabel}</span>
+                    <select
+                      id="deviceType"
+                      required
+                      value={deviceType}
+                      onChange={(e) => setDeviceType(e.target.value)}
+                      className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                    >
+                      <option value="">{language === "ar" ? "اختر" : "Select"}</option>
+                      <option value="phone">{t.devicePhone}</option>
+                      <option value="tablet">{t.deviceTablet}</option>
+                      <option value="computer">{t.deviceComputer}</option>
+                      <option value="shared">{t.deviceShared}</option>
+                    </select>
                   </label>
-                  <textarea
-                    id="accessLogistics"
-                    rows={3}
-                    required
-                    value={accessLogistics}
-                    onChange={(e) => setAccessLogistics(e.target.value)}
-                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all resize-none"
-                    placeholder={t.accessPlaceholder}
-                  />
+
+                  <label htmlFor="accessNotes" className="block">
+                    <span className="block text-sm font-semibold text-gray-700 mb-1.5">{t.accessNotesLabel}</span>
+                    <textarea
+                      id="accessNotes"
+                      rows={2}
+                      value={accessNotes}
+                      onChange={(e) => setAccessNotes(e.target.value)}
+                      className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all resize-none"
+                      placeholder={t.accessPlaceholder}
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="parentCountry" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      {t.countryLabel}
+                    </label>
+                    <input
+                      id="parentCountry"
+                      type="text"
+                      required
+                      value={parentCountry}
+                      onChange={(e) => setParentCountry(e.target.value)}
+                      className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                      placeholder={t.countryPlaceholder}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="parentCity" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      {t.cityLabel}
+                    </label>
+                    <input
+                      id="parentCity"
+                      type="text"
+                      value={parentCity}
+                      onChange={(e) => setParentCity(e.target.value)}
+                      className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                      placeholder={t.cityPlaceholder}
+                    />
+                  </div>
                 </div>
               </div>
             )}
