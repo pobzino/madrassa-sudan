@@ -30,6 +30,7 @@ import { packClipSegments, useSimClipEditor } from '@/lib/sim-clip-editor';
 import { compactSimEvents, type SimEvent, type SimPayload, type SimRow } from '@/lib/sim.types';
 import type { SimRecording } from '@/hooks/useSimRecorder';
 import SimSlidePatchList from '@/components/slides/SimSlidePatchList';
+import SimVersionHistory from '@/components/slides/SimVersionHistory';
 import type { SimPatchTarget } from '@/components/slides/sim-patch.types';
 import type { Slide } from '@/lib/slides.types';
 
@@ -57,6 +58,8 @@ export type SimReviewModalProps =
        * recording surface, so it takes over from here.
        */
       onRequestSlidePatch?: (target: SimPatchTarget) => void;
+      /** A previous version of the recording was restored. */
+      onRestored?: (payload: SimPayload) => void;
     }
   | {
       mode: 'view';
@@ -1170,6 +1173,15 @@ export default function SimReviewModal(props: SimReviewModalProps) {
               language={props.language}
               disabled={saving}
               onSelect={props.onRequestSlidePatch}
+            />
+          </div>
+        )}
+
+        {props.mode === 'edit' && props.onRestored && (
+          <div className="px-6 py-4 border-t border-gray-100">
+            <SimVersionHistory
+              lessonId={props.lessonId}
+              onRestored={props.onRestored}
             />
           </div>
         )}

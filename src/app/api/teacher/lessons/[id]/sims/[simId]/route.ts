@@ -250,16 +250,9 @@ export async function DELETE(
       return NextResponse.json({ error: 'Sim not found' }, { status: 404 });
     }
 
-    if (row.audio_path && hasServiceRoleConfig()) {
-      try {
-        const service = createServiceClient();
-        await service.storage.from(SIM_AUDIO_BUCKET).remove([row.audio_path]);
-      } catch (err) {
-        // Best-effort: if the file is already gone we still want the row deleted.
-        console.warn('Failed to remove sim audio file:', err);
-      }
-    }
-
+    // The audio file is intentionally kept: the delete trigger snapshots this
+    // recording into lesson_sim_versions, and that snapshot is only restorable
+    // while its audio still exists. Storage is bounded by pruneSimVersionAudio.
     const { error: deleteError } = await dataClient
       .from('lesson_sims')
       .delete()
