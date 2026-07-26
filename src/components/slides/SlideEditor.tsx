@@ -14,6 +14,7 @@ import dynamic from 'next/dynamic';
 import { useWhiteboard, type WhiteboardEvent } from '@/hooks/useWhiteboard';
 import WhiteboardToolbar from './WhiteboardToolbar';
 import { useSimRecorder, SIM_MAX_DURATION_MS, type SimRecording } from '@/hooks/useSimRecorder';
+import type { SimPatchTarget } from '@/components/slides/sim-patch.types';
 import type { SimPayload } from '@/lib/sim.types';
 import type { InteractionAnswer } from '@/lib/interactions/types';
 import type { ExplorationWidgetType, ExplorationWidgetConfig } from '@/lib/explorations/types';
@@ -38,6 +39,7 @@ export interface RegenerateProps {
   onGeneratingChange: (generating: boolean, progress: string) => void;
 }
 
+const SimPatchDialog = dynamic(() => import('./SimPatchDialog'), { ssr: false });
 const SimReviewModal = dynamic(() => import('./SimReviewModal'), {
   loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
 });
@@ -454,6 +456,11 @@ export default function SlideEditor({
   // Which SimReviewModal mode is open (null = closed). Driven by three
   // entry points: stop-of-recording (record-review), Sim toolbar button on
   // a draft lesson (edit), and Sim toolbar button on a published lesson (view).
+  // Fixing one slide of an already-saved sim: the target span picked in the
+  // review modal, and the replacement take once it has been recorded.
+  const [patchTarget, setPatchTarget] = useState<SimPatchTarget | null>(null);
+  const [patchTake, setPatchTake] = useState<SimRecording | null>(null);
+
   const [simReviewMode, setSimReviewMode] = useState<
     | { kind: 'record-review'; recording: SimRecording; deckSnapshot: Slide[] }
     | { kind: 'edit'; payload: SimPayload }
@@ -1067,12 +1074,18 @@ export default function SlideEditor({
     setSimRecording(false);
     setPresenting(false);
     setWhiteboardActive(false);
+    // A patch take replaces one slide of the saved sim rather than the whole
+    // recording, so it gets the splice dialog instead of the create flow.
+    if (patchTarget) {
+      setPatchTake(simRecordingData);
+      return;
+    }
     setSimReviewMode({
       kind: 'record-review',
       recording: simRecordingData,
       deckSnapshot: slidesRef.current,
     });
-  }, [simState, simRecordingData]);
+  }, [simState, simRecordingData, patchTarget]);
 
   // Keyboard navigation for present mode
   useEffect(() => {
@@ -1287,6 +1300,54 @@ export default function SlideEditor({
     await new Promise((r) => setTimeout(r, 100));
     await simStartRecording();
   }, [lessonId, refreshSimSession, selectedIndex, simStartRecording]);
+
+  // ── Slide patch (fix one slide of a saved sim) ───────────────────────────
+  // Jump to the chosen slide and record just that stretch. Events are stamped
+  // with this slide's id automatically, exactly as in a full recording.
+  const startSimPatchRecord = useCallback(
+    async (target: SimPatchTarget) => {
+      if (!lessonId) return;
+      const session = await refreshSimSession(true);
+      if (!session.ok) return;
+      if (session.lessonPublished) {
+        toast.error('Unpublish the lesson before fixing its recording.');
+        return;
+      }
+      setSimReviewMode(null);
+      setPatchTake(null);
+      setPatchTarget(target);
+      setSelectedIndex(target.slideIndex);
+      setPresentIndex(target.slideIndex);
+      setRevealedCount(0);
+      setShowActivityAnswer(false);
+      setPresenting(true);
+      setSimRecording(true);
+      // Small delay so the fullscreen present-mode DOM renders first.
+      await new Promise((r) => setTimeout(r, 100));
+      await simStartRecording();
+      toast.info(`Re-recording “${target.label}” — stop when you are done`);
+    },
+    [lessonId, refreshSimSession, simStartRecording]
+  );
+
+  // Take thrown away, or the splice saved — either way reset the recorder so
+  // the stop-effect above doesn't reopen anything on stale data.
+  const clearSimPatch = useCallback(() => {
+    setPatchTarget(null);
+    setPatchTake(null);
+    // The open-guard key is intentionally left set: simCancelRecording clears
+    // simRecordingData, which resets the guard through the effect's early
+    // return. Clearing it here would race and reopen the discarded patch take
+    // as if it were a brand-new full recording.
+    simCancelRecording();
+    if (lessonId) void clearSimRecordingDraft(lessonId);
+  }, [lessonId, simCancelRecording]);
+
+  const handleSimPatchApplied = useCallback(() => {
+    clearSimPatch();
+    // Re-read the sim so the editor holds the spliced timeline and new audio.
+    void refreshSimSession(false);
+  }, [clearSimPatch, refreshSimSession]);
 
   // ── SimReviewModal handlers ─────────────────────────────────────────────
   // Recording was saved successfully from the review modal — sync the local
@@ -1935,6 +1996,17 @@ export default function SlideEditor({
           onClose={() => setSimReviewMode(null)}
           onSaved={handleSimEditSaved}
           onDeleted={handleSimDeleted}
+          onRequestSlidePatch={startSimPatchRecord}
+        />
+      )}
+      {lessonId && patchTarget && patchTake && existingSim && (
+        <SimPatchDialog
+          lessonId={lessonId}
+          payload={existingSim}
+          target={patchTarget}
+          recording={patchTake}
+          onCancel={clearSimPatch}
+          onApplied={handleSimPatchApplied}
         />
       )}
       {simReviewMode && lessonId && simReviewMode.kind === 'view' && (

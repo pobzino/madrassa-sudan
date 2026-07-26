@@ -29,6 +29,8 @@ import VideoTimeline, { type TimelineCheckpointMarker } from './VideoTimeline';
 import { packClipSegments, useSimClipEditor } from '@/lib/sim-clip-editor';
 import { compactSimEvents, type SimEvent, type SimPayload, type SimRow } from '@/lib/sim.types';
 import type { SimRecording } from '@/hooks/useSimRecorder';
+import SimSlidePatchList from '@/components/slides/SimSlidePatchList';
+import type { SimPatchTarget } from '@/components/slides/sim-patch.types';
 import type { Slide } from '@/lib/slides.types';
 
 export type SimReviewModalProps =
@@ -50,6 +52,11 @@ export type SimReviewModalProps =
       onClose: () => void;
       onSaved: (updated: SimPayload) => void;
       onDeleted: () => void;
+      /**
+       * Re-record one slide instead of the whole lesson. The editor owns the
+       * recording surface, so it takes over from here.
+       */
+      onRequestSlidePatch?: (target: SimPatchTarget) => void;
     }
   | {
       mode: 'view';
@@ -1151,6 +1158,19 @@ export default function SimReviewModal(props: SimReviewModalProps) {
                   : 'Saving…'
                 : 'Save to Lesson'}
             </button>
+          </div>
+        )}
+
+        {props.mode === 'edit' && props.onRequestSlidePatch && (
+          <div className="px-6 py-4 border-t border-gray-100">
+            <SimSlidePatchList
+              deck={props.payload.sim.deck_snapshot}
+              events={props.payload.sim.events}
+              durationMs={props.payload.sim.duration_ms}
+              language={props.language}
+              disabled={saving}
+              onSelect={props.onRequestSlidePatch}
+            />
           </div>
         )}
 
