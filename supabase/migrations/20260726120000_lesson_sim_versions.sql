@@ -68,6 +68,17 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- When the parent LESSON is being deleted, lesson_sims rows disappear by
+  -- cascade. Writing history here would reference a lesson row that is already
+  -- gone, and the FK would abort the whole lesson deletion. There is also
+  -- nothing to keep: these history rows cascade away with the lesson anyway.
+  IF NOT EXISTS (SELECT 1 FROM public.lessons WHERE id = OLD.lesson_id) THEN
+    IF TG_OP = 'DELETE' THEN
+      RETURN OLD;
+    END IF;
+    RETURN NEW;
+  END IF;
+
   SELECT COALESCE(MAX(version_number), 0) + 1
     INTO next_number
     FROM public.lesson_sim_versions
