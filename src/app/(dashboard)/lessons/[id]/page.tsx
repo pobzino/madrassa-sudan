@@ -551,10 +551,17 @@ export default function LessonPlayerPage() {
       lesson_id: lessonId,
       last_position_seconds: positionSec,
       total_watch_time_seconds: positionSec,
-      completed: isCompleted,
-      completed_at: isCompleted ? new Date().toISOString() : null,
       questions_answered: answeredQuestions.size,
       questions_correct: correctQuestions.size,
+      // On a practice-gated lesson, playback never owns completion — passing the
+      // Practice does (the submit route writes it). Omitting the fields also
+      // stops a re-watch from clearing a completion already earned.
+      ...(practiceAssignmentId
+        ? {}
+        : {
+            completed: isCompleted,
+            completed_at: isCompleted ? new Date().toISOString() : null,
+          }),
     };
 
     if (!navigator.onLine) {
