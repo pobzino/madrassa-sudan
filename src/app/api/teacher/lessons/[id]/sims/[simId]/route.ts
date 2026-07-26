@@ -18,6 +18,8 @@ const PatchSimSchema = z.object({
   audio_upload_path: z.string().optional(),
   audio_mime: z.string().nullable().optional(),
   audio_duration_ms: z.number().int().nonnegative().nullable().optional(),
+  // Splicing a patch take into a sim changes its overall length.
+  duration_ms: z.number().int().positive().optional(),
 });
 
 // GET /api/teacher/lessons/[id]/sims/[simId] — fetch a single sim with a
@@ -124,12 +126,16 @@ export async function PATCH(
       audio_path?: string;
       audio_mime?: string | null;
       audio_duration_ms?: number | null;
+      duration_ms?: number;
     } = {};
     if (body.clip_segments !== undefined) {
       updates.clip_segments = body.clip_segments as unknown as Json | null;
     }
     if (body.events !== undefined) {
       updates.events = body.events as unknown as Json;
+    }
+    if (body.duration_ms !== undefined) {
+      updates.duration_ms = body.duration_ms;
     }
     if (body.audio_upload_path !== undefined) {
       const expectedPrefix = `${lessonId}/${simId}.`;

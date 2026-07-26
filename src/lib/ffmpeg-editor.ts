@@ -187,3 +187,5 @@ export async function trimAndCut(
 }
 
 export { computeKeptSegments };
+/** Shared loader so other editors (e.g. sim audio splicing) reuse one instance. */
+export { getFFmpeg };
