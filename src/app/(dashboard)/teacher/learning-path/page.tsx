@@ -19,6 +19,11 @@ interface LessonItem {
   title: string;
 }
 
+interface StepPracticeInfo {
+  stepId: string;
+  practiceAssignmentId: string | null;
+}
+
 export default function LearningPathEditorPage() {
   const { loading: authLoading } = useTeacherGuard();
   const [subjects, setSubjects] = useState<SubjectRow[]>([]);
@@ -28,6 +33,9 @@ export default function LearningPathEditorPage() {
   const [loadingPath, setLoadingPath] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // lessonId -> saved step + its practice; used for the Generate/Vet controls.
+  const [stepByLesson, setStepByLesson] = useState<Record<string, StepPracticeInfo>>({});
+  const [generatingFor, setGeneratingFor] = useState<string | null>(null);
 
   // Load subjects that actually have published lessons.
   useEffect(() => {
@@ -82,6 +90,7 @@ export default function LearningPathEditorPage() {
       .maybeSingle<{ id: string }>();
 
     let orderedIds: string[] = [];
+    setStepByLesson({});
     if (path) {
       const { data: weeks } = await db
         .from("learning_path_weeks")
@@ -94,12 +103,17 @@ export default function LearningPathEditorPage() {
       if (weeks && weeks.length > 0) {
         const { data: steps } = await db
           .from("learning_path_steps")
-          .select("week_id, lesson_id, sequence")
+          .select("id, week_id, lesson_id, sequence, practice_assignment_id")
           .in(
             "week_id",
             weeks.map((w) => w.id)
           )
-          .returns<Array<{ week_id: string; lesson_id: string; sequence: number }>>();
+          .returns<Array<{ id: string; week_id: string; lesson_id: string; sequence: number; practice_assignment_id: string | null }>>();
+        const stepMap: Record<string, StepPracticeInfo> = {};
+        for (const st of steps ?? []) {
+          stepMap[st.lesson_id] = { stepId: st.id, practiceAssignmentId: st.practice_assignment_id };
+        }
+        setStepByLesson(stepMap);
         orderedIds = (steps ?? [])
           .slice()
           .sort((a, b) => {
@@ -151,6 +165,35 @@ export default function LearningPathEditorPage() {
     setOrdered((prev) => [...prev, lesson]);
     setAvailable((prev) => prev.filter((l) => l.id !== lesson.id));
     setDirty(true);
+  };
+
+  const generatePractice = async (lessonId: string) => {
+    const info = stepByLesson[lessonId];
+    if (!info) return;
+    setGeneratingFor(lessonId);
+    try {
+      const res = await fetch("/api/teacher/learning-path/generate-practice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step_id: info.stepId, num_questions: 10 }),
+      });
+      const text = await res.text();
+      const lastLine = text.trim().split("\n").pop() ?? "";
+      const data = JSON.parse(lastLine) as { assignment_id?: string; error?: string };
+      if (!res.ok || data.error || !data.assignment_id) {
+        toast.error("Practice generation failed: " + (data.error || "Unknown error"));
+      } else {
+        setStepByLesson((prev) => ({
+          ...prev,
+          [lessonId]: { ...info, practiceAssignmentId: data.assignment_id! },
+        }));
+        toast.success("Practice generated — review the questions before students see them");
+      }
+    } catch {
+      toast.error("Practice generation failed");
+    } finally {
+      setGeneratingFor(null);
+    }
   };
 
   const save = async () => {
@@ -254,6 +297,45 @@ export default function LearningPathEditorPage() {
                           {i + 1}
                         </span>
                         <span className="flex-1 text-sm text-gray-800 truncate">{lesson.title}</span>
+                        {stepByLesson[lesson.id] ? (
+                          generatingFor === lesson.id ? (
+                            <span className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-amber-600">
+                              <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-amber-600" />
+                              Generating…
+                            </span>
+                          ) : stepByLesson[lesson.id].practiceAssignmentId ? (
+                            <span className="flex items-center gap-1">
+                              <a
+                                href={`/teacher/homework/create?assignment=${stepByLesson[lesson.id].practiceAssignmentId}`}
+                                className="px-2.5 py-1 text-xs font-medium text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50"
+                                title="Review and edit the practice questions"
+                              >
+                                ✓ Practice · Vet
+                              </a>
+                              <button
+                                onClick={() => generatePractice(lesson.id)}
+                                disabled={generatingFor !== null}
+                                className="px-2 py-1 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                                title="Regenerate questions from the lesson"
+                              >
+                                ↻
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => generatePractice(lesson.id)}
+                              disabled={generatingFor !== null}
+                              className="px-2.5 py-1 text-xs font-medium text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-50 disabled:opacity-40"
+                              title="Generate ~10 auto-marked questions from this lesson"
+                            >
+                              ⚡ Generate practice
+                            </button>
+                          )
+                        ) : (
+                          <span className="px-2 py-1 text-[11px] text-gray-300" title="Save the path first to enable practice generation">
+                            save first
+                          </span>
+                        )}
                         <button
                           onClick={() => move(i, -1)}
                           disabled={i === 0}

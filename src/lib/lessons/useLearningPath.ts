@@ -16,6 +16,7 @@ import {
   evaluatePath,
   type PathInput,
   type StudentProgressInput,
+  type StepPracticeState,
   type StepState,
   type WeekState,
   type WeekTestState,
@@ -39,6 +40,7 @@ interface StepRow {
   week_id: string;
   lesson_id: string;
   sequence: number;
+  practice_assignment_id: string | null;
 }
 
 export interface TreeStep {
@@ -50,6 +52,9 @@ export interface TreeStep {
   thumbnailUrl: string | null;
   durationSeconds: number | null;
   videoUrl: string | null;
+  practiceAssignmentId: string | null;
+  practiceState: StepPracticeState;
+  lessonWatched: boolean;
 }
 
 export interface TreeWeek {
@@ -99,7 +104,7 @@ export async function loadSubjectLearningPath(
 
   const { data: stepRows } = await db
     .from("learning_path_steps")
-    .select("id, week_id, lesson_id, sequence")
+    .select("id, week_id, lesson_id, sequence, practice_assignment_id")
     .in(
       "week_id",
       weeks.map((w) => w.id)
@@ -109,9 +114,15 @@ export async function loadSubjectLearningPath(
 
   const steps = stepRows ?? [];
   const lessonIds = Array.from(new Set(steps.map((s) => s.lesson_id)));
-  const testIds = weeks
-    .map((w) => w.test_assignment_id)
+  const practiceIds = steps
+    .map((s) => s.practice_assignment_id)
     .filter((id): id is string => Boolean(id));
+  const testIds = [
+    ...weeks
+      .map((w) => w.test_assignment_id)
+      .filter((id): id is string => Boolean(id)),
+    ...practiceIds,
+  ];
 
   // Lesson metadata + the student's completion (typed tables).
   const [{ data: lessons }, { data: progressRows }] = await Promise.all([
@@ -194,6 +205,7 @@ export async function loadSubjectLearningPath(
         id: s.id,
         lessonId: s.lesson_id,
         sequence: s.sequence,
+        practiceAssignmentId: s.practice_assignment_id,
       })),
     })),
   };
@@ -249,6 +261,9 @@ export async function loadSubjectLearningPath(
           thumbnailUrl: lesson?.thumbnail_url ?? null,
           durationSeconds: lesson?.video_duration_seconds ?? null,
           videoUrl: lesson?.video_url_720p ?? null,
+          practiceAssignmentId: stepResult.practiceAssignmentId,
+          practiceState: stepResult.practiceState,
+          lessonWatched: stepResult.lessonWatched,
         };
       }),
     };

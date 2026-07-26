@@ -131,3 +131,74 @@ describe('evaluatePath', () => {
     expect(r.currentWeekId).toBeNull();
   });
 });
+
+describe('per-step practice gating', () => {
+  // One week, two lessons; each lesson gates on its own practice.
+  const PRACTICE_PATH: PathInput = {
+    weeks: [
+      {
+        id: 'w1',
+        weekNumber: 1,
+        testAssignmentId: null,
+        steps: [
+          { id: 's1', lessonId: 'l1', sequence: 1, practiceAssignmentId: 'p1' },
+          { id: 's2', lessonId: 'l2', sequence: 2, practiceAssignmentId: 'p2' },
+        ],
+      },
+    ],
+  };
+
+  it('watching the video alone does not complete a practice step', () => {
+    const result = evaluatePath(PRACTICE_PATH, progress({ l1: true }));
+    const [s1, s2] = result.weeks[0].steps;
+    expect(s1.state).toBe('in_progress');
+    expect(s1.practiceState).toBe('available');
+    expect(s1.lessonWatched).toBe(true);
+    expect(s2.state).toBe('locked');
+    expect(result.currentStepId).toBe('s1');
+  });
+
+  it('passing the practice completes the step and unlocks the next', () => {
+    const result = evaluatePath(
+      PRACTICE_PATH,
+      progress({ l1: true }, { p1: passingTest })
+    );
+    const [s1, s2] = result.weeks[0].steps;
+    expect(s1.state).toBe('completed');
+    expect(s1.practiceState).toBe('passed');
+    expect(s2.state).toBe('available');
+    expect(result.currentStepId).toBe('s2');
+  });
+
+  it('failing the practice keeps the step in progress with a retryable practice', () => {
+    const result = evaluatePath(
+      PRACTICE_PATH,
+      progress({ l1: true }, { p1: failingTest })
+    );
+    const [s1, s2] = result.weeks[0].steps;
+    expect(s1.state).toBe('in_progress');
+    expect(s1.practiceState).toBe('failed');
+    expect(s2.state).toBe('locked');
+  });
+
+  it('week completes only when every practice is passed', () => {
+    const partial = evaluatePath(
+      PRACTICE_PATH,
+      progress({ l1: true, l2: true }, { p1: passingTest })
+    );
+    expect(partial.weeks[0].state).toBe('in_progress');
+
+    const full = evaluatePath(
+      PRACTICE_PATH,
+      progress({ l1: true, l2: true }, { p1: passingTest, p2: passingTest })
+    );
+    expect(full.weeks[0].state).toBe('completed');
+    expect(full.currentStepId).toBeNull();
+  });
+
+  it('steps without a practice keep the original completion rule', () => {
+    const result = evaluatePath(PATH, progress({ l1: true }));
+    expect(result.weeks[0].steps[0].state).toBe('completed');
+    expect(result.weeks[0].steps[0].practiceState).toBe('none');
+  });
+});

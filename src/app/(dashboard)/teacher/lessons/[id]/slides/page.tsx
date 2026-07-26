@@ -68,6 +68,9 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
   const [languageMode, setLanguageMode] = useState<SlideLanguageMode>(
     requestedLanguageMode === 'en' ? 'en' : 'ar'
   );
+  // Set when the teacher explicitly changes the per-lesson language lock, so
+  // the new mode persists immediately (not only on the next slide save).
+  const languageModeTouchedRef = useRef(false);
 
   const loadData = useCallback(async () => {
     const supabase = createClient();
@@ -100,10 +103,9 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
       typeof slidesRes?.slideDeck?.updated_at === 'string' ? slidesRes.slideDeck.updated_at : null
     );
 
-    if (slidesRes?.slideDeck?.language_mode === 'en') {
-      setLanguageMode('en');
-    } else if (slidesRes?.slideDeck?.language_mode === 'ar' || slidesRes?.slideDeck?.language_mode === 'both') {
-      setLanguageMode('ar');
+    const loadedMode = slidesRes?.slideDeck?.language_mode;
+    if (loadedMode === 'en' || loadedMode === 'ar' || loadedMode === 'both') {
+      setLanguageMode(loadedMode);
     }
     setLoading(false);
   }, [id]);
@@ -308,6 +310,44 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
           </div>
         )
       ) : (
+        <>
+        {/* Per-lesson language lock: students see the slides ONLY in the
+            locked language, so an unedited translation can never surface. */}
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2">
+          <span className="text-xs font-semibold text-amber-800">
+            Student slide language
+          </span>
+          <div className="flex overflow-hidden rounded-lg border border-amber-200">
+            {([
+              { value: 'ar', label: 'العربية فقط' },
+              { value: 'en', label: 'English only' },
+              { value: 'both', label: 'Both (student choice)' },
+            ] as const).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  if (languageMode !== opt.value) {
+                    languageModeTouchedRef.current = true;
+                    setLanguageMode(opt.value);
+                  }
+                }}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  languageMode === opt.value
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-white text-gray-600 hover:bg-amber-100'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <span className="text-[11px] text-amber-700">
+            {languageMode === 'both'
+              ? 'Students can switch languages — make sure BOTH versions are edited.'
+              : 'Students only ever see this version of the slides.'}
+          </span>
+        </div>
         <SlideEditor
           slides={slides}
           onChange={setSlides}
@@ -341,6 +381,7 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
             onGeneratingChange: handleGeneratingChange,
           }}
         />
+        </>
       )}
     </div>
   );

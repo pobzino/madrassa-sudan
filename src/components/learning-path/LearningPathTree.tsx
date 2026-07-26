@@ -12,8 +12,8 @@ import type {
 } from "@/lib/lessons/useLearningPath";
 
 const translations = {
-  ar: { startTest: "ابدأ الاختبار", retake: "أعد المحاولة", passed: "ناجح", passMark: "80% للنجاح", open: "افتح", test: "اختبار" },
-  en: { startTest: "Start test", retake: "Retake", passed: "Passed", passMark: "80% to pass", open: "Open", test: "Test" },
+  ar: { startTest: "ابدأ الاختبار", retake: "أعد المحاولة", passed: "ناجح", passMark: "80% للنجاح", open: "افتح", test: "اختبار", practice: "التدريب", practiceRetry: "أعد التدريب" },
+  en: { startTest: "Start test", retake: "Retake", passed: "Passed", passMark: "80% to pass", open: "Open", test: "Test", practice: "Practice", practiceRetry: "Retry practice" },
 };
 
 type TreeNode =
@@ -346,6 +346,20 @@ export default function LearningPathTree({
                     >
                       {ctaFor(node)}
                     </Link>
+                    {node.kind === "lesson" &&
+                      node.step.practiceAssignmentId &&
+                      (node.step.practiceState === "available" || node.step.practiceState === "failed") && (
+                        <Link
+                          href={`/practice/${node.step.practiceAssignmentId}`}
+                          className={`inline-block px-3.5 py-1 rounded-full text-white text-[11px] font-bold font-fredoka shadow-sm transition-colors ${
+                            node.step.practiceState === "failed"
+                              ? "bg-amber-500 hover:bg-amber-600"
+                              : "bg-[#D97706] hover:bg-[#B45309]"
+                          }`}
+                        >
+                          {node.step.practiceState === "failed" ? t.practiceRetry : t.practice}
+                        </Link>
+                      )}
                     {node.kind === "lesson" && (
                       <>
                         <LessonComputerDownloadButton

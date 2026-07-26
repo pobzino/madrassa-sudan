@@ -84,7 +84,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           return NextResponse.json({ error: "You don't have access to this assignment" }, { status: 403 });
         }
 
-        // Student access - return without correct answers
+        // Student access - return without correct answers. Practices are the
+        // exception: the player gives instant feedback and reveals the right
+        // answer as a teaching moment, so it needs correct_answer client-side
+        // (the submit route still re-grades server-side).
         const questions = (assignment.homework_questions || [])
           .sort((a, b) => a.display_order - b.display_order)
           .map((q) => ({
@@ -96,7 +99,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             points: q.points,
             display_order: q.display_order,
             instructions: q.instructions,
-            // Exclude correct_answer for students
+            ...(assignment.is_practice ? { correct_answer: q.correct_answer } : {}),
           }));
 
         return NextResponse.json({

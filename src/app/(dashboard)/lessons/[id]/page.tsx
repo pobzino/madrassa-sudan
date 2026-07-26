@@ -43,6 +43,9 @@ const translations = {
     prevLesson: "الدرس السابق",
     completed: "مكتمل",
     markComplete: "تحديد كمكتمل",
+    startPractice: "ابدأ التدريب",
+    retryPractice: "أعد التدريب",
+    practiceHint: "أكمل التدريب لإنهاء الدرس",
     downloadVideo: "تحميل الفيديو",
     question: "سؤال",
     submit: "إرسال",
@@ -64,6 +67,9 @@ const translations = {
     prevLesson: "Previous Lesson",
     completed: "Completed",
     markComplete: "Mark Complete",
+    startPractice: "Start Practice",
+    retryPractice: "Retry Practice",
+    practiceHint: "Pass the practice to finish this lesson",
     downloadVideo: "Download video",
     question: "Question",
     submit: "Submit",
@@ -188,9 +194,60 @@ export default function LessonPlayerPage() {
   const [subject, setSubject] = useState<Subject | null>(null);
   const [questions, setQuestions] = useState<LessonQuestion[]>([]);
   const [progress, setProgress] = useState<LessonProgress | null>(null);
+  // Independent-track practice gate: when this lesson is a learning-path step
+  // with a practice attached, passing the practice IS completion — the manual
+  // "mark complete" button disappears and the video end routes into practice.
+  const [practiceAssignmentId, setPracticeAssignmentId] = useState<string | null>(null);
+  const [practicePassed, setPracticePassed] = useState(false);
   const [adjacentLessons, setAdjacentLessons] = useState<{ prev: Lesson | null; next: Lesson | null }>({ prev: null, next: null });
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPracticeGate() {
+      if (!lessonId || !userId) return;
+      const { data: step } = await supabase
+        .from("learning_path_steps")
+        .select("practice_assignment_id")
+        .eq("lesson_id", lessonId)
+        .not("practice_assignment_id", "is", null)
+        .limit(1)
+        .maybeSingle();
+      const practiceId = step?.practice_assignment_id ?? null;
+      if (cancelled) return;
+      setPracticeAssignmentId(practiceId);
+      if (!practiceId) return;
+      const [{ data: assignment }, { data: sub }] = await Promise.all([
+        supabase
+          .from("homework_assignments")
+          .select("total_points, passing_score")
+          .eq("id", practiceId)
+          .maybeSingle(),
+        supabase
+          .from("homework_submissions")
+          .select("status, score")
+          .eq("assignment_id", practiceId)
+          .eq("student_id", userId)
+          .maybeSingle(),
+      ]);
+      if (cancelled) return;
+      if (
+        assignment &&
+        sub &&
+        (sub.status === "graded" || sub.status === "returned") &&
+        sub.score != null &&
+        (assignment.total_points ?? 0) > 0 &&
+        sub.score >= (((assignment.passing_score ?? 80) / 100) * (assignment.total_points ?? 0))
+      ) {
+        setPracticePassed(true);
+      }
+    }
+    void loadPracticeGate();
+    return () => {
+      cancelled = true;
+    };
+  }, [lessonId, userId, supabase]);
 
   // Lesson sim (event-sourced recording). Replaces the Bunny CDN video on
   // the student page — if a sim exists we render SimPlayer; otherwise we
@@ -512,7 +569,13 @@ export default function LessonPlayerPage() {
 
     const { data: updatedProgress } = await supabase.from("lesson_progress").upsert(progressData, { onConflict: "student_id,lesson_id" }).select().single();
     if (updatedProgress) setProgress(updatedProgress);
-  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size]);
+
+    // Independent track: finishing the recording flows straight into the
+    // lesson's Practice (passing it is what completes the step).
+    if (pct >= 99 && practiceAssignmentId && !practicePassed) {
+      router.push(`/practice/${practiceAssignmentId}?from=lesson`);
+    }
+  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practicePassed, router]);
 
   // Close progress gate and let sim handle replay
   const handleRewatchQuiz = useCallback(() => {
@@ -638,8 +701,24 @@ export default function LessonPlayerPage() {
                 />
               ) : null)}
 
-            {/* Completion status */}
-            {progress?.completed ? (
+            {/* Completion status. Practice-gated lessons have no manual
+                mark-complete: passing the Practice is completion. */}
+            {practiceAssignmentId ? (
+              practicePassed ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-[#007229]/10 text-[#007229] rounded-full text-sm font-medium">
+                  {Icons.check}
+                  <span>{t.completed}</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => router.push(`/practice/${practiceAssignmentId}?from=lesson`)}
+                  title={t.practiceHint}
+                  className="px-4 py-2 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors text-sm font-medium shadow-lg shadow-[#007229]/20"
+                >
+                  {t.startPractice}
+                </button>
+              )
+            ) : progress?.completed ? (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-[#007229]/10 text-[#007229] rounded-full text-sm font-medium">
                 {Icons.check}
                 <span>{t.completed}</span>
@@ -673,6 +752,12 @@ export default function LessonPlayerPage() {
             playsInline
             className="w-full h-full"
             onEnded={() => {
+              if (practiceAssignmentId) {
+                if (!practicePassed) {
+                  router.push(`/practice/${practiceAssignmentId}?from=lesson`);
+                }
+                return;
+              }
               if (!progress?.completed) {
                 handleMarkComplete();
               }

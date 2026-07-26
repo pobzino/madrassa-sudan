@@ -276,6 +276,74 @@ html {
   100% { transform: translateY(0); opacity: 1; }
 }
 
+/* ── Practice player: owl reactions ── */
+/* Springy bounce with squash & stretch — the "correct!" reaction. */
+@keyframes owl-happy-bounce {
+  0%   { transform: translateY(0) scale(1, 1); }
+  18%  { transform: translateY(2px) scale(1.06, 0.92); }
+  40%  { transform: translateY(-16px) scale(0.96, 1.06); }
+  62%  { transform: translateY(0) scale(1.04, 0.94); }
+  78%  { transform: translateY(-6px) scale(0.99, 1.02); }
+  100% { transform: translateY(0) scale(1, 1); }
+}
+/* Gentle sympathetic tilt — the "not quite" reaction. Nothing harsh. */
+@keyframes owl-sad-tilt {
+  0%   { transform: rotate(0deg) translateY(0); }
+  30%  { transform: rotate(-8deg) translateY(2px); }
+  60%  { transform: rotate(-6deg) translateY(2px); }
+  100% { transform: rotate(0deg) translateY(0); }
+}
+/* Two celebratory hops with wing flaps — the pass-screen reaction. */
+@keyframes owl-cheer-hop {
+  0%   { transform: translateY(0) rotate(0deg); }
+  15%  { transform: translateY(-18px) rotate(-4deg); }
+  30%  { transform: translateY(0) rotate(0deg); }
+  45%  { transform: translateY(-24px) rotate(4deg); }
+  62%  { transform: translateY(0) rotate(0deg); }
+  75%  { transform: translateY(-8px) rotate(-2deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+@keyframes owl-idle-breathe {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  50%      { transform: translateY(1px) scale(1.015, 0.985); }
+}
+@keyframes owl-wing-flap-l {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(38deg); }
+}
+@keyframes owl-wing-flap-r {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(-38deg); }
+}
+@keyframes owl-eye-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%           { transform: scaleY(0.08); }
+}
+.owl-anim-idle  { animation: owl-idle-breathe 3.2s ease-in-out infinite; transform-origin: 50% 90%; }
+.owl-anim-happy { animation: owl-happy-bounce 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both; transform-origin: 50% 100%; }
+.owl-anim-sad   { animation: owl-sad-tilt 1.1s ease-in-out both; transform-origin: 50% 85%; }
+.owl-anim-cheer { animation: owl-cheer-hop 1.5s ease-in-out both; transform-origin: 50% 100%; }
+.owl-anim-cheer .owl-wing-l { animation: owl-wing-flap-l 0.4s ease-in-out 3; transform-origin: 30px 58px; }
+.owl-anim-cheer .owl-wing-r { animation: owl-wing-flap-r 0.4s ease-in-out 3; transform-origin: 90px 58px; }
+.owl-anim-happy .owl-wing-l { animation: owl-wing-flap-l 0.45s ease-in-out 1; transform-origin: 30px 58px; }
+.owl-anim-happy .owl-wing-r { animation: owl-wing-flap-r 0.45s ease-in-out 1; transform-origin: 90px 58px; }
+.owl-blink { animation: owl-eye-blink 4.6s ease-in-out infinite; transform-origin: center 58px; }
+
+/* Correct answer reveal: soft green pulse that draws the eye. */
+@keyframes practice-reveal-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(0, 145, 61, 0.35); }
+  70%  { box-shadow: 0 0 0 12px rgba(0, 145, 61, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 145, 61, 0); }
+}
+.practice-reveal { animation: practice-reveal-pulse 0.9s ease-out 2; }
+
+@media (prefers-reduced-motion: reduce) {
+  .owl-anim-idle, .owl-anim-happy, .owl-anim-sad, .owl-anim-cheer,
+  .owl-anim-cheer .owl-wing-l, .owl-anim-cheer .owl-wing-r,
+  .owl-anim-happy .owl-wing-l, .owl-anim-happy .owl-wing-r,
+  .owl-blink, .practice-reveal { animation: none !important; }
+}
+
 /* RTL Support */
 [dir="rtl"] {
   font-family: var(--font-cairo);

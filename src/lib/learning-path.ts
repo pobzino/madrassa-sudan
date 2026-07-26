@@ -18,11 +18,14 @@
 export type StepState = "locked" | "available" | "in_progress" | "completed";
 export type WeekState = "locked" | "available" | "in_progress" | "completed";
 export type WeekTestState = "none" | "locked" | "available" | "failed" | "passed";
+export type StepPracticeState = "none" | "locked" | "available" | "failed" | "passed";
 
 export interface PathStepInput {
   id: string;
   lessonId: string;
   sequence: number;
+  /** Per-lesson Practice gate; passing it (>= passing_score) completes the step. */
+  practiceAssignmentId?: string | null;
 }
 
 export interface PathWeekInput {
@@ -62,6 +65,10 @@ export interface StepResult {
   lessonId: string;
   sequence: number;
   state: StepState;
+  practiceAssignmentId: string | null;
+  practiceState: StepPracticeState;
+  /** Whether the lesson video/sim itself has been watched to completion. */
+  lessonWatched: boolean;
 }
 
 export interface WeekResult {
@@ -96,12 +103,24 @@ function isTestFailed(result: TestResultInput | undefined): boolean {
   return !isTestPassed(result);
 }
 
+/**
+ * A step with a Practice completes by PASSING the practice (mastery); the
+ * video alone is not enough. A step without one keeps the original rule:
+ * lesson_progress.completed.
+ */
+function stepIsCompleted(step: PathStepInput, progress: StudentProgressInput): boolean {
+  if (step.practiceAssignmentId) {
+    return isTestPassed(progress.testResults[step.practiceAssignmentId]);
+  }
+  return progress.lessonCompletion[step.lessonId]?.completed === true;
+}
+
 function lessonsAllCompleted(
   week: PathWeekInput,
-  lessonCompletion: StudentProgressInput["lessonCompletion"]
+  progress: StudentProgressInput
 ): boolean {
   if (week.steps.length === 0) return true;
-  return week.steps.every((step) => lessonCompletion[step.lessonId]?.completed === true);
+  return week.steps.every((step) => stepIsCompleted(step, progress));
 }
 
 function computeTestState(
@@ -109,7 +128,7 @@ function computeTestState(
   progress: StudentProgressInput
 ): WeekTestState {
   if (!week.testAssignmentId) return "none";
-  if (!lessonsAllCompleted(week, progress.lessonCompletion)) return "locked";
+  if (!lessonsAllCompleted(week, progress)) return "locked";
   const result = progress.testResults[week.testAssignmentId];
   if (isTestPassed(result)) return "passed";
   if (isTestFailed(result)) return "failed";
@@ -120,7 +139,7 @@ function weekIsCompleted(
   week: PathWeekInput,
   progress: StudentProgressInput
 ): boolean {
-  if (!lessonsAllCompleted(week, progress.lessonCompletion)) return false;
+  if (!lessonsAllCompleted(week, progress)) return false;
   if (!week.testAssignmentId) return true;
   return isTestPassed(progress.testResults[week.testAssignmentId]);
 }
@@ -137,7 +156,7 @@ export function evaluatePath(
 
   const results: WeekResult[] = weeks.map((week) => {
     const weekAvailable = previousWeekCompleted;
-    const lessonsDone = lessonsAllCompleted(week, progress.lessonCompletion);
+    const lessonsDone = lessonsAllCompleted(week, progress);
     // A week only counts as completed (and thus unlocks the next) if it was
     // itself reachable — otherwise out-of-order completion data could unlock
     // later weeks while earlier ones are still locked.
@@ -148,24 +167,47 @@ export function evaluatePath(
     let priorStepCompleted = true; // first step in an available week unlocks
     const steps: StepResult[] = sortedSteps.map((step) => {
       const lesson = progress.lessonCompletion[step.lessonId];
+      const completed = stepIsCompleted(step, progress);
+      const practiceResult = step.practiceAssignmentId
+        ? progress.testResults[step.practiceAssignmentId]
+        : undefined;
+
       let state: StepState;
       if (!weekAvailable) {
         state = "locked";
-      } else if (lesson?.completed) {
+      } else if (completed) {
         state = "completed";
       } else if (!priorStepCompleted) {
         state = "locked";
+      } else if (lesson?.completed && step.practiceAssignmentId) {
+        // Video done, practice still to pass.
+        state = "in_progress";
       } else {
         state = lesson?.started ? "in_progress" : "available";
       }
-      priorStepCompleted = lesson?.completed === true;
+      priorStepCompleted = completed;
+
+      let practiceState: StepPracticeState;
+      if (!step.practiceAssignmentId) practiceState = "none";
+      else if (state === "locked") practiceState = "locked";
+      else if (isTestPassed(practiceResult)) practiceState = "passed";
+      else if (isTestFailed(practiceResult)) practiceState = "failed";
+      else practiceState = "available";
 
       // Bird perches on the first non-completed, accessible step.
       if (currentStepId === null && (state === "available" || state === "in_progress")) {
         currentStepId = step.id;
         currentWeekId = week.id;
       }
-      return { id: step.id, lessonId: step.lessonId, sequence: step.sequence, state };
+      return {
+        id: step.id,
+        lessonId: step.lessonId,
+        sequence: step.sequence,
+        state,
+        practiceAssignmentId: step.practiceAssignmentId ?? null,
+        practiceState,
+        lessonWatched: lesson?.completed === true,
+      };
     });
 
     // If lessons are done but the test still needs passing, the bird moves to
