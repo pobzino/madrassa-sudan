@@ -21,6 +21,7 @@ import {
   type WeekState,
   type WeekTestState,
 } from "@/lib/learning-path";
+import { watchedPercent } from "@/lib/lessons/watched-percent";
 
 interface PathRow {
   id: string;
@@ -55,6 +56,8 @@ export interface TreeStep {
   practiceAssignmentId: string | null;
   practiceState: StepPracticeState;
   lessonWatched: boolean;
+  /** How much of the recording has been watched, 0–100. */
+  watchedPercent: number;
 }
 
 export interface TreeWeek {
@@ -216,6 +219,11 @@ export async function loadSubjectLearningPath(
     lessonCompletion[lessonId] = {
       completed: p?.completed === true,
       started: p ? p.completed === true || (p.last_position_seconds ?? 0) > 0 : false,
+      watchedPercent: watchedPercent(
+        p?.last_position_seconds,
+        lessonById.get(lessonId)?.video_duration_seconds,
+        p?.completed === true
+      ),
     };
   }
 
@@ -264,6 +272,7 @@ export async function loadSubjectLearningPath(
           practiceAssignmentId: stepResult.practiceAssignmentId,
           practiceState: stepResult.practiceState,
           lessonWatched: stepResult.lessonWatched,
+          watchedPercent: stepResult.watchedPercent,
         };
       }),
     };

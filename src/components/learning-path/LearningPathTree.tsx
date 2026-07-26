@@ -12,8 +12,8 @@ import type {
 } from "@/lib/lessons/useLearningPath";
 
 const translations = {
-  ar: { startTest: "ابدأ الاختبار", retake: "أعد المحاولة", passed: "ناجح", passMark: "80% للنجاح", open: "افتح", test: "اختبار", practice: "التدريب", practiceRetry: "أعد التدريب" },
-  en: { startTest: "Start test", retake: "Retake", passed: "Passed", passMark: "80% to pass", open: "Open", test: "Test", practice: "Practice", practiceRetry: "Retry practice" },
+  ar: { startTest: "ابدأ الاختبار", retake: "أعد المحاولة", passed: "ناجح", passMark: "80% للنجاح", open: "افتح", test: "اختبار", practice: "التدريب", practiceRetry: "أعد التدريب", watched: (p: number) => `شاهدت ${p}%`, resume: "أكمل" },
+  en: { startTest: "Start test", retake: "Retake", passed: "Passed", passMark: "80% to pass", open: "Open", test: "Test", practice: "Practice", practiceRetry: "Retry practice", watched: (p: number) => `${p}% watched`, resume: "Continue" },
 };
 
 type TreeNode =
@@ -65,13 +65,47 @@ function Sparkle({ className = "" }: { className?: string }) {
   );
 }
 
+/**
+ * Ring around a lesson disc showing how much of the recording has been watched.
+ * Only drawn part-way through — a completed node already reads as done via the
+ * check + sparkle, and an untouched one should stay clean.
+ */
+function WatchedRing({ percent }: { percent: number }) {
+  const r = 34;
+  const circumference = 2 * Math.PI * r;
+  return (
+    <svg
+      className="absolute -inset-2 w-20 h-20 -rotate-90 pointer-events-none"
+      viewBox="0 0 80 80"
+      aria-hidden="true"
+    >
+      <circle cx="40" cy="40" r={r} fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="5" />
+      <circle
+        cx="40"
+        cy="40"
+        r={r}
+        fill="none"
+        stroke="#D97706"
+        strokeWidth="5"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={circumference * (1 - percent / 100)}
+        style={{ transition: "stroke-dashoffset 600ms ease-out" }}
+      />
+    </svg>
+  );
+}
+
 function NodeDisc({ node, isCurrent }: { node: TreeNode; isCurrent: boolean }) {
   if (node.kind === "lesson") {
     const { state } = node.step;
     const completed = state === "completed";
     const locked = state === "locked";
+    const watched = node.step.watchedPercent;
+    const showRing = !completed && !locked && watched > 0;
     return (
       <div className="relative">
+        {showRing && <WatchedRing percent={watched} />}
         <div
           className={`w-16 h-16 rounded-full flex items-center justify-center shadow-md border-b-4 transition-transform ${
             completed
@@ -212,7 +246,15 @@ export default function LearningPathTree({
 
   const labelFor = (node: TreeNode) => {
     if (node.kind === "lesson") {
-      return { title: node.step.title, sub: null as string | null, muted: node.step.state === "locked" };
+      const { state, watchedPercent } = node.step;
+      // Part-way through: say how far, so a half-watched lesson is obvious at a
+      // glance instead of looking identical to an untouched one.
+      const partial = state !== "completed" && state !== "locked" && watchedPercent > 0;
+      return {
+        title: node.step.title,
+        sub: partial ? t.watched(watchedPercent) : (null as string | null),
+        muted: state === "locked",
+      };
     }
     const s = node.week.testState;
     return {
@@ -223,7 +265,11 @@ export default function LearningPathTree({
   };
   // Call-to-action shown on the selected node to actually open the lesson/test.
   const ctaFor = (node: TreeNode): string => {
-    if (node.kind === "lesson") return t.open;
+    if (node.kind === "lesson") {
+      const { state, watchedPercent } = node.step;
+      const partial = state !== "completed" && state !== "locked" && watchedPercent > 0;
+      return partial ? t.resume : t.open;
+    }
     if (node.week.testState === "failed") return t.retake;
     if (node.week.testState === "passed") return t.open;
     return t.startTest;
