@@ -244,6 +244,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .eq("id", submissionId);
     }
 
+    // Passing a Practice IS the completion of its lesson (independent track):
+    // the recording alone never marks the lesson complete, so record it here so
+    // dashboards, counters and the streak trigger stay in step with the path
+    // tree. Below the threshold nothing is written — the student just retries.
+    if (isPractice && assignment.lesson_id && assignment.total_points > 0) {
+      const passMark = ((assignment.passing_score ?? 80) / 100) * assignment.total_points;
+      if (autoGradedScore >= passMark) {
+        await supabase.from("lesson_progress").upsert(
+          {
+            student_id: user.id,
+            lesson_id: assignment.lesson_id,
+            completed: true,
+            completed_at: now.toISOString(),
+          },
+          { onConflict: "student_id,lesson_id" }
+        );
+      }
+    }
+
     // Snapshot this attempt into the immutable homework_attempts log so teachers
     // can see the student's full progression across retries. We record the
     // answers picked plus per-question correctness for auto-gradable questions.
