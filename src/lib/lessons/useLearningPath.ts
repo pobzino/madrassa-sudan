@@ -219,11 +219,6 @@ export async function loadSubjectLearningPath(
     lessonCompletion[lessonId] = {
       completed: p?.completed === true,
       started: p ? p.completed === true || (p.last_position_seconds ?? 0) > 0 : false,
-      watchedPercent: watchedPercent(
-        p?.last_position_seconds,
-        lessonById.get(lessonId)?.video_duration_seconds,
-        p?.completed === true
-      ),
     };
   }
 
@@ -272,7 +267,13 @@ export async function loadSubjectLearningPath(
           practiceAssignmentId: stepResult.practiceAssignmentId,
           practiceState: stepResult.practiceState,
           lessonWatched: stepResult.lessonWatched,
-          watchedPercent: stepResult.watchedPercent,
+          // Display-only, so it is computed here rather than threaded through
+          // the unlock engine (no unlock rule depends on it).
+          watchedPercent: watchedPercent(
+            progressByLesson.get(stepResult.lessonId)?.last_position_seconds,
+            lesson?.video_duration_seconds,
+            stepResult.lessonWatched
+          ),
         };
       }),
     };

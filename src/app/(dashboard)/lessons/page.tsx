@@ -13,6 +13,7 @@ import SlideCard from "@/components/slides/SlideCard";
 import OwlImage, { isOwlImage } from "@/components/slides/OwlImage";
 import type { Slide } from "@/lib/slides.types";
 import LearningPathTree from "@/components/learning-path/LearningPathTree";
+import { watchedPercent } from "@/lib/lessons/watched-percent";
 import LessonsBackground from "@/components/learning-path/LessonsBackground";
 import { loadSubjectLearningPath, type SubjectLearningPath } from "@/lib/lessons/useLearningPath";
 import DownloadButton from "@/components/lessons/DownloadButton";
@@ -204,17 +205,12 @@ export default function LessonsPage() {
     return `${mins} ${t.minutes}`;
   };
 
-  const getProgress = (lesson: LessonWithProgress) => {
-    if (!lesson.progress) return 0;
-    if (lesson.progress.completed) return 100;
-    if (!lesson.video_duration_seconds) return 0;
-    return Math.min(
-      100,
-      Math.round(
-        (lesson.progress.last_position_seconds / lesson.video_duration_seconds) * 100
-      )
+  const getProgress = (lesson: LessonWithProgress) =>
+    watchedPercent(
+      lesson.progress?.last_position_seconds,
+      lesson.video_duration_seconds,
+      lesson.progress?.completed === true
     );
-  };
 
   const isCompleted = (lesson: LessonWithProgress) =>
     lesson.progress?.completed === true;
