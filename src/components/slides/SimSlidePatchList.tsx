@@ -12,6 +12,7 @@
 
 import { useMemo } from 'react';
 import { computeSlideSpans } from '@/lib/sim-splice';
+import AudioSpanPlayer from '@/components/slides/AudioSpanPlayer';
 import type { SimPatchTarget } from '@/components/slides/sim-patch.types';
 import type { SimEvent } from '@/lib/sim.types';
 import type { Slide } from '@/lib/slides.types';
@@ -20,6 +21,8 @@ interface SimSlidePatchListProps {
   deck: Slide[];
   events: SimEvent[];
   durationMs: number;
+  /** Signed URL of the current recording, so a tutor can hear a slide before replacing it. */
+  audioUrl: string | null;
   language: 'ar' | 'en';
   onSelect: (target: SimPatchTarget) => void;
   disabled?: boolean;
@@ -42,6 +45,7 @@ export default function SimSlidePatchList({
   deck,
   events,
   durationMs,
+  audioUrl,
   language,
   onSelect,
   disabled = false,
@@ -74,8 +78,8 @@ export default function SimSlidePatchList({
       <div>
         <h3 className="text-sm font-semibold text-gray-900">Fix a mistake</h3>
         <p className="mt-0.5 text-xs text-gray-500">
-          Re-record one slide instead of the whole lesson. The rest of the recording is kept and
-          everything after the fix shifts to fit.
+          Play a slide to hear what is there now, then re-record just that one. The rest of the
+          recording is kept and everything after the fix shifts to fit.
         </p>
       </div>
       <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200">
@@ -90,6 +94,14 @@ export default function SimSlidePatchList({
             <span className="flex-1 truncate text-sm text-gray-800" title={target.label}>
               {target.label}
             </span>
+            <AudioSpanPlayer
+              src={audioUrl}
+              startMs={target.startMs}
+              endMs={target.endMs}
+              disabled={disabled}
+              compact
+              label={`Listen to ${target.label}`}
+            />
             <button
               type="button"
               disabled={disabled}
