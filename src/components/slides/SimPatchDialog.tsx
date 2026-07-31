@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { applySimPatch } from '@/lib/sim-patch';
+import AudioSpanPlayer from '@/components/slides/AudioSpanPlayer';
 import type { SimPatchTarget } from '@/components/slides/sim-patch.types';
 import type { SimPayload } from '@/lib/sim.types';
 import type { SimRecording } from '@/hooks/useSimRecorder';
@@ -137,13 +138,31 @@ export default function SimPatchDialog({
           </div>
         </dl>
 
-        {takeUrl && (
-          <div className="mt-4">
-            <p className="mb-1 text-xs font-medium text-gray-500">Listen back before applying</p>
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-            <audio src={takeUrl} controls className="w-full" />
+        {/* Compare before committing: the stretch being replaced, then the retake. */}
+        <div className="mt-4 space-y-2">
+          <p className="text-xs font-medium text-gray-500">Compare before applying</p>
+
+          <div className="flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2">
+            <AudioSpanPlayer
+              src={payload.audio_url}
+              startMs={target.startMs}
+              endMs={target.endMs}
+              label="Play current"
+            />
+            <span className="text-xs text-gray-500">
+              What is there now ({formatClock(originalSpanMs)})
+            </span>
           </div>
-        )}
+
+          {takeUrl && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 px-3 py-2">
+              <p className="mb-1 text-xs font-semibold text-emerald-800">
+                Your new take ({formatClock(recording.durationMs)})
+              </p>
+              <audio src={takeUrl} controls className="w-full" />
+            </div>
+          )}
+        </div>
 
         {busy && (
           <div className="mt-4">

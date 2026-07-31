@@ -1170,6 +1170,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
               deck={props.payload.sim.deck_snapshot}
               events={props.payload.sim.events}
               durationMs={props.payload.sim.duration_ms}
+              audioUrl={props.payload.audio_url}
               language={props.language}
               disabled={saving}
               onSelect={props.onRequestSlidePatch}
