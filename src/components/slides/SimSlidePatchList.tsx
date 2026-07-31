@@ -10,11 +10,12 @@
  * has to be unpublished before its recording can be touched).
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { computeSlideSpans } from '@/lib/sim-splice';
 import AudioSpanPlayer from '@/components/slides/AudioSpanPlayer';
+import SimPreviewModal from '@/components/slides/SimPreviewModal';
 import type { SimPatchTarget } from '@/components/slides/sim-patch.types';
-import type { SimEvent } from '@/lib/sim.types';
+import type { SimEvent, SimPayload } from '@/lib/sim.types';
 import type { Slide } from '@/lib/slides.types';
 
 interface SimSlidePatchListProps {
@@ -23,6 +24,8 @@ interface SimSlidePatchListProps {
   durationMs: number;
   /** Signed URL of the current recording, so a tutor can hear a slide before replacing it. */
   audioUrl: string | null;
+  /** The recording itself, so a slide can be WATCHED (slides + strokes) before replacing it. */
+  payload: SimPayload;
   language: 'ar' | 'en';
   onSelect: (target: SimPatchTarget) => void;
   disabled?: boolean;
@@ -46,10 +49,13 @@ export default function SimSlidePatchList({
   events,
   durationMs,
   audioUrl,
+  payload,
   language,
   onSelect,
   disabled = false,
 }: SimSlidePatchListProps) {
+  const [previewing, setPreviewing] = useState<SimPatchTarget | null>(null);
+
   const targets = useMemo<SimPatchTarget[]>(() => {
     const spans = computeSlideSpans(events, durationMs, deck[0]?.id ?? null);
     return spans.map((span) => {
@@ -78,8 +84,8 @@ export default function SimSlidePatchList({
       <div>
         <h3 className="text-sm font-semibold text-gray-900">Fix a mistake</h3>
         <p className="mt-0.5 text-xs text-gray-500">
-          Play a slide to hear what is there now, then re-record just that one. The rest of the
-          recording is kept and everything after the fix shifts to fit.
+          Watch a slide to see exactly what is there now, then re-record just that one. The rest of
+          the recording is kept and everything after the fix shifts to fit.
         </p>
       </div>
       <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200">
@@ -105,6 +111,14 @@ export default function SimSlidePatchList({
             <button
               type="button"
               disabled={disabled}
+              onClick={() => setPreviewing(target)}
+              className="shrink-0 rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 disabled:opacity-40"
+            >
+              Watch
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
               onClick={() => onSelect(target)}
               className="shrink-0 rounded-lg border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-40"
             >
@@ -113,6 +127,27 @@ export default function SimSlidePatchList({
           </li>
         ))}
       </ul>
+
+      {previewing && (
+        <SimPreviewModal
+          payload={payload}
+          language={language}
+          title={`Before re-recording: ${previewing.label}`}
+          subtitle="Playing only this slide's stretch of the current recording."
+          spanStartMs={previewing.startMs}
+          spanEndMs={previewing.endMs}
+          onClose={() => setPreviewing(null)}
+          action={{
+            label: 'Re-record this slide',
+            tone: 'amber',
+            onClick: () => {
+              const t = previewing;
+              setPreviewing(null);
+              onSelect(t);
+            },
+          }}
+        />
+      )}
     </div>
   );
 }
