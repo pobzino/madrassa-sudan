@@ -12,6 +12,7 @@ import {
 import { pruneSimVersionAudio } from '@/lib/server/sim-versions';
 import type { Json } from '@/lib/database.types';
 import type { SimPayload, SimRow } from '@/lib/sim.types';
+import { logError } from '@/lib/observability/error-log.server';
 
 const PatchSimSchema = z.object({
   clip_segments: z.array(ClipSegmentSchema).nullable().optional(),
@@ -65,7 +66,7 @@ export async function GET(
     const payload: SimPayload = { sim: simRow, audio_url: audioUrl };
     return NextResponse.json(payload);
   } catch (error) {
-    console.error('Get sim error:', error);
+    void logError({ error: error, route: 'PATCH /api/teacher/lessons/[id]/sims/[simId]', context: { note: 'Get sim error:' } });
     return NextResponse.json({ error: 'Failed to load sim' }, { status: 500 });
   }
 }
@@ -214,7 +215,7 @@ export async function PATCH(
     const payload: SimPayload = { sim: row, audio_url: audioUrl };
     return NextResponse.json(payload);
   } catch (error) {
-    console.error('Update sim error:', error);
+    void logError({ error: error, route: 'PATCH /api/teacher/lessons/[id]/sims/[simId]', context: { note: 'Update sim error:' } });
     return NextResponse.json({ error: 'Failed to update sim' }, { status: 500 });
   }
 }
@@ -277,7 +278,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Delete sim error:', error);
+    void logError({ error: error, route: 'PATCH /api/teacher/lessons/[id]/sims/[simId]', context: { note: 'Delete sim error:' } });
     return NextResponse.json({ error: 'Failed to delete sim' }, { status: 500 });
   }
 }

@@ -14,6 +14,7 @@ import {
   signAudioUrl,
 } from '@/lib/server/sim-storage';
 import { pruneSimVersionAudio } from '@/lib/server/sim-versions';
+import { logError } from '@/lib/observability/error-log.server';
 
 const RestoreSchema = z.object({ version_id: z.string().uuid() });
 
@@ -62,7 +63,7 @@ export async function GET(
       .order('version_number', { ascending: false });
 
     if (error) {
-      console.error('List sim versions error:', error);
+      void logError({ error: error, route: '/api/teacher/lessons/[id]/sims/versions', context: { note: 'List sim versions error:' } });
       return NextResponse.json({ error: 'Failed to load history' }, { status: 500 });
     }
 
@@ -82,7 +83,7 @@ export async function GET(
 
     return NextResponse.json({ versions });
   } catch (error) {
-    console.error('Sim versions GET error:', error);
+    void logError({ error: error, route: '/api/teacher/lessons/[id]/sims/versions', context: { note: 'Sim versions GET error:' } });
     return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 });
   }
 }
@@ -167,7 +168,7 @@ export async function POST(
     const audioUrl = await signAudioUrl(lessonId, sim.audio_path);
     return NextResponse.json({ sim: { sim: row, audio_url: audioUrl } });
   } catch (error) {
-    console.error('Sim versions POST error:', error);
+    void logError({ error: error, route: '/api/teacher/lessons/[id]/sims/versions', context: { note: 'Sim versions POST error:' } });
     return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 });
   }
 }

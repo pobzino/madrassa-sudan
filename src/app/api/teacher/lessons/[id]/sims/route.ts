@@ -12,6 +12,7 @@ import {
   signAudioUrl,
 } from '@/lib/server/sim-storage';
 import type { SimPayload, SimRow } from '@/lib/sim.types';
+import { logError } from '@/lib/observability/error-log.server';
 
 /** Allow up to 5 minutes for large audio uploads + storage writes. */
 export const maxDuration = 300;
@@ -147,7 +148,7 @@ export async function GET(
 
     return NextResponse.json({ sim, lesson_published: access.lessonPublished });
   } catch (error) {
-    console.error('Get lesson sim error:', error);
+    void logError({ error: error, route: 'POST /api/teacher/lessons/[id]/sims', context: { note: 'Get lesson sim error:' } });
     return NextResponse.json({ error: 'Failed to load sim' }, { status: 500 });
   }
 }
@@ -415,7 +416,7 @@ export async function POST(
     const audioUrl = await signAudioUrl(lessonId, row.audio_path);
     return NextResponse.json(rowToPayload(row, audioUrl), { status: 201 });
   } catch (error) {
-    console.error('Create sim error:', error);
+    void logError({ error: error, route: 'POST /api/teacher/lessons/[id]/sims', context: { note: 'Create sim error:' } });
     return NextResponse.json({ error: 'Failed to create sim' }, { status: 500 });
   }
 }

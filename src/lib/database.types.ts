@@ -500,6 +500,81 @@ export type Database = {
           },
         ]
       }
+      error_logs: {
+        Row: {
+          context: Json
+          fingerprint: string
+          http_method: string | null
+          id: string
+          level: string
+          message: string
+          occurred_at: string
+          release: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          route: string | null
+          source: string
+          stack: string | null
+          status_code: number | null
+          user_agent: string | null
+          user_id: string | null
+          user_role: string | null
+        }
+        Insert: {
+          context?: Json
+          fingerprint: string
+          http_method?: string | null
+          id?: string
+          level?: string
+          message: string
+          occurred_at?: string
+          release?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          route?: string | null
+          source: string
+          stack?: string | null
+          status_code?: number | null
+          user_agent?: string | null
+          user_id?: string | null
+          user_role?: string | null
+        }
+        Update: {
+          context?: Json
+          fingerprint?: string
+          http_method?: string | null
+          id?: string
+          level?: string
+          message?: string
+          occurred_at?: string
+          release?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          route?: string | null
+          source?: string
+          stack?: string | null
+          status_code?: number | null
+          user_agent?: string | null
+          user_id?: string | null
+          user_role?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "error_logs_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "error_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       feedback: {
         Row: {
           category: string
@@ -2380,7 +2455,21 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      error_log_groups: {
+        Row: {
+          affected_users: number | null
+          fingerprint: string | null
+          first_seen: string | null
+          last_seen: string | null
+          latest_message: string | null
+          latest_release: string | null
+          latest_route: string | null
+          occurrences: number | null
+          resolved: boolean | null
+          source: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       can_user_access_published_lesson: {
@@ -2437,6 +2526,10 @@ export type Database = {
           subject_name_ar: string
           subject_name_en: string
         }[]
+      }
+      prune_error_logs: {
+        Args: { keep_days?: number; keep_resolved_days?: number }
+        Returns: number
       }
       restore_lesson_sim_version: {
         Args: { p_lesson_id: string; p_version_id: string }
