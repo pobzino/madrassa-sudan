@@ -264,8 +264,11 @@ export async function POST(
       }
     }
 
-    // Delete any existing sim for this lesson (row + audio file) so the new
-    // one can take its slot under the UNIQUE(lesson_id) constraint.
+    // Delete any existing sim row for this lesson so the new one can take its
+    // slot under the UNIQUE(lesson_id) constraint. The delete trigger snapshots
+    // the outgoing recording into lesson_sim_versions first, and its audio file
+    // is deliberately LEFT IN STORAGE so that snapshot stays restorable —
+    // pruneSimVersionAudio bounds how many we keep.
     const { data: existing } = await dataClient
       .from('lesson_sims')
       .select('id, audio_path')
@@ -273,15 +276,6 @@ export async function POST(
       .maybeSingle();
 
     if (existing) {
-      if (existing.audio_path && hasServiceRoleConfig()) {
-        try {
-          const service = createServiceClient();
-          await service.storage.from(SIM_AUDIO_BUCKET).remove([existing.audio_path]);
-        } catch (err) {
-          // Best-effort: if the file is already gone we still want the new row in.
-          console.warn('Failed to remove previous sim audio file:', err);
-        }
-      }
       const { error: deleteError } = await dataClient
         .from('lesson_sims')
         .delete()

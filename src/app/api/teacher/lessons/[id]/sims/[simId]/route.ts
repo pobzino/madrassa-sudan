@@ -9,6 +9,7 @@ import {
   assertSimFeatureAccess,
   signAudioUrl,
 } from '@/lib/server/sim-storage';
+import { pruneSimVersionAudio } from '@/lib/server/sim-versions';
 import type { Json } from '@/lib/database.types';
 import type { SimPayload, SimRow } from '@/lib/sim.types';
 
@@ -201,6 +202,14 @@ export async function PATCH(
     // (lessons.video_duration_seconds follows duration_ms via the
     // trg_sync_lesson_video_duration trigger — no sync needed here.)
 
+    // The update just pushed the previous state into version history (trigger).
+    // Splicing in a patch also leaves a new audio object behind each time, so
+    // bound the history's storage here as well as on restore — otherwise a tutor
+    // fixing several slides would accumulate recordings indefinitely.
+    if (updates.audio_path && hasServiceRoleConfig()) {
+      await pruneSimVersionAudio(createServiceClient(), lessonId, row.audio_path);
+    }
+
     const audioUrl = await signAudioUrl(lessonId, row.audio_path);
     const payload: SimPayload = { sim: row, audio_url: audioUrl };
     return NextResponse.json(payload);
@@ -253,16 +262,9 @@ export async function DELETE(
       return NextResponse.json({ error: 'Sim not found' }, { status: 404 });
     }
 
-    if (row.audio_path && hasServiceRoleConfig()) {
-      try {
-        const service = createServiceClient();
-        await service.storage.from(SIM_AUDIO_BUCKET).remove([row.audio_path]);
-      } catch (err) {
-        // Best-effort: if the file is already gone we still want the row deleted.
-        console.warn('Failed to remove sim audio file:', err);
-      }
-    }
-
+    // The audio file is intentionally kept: the delete trigger snapshots this
+    // recording into lesson_sim_versions, and that snapshot is only restorable
+    // while its audio still exists. Storage is bounded by pruneSimVersionAudio.
     const { error: deleteError } = await dataClient
       .from('lesson_sims')
       .delete()

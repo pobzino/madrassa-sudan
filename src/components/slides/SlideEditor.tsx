@@ -1343,6 +1343,16 @@ export default function SlideEditor({
     if (lessonId) void clearSimRecordingDraft(lessonId);
   }, [lessonId, simCancelRecording]);
 
+  // A previous version was restored from the history panel.
+  const handleSimRestored = useCallback(
+    (payload: SimPayload) => {
+      setExistingSim(payload);
+      setSimReviewMode(null);
+      onSimChange?.(payload);
+    },
+    [onSimChange]
+  );
+
   const handleSimPatchApplied = useCallback(() => {
     clearSimPatch();
     // Re-read the sim so the editor holds the spliced timeline and new audio.
@@ -1997,6 +2007,7 @@ export default function SlideEditor({
           onSaved={handleSimEditSaved}
           onDeleted={handleSimDeleted}
           onRequestSlidePatch={startSimPatchRecord}
+          onRestored={handleSimRestored}
         />
       )}
       {lessonId && patchTarget && patchTake && existingSim && (

@@ -1422,6 +1422,82 @@ export type Database = {
           },
         ]
       }
+      lesson_sim_versions: {
+        Row: {
+          audio_duration_ms: number | null
+          audio_mime: string | null
+          audio_path: string | null
+          audio_retained: boolean
+          clip_segments: Json | null
+          created_at: string
+          created_by: string | null
+          deck_snapshot: Json
+          duration_ms: number
+          events: Json
+          id: string
+          lesson_id: string
+          reason: string
+          sim_id: string | null
+          version_number: number
+        }
+        Insert: {
+          audio_duration_ms?: number | null
+          audio_mime?: string | null
+          audio_path?: string | null
+          audio_retained?: boolean
+          clip_segments?: Json | null
+          created_at?: string
+          created_by?: string | null
+          deck_snapshot: Json
+          duration_ms: number
+          events: Json
+          id?: string
+          lesson_id: string
+          reason?: string
+          sim_id?: string | null
+          version_number: number
+        }
+        Update: {
+          audio_duration_ms?: number | null
+          audio_mime?: string | null
+          audio_path?: string | null
+          audio_retained?: boolean
+          clip_segments?: Json | null
+          created_at?: string
+          created_by?: string | null
+          deck_snapshot?: Json
+          duration_ms?: number
+          events?: Json
+          id?: string
+          lesson_id?: string
+          reason?: string
+          sim_id?: string | null
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_sim_versions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_sim_versions_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_sim_versions_sim_id_fkey"
+            columns: ["sim_id"]
+            isOneToOne: false
+            referencedRelation: "lesson_sims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lesson_sims: {
         Row: {
           audio_duration_ms: number | null
@@ -2361,6 +2437,10 @@ export type Database = {
           subject_name_ar: string
           subject_name_en: string
         }[]
+      }
+      restore_lesson_sim_version: {
+        Args: { p_lesson_id: string; p_version_id: string }
+        Returns: string
       }
       sync_homework_submissions_for_assignment_row: {
         Args: {
