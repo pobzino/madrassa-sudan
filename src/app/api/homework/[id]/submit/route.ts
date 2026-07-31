@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { submitHomeworkSchema, saveDraftSchema } from "@/lib/homework.validation";
+import { logError } from '@/lib/observability/error-log.server';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -336,7 +337,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       message: "Homework submitted successfully",
     });
   } catch (error) {
-    console.error("Homework submission API error:", error);
+    void logError({ error: error, route: 'POST /api/homework/[id]/submit', context: { note: "Homework submission API error:" } });
     return NextResponse.json(
       { error: "An unexpected error occurred" },
       { status: 500 }
@@ -505,7 +506,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       message: "Draft saved successfully",
     });
   } catch (error) {
-    console.error("Homework draft API error:", error);
+    void logError({ error: error, route: 'POST /api/homework/[id]/submit', context: { note: "Homework draft API error:" } });
     return NextResponse.json(
       { error: "An unexpected error occurred" },
       { status: 500 }
