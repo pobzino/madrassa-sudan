@@ -5,8 +5,8 @@ import { loadSampleLesson } from "@/lib/server/sample-lesson";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Counting from 0 to 10 | Amal School Sample Lesson",
-  description: "Try a real Amal School Grade 1 Mathematics lesson without creating an account.",
+  title: "My Name Is & How Old Are You? | Amal School Sample Lesson",
+  description: "Try a real Amal School Grade 1 English lesson without creating an account.",
 };
 
 export default async function SampleLessonPage({

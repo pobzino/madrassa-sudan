@@ -8,7 +8,14 @@ import type {
   SamplePracticeQuestion,
 } from "@/lib/sample-lesson.types";
 
-export const SAMPLE_LESSON_ID = "2c6f5e66-5590-4c0f-a315-68ac7a2842fd";
+export const SAMPLE_LESSON_ID = "6618d1b9-d0f2-41cb-b153-19b7d477e2b5";
+const SAMPLE_TITLE_AR = "الأسبوع 3: اسمي... كم عمرك؟";
+const SAMPLE_DESCRIPTION_AR =
+  "تعلّم تقديم نفسك بقول اسمك وعمرك، وطرح أسئلة بسيطة على الآخرين.";
+
+function containsArabic(value: string | null): value is string {
+  return Boolean(value && /[\u0600-\u06ff]/.test(value));
+}
 
 function strings(value: unknown): string[] {
   return Array.isArray(value)
@@ -27,9 +34,9 @@ export async function loadSampleLesson(): Promise<SampleLessonData> {
   const [{ data: lesson, error: lessonError }, { data: sim, error: simError }] =
     await Promise.all([
       supabase
-      .from("lessons")
+        .from("lessons")
         .select(
-          "id, grade_level, subject_id, is_published"
+          "id, title_ar, title_en, description_ar, description_en, grade_level, subject_id, is_published"
         )
         .eq("id", SAMPLE_LESSON_ID)
         .eq("is_published", true)
@@ -116,10 +123,12 @@ export async function loadSampleLesson(): Promise<SampleLessonData> {
   return {
     lesson: {
       id: lesson.id,
-      titleAr: "العد من 0 إلى 10",
-      titleEn: "Counting from 0 to 10",
-      descriptionAr: "نتعلم العد بالترتيب، ونطابق الأعداد مع المجموعات، ونعد للأمام والخلف.",
-      descriptionEn: "Count in order, match numbers to groups, and count forwards and backwards.",
+      titleAr: containsArabic(lesson.title_ar) ? lesson.title_ar : SAMPLE_TITLE_AR,
+      titleEn: lesson.title_en || lesson.title_ar,
+      descriptionAr: containsArabic(lesson.description_ar)
+        ? lesson.description_ar
+        : SAMPLE_DESCRIPTION_AR,
+      descriptionEn: lesson.description_en || lesson.description_ar || "",
       gradeLevel: lesson.grade_level,
       subjectAr: subjectResult.data.name_ar,
       subjectEn: subjectResult.data.name_en,
