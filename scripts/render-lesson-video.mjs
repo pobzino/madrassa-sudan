@@ -121,6 +121,33 @@ function log(msg) {
   console.log(`[render-lesson-video] ${new Date().toISOString()} ${msg}`);
 }
 
+async function requestPracticeGeneration(lessonId) {
+  const secret = process.env.PRACTICE_AUTOMATION_SECRET;
+  if (!secret) {
+    log('Practice generation secret is not configured; publish/save automation will cover this lesson.');
+    return;
+  }
+
+  const siteUrl = (process.env.AMAL_SITE_URL || 'https://amalschool.org').replace(/\/$/, '');
+  try {
+    const response = await fetch(`${siteUrl}/api/internal/practice/ensure`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ lesson_id: lessonId }),
+    });
+    if (!response.ok) {
+      log(`WARN: Practice generation request failed (HTTP ${response.status}).`);
+      return;
+    }
+    log('Practice generation confirmed.');
+  } catch (error) {
+    log(`WARN: Practice generation request failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 // Thrown by setLesson when the generation token no longer matches — a newer
 // export claimed this lesson, so this worker should bow out silently.
 class SupersededError extends Error {}
@@ -338,6 +365,8 @@ async function main() {
       video_processing_status: 'ready',
       video_processing_error: null,
     });
+
+    await requestPracticeGeneration(lessonId);
 
     log(`Done. Public URL: ${publicUrl}`);
   } catch (error) {

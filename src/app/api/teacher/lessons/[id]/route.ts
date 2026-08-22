@@ -1,11 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient, hasServiceRoleConfig } from '@/lib/supabase/service'
 import type { Database, Json } from '@/lib/database.types'
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { canManageLesson, getTeacherRole } from '@/lib/server/teacher-lesson-access'
 import { getLessonPublishReadiness } from '@/lib/lessons/publish-readiness'
 import { linkLessonToLearningPath } from '@/lib/lessons/path-autolink'
 import type { Slide } from '@/lib/slides.types'
+import { ensureLessonPractice } from '@/lib/server/practice-generator'
 
 const QuizSettingsSchema = z.object({
   require_pass_to_continue: z.boolean(),
@@ -258,6 +260,18 @@ export async function PATCH(
     } catch (linkError) {
       console.error('Auto-link lesson to learning path failed:', linkError)
     }
+
+    after(async () => {
+      try {
+        await ensureLessonPractice({
+          client: hasServiceRoleConfig() ? createServiceClient() : supabase,
+          lessonId,
+          createdBy: user.id,
+        })
+      } catch (practiceError) {
+        console.error('Automatic Practice generation failed:', { lessonId, practiceError })
+      }
+    })
   }
 
   return NextResponse.json({ lesson: updatedLesson })

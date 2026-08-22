@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
 import { getLessonPublishReadiness } from "@/lib/lessons/publish-readiness";
 import { linkLessonToLearningPath } from "@/lib/lessons/path-autolink";
+import { ensureLessonPractice } from "@/lib/server/practice-generator";
 import type { Slide } from "@/lib/slides.types";
 
 export async function PATCH(
@@ -117,7 +119,19 @@ export async function PATCH(
       console.error("Auto-link lesson to learning path failed:", linkError);
     }
 
-    return NextResponse.json({ success: true });
+    after(async () => {
+      try {
+        await ensureLessonPractice({
+          client: hasServiceRoleConfig() ? createServiceClient() : supabase,
+          lessonId,
+          createdBy: user.id,
+        });
+      } catch (practiceError) {
+        console.error("Automatic Practice generation failed:", { lessonId, practiceError });
+      }
+    });
+
+    return NextResponse.json({ success: true, practice_queued: true });
   } catch (error) {
     console.error("Admin lesson publish error:", error);
     return NextResponse.json(

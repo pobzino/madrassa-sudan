@@ -349,6 +349,10 @@ export default function NewLessonPage() {
       return;
     }
 
+    if (form.is_published) {
+      void fetch(`/api/teacher/lessons/${lesson.id}/ensure-practice`, { method: "POST" });
+    }
+
     lastSavedDraftKeyRef.current = JSON.stringify(
       getDraftPayload(form, form.subject_id)
     );

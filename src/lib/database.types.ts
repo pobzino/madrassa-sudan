@@ -820,14 +820,21 @@ export type Database = {
       }
       homework_questions: {
         Row: {
+          audio_text_hash_ar: string | null
+          audio_text_hash_en: string | null
+          audio_url_ar: string | null
+          audio_url_en: string | null
           assignment_id: string
           correct_answer: string | null
+          correct_option_index: number | null
           created_at: string
           display_order: number
           hints: Json
           id: string
           instructions: string | null
           options: Json | null
+          options_ar: Json | null
+          options_en: Json | null
           points: number
           question_text_ar: string
           question_text_en: string | null
@@ -835,14 +842,21 @@ export type Database = {
           rubric: Json | null
         }
         Insert: {
+          audio_text_hash_ar?: string | null
+          audio_text_hash_en?: string | null
+          audio_url_ar?: string | null
+          audio_url_en?: string | null
           assignment_id: string
           correct_answer?: string | null
+          correct_option_index?: number | null
           created_at?: string
           display_order?: number
           hints?: Json
           id?: string
           instructions?: string | null
           options?: Json | null
+          options_ar?: Json | null
+          options_en?: Json | null
           points?: number
           question_text_ar: string
           question_text_en?: string | null
@@ -850,14 +864,21 @@ export type Database = {
           rubric?: Json | null
         }
         Update: {
+          audio_text_hash_ar?: string | null
+          audio_text_hash_en?: string | null
+          audio_url_ar?: string | null
+          audio_url_en?: string | null
           assignment_id?: string
           correct_answer?: string | null
+          correct_option_index?: number | null
           created_at?: string
           display_order?: number
           hints?: Json
           id?: string
           instructions?: string | null
           options?: Json | null
+          options_ar?: Json | null
+          options_en?: Json | null
           points?: number
           question_text_ar?: string
           question_text_en?: string | null

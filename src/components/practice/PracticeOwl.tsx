@@ -13,10 +13,16 @@ interface PracticeOwlProps {
   mood: OwlMood;
   /** Bump to replay the current answer reaction. */
   pulse?: number;
+  speaking?: boolean;
   className?: string;
 }
 
-export default function PracticeOwl({ mood, pulse = 0, className = "" }: PracticeOwlProps) {
+export default function PracticeOwl({
+  mood,
+  pulse = 0,
+  speaking = false,
+  className = "",
+}: PracticeOwlProps) {
   const animClass =
     mood === "happy"
       ? "owl-anim-happy"
@@ -27,7 +33,11 @@ export default function PracticeOwl({ mood, pulse = 0, className = "" }: Practic
           : "owl-anim-idle";
 
   return (
-    <div key={`${mood}-${pulse}`} className={`${animClass} ${className}`} aria-hidden="true">
+    <div
+      key={`${mood}-${pulse}`}
+      className={`${animClass} ${speaking ? "owl-anim-speaking" : ""} ${className}`}
+      aria-hidden="true"
+    >
       {mood === "happy" ? (
         <OwlCorrect className="h-full w-full" />
       ) : mood === "sad" ? (

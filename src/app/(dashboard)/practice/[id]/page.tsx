@@ -63,8 +63,11 @@ export default function PracticePage() {
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "not_found" | "not_practice">("loading");
   const [round, setRound] = useState(0);
   const [nextLessonId, setNextLessonId] = useState<string | null>(null);
-  // True/false labels are display-localized but submit canonical "true"/"false".
-  const [tfByQuestion, setTfByQuestion] = useState<Record<string, Record<string, string>>>({});
+  // Displayed bilingual choices map back to the canonical value stored for
+  // server-side grading.
+  const [submissionValueByQuestion, setSubmissionValueByQuestion] = useState<
+    Record<string, Record<string, string>>
+  >({});
 
   const load = useCallback(async () => {
     try {
@@ -105,7 +108,7 @@ export default function PracticePage() {
         }
       }
 
-      const tfMap: Record<string, Record<string, string>> = {};
+      const submissionMap: Record<string, Record<string, string>> = {};
       const questions: PracticeQuestionInput[] = (data.questions ?? [])
         .filter((q: { correct_answer?: string | null }) => q.correct_answer)
         .map(
@@ -115,21 +118,31 @@ export default function PracticePage() {
             question_text_ar: string;
             question_text_en: string | null;
             options: string[] | null;
+            options_ar?: string[] | null;
+            options_en?: string[] | null;
             correct_answer: string;
+            correct_option_index?: number | null;
+            audio_url_ar?: string | null;
+            audio_url_en?: string | null;
           }) => {
             const prompt =
               (language === "ar" ? q.question_text_ar : q.question_text_en) || q.question_text_ar;
             if (q.question_type === "true_false") {
               const labels = TRUE_FALSE_LABELS[language];
-              tfMap[q.id] = Object.fromEntries(labels.map((l) => [l.label, l.value]));
-              const correctLabel =
-                labels.find((l) => l.value === q.correct_answer)?.label ?? q.correct_answer;
+              submissionMap[q.id] = Object.fromEntries(labels.map((l) => [l.label, l.value]));
+              const correctIndex =
+                typeof q.correct_option_index === "number"
+                  ? q.correct_option_index
+                  : q.correct_answer === "false" || q.correct_answer === "خطأ"
+                    ? 1
+                    : 0;
               return {
                 id: q.id,
                 type: "true_false" as const,
                 prompt,
                 options: labels.map((l) => l.label),
-                correctAnswer: correctLabel,
+                correctAnswer: labels[correctIndex]?.label ?? labels[0].label,
+                audioUrl: (language === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null,
               };
             }
             if (q.question_type === "short_answer") {
@@ -139,14 +152,26 @@ export default function PracticePage() {
                 prompt,
                 options: [],
                 correctAnswer: q.correct_answer,
+                audioUrl: (language === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null,
               };
             }
+            const optionsAr = (q.options_ar?.length ? q.options_ar : q.options) ?? [];
+            const optionsEn = (q.options_en?.length ? q.options_en : q.options) ?? optionsAr;
+            const displayOptions = language === "ar" ? optionsAr : optionsEn;
+            const correctIndex =
+              typeof q.correct_option_index === "number"
+                ? q.correct_option_index
+                : optionsAr.findIndex((option) => option === q.correct_answer);
+            submissionMap[q.id] = Object.fromEntries(
+              displayOptions.map((option, optionIndex) => [option, optionsAr[optionIndex] ?? option])
+            );
             return {
               id: q.id,
               type: "multiple_choice" as const,
               prompt,
-              options: (q.options ?? []) as string[],
-              correctAnswer: q.correct_answer,
+              options: displayOptions,
+              correctAnswer: displayOptions[correctIndex] ?? q.correct_answer,
+              audioUrl: (language === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null,
             };
           }
         );
@@ -175,7 +200,7 @@ export default function PracticePage() {
         }
       }
 
-      setTfByQuestion(tfMap);
+      setSubmissionValueByQuestion(submissionMap);
       setPractice({
         title: (language === "ar" ? data.title_ar : data.title_en) || data.title_ar || "",
         passingPercent: data.passing_score ?? PRACTICE_PASSING_SCORE,
@@ -204,8 +229,8 @@ export default function PracticePage() {
           body: JSON.stringify({
             answers: answers.map((a) => ({
               question_id: a.questionId,
-              // Map localized true/false labels back to canonical values.
-              response_text: tfByQuestion[a.questionId]?.[a.response] ?? a.response,
+              response_text:
+                submissionValueByQuestion[a.questionId]?.[a.response] ?? a.response,
             })),
           }),
         });
@@ -215,7 +240,21 @@ export default function PracticePage() {
         return false;
       }
     },
-    [assignmentId, tfByQuestion]
+    [assignmentId, submissionValueByQuestion]
+  );
+
+  const requestQuestionAudio = useCallback(
+    async (questionId: string) => {
+      const response = await fetch(`/api/practice/questions/${questionId}/audio`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ language }),
+      });
+      if (!response.ok) return null;
+      const payload = (await response.json()) as { audio_url?: string };
+      return payload.audio_url ?? null;
+    },
+    [language]
   );
 
   const handleRetry = useCallback(() => {
@@ -296,6 +335,7 @@ export default function PracticePage() {
         onRetry={handleRetry}
         onContinue={handleContinue}
         onExit={returnToLessons}
+        onRequestAudio={requestQuestionAudio}
       />
     </div>
   );

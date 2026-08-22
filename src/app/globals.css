@@ -343,11 +343,18 @@ html {
 }
 .practice-question-enter { animation: practice-question-enter 0.32s ease-out both; }
 
+@keyframes owl-speaking {
+  0%, 100% { transform: translateY(0) scale(1); }
+  35% { transform: translateY(-2px) scale(1.015); }
+  70% { transform: translateY(1px) scale(0.995); }
+}
+.owl-anim-speaking { animation: owl-speaking 0.7s ease-in-out infinite; }
+
 @media (prefers-reduced-motion: reduce) {
   .owl-anim-idle, .owl-anim-happy, .owl-anim-sad, .owl-anim-cheer,
   .owl-anim-cheer .owl-wing-l, .owl-anim-cheer .owl-wing-r,
   .owl-anim-happy .owl-wing-l, .owl-anim-happy .owl-wing-r,
-  .owl-blink, .practice-reveal, .practice-question-enter { animation: none !important; }
+  .owl-blink, .practice-reveal, .practice-question-enter, .owl-anim-speaking { animation: none !important; }
 }
 
 /* RTL Support */

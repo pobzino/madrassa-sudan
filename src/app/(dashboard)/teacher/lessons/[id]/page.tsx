@@ -610,6 +610,9 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         );
 
         await syncLessonTasks(supabase, id, persistedTasks);
+        if (form.is_published) {
+          void fetch(`/api/teacher/lessons/${id}/ensure-practice`, { method: "POST" });
+        }
         lastPersistedPublishedRef.current = form.is_published;
         if (concurrentEditDetected) {
           setSaveMessage({

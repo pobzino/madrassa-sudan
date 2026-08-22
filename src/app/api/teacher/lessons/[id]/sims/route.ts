@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import type { Json } from '@/lib/database.types';
 import { createClient } from '@/lib/supabase/server';
@@ -12,6 +12,7 @@ import {
   signAudioUrl,
 } from '@/lib/server/sim-storage';
 import type { SimPayload, SimRow } from '@/lib/sim.types';
+import { ensureLessonPractice } from '@/lib/server/practice-generator';
 
 /** Allow up to 5 minutes for large audio uploads + storage writes. */
 export const maxDuration = 300;
@@ -411,6 +412,23 @@ export async function POST(
           .eq('id', lessonId);
       }
     }
+
+    after(async () => {
+      if (!hasServiceRoleConfig()) return;
+      try {
+        await ensureLessonPractice({
+          client: createServiceClient(),
+          lessonId,
+          createdBy: user.id,
+          force: true,
+        });
+      } catch (practiceError) {
+        console.error('Automatic Practice generation after recording failed:', {
+          lessonId,
+          practiceError,
+        });
+      }
+    });
 
     const audioUrl = await signAudioUrl(lessonId, row.audio_path);
     return NextResponse.json(rowToPayload(row, audioUrl), { status: 201 });

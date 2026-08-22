@@ -92,6 +92,28 @@ export async function PUT(request: NextRequest) {
 
     const neededWeeks = Math.ceil(lessonIds.length / LESSONS_PER_WEEK);
 
+    // Preserve each lesson's Practice link while steps are repacked. Also pick
+    // up a canonical Practice that may have been generated before the lesson
+    // was added to this path.
+    const [{ data: existingStepPractices }, { data: lessonPractices }] = await Promise.all([
+      db
+        .from("learning_path_steps")
+        .select("lesson_id, practice_assignment_id")
+        .in("lesson_id", lessonIds.length > 0 ? lessonIds : ["00000000-0000-0000-0000-000000000000"]),
+      db
+        .from("homework_assignments")
+        .select("id, lesson_id")
+        .eq("is_practice", true)
+        .in("lesson_id", lessonIds.length > 0 ? lessonIds : ["00000000-0000-0000-0000-000000000000"]),
+    ]);
+    const practiceByLesson = new Map<string, string>();
+    for (const row of existingStepPractices ?? []) {
+      if (row.practice_assignment_id) practiceByLesson.set(row.lesson_id, row.practice_assignment_id);
+    }
+    for (const row of lessonPractices ?? []) {
+      if (row.lesson_id) practiceByLesson.set(row.lesson_id, row.id);
+    }
+
     // 2. Load existing weeks (ordered) so we can reuse them by position and keep
     //    their test_assignment_id attached to the same week number.
     const { data: existingWeeks } = await db
@@ -168,6 +190,7 @@ export async function PUT(request: NextRequest) {
           week_id: weekIdByNumber.get(weekNumber)!,
           lesson_id: lessonId,
           sequence,
+          practice_assignment_id: practiceByLesson.get(lessonId) ?? null,
         };
       });
       const { error: insErr } = await db.from("learning_path_steps").insert(stepRows);

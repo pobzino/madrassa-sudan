@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, RotateCcw } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  LoaderCircle,
+  RotateCcw,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import PracticeOwl, { type OwlMood } from "./PracticeOwl";
 import ConfettiBurst from "./ConfettiBurst";
 import PracticeHud from "./PracticeHud";
@@ -15,6 +23,7 @@ export interface PracticeQuestionInput {
   options: string[];
   correctAnswer: string;
   imageUrl?: string | null;
+  audioUrl?: string | null;
 }
 
 export interface PracticeAnswer {
@@ -32,6 +41,7 @@ interface PracticePlayerProps {
   onRetry: () => void;
   onContinue: () => void;
   onExit?: () => void;
+  onRequestAudio?: (questionId: string) => Promise<string | null>;
 }
 
 const UI = {
@@ -48,6 +58,9 @@ const UI = {
     backToLessons: "العودة للدروس",
     saving: "جاري الحفظ...",
     exit: "خروج",
+    playQuestion: "استمع إلى السؤال",
+    stopQuestion: "إيقاف الصوت",
+    audioUnavailable: "الصوت غير متاح الآن",
     passNeeded: (p: number) => `تحتاج ${p}٪ لإكمال الدرس`,
     questionNumber: (current: number, total: number) => `السؤال ${current} من ${total}`,
     resultDetail: (correct: number, total: number) => `${correct} إجابات صحيحة من ${total}`,
@@ -65,6 +78,9 @@ const UI = {
     backToLessons: "Back to lessons",
     saving: "Saving...",
     exit: "Exit",
+    playQuestion: "Listen to the question",
+    stopQuestion: "Stop narration",
+    audioUnavailable: "Narration is unavailable right now",
     passNeeded: (p: number) => `You need ${p}% to complete the lesson`,
     questionNumber: (current: number, total: number) => `Question ${current} of ${total}`,
     resultDetail: (correct: number, total: number) => `${correct} correct out of ${total}`,
@@ -84,6 +100,13 @@ const MARKER_STYLES = [
   "bg-violet-100 text-violet-800",
   "bg-orange-100 text-orange-800",
 ];
+
+const SCENES = [
+  { stage: "bg-[#DDF2BC]", tray: "bg-[#C9E99D]", frame: "border-[#A7D86A]" },
+  { stage: "bg-[#F5C4D6]", tray: "bg-[#EFAAC4]", frame: "border-[#DF86AA]" },
+  { stage: "bg-[#BFE7F7]", tray: "bg-[#A5D9EF]", frame: "border-[#72BFDF]" },
+  { stage: "bg-[#FFE7A3]", tray: "bg-[#FBD477]", frame: "border-[#EAB94E]" },
+] as const;
 
 function answersMatch(response: string, correct: string): boolean {
   const norm = (value: string) => normalizeArabicDigits(value).trim();
@@ -116,6 +139,7 @@ export default function PracticePlayer({
   onRetry,
   onContinue,
   onExit,
+  onRequestAudio,
 }: PracticePlayerProps) {
   const t = UI[lang];
   const total = questions.length;
@@ -137,20 +161,92 @@ export default function PracticePlayer({
   const [owlMood, setOwlMood] = useState<OwlMood>("idle");
   const [owlPulse, setOwlPulse] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [audioStatus, setAudioStatus] = useState<"idle" | "loading" | "playing" | "error">("idle");
+  const [audioByQuestion, setAudioByQuestion] = useState<Record<string, string>>({});
   const answersRef = useRef<PracticeAnswer[]>([]);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const narrationEnabledRef = useRef(false);
 
   const question = questions[index];
   const correctCount = answersRef.current.filter((answer) => answer.isCorrect).length;
   const scorePercent = total > 0 ? Math.round((correctCount / total) * 100) : 0;
   const passed = scorePercent >= passingPercent;
+  const scene = SCENES[index % SCENES.length];
+
+  const stopAudio = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    audioRef.current = null;
+    setAudioStatus("idle");
+  }, []);
+
+  const playQuestionAudio = useCallback(async () => {
+    if (!question) return;
+    stopAudio();
+    setAudioStatus("loading");
+    try {
+      let url = audioByQuestion[question.id] || question.audioUrl || null;
+      if (!url && onRequestAudio) {
+        url = await onRequestAudio(question.id);
+        if (url) setAudioByQuestion((current) => ({ ...current, [question.id]: url as string }));
+      }
+      if (!url) {
+        setAudioStatus("error");
+        return;
+      }
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onplay = () => setAudioStatus("playing");
+      audio.onended = () => {
+        audioRef.current = null;
+        setAudioStatus("idle");
+      };
+      audio.onerror = () => {
+        audioRef.current = null;
+        setAudioStatus("error");
+      };
+      await audio.play();
+    } catch {
+      setAudioStatus("error");
+    }
+  }, [audioByQuestion, onRequestAudio, question, stopAudio]);
+
+  const toggleNarration = useCallback(() => {
+    if (audioStatus === "playing" || audioStatus === "loading") {
+      narrationEnabledRef.current = false;
+      stopAudio();
+      return;
+    }
+    narrationEnabledRef.current = true;
+    void playQuestionAudio();
+  }, [audioStatus, playQuestionAudio, stopAudio]);
 
   useEffect(
     () => () => {
       if (advanceTimer.current) clearTimeout(advanceTimer.current);
+      stopAudio();
     },
-    []
+    [stopAudio]
   );
+
+  const playQuestionAudioRef = useRef(playQuestionAudio);
+  useEffect(() => {
+    playQuestionAudioRef.current = playQuestionAudio;
+  }, [playQuestionAudio]);
+
+  useEffect(() => {
+    if (narrationEnabledRef.current) void playQuestionAudioRef.current();
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, [index]);
 
   const goNext = useCallback(async () => {
     if (advanceTimer.current) {
@@ -190,6 +286,8 @@ export default function PracticePlayer({
     (response: string) => {
       if (phase !== "question" || !question) return;
 
+      stopAudio();
+
       const isCorrect = answersMatch(response, question.correctAnswer);
       answersRef.current = [
         ...answersRef.current,
@@ -216,7 +314,7 @@ export default function PracticePlayer({
         navigator.vibrate?.(60);
       }
     },
-    [phase, question, streak, lang, goNext]
+    [phase, question, streak, lang, goNext, stopAudio]
   );
 
   const restart = useCallback(() => {
@@ -228,8 +326,10 @@ export default function PracticePlayer({
     setHearts(maxHearts);
     setStreak(0);
     setOwlMood("idle");
+    narrationEnabledRef.current = false;
+    stopAudio();
     onRetry();
-  }, [maxHearts, onRetry]);
+  }, [maxHearts, onRetry, stopAudio]);
 
   if (!question && phase !== "summary") return null;
 
@@ -237,7 +337,7 @@ export default function PracticePlayer({
   const questionLabel = t.questionNumber(index + 1, total);
 
   return (
-    <div className="relative min-h-[calc(100vh-5rem)] overflow-hidden bg-[#F4F8F5]">
+    <div className="relative min-h-[calc(100vh-5rem)] overflow-hidden bg-[#F7F7F2]">
       <div className="absolute inset-x-0 top-0 flex h-1" aria-hidden="true">
         <span className="flex-1 bg-[#007229]" />
         <span className="flex-1 bg-[#F59E0B]" />
@@ -264,27 +364,62 @@ export default function PracticePlayer({
         {phase !== "summary" && question && (
           <main
             key={question.id}
-            className="practice-question-enter mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-[0_14px_40px_rgba(22,60,35,0.08)]"
+            className="practice-question-enter mt-6 overflow-hidden rounded-lg border-4 border-white bg-white shadow-[0_18px_45px_rgba(36,60,42,0.16)]"
           >
-            <section className="grid min-h-48 items-center gap-2 px-5 py-6 sm:grid-cols-[9rem_1fr] sm:gap-6 sm:px-8 sm:py-8">
-              <div className="mx-auto h-28 w-28 shrink-0 sm:h-36 sm:w-36">
-                <PracticeOwl mood={owlMood} pulse={owlPulse} className="h-full w-full" />
+            <section
+              className={`relative grid items-center gap-2 px-4 py-4 sm:min-h-60 sm:grid-cols-[11rem_1fr] sm:gap-7 sm:px-9 sm:py-9 ${scene.stage}`}
+            >
+              <div className="mx-auto h-28 w-28 shrink-0 sm:h-44 sm:w-44">
+                <PracticeOwl
+                  mood={owlMood}
+                  pulse={owlPulse}
+                  speaking={audioStatus === "playing"}
+                  className="h-full w-full"
+                />
               </div>
 
-              <div className="min-w-0 text-center sm:text-start">
+              <div
+                className={`relative min-w-0 rounded-lg border-2 bg-white px-4 py-4 text-center shadow-[0_5px_0_rgba(52,74,58,0.13)] sm:px-7 sm:py-6 sm:text-start ${scene.frame}`}
+              >
+                <button
+                  type="button"
+                  onClick={toggleNarration}
+                  aria-label={
+                    audioStatus === "playing" || audioStatus === "loading"
+                      ? t.stopQuestion
+                      : t.playQuestion
+                  }
+                  title={
+                    audioStatus === "playing" || audioStatus === "loading"
+                      ? t.stopQuestion
+                      : t.playQuestion
+                  }
+                  className="absolute end-3 top-3 grid h-11 w-11 place-items-center rounded-full border-2 border-gray-100 bg-white text-[var(--primary)] shadow-sm transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/70"
+                >
+                  {audioStatus === "loading" ? (
+                    <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
+                  ) : audioStatus === "playing" ? (
+                    <VolumeX className="h-5 w-5" aria-hidden="true" />
+                  ) : (
+                    <Volume2 className="h-5 w-5" aria-hidden="true" />
+                  )}
+                </button>
                 {phase === "feedback" && (
                   <p
                     aria-live="polite"
-                    className={`mb-2 text-sm font-extrabold sm:text-base ${
+                    className={`mb-2 pe-12 text-sm font-extrabold sm:text-base ${
                       wasCorrect ? "text-emerald-700" : "text-amber-700"
                     }`}
                   >
                     {phrase}
                   </p>
                 )}
-                <h1 className="break-words text-2xl font-extrabold leading-snug text-gray-900 sm:text-3xl">
+                <h1 className="break-words pe-10 text-2xl font-extrabold leading-snug text-gray-900 sm:text-3xl">
                   {question.prompt}
                 </h1>
+                {audioStatus === "error" && (
+                  <p className="mt-2 text-xs font-bold text-gray-500">{t.audioUnavailable}</p>
+                )}
               </div>
             </section>
 
@@ -299,7 +434,7 @@ export default function PracticePlayer({
               </div>
             )}
 
-            <section className="border-t border-gray-100 bg-[#FBFCFB] px-4 py-5 sm:px-8 sm:py-7">
+            <section className={`border-t-2 px-4 py-5 sm:px-8 sm:py-8 ${scene.tray} ${scene.frame}`}>
               {question.type === "short_answer" ? (
                 <form
                   className="mx-auto flex w-full max-w-xl flex-col items-stretch gap-4 sm:flex-row"
@@ -320,7 +455,7 @@ export default function PracticePlayer({
                         ? wasCorrect
                           ? "border-emerald-400 bg-emerald-50 text-emerald-900"
                           : "border-amber-300 bg-amber-50 text-amber-900"
-                        : "border-gray-200 bg-white text-gray-900 focus:border-[var(--primary)] focus:ring-4 focus:ring-emerald-100"
+                        : `bg-white text-gray-900 focus:border-[var(--primary)] focus:ring-4 focus:ring-white/70 ${scene.frame}`
                     }`}
                     dir="auto"
                   />
@@ -349,14 +484,14 @@ export default function PracticePlayer({
                         disabled={phase === "feedback"}
                         aria-pressed={isChosen}
                         onClick={() => submitAnswer(option)}
-                        className={`practice-option group flex min-h-[4.75rem] items-center gap-4 rounded-lg border-2 px-4 py-3 text-start transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-100 ${
+                        className={`practice-option group flex min-h-[4.5rem] items-center gap-4 rounded-lg border-2 px-4 py-2.5 text-start shadow-[0_5px_0_rgba(48,64,52,0.16)] transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/70 sm:min-h-[5.25rem] sm:py-3 ${
                           revealCorrect
-                            ? "practice-reveal border-emerald-400 bg-emerald-50 text-emerald-950"
+                            ? "practice-reveal border-emerald-500 bg-emerald-50 text-emerald-950 shadow-[0_5px_0_#15803D]"
                             : revealWrongChoice
-                              ? "border-amber-300 bg-amber-50 text-amber-950"
+                              ? "border-amber-400 bg-amber-50 text-amber-950 shadow-[0_5px_0_#D97706]"
                               : phase === "feedback"
                                 ? "border-gray-100 bg-white text-gray-400 opacity-70"
-                                : "border-gray-200 bg-white text-gray-900 hover:-translate-y-0.5 hover:border-[var(--primary)] hover:shadow-md active:translate-y-0"
+                                : `bg-white text-gray-900 hover:-translate-y-1 hover:shadow-[0_7px_0_rgba(48,64,52,0.18)] active:translate-y-1 active:shadow-none ${scene.frame}`
                         }`}
                       >
                         <span

@@ -74,15 +74,31 @@ export async function linkLessonToLearningPath(
   if (weeks.length > 0) {
     const { data: existingStep } = await db
       .from("learning_path_steps")
-      .select("id")
+      .select("id, practice_assignment_id")
       .eq("lesson_id", lessonId)
       .in(
         "week_id",
         weeks.map((w) => w.id)
       )
-      .maybeSingle<{ id: string }>();
+      .maybeSingle<{ id: string; practice_assignment_id: string | null }>();
 
-    if (existingStep) return { linked: false, reason: "already-linked" };
+    if (existingStep) {
+      if (!existingStep.practice_assignment_id) {
+        const { data: practice } = await db
+          .from("homework_assignments")
+          .select("id")
+          .eq("lesson_id", lessonId)
+          .eq("is_practice", true)
+          .maybeSingle<{ id: string }>();
+        if (practice) {
+          await db
+            .from("learning_path_steps")
+            .update({ practice_assignment_id: practice.id })
+            .eq("id", existingStep.id);
+        }
+      }
+      return { linked: false, reason: "already-linked" };
+    }
   }
 
   // 3. Decide which week to append to.
@@ -127,10 +143,18 @@ export async function linkLessonToLearningPath(
   }
 
   // 5. Append the step.
+  const { data: practice } = await db
+    .from("homework_assignments")
+    .select("id")
+    .eq("lesson_id", lessonId)
+    .eq("is_practice", true)
+    .maybeSingle<{ id: string }>();
+
   const { error: stepErr } = await db.from("learning_path_steps").insert({
     week_id: targetWeekId,
     lesson_id: lessonId,
     sequence: nextSequence,
+    practice_assignment_id: practice?.id ?? null,
   });
 
   if (stepErr) {
