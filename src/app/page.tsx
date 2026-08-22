@@ -28,6 +28,7 @@ import {
   CelebrationIcon,
 } from "@/components/illustrations";
 import { LandingHeroScene, SectionScene, StepGraphic, LeafyGreenBg, TeacherScene } from "@/components/dashboard/DashboardScenes";
+import HomepageSamplePreview from "@/components/sample/HomepageSamplePreview";
 
 // Helper function to render feature icons
 const FeatureIcon = ({ type, className }: { type: string; className?: string }) => {
@@ -75,7 +76,7 @@ export default function Home() {
 
   const t = {
     ar: {
-      nav: { features: "المميزات", howItWorks: "كيف يعمل", teachers: "للمعلمين", faq: "الأسئلة" },
+      nav: { features: "المميزات", howItWorks: "كيف يعمل", sample: "درس نموذجي", teachers: "للمعلمين", faq: "الأسئلة" },
       login: "تسجيل الدخول",
       getStarted: "ابدأ الآن",
       goToDashboard: "لوحة التحكم",
@@ -87,7 +88,7 @@ export default function Home() {
         title2: "لأطفال السودان",
         subtitle: "منصة تعليمية مجانية ممتعة مع دروس تفاعلية، واجبات، ومنهج سوداني معتمد",
         cta1: "ابدأ مجاناً",
-        cta2: "شاهد كيف يعمل",
+        cta2: "جرّب درساً نموذجياً",
       },
       features: {
         label: "مميزاتنا التفاعلية",
@@ -130,12 +131,8 @@ export default function Home() {
           { num: "2", title: "وقفة للنشاط", desc: "الدرس بيوقف تلقائياً عشان تحل سؤال أو نشاط قبل ما تكمّل — اختبار، سحب وإفلات، أو توصيل" },
           { num: "3", title: "نتيجة فورية", desc: "تعرف إجابتك صح أو غلط فوراً. والمعلم يشوف أداءك ويتابع تقدمك" },
         ],
-        features: [
-          { title: "وقّف وارجع", desc: "ما فهمت؟ ارجع وسمع تاني" },
-          { title: "سبورة حية", desc: "رسومات المعلم تظهر وهو بشرح" },
-          { title: "تعلم بسرعتك", desc: "ما في ضغط — خذ وقتك" },
-        ],
-        cta: "جرّب درس تجريبي",
+        cta: "افتح الدرس النموذجي",
+        noSignup: "بدون تسجيل حساب",
       },
       teachers: {
         label: "للمعلمين",
@@ -164,7 +161,7 @@ export default function Home() {
       },
     },
     en: {
-      nav: { features: "Features", howItWorks: "How it works", teachers: "For Teachers", faq: "FAQ" },
+      nav: { features: "Features", howItWorks: "How it works", sample: "Sample lesson", teachers: "For Teachers", faq: "FAQ" },
       login: "Log in",
       getStarted: "Start Now",
       goToDashboard: "Dashboard",
@@ -176,7 +173,7 @@ export default function Home() {
         title2: "for Sudanese kids",
         subtitle: "A free fun learning platform with interactive lessons, practice, and certified Sudanese curriculum",
         cta1: "Start Now",
-        cta2: "See How It Works",
+        cta2: "Try a sample lesson",
       },
       features: {
         label: "Our Interactive Features",
@@ -219,12 +216,8 @@ export default function Home() {
           { num: "2", title: "Pause for activity", desc: "The lesson pauses automatically so you can solve a quiz, drag-and-drop, or matching activity before continuing" },
           { num: "3", title: "Instant feedback", desc: "Know right away if your answer is correct. Your teacher can track your progress and see how you're doing" },
         ],
-        features: [
-          { title: "Pause & rewind", desc: "Didn't get it? Go back and listen again" },
-          { title: "Live whiteboard", desc: "See your teacher's drawings as they explain" },
-          { title: "Learn at your pace", desc: "No pressure — take your time" },
-        ],
-        cta: "Try a sample lesson",
+        cta: "Open the sample lesson",
+        noSignup: "No signup required",
       },
       teachers: {
         label: "FOR TEACHERS",
@@ -269,6 +262,7 @@ export default function Home() {
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
             <a href="#features" className="hover:text-[#007229] transition-colors">{txt.nav.features}</a>
             <a href="#how-it-works" className="hover:text-[#007229] transition-colors">{txt.nav.howItWorks}</a>
+            <Link href="/sample-lesson" className="hover:text-[#007229] transition-colors">{txt.nav.sample}</Link>
             <a href="#teachers" className="hover:text-[#007229] transition-colors">{txt.nav.teachers}</a>
             <a href="#faq" className="hover:text-[#007229] transition-colors">{txt.nav.faq}</a>
           </div>
@@ -361,13 +355,13 @@ export default function Home() {
                     <CelebrationIcon className="w-5 h-5 sm:w-6 sm:h-6" />
                   </Link>
                 )}
-                <a
-                  href="#how-it-works"
+                <Link
+                  href="/sample-lesson"
                   className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg font-semibold text-gray-700 bg-white border-2 border-gray-200 rounded-full hover:border-gray-300 hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
                 >
                   <PlayIcon className="w-5 h-5 sm:w-6 sm:h-6 text-[#007229]" />
                   {txt.hero.cta2}
-                </a>
+                </Link>
               </div>
 
             </div>
@@ -553,114 +547,8 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Animated Lesson Mockup */}
-            <div className="max-w-3xl mx-auto mb-10 sm:mb-14">
-              <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl shadow-gray-200/60 border border-gray-200 overflow-hidden">
-                {/* Top bar */}
-                <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-4 sm:px-6 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-white/30" />
-                    <div className="w-3 h-3 rounded-full bg-white/30" />
-                    <div className="w-3 h-3 rounded-full bg-white/30" />
-                  </div>
-                  <span className="text-white/90 text-xs sm:text-sm font-bold">{language === "ar" ? "الكسور — الصف الرابع" : "Fractions — Grade 4"}</span>
-                  <div className="w-16" />
-                </div>
-
-                {/* Slide content area */}
-                <div className="relative p-5 sm:p-8 min-h-[220px] sm:min-h-[280px] bg-gradient-to-br from-gray-50 to-white">
-                  {/* Slide content */}
-                  <div className="flex gap-4 sm:gap-6">
-                    <div className="flex-1 space-y-3 sm:space-y-4">
-                      <h3 className="text-lg sm:text-2xl font-bold text-gray-800">{language === "ar" ? "ما هي الكسور؟" : "What are fractions?"}</h3>
-                      <div className="space-y-2">
-                        <div className="h-3 bg-gray-200 rounded-full w-full" />
-                        <div className="h-3 bg-gray-200 rounded-full w-5/6" />
-                        <div className="h-3 bg-gray-200 rounded-full w-4/6" />
-                      </div>
-                      <div className="flex gap-2 pt-2">
-                        <div className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold">1/2</div>
-                        <div className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold">1/4</div>
-                        <div className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold">3/4</div>
-                      </div>
-                    </div>
-                    {/* Illustration circle */}
-                    <div className="hidden sm:flex w-28 h-28 rounded-2xl bg-gradient-to-br from-amber-100 to-amber-200 items-center justify-center flex-shrink-0">
-                      <svg className="w-16 h-16 text-amber-500" viewBox="0 0 64 64" fill="none">
-                        <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="3" />
-                        <line x1="32" y1="4" x2="32" y2="60" stroke="currentColor" strokeWidth="3" />
-                        <path d="M32 4 A28 28 0 0 1 32 60" fill="currentColor" opacity="0.2" />
-                      </svg>
-                    </div>
-                  </div>
-
-                  {/* Quiz popup — slides in during phase 1+2 */}
-                  <div className={`absolute bottom-3 ${isRtl ? "left-3 sm:left-5" : "right-3 sm:right-5"} w-56 sm:w-64 bg-white rounded-xl shadow-xl border border-gray-200 p-3 sm:p-4 transition-all duration-700 ease-in-out ${simPhase >= 1 ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"}`}>
-                    <p className="text-xs font-bold text-gray-700 mb-2">{language === "ar" ? "ما هو نصف الكعكة؟" : "What is half of a cake?"}</p>
-                    <div className="space-y-1.5">
-                      {[
-                        { label: "1/2", correct: true },
-                        { label: "1/3", correct: false },
-                        { label: "2/4", correct: false },
-                      ].map((opt, oi) => (
-                        <div key={oi} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-500 ${
-                          opt.correct && simPhase === 2
-                            ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
-                            : "bg-gray-50 text-gray-600 border border-gray-100"
-                        }`}>
-                          <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-500 ${
-                            opt.correct && simPhase === 2 ? "border-emerald-500 bg-emerald-500" : "border-gray-300"
-                          }`}>
-                            {opt.correct && simPhase === 2 && (
-                              <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                              </svg>
-                            )}
-                          </div>
-                          {opt.label}
-                        </div>
-                      ))}
-                    </div>
-                    {simPhase === 2 && (
-                      <div className="mt-2 text-[10px] font-bold text-emerald-600 flex items-center gap-1 animate-bounce">
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75" /></svg>
-                        {language === "ar" ? "إجابة صحيحة!" : "Correct!"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Audio bar */}
-                <div className="px-4 sm:px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center gap-3">
-                  {/* Play/Pause */}
-                  <button className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center flex-shrink-0">
-                    {simPhase === 0 ? (
-                      <svg className="w-3.5 h-3.5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z" /></svg>
-                    ) : (
-                      <svg className="w-3.5 h-3.5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                    )}
-                  </button>
-                  {/* Progress bar */}
-                  <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                    <div className={`h-full bg-emerald-500 rounded-full transition-all ease-linear ${simPhase === 0 ? "w-[60%] duration-[3000ms]" : "w-[45%] duration-0"}`} />
-                  </div>
-                  {/* Waveform */}
-                  <div className="flex items-center gap-[3px]">
-                    {[3, 5, 2, 6, 4, 3, 5, 2, 4, 6].map((h, wi) => (
-                      <div
-                        key={wi}
-                        className={`w-[3px] rounded-full transition-all duration-300 ${simPhase === 0 ? "bg-emerald-400" : "bg-gray-300"}`}
-                        style={{
-                          height: simPhase === 0 ? `${h * 3}px` : "4px",
-                          transitionDelay: `${wi * 30}ms`,
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-[10px] text-gray-400 font-mono w-12 text-right">04:32</span>
-                </div>
-              </div>
-            </div>
+            {/* Real lesson + one live Practice question */}
+            <HomepageSamplePreview language={language} isRtl={isRtl} />
 
             {/* 3-step flow */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
@@ -710,43 +598,16 @@ export default function Home() {
               })}
             </div>
 
-            {/* Feature pills */}
-            <div className="flex flex-wrap justify-center gap-3 sm:gap-4 mb-8">
-              {txt.sims.features.map((feat, i) => {
-                const pillIcons = [
-                  <svg key="rw" className="w-4 h-4 sm:w-5 sm:h-5 text-[#007229]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061A1.125 1.125 0 0 1 21 8.689v8.122ZM11.25 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061a1.125 1.125 0 0 1 1.683.977v8.122Z" />
-                  </svg>,
-                  <svg key="wb" className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" />
-                  </svg>,
-                  <svg key="pace" className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                  </svg>,
-                ];
-                const pillBgs = ["bg-emerald-50 border-emerald-200", "bg-amber-50 border-amber-200", "bg-rose-50 border-rose-200"];
-
-                return (
-                  <div key={i} className={`flex items-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 ${pillBgs[i]} border rounded-full`}>
-                    {pillIcons[i]}
-                    <div className="text-left">
-                      <span className="text-sm sm:text-base font-bold text-gray-900">{feat.title}</span>
-                      <span className="text-xs sm:text-sm text-gray-500 ml-1.5">{feat.desc}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
             {/* Try a sample lesson CTA */}
             <div className="text-center">
               <Link
-                href="/dashboard"
+                href="/sample-lesson"
                 className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg font-bold text-white bg-[#007229] rounded-full hover:bg-[#005C22] transition-all shadow-xl shadow-[#007229]/30 hover:shadow-2xl hover:shadow-[#007229]/40 hover:-translate-y-1"
               >
                 <PlayIcon className="w-5 h-5 sm:w-6 sm:h-6" />
                 {txt.sims.cta}
               </Link>
+              <p className="mt-2 text-xs font-semibold text-gray-500">{txt.sims.noSignup}</p>
             </div>
           </div>
         </section>

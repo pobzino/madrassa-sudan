@@ -47,6 +47,7 @@ interface PracticePlayerProps {
   onContinue: () => void;
   onExit?: () => void;
   onRequestAudio?: (questionId: string) => Promise<string | null>;
+  continueLabel?: string;
 }
 
 const UI = {
@@ -145,6 +146,7 @@ export default function PracticePlayer({
   onContinue,
   onExit,
   onRequestAudio,
+  continueLabel,
 }: PracticePlayerProps) {
   const t = UI[lang];
   const total = questions.length;
@@ -586,7 +588,7 @@ export default function PracticePlayer({
                     onClick={onContinue}
                     className="inline-flex min-h-14 items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-6 text-lg font-extrabold text-white shadow-md transition-colors hover:bg-[var(--primary-light)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200"
                   >
-                    {t.continue}
+                    {continueLabel ?? t.continue}
                     <DirectionIcon className="h-5 w-5" aria-hidden="true" />
                   </button>
                 ) : (
