@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -77,7 +78,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
     if (assignment.is_test) {
       // Gating test: retry only if not yet passed.
-      const threshold = ((assignment.passing_score ?? 80) / 100) * totalPoints;
+      const threshold = ((assignment.passing_score ?? PRACTICE_PASSING_SCORE) / 100) * totalPoints;
       const passed = submission.score != null && totalPoints > 0 && submission.score >= threshold;
       if (passed) {
         return NextResponse.json(

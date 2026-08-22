@@ -51,6 +51,7 @@ import {
   type SlideLengthPreset,
   type SlideLanguageMode,
 } from "@/lib/slides-generation";
+import { PRACTICE_PASSING_SCORE, PRACTICE_QUESTION_COUNT } from "@/lib/practice";
 
 type Subject = {
   id: string;
@@ -1007,6 +1008,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                 onSave={() => void saveAll()}
                 saving={saving}
                 preferredLanguage={slideLanguageMode === "en" ? "en" : "ar"}
+                languageLocked={slideLanguageMode !== "both"}
                 lessonId={id}
                 lessonTitle={form.title_ar || form.title_en || ""}
                 focusedSlideId={slideEditorFocusId}
@@ -1047,10 +1049,7 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
         {activeTab === "sim" && (
           <div className="space-y-4">
             {lessonSim ? (
-              <>
-                <SimPlayer payload={lessonSim} language="ar" lessonId={id} showTeacherNotes />
-                <GenerateHomeworkButton lessonId={id} subjectId={form.subject_id} />
-              </>
+              <SimPlayer payload={lessonSim} language={slideLanguageMode === "en" ? "en" : "ar"} lessonId={id} showTeacherNotes />
             ) : (
               <div className="bg-white border border-gray-200 rounded-lg p-10 text-center">
                 <p className="text-sm text-gray-500">
@@ -1061,6 +1060,10 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
                 </p>
               </div>
             )}
+            <GeneratePracticeButton
+              lessonId={id}
+              hasSource={slides.length > 0 || Boolean(lessonSim)}
+            />
           </div>
         )}
 
@@ -1078,44 +1081,55 @@ export default function LessonEditPage({ params }: { params: Promise<{ id: strin
 
 /* ─── Generate Practice Button ─── */
 
-function GenerateHomeworkButton({ lessonId, subjectId }: { lessonId: string; subjectId: string }) {
+function GeneratePracticeButton({ lessonId, hasSource }: { lessonId: string; hasSource: boolean }) {
   const router = useRouter();
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<{ id: string; practice_assignment_id: string | null } | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createClient();
+    void supabase
+      .from("learning_path_steps")
+      .select("id, practice_assignment_id")
+      .eq("lesson_id", lessonId)
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setStep(data ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lessonId]);
 
   async function handleGenerate() {
     setGenerating(true);
     setError(null);
 
     try {
-      const res = await fetch(`/api/teacher/lessons/${lessonId}/generate-homework`, {
+      if (!step) {
+        setError("Add this lesson to the independent learning path first.");
+        return;
+      }
+
+      const res = await fetch("/api/teacher/learning-path/generate-practice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step_id: step.id, num_questions: PRACTICE_QUESTION_COUNT }),
       });
 
       const text = await res.text();
-      // The streaming route sends keep-alive spaces then "\n" + JSON
-      const jsonStr = text.includes("\n") ? text.slice(text.lastIndexOf("\n") + 1) : text;
+      const jsonStr = text.trim().split("\n").pop() || "{}";
       const data = JSON.parse(jsonStr);
 
-      if (data.error) {
+      if (!res.ok || data.error || !data.assignment_id) {
         setError(data.error);
         return;
       }
 
-      // Store prefill data in sessionStorage
-      sessionStorage.setItem(
-        `hw-prefill-${lessonId}`,
-        JSON.stringify({
-          questions: data.questions,
-          title_ar: data.title_ar,
-          title_en: data.title_en,
-          subject_id: subjectId,
-          lesson_id: lessonId,
-        })
-      );
-
-      router.push(`/teacher/homework/create?lesson=${lessonId}&prefill=1`);
+      router.push(`/teacher/homework/create?assignment=${data.assignment_id}`);
     } catch (err) {
       console.error("generate-homework error:", err);
       setError("Failed to generate practice. Please try again.");
@@ -1127,16 +1141,20 @@ function GenerateHomeworkButton({ lessonId, subjectId }: { lessonId: string; sub
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between">
       <div>
-        <p className="text-sm font-medium text-gray-900">Generate Practice</p>
+        <p className="text-sm font-medium text-gray-900">
+          {step?.practice_assignment_id ? "Regenerate Practice" : "Generate Practice"}
+        </p>
         <p className="text-xs text-gray-500">
-          Auto-create practice questions from this lesson&apos;s slide content using AI
+          {step === null
+            ? "Add this lesson to the independent learning path before generating Practice."
+            : `Create ${PRACTICE_QUESTION_COUNT} editable questions from this lesson. Students pass at ${PRACTICE_PASSING_SCORE}%.`}
         </p>
       </div>
       <div className="flex items-center gap-3">
         {error && <p className="text-xs text-red-600 max-w-xs">{error}</p>}
         <button
           onClick={handleGenerate}
-          disabled={generating}
+          disabled={generating || !hasSource || step === undefined || step === null}
           className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-2"
         >
           {generating ? (
@@ -1145,7 +1163,7 @@ function GenerateHomeworkButton({ lessonId, subjectId }: { lessonId: string; sub
               Generating...
             </>
           ) : (
-            "Generate Practice"
+            step?.practice_assignment_id ? "Regenerate Practice" : "Generate Practice"
           )}
         </button>
       </div>

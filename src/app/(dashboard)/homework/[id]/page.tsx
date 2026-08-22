@@ -20,6 +20,7 @@ import { useActivitySounds } from "@/hooks/useActivitySounds";
 import HomeworkOwlCompanion, { type OwlMood } from "@/components/homework/HomeworkOwlCompanion";
 import HomeworkProgressBar from "@/components/homework/HomeworkProgressBar";
 import HomeworkCompletionCard from "@/components/homework/HomeworkCompletionCard";
+import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 
 const translations = {
   ar: {
@@ -563,7 +564,7 @@ export default function HomeworkAssignmentPage() {
           }
 
           const graded = submissionData.status === "graded" || submissionData.status === "returned";
-          const passMark = assignment?.passing_score ?? 80;
+          const passMark = assignment?.passing_score ?? PRACTICE_PASSING_SCORE;
           testPassedNow =
             graded && submissionData.score != null && totalPts > 0 && submissionData.score >= (passMark / 100) * totalPts;
           masteredNow =
@@ -627,7 +628,7 @@ export default function HomeworkAssignmentPage() {
 
   // Track B: gating "week test" presentation.
   const isTest = assignment?.is_test === true;
-  const passMark = assignment?.passing_score ?? 80;
+  const passMark = assignment?.passing_score ?? PRACTICE_PASSING_SCORE;
   const totalPts = assignment?.total_points ?? 0;
   const testPassed =
     isTest &&

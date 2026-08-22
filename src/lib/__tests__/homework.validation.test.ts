@@ -119,6 +119,7 @@ describe('createAssignmentSchema', () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.is_published).toBe(false);
+      expect(result.data.passing_score).toBe(75);
     }
   });
 });

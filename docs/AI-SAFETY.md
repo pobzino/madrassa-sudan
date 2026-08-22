@@ -339,8 +339,8 @@ Per [OpenAI API Data Usage Policy](https://openai.com/policies/api-data-usage-po
 
 **How to Report Issues:**
 - **Incorrect AI Response:** Click "Report" button on message → Teacher reviews
-- **Inappropriate Content:** Email [safety@amalmadrassa.org]
-- **Privacy Concern:** Email [privacy@amalmadrassa.org]
+- **Inappropriate Content:** Email [admin@amalschool.org]
+- **Privacy Concern:** Email [admin@amalschool.org]
 
 **Monthly Review:**
 - Platform staff analyze:
@@ -376,6 +376,6 @@ This AI Safety Guide aligns with:
 ---
 
 **Questions or Concerns?**  
-Contact our Safety Team: [safety@amalmadrassa.org]
+Contact the Amal School team: [admin@amalschool.org]
 
 **We are committed to creating a safe, supportive learning environment for every child.**

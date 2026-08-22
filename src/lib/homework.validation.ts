@@ -2,6 +2,7 @@
 // Zod schemas for API validation
 
 import { z } from "zod";
+import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 
 // Question types
 const questionTypeSchema = z.enum([
@@ -46,7 +47,7 @@ export const createAssignmentSchema = z.object({
   // Track B: mark this assignment as a gating "week test" and set the pass mark
   // (percent). Defaults keep regular homework behaviour unchanged.
   is_test: z.boolean().optional().default(false),
-  passing_score: z.number().min(0).max(100).optional().default(80),
+  passing_score: z.number().min(0).max(100).optional().default(PRACTICE_PASSING_SCORE),
   questions: z.array(createQuestionSchema).min(1, "At least one question is required"),
 });
 

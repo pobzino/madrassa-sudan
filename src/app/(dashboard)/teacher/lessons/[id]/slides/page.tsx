@@ -354,6 +354,7 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
           onSave={handleSave}
           saving={saving}
           preferredLanguage={languageMode === 'en' ? 'en' : 'ar'}
+          languageLocked={languageMode !== 'both'}
           lessonId={id}
           lessonTitle={lessonTitle}
           regenerateProps={{

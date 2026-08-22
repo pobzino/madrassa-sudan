@@ -12,8 +12,8 @@ import type {
 } from "@/lib/lessons/useLearningPath";
 
 const translations = {
-  ar: { startTest: "ابدأ الاختبار", retake: "أعد المحاولة", passed: "ناجح", passMark: "80% للنجاح", open: "افتح", test: "اختبار", practice: "التدريب", practiceRetry: "أعد التدريب", watched: (p: number) => `شاهدت ${p}%`, resume: "أكمل" },
-  en: { startTest: "Start test", retake: "Retake", passed: "Passed", passMark: "80% to pass", open: "Open", test: "Test", practice: "Practice", practiceRetry: "Retry practice", watched: (p: number) => `${p}% watched`, resume: "Continue" },
+  ar: { startTest: "ابدأ الاختبار", retake: "أعد المحاولة", passed: "ناجح", passMark: "75% للنجاح", open: "افتح", test: "اختبار", practice: "التدريب", practiceRetry: "أعد التدريب", watched: (p: number) => `شاهدت ${p}%`, resume: "أكمل" },
+  en: { startTest: "Start test", retake: "Retake", passed: "Passed", passMark: "75% to pass", open: "Open", test: "Test", practice: "Practice", practiceRetry: "Retry practice", watched: (p: number) => `${p}% watched`, resume: "Continue" },
 };
 
 type TreeNode =

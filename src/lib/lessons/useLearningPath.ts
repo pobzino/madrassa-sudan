@@ -22,6 +22,7 @@ import {
   type WeekTestState,
 } from "@/lib/learning-path";
 import { watchedPercent } from "@/lib/lessons/watched-percent";
+import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 
 interface PathRow {
   id: string;
@@ -231,7 +232,7 @@ export async function loadSubjectLearningPath(
         status: sub.status,
         score: sub.score,
         totalPoints: assignment.total_points ?? 0,
-        passingScore: assignment.passing_score ?? 80,
+        passingScore: assignment.passing_score ?? PRACTICE_PASSING_SCORE,
       };
     }
   }

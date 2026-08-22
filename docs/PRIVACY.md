@@ -1,279 +1,101 @@
-# Privacy Policy — Amal Madrassa
+# Privacy Policy - Amal School
 
-**Last Updated:** February 24, 2026
+**Last Updated:** August 22, 2026
 
-## Introduction
-
-Amal Madrassa ("we," "our," "us") operates an educational platform designed to support displaced Sudanese children through AI-powered tutoring, diagnostic assessments, and teacher-facilitated homework systems. We are committed to protecting the privacy and safety of all users, especially children.
+## 1. About Amal School
 
-This Privacy Policy explains what data we collect, why we collect it, how we use it, and your rights regarding your personal information.
+Amal School is a free online learning platform focused on helping Sudanese children continue their education. We provide Maths and English lessons, interactive Practice activities, progress tracking, and teacher support. We work with families, volunteers, and partner organisations, including teams supporting refugee communities.
 
-## Legal Basis and Compliance
+This policy explains what personal information we collect, why we use it, and the choices available to children, parents, caregivers, teachers, and volunteers.
 
-We process personal data in compliance with:
-- **General Data Protection Regulation (GDPR)** for users in the European Union
-- **United Nations Convention on the Rights of the Child (UNCRC)** principles
-- **Children's Online Privacy Protection Act (COPPA)** best practices for child safety
+## 2. Information We Collect
 
-Our legal basis for processing includes:
-- **Consent:** When parents/guardians provide consent for children to use the platform
-- **Contract Performance:** To deliver educational services
-- **Legitimate Interest:** To improve educational outcomes and platform safety
+### Parent and caregiver applications
 
-## Who We Serve
+When a parent or caregiver applies, we may collect:
 
-Our platform serves:
-- **Students** (children ages 6-18)
-- **Teachers** (educators and facilitators)
-- **Partner Organizations** (NGOs and educational institutions)
+- Parent or caregiver name, profession, WhatsApp number, optional email, city, and country
+- Whether the family is of Sudanese descent and whether a child has been affected by the war
+- Information about missed schooling or time out of school
+- The number and ages of eligible children
+- Website, Zoom, and device access information
+- Preferred language and confirmation that the terms were accepted
 
-## Data We Collect
-
-### 1. Student Information
+### Volunteer and teacher applications
 
-**Account Data:**
-- Full name
-- Email address (for students 13+, or parent/guardian email)
-- Grade level
-- Preferred language (Arabic or English)
-- Date of birth (to verify age)
+We may collect a volunteer's name, verified email, WhatsApp number, city and country, educational background, areas of interest, availability, and application status.
 
-**Educational Data:**
-- Diagnostic assessment results and placement recommendations
-- Lesson progress and completion status
-- Homework assignments, submissions, and grades
-- Quiz results and performance metrics
-- Learning strengths and areas needing improvement
-
-**AI Tutor Interactions:**
-- Conversation transcripts with the AI tutor ("معلم البومة" / Owl Teacher)
-- Questions asked and topics discussed
-- Session timestamps and duration
-- Tool usage logs (e.g., when students request practice problems)
+### Student and account information
 
-**Technical Data:**
-- IP address (for security and rate limiting)
-- Browser type and version
-- Device information (for responsive design)
-- Session logs (login times, feature usage)
+We may collect a student's name, grade level, preferred language, account details, enrolled programme or cohort, lesson progress, Practice answers and scores, teacher feedback, and learning activity. We may also process basic technical information needed to keep accounts secure and make the service work, such as device, browser, login, and error information.
 
-### 2. Teacher Information
+Please do not submit home addresses, identity documents, medical records, or other sensitive information unless an authorised Amal School team member has specifically requested it through an appropriate process.
 
-- Full name, email address
-- Assigned cohorts and classes
-- Homework assignments created
-- Grading activity and feedback provided
-- Lesson planning and curriculum access
+## 3. How We Use Information
 
-## How We Use Your Data
+We use information to:
 
-### Educational Purposes
+- Review applications and contact families or volunteers, usually by WhatsApp or email
+- Create and manage accounts and provide Maths and English learning
+- Save lesson progress, mark Practice answers, unlock the next lesson, and support students
+- Help teachers and authorised partner staff understand participation and learning progress
+- Protect children, prevent misuse, investigate technical problems, and keep the platform secure
+- Improve lessons, Practice activities, accessibility, and platform performance
+- Meet safeguarding, legal, and regulatory obligations where they apply
 
-1. **Personalized Learning:** We use student data to:
-   - Determine appropriate grade-level placement via diagnostic assessments
-   - Adapt AI tutor responses to the student's grade level and language preference
-   - Identify learning gaps and recommend lessons
-   - Create personalized practice assignments
+We rely on consent where it is required, on providing the requested service, on legitimate interests such as operating and protecting the platform, and on legal or safeguarding obligations where applicable. Parents and caregivers should supervise young children and provide any consent required by local law.
 
-2. **Academic Progress Tracking:**
-   - Monitor lesson completion and homework submission rates
-   - Track quiz scores and assignment grades
-   - Generate progress reports for students and teachers
-   - Identify patterns in mistakes to improve instruction
+## 4. Who We Share Information With
 
-3. **Teacher Support:**
-   - Enable teachers to create, assign, and grade homework
-   - Provide student performance dashboards
-   - Facilitate cohort-based class management
+We do not sell personal information and we do not use children's information for behavioural advertising.
 
-### Platform Operations
+Information may be shared only when needed with:
 
-1. **Authentication and Access Control:**
-   - Verify user identity and role (student or teacher)
-   - Enforce role-based permissions
-   - Detect and prevent unauthorized access
+- Authorised Amal School staff, teachers, and volunteers
+- A child's parent or caregiver
+- Partner organisations supporting the relevant programme or refugee community
+- Service providers that host or operate the platform, including Supabase and Netlify
+- OpenAI when authorised staff use AI tools to help draft lesson or Practice content; generated content should be reviewed before publication
+- WhatsApp, Zoom, or email providers when those services are used for communication or lessons
+- Safeguarding or legal authorities when necessary to protect a child or comply with law
 
-2. **Safety and Abuse Prevention:**
-   - Monitor AI tutor conversations for concerning content (e.g., expressions of harm)
-   - Flag inappropriate behavior for human review
-   - Rate-limit requests to prevent system abuse
-   - Log interactions for safety audits
+These organisations may process information in other countries. We take reasonable steps to limit access and use appropriate safeguards for international transfers where required.
 
-3. **Service Improvement:**
-   - Analyze aggregate usage patterns to improve features
-   - Identify technical issues and bugs
-   - Optimize lesson content based on student engagement
+## 5. Children's Privacy and Safety
 
-## Data Sharing and Third-Party Processors
+We design Amal School for children and aim to collect only the information needed to provide and improve learning. Children's accounts and programme participation may require parent or caregiver involvement. Student progress is not public, and children should not share passwords or unnecessary personal information in answers or messages.
 
-We **DO NOT sell** student data to advertisers or third parties.
+If we become aware that personal information was collected without appropriate permission, a parent or caregiver can ask us to review or delete it.
 
-We share data only with trusted service providers necessary for platform operation:
+## 6. Retention and Security
 
-### Supabase (Database and Authentication)
-- **Purpose:** Stores all user data, authentication, and application data
-- **Data Shared:** All account, educational, and conversation data
-- **Location:** Cloud-hosted (exact region depends on deployment configuration)
-- **Protection:** Encrypted in transit (TLS) and at rest; access restricted via Row-Level Security (RLS) policies
-- **Contract:** Data Processing Agreement (DPA) in place
+We keep information only for as long as it is reasonably needed to run the programme, maintain learning records, handle safeguarding concerns, meet partner commitments, resolve disputes, or comply with law. Retention periods vary by record and programme. We delete or anonymise information when it is no longer needed, subject to backups and legal requirements.
 
-### OpenAI (AI Tutor Processing)
-- **Purpose:** Powers the AI tutor conversation engine
-- **Data Shared:** Student messages, grade level, language preference, and conversation context
-- **Retention:** OpenAI retains data per their [API Data Usage Policy](https://openai.com/policies/api-data-usage-policies) (30 days for abuse monitoring)
-- **Protection:** We use OpenAI's API with enterprise-grade security; conversations are logged in our database for educational continuity
-- **No Training:** Student data is **NOT** used to train OpenAI models (per API terms)
+We use access controls, authentication, secure connections, database permissions, and other organisational and technical measures intended to protect information. No online service can guarantee complete security. Please contact us promptly if you believe an account or personal information has been compromised.
 
-### Email Service Provider (Transactional Emails)
-- **Purpose:** Send account verification, password resets, and operational emails
-- **Data Shared:** Email addresses, names, and message content (no academic data)
-- **Retention:** Typically 30-90 days per provider policy
+## 7. Your Choices and Rights
 
-### Partner NGOs (With Consent)
-- **Purpose:** Partner organizations (e.g., refugee support NGOs) may access aggregate progress reports
-- **Data Shared:** Only anonymized cohort-level statistics (e.g., "80% of students improved in Math")
-- **Explicit Consent Required:** Individual student data is shared only with signed parent/guardian consent forms
+Depending on where you live, you or your parent or caregiver may ask us to:
 
-## Data Retention
+- Provide a copy of personal information we hold
+- Correct inaccurate or incomplete information
+- Delete information or close an account
+- Restrict or object to certain processing
+- Withdraw consent where processing is based on consent
+- Explain a decision or request human review where appropriate
 
-We retain data as follows:
+We may need to verify the request and may retain limited information where law, safeguarding, or legitimate educational record-keeping requires it. You may also have the right to complain to your local data protection authority.
 
-| Data Type | Retention Period | Rationale |
-|-----------|------------------|-----------|
-| **Student Accounts** | Until account deletion or graduation + 1 year | Academic continuity |
-| **Lesson Progress & Grades** | 5 years from last activity | Educational records; required by some partner agreements |
-| **AI Tutor Conversations** | 2 years from conversation date | Safety audits; allows review of flagged content |
-| **Diagnostic Assessments** | Permanent (for academic record) | Placement decisions; longitudinal progress tracking |
-| **Homework Submissions** | 3 years from submission | Grading appeals; teacher reference |
-| **Teacher Accounts** | Until account deletion + 90 days | Operational continuity |
-| **Technical Logs (IP, session)** | 90 days | Security incident investigation |
+## 8. Cookies and Local Storage
 
-**Deletion:** When data retention periods expire, records are permanently deleted from production databases and backups.
+Amal School uses cookies and similar browser storage for sign-in, language preference, lesson progress, offline features, security, and essential platform operation. We do not use them to sell personal information or deliver behavioural advertising to children.
 
-## Children's Privacy Protections
+## 9. Changes to This Policy
 
-We take special care with children's data:
+We may update this policy as Amal School and its programmes develop. The date at the top shows the latest revision. We will provide an appropriate notice if a change materially affects how personal information is used.
 
-### Age Verification
-- Students under 13 require parent/guardian email for account creation
-- Guardian consent is logged and verifiable
+## 10. Contact Us
 
-### Restricted Data Collection
-- No location tracking beyond country/region for content localization
-- No behavioral advertising or profiling for commercial purposes
-- No public profiles or social networking features
+For privacy questions, safeguarding concerns, account requests, or complaints, contact:
 
-### Parental Rights (see "Your Rights" section)
-- Parents/caregivers can request deletion of student accounts at any time
-
-### Secure AI Interactions
-- AI tutor conversations are monitored for safety (see AI-SAFETY.md)
-- No student names or identifiable information sent to OpenAI beyond session context
-- Human oversight for flagged content
-
-## International Data Transfers
-
-Amal Madrassa is designed for deployment in regions serving Sudanese displaced children (e.g., Sudan, Egypt, Chad, refugee camps). Data may be transferred internationally depending on:
-
-- **Supabase hosting region** (typically EU or US regions)
-- **OpenAI API processing** (globally distributed, subject to OpenAI's data localization policies)
-
-When data is transferred outside the student's country of residence, we ensure:
-- **Standard Contractual Clauses (SCCs)** with all processors
-- **Encryption in transit** (TLS 1.2+)
-- **Access controls** restricting data access to authorized personnel only
-
-## Data Security Measures
-
-We implement technical and organizational safeguards:
-
-### Technical Controls
-- **Encryption:** All data encrypted in transit (HTTPS/TLS) and at rest (AES-256)
-- **Authentication:** Multi-factor authentication (MFA) available for teachers and administrators
-- **Access Control:** Role-based permissions enforced via Supabase Row-Level Security (RLS)
-- **Rate Limiting:** Prevents brute-force attacks and API abuse
-- **Session Management:** Automatic session expiration after inactivity
-
-### Organizational Controls
-- **Staff Training:** Limited personnel with data access; trained on child safety and data protection
-- **Audit Logs:** All data access and changes logged for security reviews
-- **Incident Response Plan:** Procedures for data breach notification and remediation
-- **Regular Reviews:** Quarterly security audits and vulnerability assessments
-
-### Limitations
-No system is 100% secure. In the event of a data breach, we will:
-1. Notify affected users within 72 hours
-2. Report to supervisory authorities as required by law
-3. Provide remediation steps and support
-
-## Your Rights
-
-Depending on your location, you may have the following rights:
-
-### Access and Portability
-- **View Your Data:** Students and teachers can view their data via account dashboards
-- **Export Data:** Download AI tutor conversations, lesson progress, and homework submissions in Markdown format
-
-### Correction and Deletion
-- **Update Information:** Correct profile information (name, grade level, language preference) via account settings
-- **Delete Account:** Request full account deletion by contacting [support@amalmadrassa.org] — data will be removed within 30 days
-- **Delete Conversations:** Students can delete AI tutor conversations from their history (subject to 30-day safety retention)
-
-### Restriction and Objection
-- **Limit Processing:** Request we stop using data for specific purposes (e.g., AI tutor feature)
-- **Withdraw Consent:** Parents/caregivers can withdraw consent for children's accounts at any time
-
-### Automated Decision-Making
-- **Diagnostic Placement:** Automated assessments determine grade-level placement, but teachers can override recommendations
-- **Right to Human Review:** Any automated decision (e.g., content flagging) can be appealed for human review
-
-## How to Exercise Your Rights
-
-To exercise any of these rights, contact us:
-
-**Email:** [privacy@amalmadrassa.org] (replace with actual contact)  
-**Data Protection Officer (if applicable):** [dpo@amalmadrassa.org]
-
-We will respond to requests within 30 days. For deletion requests, we may retain certain data if required by law or legitimate educational purposes (e.g., final grade transcripts).
-
-## Cookies and Tracking
-
-We use minimal tracking technologies:
-
-- **Essential Cookies:** Session management and authentication (required for platform function)
-- **Analytics (Optional):** Aggregate usage statistics (e.g., most-used features) — no personally identifiable information
-- **No Advertising Trackers:** We do **not** use third-party advertising cookies or behavioral tracking
-
-You can disable non-essential cookies via browser settings, but this may limit platform functionality.
-
-## Changes to This Policy
-
-We may update this Privacy Policy to reflect:
-- New features or services
-- Changes in data protection laws
-- Feedback from users and partner organizations
-
-**Notification:** We will notify users of material changes via:
-- Email to registered addresses (for teachers and administrators)
-- In-app banner notification (for students)
-- Updated "Last Modified" date at the top of this document
-
-Continued use of the platform after notification constitutes acceptance of changes.
-
-## Contact Us
-
-For privacy questions, concerns, or complaints:
-
-**Amal Madrassa Privacy Team**  
-Email: [privacy@amalmadrassa.org]  
-Website: [https://amalmadrassa.org]
-
-**For GDPR/EU Users:**  
-You have the right to lodge a complaint with your local data protection authority.
-
-**For Child Safety Concerns:**  
-Report concerning AI tutor interactions or platform misuse to: [safety@amalmadrassa.org]
-
----
-
-**Commitment to Transparency:** We are committed to protecting the privacy and safety of all learners. If you have questions or concerns, please reach out — we're here to help.
+**Email:** [admin@amalschool.org](mailto:admin@amalschool.org)

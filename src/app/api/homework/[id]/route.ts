@@ -243,6 +243,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (data.instructions_en !== undefined) updateData.instructions_en = data.instructions_en;
     if (data.due_at !== undefined) updateData.due_at = data.due_at;
     if (data.is_published !== undefined) updateData.is_published = data.is_published;
+    if (data.passing_score !== undefined) updateData.passing_score = data.passing_score;
 
     // Recalculate total points if questions are provided
     if (data.questions && data.questions.length > 0) {

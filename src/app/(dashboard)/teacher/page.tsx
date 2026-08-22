@@ -562,8 +562,8 @@ export default function TeacherDashboard() {
             className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-2xl p-6 hover:opacity-90 transition-opacity"
           >
             <Plus className="w-8 h-8 mb-3" />
-            <h3 className="font-semibold text-lg mb-1">Create Assignment</h3>
-            <p className="text-emerald-100 text-sm">Create new homework for your classes</p>
+            <h3 className="font-semibold text-lg mb-1">Create Practice</h3>
+            <p className="text-emerald-100 text-sm">Create Practice for your students</p>
           </Link>
 
           <Link

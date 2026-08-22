@@ -3,8 +3,8 @@ import path from "path";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Terms of Service | Amal School",
-  description: "Terms of service for Amal School — rules and guidelines for using the platform.",
+  title: "Terms and Conditions | Amal School",
+  description: "Terms and conditions for using the Amal School learning platform.",
 };
 
 function MarkdownContent({ content }: { content: string }) {
@@ -17,9 +17,8 @@ function MarkdownContent({ content }: { content: string }) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (i === 0 && line.startsWith("# ")) continue;
-    if (i === 1 && line.startsWith("**Last Updated")) continue;
-    if (i === 2 && line.trim() === "") continue;
+    if (line.startsWith("# ")) continue;
+    if (line.startsWith("**Last Updated")) continue;
 
     if (inTable && !line.startsWith("|")) {
       html.push("</tbody></table></div>");
@@ -111,8 +110,8 @@ export default function TermsPage() {
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-10">
           <div className="mb-8 pb-6 border-b border-gray-100">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Terms of Service</h1>
-            <p className="text-sm text-gray-500">Last Updated: February 24, 2026</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Terms and Conditions</h1>
+            <p className="text-sm text-gray-500">Last Updated: August 22, 2026</p>
           </div>
 
           <MarkdownContent content={content} />

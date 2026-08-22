@@ -157,7 +157,7 @@ NEXT_PUBLIC_SITE_URL=https://your-domain.com
 # OPTIONAL: EMAIL CONFIGURATION
 # ============================================
 # If using Resend, SendGrid, or other email service
-# EMAIL_FROM=noreply@amalmadrassa.org
+# EMAIL_FROM=admin@amalschool.org
 # EMAIL_SERVICE_API_KEY=your_email_api_key
 
 # ============================================
@@ -298,7 +298,7 @@ Run these checks:
 ### 5.4 Compliance Verification
 
 - [ ] **Privacy Policy accessible:** `/privacy` page loads
-- [ ] **Terms of Service accessible:** `/terms` page loads
+- [ ] **Terms and Conditions accessible:** `/terms` page loads
 - [ ] **AI Safety Guide available:** Link to `/docs/AI-SAFETY.md` in help section
 - [ ] **Child consent process documented:** Confirm onboarding and partner procedures cover required parental/caregiver consent
 
@@ -434,7 +434,7 @@ Before going live, verify:
 - [ ] Database RLS policies active and tested
 - [ ] OpenAI API key restricted to server-side routes only
 - [ ] Rate limiting enabled (Supabase Auth and AI tutor)
-- [ ] Privacy Policy and Terms of Service accessible
+- [ ] Privacy Policy and Terms and Conditions accessible
 - [ ] Child consent flow documented and tested with partner operations
 - [ ] AI tutor content moderation active (see AI-SAFETY.md)
 - [ ] Backup strategy in place (weekly database exports)
@@ -445,7 +445,7 @@ Before going live, verify:
 ## Support and Resources
 
 **Technical Support:**
-- Email: [devs@amalmadrassa.org] (replace with actual contact)
+- Email: [admin@amalschool.org]
 - GitHub Issues: (if using open-source model)
 
 **Documentation:**

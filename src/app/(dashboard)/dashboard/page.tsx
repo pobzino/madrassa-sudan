@@ -28,8 +28,8 @@ const translations = {
     lessonsSub: "دروس مكتملة",
     dayStreak: "يوم متتالي",
     streakSub: "واصل التقدم!",
-    homeworkDone: "واجبات",
-    homeworkSub: "واجبات",
+    homeworkDone: "التدريب",
+    homeworkSub: "أنشطة مكتملة",
     totalPoints: "نقاط",
     pointsSub: "اجمع المزيد!",
     subjects: "اختر مادة",
@@ -47,8 +47,8 @@ const translations = {
     lessonsSub: "Lessons completed",
     dayStreak: "Day Streak",
     streakSub: "Keep it up!",
-    homeworkDone: "Homework",
-    homeworkSub: "Assignments",
+    homeworkDone: "Practice",
+    homeworkSub: "Activities completed",
     totalPoints: "Points",
     pointsSub: "Keep earning!",
     subjects: "Pick a Subject",
@@ -164,10 +164,10 @@ export default function DashboardPage() {
     <div className="px-4 sm:px-6 lg:px-8 py-8" dir={isRtl ? "rtl" : "ltr"}>
           {/* Welcome Banner — illustrated "learning world" hero */}
           <div className="relative mb-8 rounded-3xl overflow-hidden shadow-sm min-h-[230px] sm:min-h-[260px]">
-            <HeroScene />
+            <HeroScene mirrored={isRtl} />
 
             {/* Owl mascot */}
-            <div className="absolute -bottom-1 right-1 sm:right-10 z-10">
+            <div className={`absolute -bottom-1 z-10 ${isRtl ? "left-1 sm:left-10" : "right-1 sm:right-10"}`}>
               <OwlWaving className="w-24 h-24 sm:w-44 sm:h-44 drop-shadow-xl" />
             </div>
 

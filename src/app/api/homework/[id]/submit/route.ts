@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { submitHomeworkSchema, saveDraftSchema } from "@/lib/homework.validation";
+import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -249,7 +250,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // dashboards, counters and the streak trigger stay in step with the path
     // tree. Below the threshold nothing is written — the student just retries.
     if (isPractice && assignment.lesson_id && assignment.total_points > 0) {
-      const passMark = ((assignment.passing_score ?? 80) / 100) * assignment.total_points;
+      const passMark = ((assignment.passing_score ?? PRACTICE_PASSING_SCORE) / 100) * assignment.total_points;
       if (autoGradedScore >= passMark) {
         await supabase.from("lesson_progress").upsert(
           {

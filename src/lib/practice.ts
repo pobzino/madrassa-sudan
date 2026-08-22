@@ -1,0 +1,2 @@
+export const PRACTICE_PASSING_SCORE = 75;
+export const PRACTICE_QUESTION_COUNT = 10;

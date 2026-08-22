@@ -4,6 +4,7 @@ import { getOpenAIClient, AI_MODEL } from "@/lib/ai/openai-client";
 import { getTeacherRole } from "@/lib/server/teacher-lesson-access";
 import { extractSlideContent } from "@/lib/ai/homework-slides";
 import type { Slide } from "@/lib/slides.types";
+import { PRACTICE_QUESTION_COUNT } from "@/lib/practice";
 
 export const maxDuration = 300;
 
@@ -19,7 +20,7 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
  *
  * Body: { lesson_id: string, num_questions?: number }
  *
- * Generates a bilingual homework from a single lesson's content. Prefers the
+ * Generates bilingual Practice questions from a single lesson's content. Prefers the
  * most recent sim deck snapshot; falls back to the lesson's slide deck so
  * homework can be generated even before a sim has been recorded. Returns
  * { title_ar, title_en, subject_id, questions } for prefilling the create page.
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { lesson_id, num_questions = 6 } = body as {
+    const { lesson_id, num_questions = PRACTICE_QUESTION_COUNT } = body as {
       lesson_id?: string;
       num_questions?: number;
     };
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
 
     const prompt = `You are an expert curriculum designer for Amal School, a Sudanese K-12 educational platform.
 
-Generate a single homework that reviews ONE lesson. Every question must draw from the lesson content below.
+Generate a single Practice that reviews ONE lesson. Every question must draw from the lesson content below.
 
 ## Lesson Context
 - Lesson: ${lessonTitle}
@@ -125,14 +126,14 @@ Generate a single homework that reviews ONE lesson. Every question must draw fro
 ${content}
 
 ## Requirements
-- Generate exactly ${clampedCount} homework questions covering this lesson
+- Generate exactly ${clampedCount} Practice questions covering this lesson
 - Mix of question types: mostly "multiple_choice" (4 options) with some "true_false"
 - All questions must be bilingual: Arabic primary (question_text_ar), English translation (question_text_en)
 - For multiple_choice: provide exactly 4 options as strings, correct_answer must match one option exactly
 - For true_false: set options to ["صحيح", "خطأ"] (True/False in Arabic), correct_answer is one of them
 - Each question is worth 10 points
 - Difficulty should be appropriate for Grade ${gradeLevel}
-- Generate a homework title in both Arabic (title_ar) and English (title_en) that reflects the lesson`;
+- Generate a Practice title in both Arabic (title_ar) and English (title_en) that reflects the lesson`;
 
     const stream = await openai.chat.completions.create({
       model: AI_MODEL,

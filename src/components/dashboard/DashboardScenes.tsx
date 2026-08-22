@@ -375,9 +375,13 @@ export function LandingHeroScene() {
 }
 
 /* ── Hero banner scene ── */
-export function HeroScene() {
+export function HeroScene({ mirrored = false }: { mirrored?: boolean }) {
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+      style={{ transform: mirrored ? 'scaleX(-1)' : undefined }}
+    >
       {/* Sky → meadow */}
       <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, #dcefff 0%, #e9f3ff 38%, #eaf7ec 70%, #dff1e2 100%)' }} />
 

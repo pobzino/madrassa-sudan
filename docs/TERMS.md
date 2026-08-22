@@ -1,321 +1,87 @@
-# Terms of Service — Amal Madrassa
+# Terms and Conditions - Amal School
 
-**Last Updated:** February 24, 2026
+**Last Updated:** August 22, 2026
 
-## Welcome
+## 1. About These Terms
 
-Welcome to Amal Madrassa, an educational platform designed to support displaced Sudanese children through AI-powered tutoring, diagnostic assessments, and teacher-facilitated learning. These Terms of Service ("Terms") govern your use of our platform.
+These Terms and Conditions govern use of Amal School. Amal School is a free learning platform focused on helping Sudanese children continue their education through online Maths and English lessons, interactive Practice, progress tracking, and teacher support.
 
-By accessing or using Amal Madrassa, you agree to these Terms. If you are a parent or guardian creating an account for a child under 13, you agree to these Terms on behalf of your child.
+By using the platform, you agree to these terms. A parent or caregiver must agree on behalf of a child where local law or the programme requires it. If you do not agree, do not create an account or use the platform.
 
-**If you do not agree to these Terms, please do not use the platform.**
+## 2. The Programme
 
-## Platform Purpose
+Amal School may provide:
 
-Amal Madrassa is designed to provide:
+- Online Maths and English lessons in Arabic or English
+- Interactive, automatically marked Practice activities
+- Lesson and Practice progress tracking
+- Teacher, volunteer, Zoom, or partner-supported learning
+- Downloadable or printable educational resources
 
-1. **Educational Content:** Lessons in Math, Science, English, and Arabic aligned with Sudanese curriculum standards
-2. **AI Tutoring:** Interactive learning support via "معلم البومة" (Owl Teacher), an AI tutor powered by OpenAI
-3. **Homework System:** Teacher-created assignments with grading and feedback
-4. **Diagnostic Assessments:** Placement tests to identify appropriate grade levels
-5. **Progress Tracking:** Dashboards for students and teachers
+Independent-track students may need to finish a lesson and score at least 75% in its Practice before the next lesson unlocks. Practice can be retried without a lockout. Camp and partner programmes may use a different teacher-led learning flow.
 
-This platform is intended for **educational purposes only** and is provided free of charge to displaced Sudanese children and their communities through partnerships with NGOs and humanitarian organizations.
+Amal School is a learning service, not a replacement for a child's school, qualified teacher, safeguarding professional, medical care, or emergency support. We do not promise a particular academic result, qualification, or uninterrupted availability.
 
-## User Accounts and Roles
+## 3. Accounts and Applications
 
-### Account Types
+You must provide accurate information and keep account credentials secure. Do not share a password outside the child, their parent or caregiver, and authorised support staff. Tell us promptly if an account may have been accessed without permission.
 
-1. **Students (Ages 6-18):**
-   - Must have parent/guardian consent if under 13
-   - Can access lessons, AI tutor, homework, and quizzes
-   - Cannot create homework or grade assignments
+Submitting a parent, volunteer, or teacher application does not guarantee enrolment, placement, or acceptance. We may contact applicants by WhatsApp or email and may ask for additional information needed to assess eligibility or safeguarding requirements.
 
-2. **Teachers:**
-   - Authorized by partner organizations or school administrators
-   - Can create cohorts, assign homework, grade submissions, and track student progress
-   - Must comply with professional conduct standards
+## 4. Acceptable Use
 
-### Account Registration
+You may use Amal School for personal, classroom, volunteer, and authorised programme learning. You must not:
 
-To create an account, you must:
-- Provide accurate and complete information (name, email, grade level for students)
-- Be at least 6 years old (students under 13 require guardian consent)
-- Use a valid email address (or parent/guardian email for young students)
-- Create a secure password and keep it confidential
+- Harass, threaten, exploit, or endanger another person
+- Share unnecessary personal information about a child
+- Access another person's account or data without permission
+- Upload unlawful, harmful, discriminatory, or malicious content
+- Interfere with security, overload the service, scrape data, or use automated attacks
+- Copy, sell, or commercially redistribute platform content without permission
+- Misrepresent your identity, role, qualifications, or relationship to a child
 
-**You are responsible for:**
-- All activity under your account
-- Maintaining the confidentiality of your password
-- Notifying us immediately of any unauthorized access
+We may remove content or restrict, suspend, or close access when needed to protect users, investigate misuse, meet safeguarding obligations, or enforce these terms. Serious safety concerns may be shared with appropriate partner staff or authorities.
 
-We reserve the right to suspend or terminate accounts that violate these Terms or engage in harmful behavior.
+## 5. Learning Content and Practice
 
-## Acceptable Use
+Teachers and authorised staff may create or review lessons and Practice questions. Some draft content may be assisted by AI tools. Educational content, translations, automatic marking, and generated questions can contain mistakes. Teachers should review content before publication, and students should ask a teacher or caregiver when something appears incorrect or unclear.
 
-### You MAY:
-- Use the platform for educational purposes (learning, teaching, homework)
-- Ask the AI tutor questions related to academic subjects
-- Share your progress with teachers and authorized platform staff
-- Collaborate with classmates on group assignments (when permitted by teachers)
-- Request help understanding homework concepts (the AI will guide, not provide answers)
+Practice results are intended to guide learning. They are not official examination results or recognised qualifications unless an authorised programme separately confirms otherwise.
 
-### You MAY NOT:
-- Use the platform for commercial purposes or advertising
-- Share your account credentials with others
-- Attempt to access other users' accounts or data
-- Harass, bully, or threaten other users
-- Submit harmful, offensive, or inappropriate content
-- Attempt to bypass content filters or safety mechanisms
-- Use the AI tutor for cheating (e.g., asking for direct homework answers)
-- Impersonate teachers, students, or other users
-- Upload malware, viruses, or malicious code
-- Scrape or harvest data from the platform
-- Overload the platform with automated requests (e.g., bots)
+## 6. Teachers, Volunteers, and Partners
 
-### Content Guidelines
+Teachers and volunteers must act professionally, use age-appropriate and culturally respectful material, protect student privacy, and follow Amal School and partner safeguarding procedures. Access to student information is limited to authorised programme purposes. Partner organisations remain responsible for their own staff, local operations, and legal duties.
 
-**Student Submissions:**
-- Homework answers and AI tutor questions must be respectful and appropriate
-- No profanity, hate speech, or violent content
-- No sharing of personal information beyond what's required (e.g., full addresses, phone numbers)
+## 7. Child Safety
 
-**Teacher Content:**
-- Homework assignments and lesson materials must be educationally appropriate
-- Content must be free from discrimination, bias, or harmful stereotypes
-- Teachers must comply with child safeguarding policies
+Do not use the platform for emergency or confidential safeguarding reports when immediate help is required. Contact local emergency or safeguarding services and the responsible programme team. You can also notify Amal School at [admin@amalschool.org](mailto:admin@amalschool.org).
 
-**Violations:**
-We reserve the right to remove content and suspend accounts that violate these guidelines. Serious violations (e.g., threats of harm) will be reported to authorities.
+Parents and caregivers are responsible for providing appropriate supervision, confirming that the child may participate, and helping the child use shared phones, WhatsApp, Zoom, and online lessons safely.
 
-## AI Tutor ("معلم البومة" / Owl Teacher)
+## 8. Privacy
 
-### How It Works
+Our [Privacy Policy](/privacy) explains what information we collect and how we use it. By using Amal School, you acknowledge that information will be handled as described in that policy.
 
-The AI tutor is powered by OpenAI and designed to:
-- Answer academic questions across subjects (Math, Science, English, Arabic)
-- Guide students through problem-solving (Socratic method)
-- Adapt to the student's grade level and language preference (Arabic or English)
-- Identify learning gaps and suggest practice
+## 9. Intellectual Property
 
-### Limitations
+Amal School and its licensors own the platform, branding, software, and educational materials they create. Students retain ownership of their original work. By submitting work, users allow Amal School to store, display, mark, and share it with authorised teachers and programme staff for educational and safeguarding purposes.
 
-The AI tutor is **NOT** a replacement for human teachers. It may:
-- Make mistakes or provide incorrect information
-- Misunderstand complex or ambiguous questions
-- Provide guidance that is too advanced or too simple
+Students, families, teachers, and partner programmes may use and print materials for personal or authorised educational use. Commercial reuse, removal of attribution, or public redistribution requires permission unless the material states a different licence.
 
-**Students should:**
-- Verify answers with textbooks, teachers, or trusted caregivers
-- Report incorrect or confusing responses to teachers
-- Use the AI as a learning tool, not a homework answer key
+## 10. Availability and Changes
 
-### Safety and Monitoring
+We may update, correct, suspend, or discontinue features and content. Internet access, third-party services, maintenance, and local conditions can affect availability. We will take reasonable care in operating the platform but cannot guarantee that it will always be available, error-free, or compatible with every device.
 
-AI tutor conversations are logged and monitored for:
-- **Safety:** Detecting expressions of self-harm, abuse, or distress
-- **Appropriateness:** Flagging inappropriate questions or responses
-- **Quality:** Improving tutor accuracy and helpfulness
+## 11. Responsibility and Liability
 
-See [AI-SAFETY.md](./AI-SAFETY.md) for detailed moderation practices.
+Nothing in these terms excludes responsibility that cannot legally be excluded, including responsibility for fraud or for death or personal injury caused by negligence where applicable. Otherwise, to the extent permitted by law, Amal School is not responsible for indirect losses, interruptions outside our reasonable control, or decisions made solely from unverified educational content.
 
-**If the AI detects concerning content (e.g., a student expresses suicidal thoughts), a teacher or designated safeguarding contact may be notified for intervention.**
+## 12. Changes to These Terms
 
-## Homework and Academic Integrity
+We may update these terms as the platform and programmes develop. The date at the top shows the latest revision. Continued use after an update means you accept the revised terms where permitted by law; we will seek fresh consent when required.
 
-### Student Responsibilities
+## 13. Contact
 
-- **Submit your own work:** Homework must be completed independently unless it's a group assignment
-- **Use the AI tutor ethically:** You may ask the AI for *help understanding concepts*, but not for direct answers
-- **Cite sources:** If you reference external materials (books, websites), cite them in your work
+Questions about these terms, accounts, content, or safeguarding can be sent to:
 
-### Consequences of Cheating
-
-If a teacher determines you have violated academic integrity (e.g., copying answers from the AI or other students):
-- The assignment may receive a failing grade
-- Repeated violations may result in account suspension
-- Serious cases may be reported to school administrators or partner organizations
-
-**We believe in learning from mistakes.** Teachers will work with students to understand *why* academic integrity matters, not just punish violations.
-
-## Teacher and Caregiver Responsibilities
-
-### Teachers
-
-Teachers agree to:
-- Create age-appropriate and culturally sensitive assignments
-- Grade fairly and provide constructive feedback
-- Protect student privacy (do not share grades publicly)
-- Report concerning behavior (e.g., signs of abuse) to appropriate authorities
-- Use the platform in accordance with partner organization policies
-
-### Parents and Caregivers
-
-Parents and caregivers are expected to:
-- Support children in using the platform appropriately
-- Follow local safeguarding and consent requirements
-- Coordinate with teachers and partner organizations when welfare concerns arise
-
-## Intellectual Property
-
-### Platform Content
-
-All lessons, quizzes, diagnostic assessments, and platform design are the intellectual property of Amal Madrassa and its licensors. You may **not**:
-- Copy or redistribute lesson materials for commercial purposes
-- Modify or reverse-engineer the platform code
-- Remove copyright or attribution notices
-
-**Educational Use Allowed:** Teachers and students may download and print lesson materials for personal or classroom use.
-
-### Student Work
-
-Students retain ownership of their homework submissions, essays, and creative work. By submitting work to the platform, you grant us a license to:
-- Store and display it to your teachers and authorized platform reviewers
-- Use it for grading and feedback purposes
-- Analyze it in aggregate (anonymized) for platform improvement
-
-**We will never:**
-- Sell student work to third parties
-- Use identifiable student work for marketing without explicit consent
-
-## Data and Privacy
-
-Your use of the platform is governed by our [Privacy Policy](./PRIVACY.md), which explains:
-- What data we collect
-- How we use and protect it
-- Your rights to access, correct, and delete data
-
-**Key Privacy Points:**
-- Student data is **not sold** to advertisers
-- AI conversations are logged for safety and educational continuity
-- You can request account deletion at any time
-
-## Platform Availability and Changes
-
-### Service Level
-
-We strive to provide 99% uptime, but the platform is provided **"as is"** without guarantees of:
-- Uninterrupted access (maintenance, outages, or technical issues may occur)
-- Error-free operation (bugs may exist)
-- Compatibility with all devices or browsers
-
-### Changes to the Platform
-
-We may:
-- Add, modify, or remove features
-- Update lesson content or diagnostic assessments
-- Change AI tutor behavior to improve safety or accuracy
-
-**Notification:** We will notify users of major changes via email or in-app announcements.
-
-### Termination
-
-We reserve the right to suspend or terminate the platform, in whole or in part, at any time. If the platform is discontinued, we will:
-1. Provide at least 90 days' notice
-2. Allow users to export their data (lesson progress, grades, AI conversations)
-3. Work with partner organizations to transition students to alternative platforms
-
-## Disclaimers and Limitation of Liability
-
-### Educational Disclaimer
-
-**Amal Madrassa is a learning tool, not a certified school.** We do **not**:
-- Guarantee academic outcomes or grade improvements
-- Provide official diplomas or transcripts recognized by governments
-- Replace formal education or professional tutoring
-
-**AI tutor responses are generated by machine learning and may contain errors.** Students should verify information with teachers, textbooks, or other authoritative sources.
-
-### No Warranty
-
-THE PLATFORM IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO:
-- MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
-- ACCURACY OF CONTENT OR AI RESPONSES
-- UNINTERRUPTED OR ERROR-FREE OPERATION
-
-### Limitation of Liability
-
-TO THE MAXIMUM EXTENT PERMITTED BY LAW, AMAL MADRASSA AND ITS STAFF, PARTNERS, AND SERVICE PROVIDERS SHALL NOT BE LIABLE FOR:
-- INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES (e.g., lost learning time, emotional distress)
-- DAMAGES RESULTING FROM UNAUTHORIZED ACCESS TO USER ACCOUNTS
-- ERRORS IN AI TUTOR RESPONSES OR GRADING
-- TECHNICAL FAILURES OR DATA LOSS
-
-**Maximum Liability:** In jurisdictions that do not allow exclusion of liability, our total liability is limited to $100 USD or the amount you paid to use the platform (which is currently $0, as the platform is free).
-
-### Exceptions
-
-These limitations do **not apply** to:
-- Personal injury or death caused by our negligence
-- Fraud or intentional misconduct
-- Violations of data protection laws (see Privacy Policy)
-
-## Indemnification
-
-You agree to indemnify and hold harmless Amal Madrassa, its staff, and partners from any claims, damages, or expenses (including legal fees) arising from:
-- Your violation of these Terms
-- Your misuse of the platform
-- Content you submit (e.g., offensive homework submissions)
-- Violation of third-party rights (e.g., plagiarism)
-
-## Dispute Resolution
-
-### Governing Law
-
-These Terms are governed by the laws of [specify jurisdiction, e.g., "the European Union" or "International Humanitarian Law principles"], without regard to conflict of law provisions.
-
-### Resolution Process
-
-If you have a complaint or dispute:
-1. **Contact Us First:** Email [support@amalmadrassa.org] to resolve the issue informally
-2. **Escalation:** If unresolved, contact our Data Protection Officer or partner NGO
-3. **Mediation:** We encourage mediation before legal action
-
-### Arbitration (If Applicable)
-
-For users in jurisdictions requiring arbitration, disputes will be resolved through binding arbitration administered by [specify organization, e.g., "the International Chamber of Commerce"].
-
-**Waiver of Class Actions:** You agree to resolve disputes individually, not as part of a class action.
-
-## Child Safety and Reporting
-
-We are committed to protecting children. If you observe or experience:
-- Abuse, harassment, or bullying on the platform
-- Inappropriate AI tutor responses
-- Safety concerns about another user
-
-**Report immediately to:**
-- **Safety Team:** [safety@amalmadrassa.org]
-- **In-App Reporting:** Use the "Report" button on conversations or homework submissions
-- **Emergency:** Contact local authorities or child protection services
-
-**We take all reports seriously and will investigate promptly.**
-
-## Changes to These Terms
-
-We may update these Terms to reflect:
-- Legal or regulatory changes
-- New features or services
-- User feedback
-
-**Notification:** We will notify users via:
-- Email (for teachers and guardians)
-- In-app banner (for students)
-- Updated "Last Modified" date
-
-**Continued use of the platform after changes are posted constitutes acceptance.** If you do not agree to the updated Terms, you may delete your account.
-
-## Contact Us
-
-For questions about these Terms:
-
-**Amal Madrassa Support Team**  
-Email: [support@amalmadrassa.org]  
-Website: [https://amalmadrassa.org]
-
-**For Legal or Compliance Inquiries:**  
-Email: [legal@amalmadrassa.org]
-
----
-
-**Thank you for using Amal Madrassa.** We are honored to support your learning journey. Together, we can build a brighter future for displaced children through education.
+**Email:** [admin@amalschool.org](mailto:admin@amalschool.org)

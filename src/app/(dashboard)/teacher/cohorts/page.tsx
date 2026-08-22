@@ -257,7 +257,7 @@ export default function TeacherCohortsPage() {
                     href={`/teacher/homework/create?cohort=${cohort.id}`}
                     className="flex-1 text-center py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors"
                   >
-                    Assign Homework
+                    Assign Practice
                   </Link>
                 </div>
               </div>

@@ -694,7 +694,7 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
                   <tr>
                     <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Student</th>
                     <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Lessons</th>
-                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Homework</th>
+                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Practice</th>
                     <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Enrolled</th>
                   </tr>
                 </thead>

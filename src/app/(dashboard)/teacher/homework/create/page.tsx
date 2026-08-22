@@ -9,6 +9,7 @@ import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import { QuestionBuilder } from "@/components/homework/QuestionBuilder";
 import type { CreateQuestionInput } from "@/lib/homework.types";
+import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 
 interface Cohort {
   id: string;
@@ -59,6 +60,7 @@ function CreateHomeworkContent() {
   const [questions, setQuestions] = useState<CreateQuestionInput[]>([]);
   const [loadingAssignment, setLoadingAssignment] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isPractice, setIsPractice] = useState(false);
 
   // AI generation state
   const [showAiPanel, setShowAiPanel] = useState(false);
@@ -218,7 +220,8 @@ function CreateHomeworkContent() {
         const data = await response.json();
         const assignment = data.data;
 
-        setSelectedCohort(assignment.cohort_id);
+        setSelectedCohort(assignment.cohort_id || "");
+        setIsPractice(Boolean(assignment.is_practice));
         setSelectedSubject(assignment.subject_id || "");
         setTitleAr(assignment.title_ar || "");
         setTitleEn(assignment.title_en || "");
@@ -475,7 +478,7 @@ function CreateHomeworkContent() {
   }
 
   async function saveAssignment(publish: boolean) {
-    if (!selectedCohort || !titleAr || questions.length === 0) {
+    if ((!selectedCohort && !isPractice) || !titleAr || questions.length === 0) {
       setError("Please fill in all required fields and add at least one question");
       return;
     }
@@ -492,7 +495,7 @@ function CreateHomeworkContent() {
 
     try {
       const payload = {
-        cohort_id: selectedCohort,
+        ...(!isPractice ? { cohort_id: selectedCohort } : {}),
         subject_id: selectedSubject || null,
         title_ar: titleAr,
         title_en: titleEn || null,
@@ -500,6 +503,7 @@ function CreateHomeworkContent() {
         instructions_en: instructionsEn || null,
         due_at: dueDate ? new Date(dueDate).toISOString() : null,
         is_published: publish,
+        ...(isPractice ? { passing_score: PRACTICE_PASSING_SCORE } : {}),
         questions: questions.map((q, index) => ({
           question_type: q.question_type,
           question_text_ar: q.question_text_ar,
@@ -556,10 +560,10 @@ function CreateHomeworkContent() {
             href="/teacher/homework"
             className="text-gray-500 hover:text-gray-700 text-sm mb-2 inline-block"
           >
-            ← Back to Homework
+            ← Back to Practice
           </Link>
           <h1 className="text-2xl font-bold text-gray-900">
-            {assignmentId ? "Edit Assignment" : "Create Assignment"}
+            {isPractice ? "Review Practice" : assignmentId ? "Edit Assignment" : "Create Assignment"}
           </h1>
         </div>
 
@@ -584,21 +588,27 @@ function CreateHomeworkContent() {
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Class *
+                {isPractice ? "Audience" : "Class *"}
               </label>
-              <select
-                value={selectedCohort}
-                onChange={(e) => setSelectedCohort(e.target.value)}
-                disabled={!!assignmentId || !!preselectedCohort}
-                className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50"
-              >
-                <option value="">Select a class</option>
-                {cohorts.map((cohort) => (
-                  <option key={cohort.id} value={cohort.id}>
-                    {cohort.name} (Grade {cohort.grade_level})
-                  </option>
-                ))}
-              </select>
+              {isPractice ? (
+                <div className="w-full px-4 py-2 border border-emerald-200 bg-emerald-50 text-emerald-800 rounded-xl text-sm font-medium">
+                  Independent learning track
+                </div>
+              ) : (
+                <select
+                  value={selectedCohort}
+                  onChange={(e) => setSelectedCohort(e.target.value)}
+                  disabled={!!assignmentId || !!preselectedCohort}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-50"
+                >
+                  <option value="">Select a class</option>
+                  {cohorts.map((cohort) => (
+                    <option key={cohort.id} value={cohort.id}>
+                      {cohort.name} (Grade {cohort.grade_level})
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div>
@@ -763,7 +773,7 @@ function CreateHomeworkContent() {
                       Generate from a specific lesson
                     </label>
                     <p className="text-xs text-violet-600 mb-2">
-                      Builds homework straight from one lesson&apos;s slides or sim recording.
+                      Builds Practice straight from one lesson&apos;s slides or sim recording.
                     </p>
                     <div className="flex gap-2 flex-col sm:flex-row">
                       <select
@@ -799,7 +809,7 @@ function CreateHomeworkContent() {
                       Generate from a learning-path week
                     </label>
                     <p className="text-xs text-violet-600 mb-2">
-                      Builds one homework covering all the lessons in the chosen week.
+                      Builds one Practice covering all the lessons in the chosen week.
                     </p>
                     <div className="flex gap-2 flex-col sm:flex-row">
                       <select

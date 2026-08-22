@@ -415,6 +415,8 @@ interface SlideEditorProps {
   onSave: () => void;
   saving: boolean;
   preferredLanguage?: 'ar' | 'en';
+  /** Prevent switching away from a lesson's single configured slide language. */
+  languageLocked?: boolean;
   focusedSlideId?: string | null;
   lessonId?: string;
   lessonTitle?: string;
@@ -432,6 +434,7 @@ export default function SlideEditor({
   onSave,
   saving,
   preferredLanguage = 'ar',
+  languageLocked = false,
   focusedSlideId,
   lessonId,
   onSimChange,
@@ -1875,6 +1878,7 @@ export default function SlideEditor({
         {/* Toolbar */}
         <SlideToolbar
           language={language}
+          languageLocked={languageLocked}
           onLanguageChange={setLanguage}
           onAddSlide={addSlide}
           onAddInteractiveSlide={addInteractiveSlide}

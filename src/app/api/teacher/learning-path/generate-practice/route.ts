@@ -4,6 +4,7 @@ import { getOpenAIClient, AI_MODEL } from "@/lib/ai/openai-client";
 import { getTeacherRole } from "@/lib/server/teacher-lesson-access";
 import { extractSlideContent } from "@/lib/ai/homework-slides";
 import type { Slide } from "@/lib/slides.types";
+import { PRACTICE_PASSING_SCORE, PRACTICE_QUESTION_COUNT } from "@/lib/practice";
 
 export const maxDuration = 300;
 
@@ -22,7 +23,7 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
  * Generates the lesson's "Practice" for an independent-track step: ~10
  * auto-markable questions (multiple choice, true/false, typed number answers)
  * drawn from the lesson's sim/slide content. Creates a published cohort-less
- * practice assignment (passing_score 80), links it to the step, and returns it
+ * practice assignment, links it to the step, and returns it
  * for vetting. Regenerating replaces the questions of the existing practice.
  *
  * Streams keep-alive whitespace while the model works (Netlify timeout), then
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { step_id, num_questions = 10 } = body as {
+    const { step_id, num_questions = PRACTICE_QUESTION_COUNT } = body as {
       step_id?: string;
       num_questions?: number;
     };
@@ -269,7 +270,7 @@ ${content}
                 is_published: true,
                 is_practice: true,
                 is_test: false,
-                passing_score: 80,
+                passing_score: PRACTICE_PASSING_SCORE,
                 show_instant_feedback: true,
               })
               .select("id")

@@ -43,6 +43,7 @@ const EXPLORATION_ICON_MAP: Record<string, LucideIcon> = {
 
 interface SlideToolbarProps {
   language: 'ar' | 'en';
+  languageLocked?: boolean;
   onLanguageChange: (lang: 'ar' | 'en') => void;
   onAddSlide: (type: SlideType) => void;
   onAddInteractiveSlide: (request: InteractiveSlideRequest) => void;
@@ -64,6 +65,7 @@ interface SlideToolbarProps {
 
 export default function SlideToolbar({
   language,
+  languageLocked = false,
   onLanguageChange,
   onAddSlide,
   onAddInteractiveSlide,
@@ -101,24 +103,30 @@ export default function SlideToolbar({
       <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-white border-b border-gray-100">
         {/* Left group: language, slide count, regenerate */}
         <div className="flex items-center gap-2">
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
-            <button
-              onClick={() => onLanguageChange('ar')}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                language === 'ar' ? 'bg-white text-[#007229] shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              عربي
-            </button>
-            <button
-              onClick={() => onLanguageChange('en')}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                language === 'en' ? 'bg-white text-[#007229] shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              EN
-            </button>
-          </div>
+          {languageLocked ? (
+            <span className="rounded-md bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-[#007229]">
+              {language === 'ar' ? 'عربي' : 'EN'}
+            </span>
+          ) : (
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => onLanguageChange('ar')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  language === 'ar' ? 'bg-white text-[#007229] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                عربي
+              </button>
+              <button
+                onClick={() => onLanguageChange('en')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  language === 'en' ? 'bg-white text-[#007229] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                EN
+              </button>
+            </div>
+          )}
 
           {slideCount !== undefined && (
             <span className="text-xs text-gray-400 tabular-nums">{slideCount} slides</span>

@@ -5,14 +5,15 @@
 // submits the attempt through the standard homework submit/retake APIs, and
 // routes back into the learning path afterwards.
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
 import PracticePlayer, {
   type PracticeAnswer,
   type PracticeQuestionInput,
 } from "@/components/practice/PracticePlayer";
+import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 
 interface LoadedPractice {
   title: string;
@@ -52,20 +53,18 @@ const TRUE_FALSE_LABELS = {
 
 export default function PracticePage() {
   const params = useParams<{ id: string }>();
-  const search = useSearchParams();
   const assignmentId = params.id;
   const router = useRouter();
   const { language, isRtl } = useLanguage();
   const t = STR[language];
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [practice, setPractice] = useState<LoadedPractice | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "not_found" | "not_practice">("loading");
   const [round, setRound] = useState(0);
+  const [nextLessonId, setNextLessonId] = useState<string | null>(null);
   // True/false labels are display-localized but submit canonical "true"/"false".
   const [tfByQuestion, setTfByQuestion] = useState<Record<string, Record<string, string>>>({});
-
-  const backTarget = search.get("from") === "lesson" ? "/lessons" : "/lessons";
 
   const load = useCallback(async () => {
     try {
@@ -83,6 +82,27 @@ export default function PracticePage() {
       if (!data.is_practice) {
         setStatus("not_practice");
         return;
+      }
+
+      if (data.lesson_id) {
+        const { data: currentLesson } = await supabase
+          .from("lessons")
+          .select("subject_id")
+          .eq("id", data.lesson_id)
+          .maybeSingle();
+
+        if (currentLesson?.subject_id) {
+          const { data: subjectLessons } = await supabase
+            .from("lessons")
+            .select("id")
+            .eq("subject_id", currentLesson.subject_id)
+            .eq("is_published", true)
+            .order("display_order", { ascending: true });
+          const currentIndex = subjectLessons?.findIndex((item) => item.id === data.lesson_id) ?? -1;
+          setNextLessonId(
+            currentIndex >= 0 ? subjectLessons?.[currentIndex + 1]?.id ?? null : null
+          );
+        }
       }
 
       const tfMap: Record<string, Record<string, string>> = {};
@@ -146,7 +166,7 @@ export default function PracticePage() {
           .maybeSingle();
         if (sub && (sub.status === "graded" || sub.status === "returned")) {
           const totalPoints = data.total_points ?? 0;
-          const threshold = ((data.passing_score ?? 80) / 100) * totalPoints;
+          const threshold = ((data.passing_score ?? PRACTICE_PASSING_SCORE) / 100) * totalPoints;
           if (sub.score != null && totalPoints > 0 && sub.score >= threshold) {
             alreadyPassed = true;
           } else {
@@ -158,7 +178,7 @@ export default function PracticePage() {
       setTfByQuestion(tfMap);
       setPractice({
         title: (language === "ar" ? data.title_ar : data.title_en) || data.title_ar || "",
-        passingPercent: data.passing_score ?? 80,
+        passingPercent: data.passing_score ?? PRACTICE_PASSING_SCORE,
         alreadyPassed,
         hasSubmission: false,
         questions,
@@ -168,10 +188,11 @@ export default function PracticePage() {
       console.error("Failed to load practice:", err);
       setStatus("error");
     }
-  }, [assignmentId, language]);
+  }, [assignmentId, language, supabase]);
 
   useEffect(() => {
-    void load();
+    const timeout = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timeout);
   }, [load]);
 
   const handleFinish = useCallback(
@@ -204,10 +225,15 @@ export default function PracticePage() {
     );
   }, [assignmentId]);
 
-  const handleContinue = useCallback(() => {
-    router.push(backTarget);
+  const returnToLessons = useCallback(() => {
+    router.push("/lessons");
     router.refresh();
-  }, [router, backTarget]);
+  }, [router]);
+
+  const handleContinue = useCallback(() => {
+    router.push(nextLessonId ? `/lessons/${nextLessonId}` : "/lessons");
+    router.refresh();
+  }, [router, nextLessonId]);
 
   if (status === "loading") {
     return (
@@ -225,7 +251,7 @@ export default function PracticePage() {
         </div>
         <button
           type="button"
-          onClick={handleContinue}
+          onClick={returnToLessons}
           className="rounded-2xl bg-[var(--primary)] px-6 py-3 font-bold text-white"
         >
           {t.back}
@@ -268,7 +294,7 @@ export default function PracticePage() {
         onFinish={handleFinish}
         onRetry={handleRetry}
         onContinue={handleContinue}
-        onExit={handleContinue}
+        onExit={returnToLessons}
       />
     </div>
   );

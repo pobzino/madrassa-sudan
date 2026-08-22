@@ -161,8 +161,8 @@ export default function TeacherHomeworkPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Homework Library</h1>
-          <p className="text-gray-500">Manage assignments across your classes</p>
+          <h1 className="text-2xl font-bold text-gray-900">Practice Library</h1>
+          <p className="text-gray-500">Manage Practice across your classes and independent lessons</p>
         </div>
 
         <div className="flex items-center gap-3">

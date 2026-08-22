@@ -18,10 +18,9 @@ function MarkdownContent({ content }: { content: string }) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Skip the first H1 title and "Last Updated" line (we render our own header)
-    if (i === 0 && line.startsWith("# ")) continue;
-    if (i === 1 && line.startsWith("**Last Updated")) continue;
-    if (i === 2 && line.trim() === "") continue;
+    // The page renders its own title and update date.
+    if (line.startsWith("# ")) continue;
+    if (line.startsWith("**Last Updated")) continue;
 
     // Close table if we leave table context
     if (inTable && !line.startsWith("|")) {
@@ -125,7 +124,7 @@ export default function PrivacyPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-10">
           <div className="mb-8 pb-6 border-b border-gray-100">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
-            <p className="text-sm text-gray-500">Last Updated: February 24, 2026</p>
+            <p className="text-sm text-gray-500">Last Updated: August 22, 2026</p>
           </div>
 
           <MarkdownContent content={content} />

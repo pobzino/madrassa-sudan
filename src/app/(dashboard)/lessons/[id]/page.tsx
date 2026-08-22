@@ -33,6 +33,7 @@ import {
   type SlideInteractionResult,
   type StoredSlideInteractionResponses,
 } from "@/lib/slide-interactions";
+import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 
 const translations = {
   ar: {
@@ -202,6 +203,9 @@ export default function LessonPlayerPage() {
   const [adjacentLessons, setAdjacentLessons] = useState<{ prev: Lesson | null; next: Lesson | null }>({ prev: null, next: null });
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const lastSimPctRef = useRef(0);
+  const furthestSecRef = useRef(0);
+  const watchTimeSecRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -238,7 +242,7 @@ export default function LessonPlayerPage() {
         (sub.status === "graded" || sub.status === "returned") &&
         sub.score != null &&
         (assignment.total_points ?? 0) > 0 &&
-        sub.score >= (((assignment.passing_score ?? 80) / 100) * (assignment.total_points ?? 0))
+        sub.score >= (((assignment.passing_score ?? PRACTICE_PASSING_SCORE) / 100) * (assignment.total_points ?? 0))
       ) {
         setPracticePassed(true);
       }
@@ -537,18 +541,15 @@ export default function LessonPlayerPage() {
   );
 
   // Sim progress tracking — debounced upsert on playback percentage changes.
-  const lastSimPctRef = useRef(0);
   // Furthest point reached / total watch time, kept in refs rather than read
   // out of `progress`: this callback writes that state, so depending on it
   // would give the callback a new identity after every write and defeat
   // SimPlayer's memo mid-playback.
-  const furthestSecRef = useRef(0);
-  const watchTimeSecRef = useRef(0);
   const simDurationSec = lessonSim?.sim?.duration_ms ? Math.ceil(lessonSim.sim.duration_ms / 1000) : lesson?.video_duration_seconds || 0;
   const handleSimProgress = useCallback(async (pct: number) => {
     if (!userId || !lessonId) return;
     // Only save when progress crosses a 10% threshold
-    const bucket = Math.floor(pct / 10) * 10;
+    const bucket = pct >= 99 ? 100 : Math.floor(pct / 10) * 10;
     if (bucket <= lastSimPctRef.current) return;
     lastSimPctRef.current = bucket;
     const isCompleted = pct >= 80;
@@ -844,7 +845,7 @@ export default function LessonPlayerPage() {
           </div>
 
           {/* Navigation */}
-          {(adjacentLessons.prev || adjacentLessons.next) && (
+          {(adjacentLessons.prev || adjacentLessons.next || (practiceAssignmentId && !practicePassed)) && (
             <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100">
               {adjacentLessons.prev ? (
                 <Link
@@ -860,7 +861,15 @@ export default function LessonPlayerPage() {
                 <div />
               )}
 
-              {adjacentLessons.next ? (
+              {practiceAssignmentId && !practicePassed ? (
+                <Link
+                  href={`/practice/${practiceAssignmentId}?from=lesson`}
+                  className="group flex items-center gap-2 px-4 py-2.5 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-sm min-w-0 max-w-[45%]"
+                >
+                  <span className="truncate text-sm">{t.startPractice}</span>
+                  <span className={`flex-shrink-0 ${isRtl ? "rotate-180" : ""}`}>{Icons.chevronRight}</span>
+                </Link>
+              ) : adjacentLessons.next ? (
                 <Link
                   href={`/lessons/${adjacentLessons.next.id}`}
                   className="group flex items-center gap-2 px-4 py-2.5 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-sm min-w-0 max-w-[45%]"
