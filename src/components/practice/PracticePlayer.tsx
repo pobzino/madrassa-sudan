@@ -357,7 +357,7 @@ export default function PracticePlayer({
       <ConfettiBurst burst={burst} originY={0.42} />
       <ConfettiBurst burst={bigBurst} big originY={0.34} />
 
-      <div className="relative mx-auto w-full max-w-4xl px-4 pb-8 pt-5 sm:px-6 sm:pb-12 sm:pt-7">
+      <div className="relative mx-auto w-full max-w-6xl px-4 pb-8 pt-5 sm:px-6 sm:pb-10 sm:pt-6">
         {phase !== "summary" && (
           <PracticeHud
             title={title}
@@ -374,12 +374,12 @@ export default function PracticePlayer({
         {phase !== "summary" && question && (
           <main
             key={question.id}
-            className="practice-question-enter mt-6 overflow-hidden rounded-lg border-4 border-white bg-white shadow-[0_18px_45px_rgba(36,60,42,0.16)]"
+            className="practice-question-enter mt-4 flex min-h-[calc(100dvh-8rem)] flex-col overflow-hidden rounded-lg border-4 border-white bg-white shadow-[0_18px_45px_rgba(36,60,42,0.16)] lg:min-h-[clamp(34rem,72dvh,48rem)]"
           >
             <section
-              className={`relative grid items-center gap-2 px-4 py-4 sm:min-h-60 sm:grid-cols-[11rem_1fr] sm:gap-7 sm:px-9 sm:py-9 ${scene.stage}`}
+              className={`relative grid flex-1 items-center gap-2 px-4 py-4 sm:min-h-60 sm:grid-cols-[11rem_1fr] sm:gap-7 sm:px-9 sm:py-7 lg:grid-cols-[14rem_1fr] lg:px-12 ${scene.stage}`}
             >
-              <div className="mx-auto h-28 w-28 shrink-0 sm:h-44 sm:w-44">
+              <div className="mx-auto h-28 w-28 shrink-0 sm:h-44 sm:w-44 lg:h-56 lg:w-56">
                 <PracticeOwl
                   mood={owlMood}
                   pulse={owlPulse}
@@ -424,7 +424,7 @@ export default function PracticePlayer({
                     {phrase}
                   </p>
                 )}
-                <h1 className="break-words pe-10 text-2xl font-extrabold leading-snug text-gray-900 sm:text-3xl">
+                <h1 className="break-words pe-10 text-2xl font-extrabold leading-snug text-gray-900 sm:text-3xl lg:text-[2rem]">
                   {question.prompt}
                 </h1>
                 {audioStatus === "error" && (
