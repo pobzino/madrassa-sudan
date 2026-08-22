@@ -288,6 +288,7 @@ export default function PracticePage() {
     <div dir={isRtl ? "rtl" : "ltr"}>
       <PracticePlayer
         key={round}
+        title={practice.title}
         questions={practice.questions}
         lang={language}
         passingPercent={practice.passingPercent}
