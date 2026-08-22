@@ -350,6 +350,14 @@ html {
 }
 .owl-anim-speaking { animation: owl-speaking 0.7s ease-in-out infinite; }
 
+.practice-triangle {
+  width: 0;
+  height: 0;
+  border-left: 15px solid transparent;
+  border-right: 15px solid transparent;
+  border-bottom: 27px solid #0ea5e9;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .owl-anim-idle, .owl-anim-happy, .owl-anim-sad, .owl-anim-cheer,
   .owl-anim-cheer .owl-wing-l, .owl-anim-cheer .owl-wing-r,

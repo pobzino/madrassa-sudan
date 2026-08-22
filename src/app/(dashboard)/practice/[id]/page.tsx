@@ -5,7 +5,7 @@
 // submits the attempt through the standard homework submit/retake APIs, and
 // routes back into the learning path afterwards.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
@@ -68,8 +68,11 @@ export default function PracticePage() {
   const [submissionValueByQuestion, setSubmissionValueByQuestion] = useState<
     Record<string, Record<string, string>>
   >({});
+  const loadVersionRef = useRef(0);
 
   const load = useCallback(async () => {
+    const loadVersion = ++loadVersionRef.current;
+    setStatus("loading");
     try {
       const res = await fetch(`/api/homework/${assignmentId}`);
       if (res.status === 404 || res.status === 403) {
@@ -200,6 +203,7 @@ export default function PracticePage() {
         }
       }
 
+      if (loadVersion !== loadVersionRef.current) return;
       setSubmissionValueByQuestion(submissionMap);
       setPractice({
         title: (language === "ar" ? data.title_ar : data.title_en) || data.title_ar || "",
@@ -326,7 +330,7 @@ export default function PracticePage() {
   return (
     <div dir={isRtl ? "rtl" : "ltr"}>
       <PracticePlayer
-        key={round}
+        key={`${language}-${round}`}
         title={practice.title}
         questions={practice.questions}
         lang={language}

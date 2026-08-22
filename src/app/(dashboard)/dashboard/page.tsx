@@ -171,7 +171,11 @@ export default function DashboardPage() {
               <OwlWaving className="w-24 h-24 sm:w-44 sm:h-44 drop-shadow-xl" />
             </div>
 
-            <div className="relative z-10 p-5 sm:p-10 max-w-[64%] sm:max-w-xl">
+            <div
+              className={`relative z-10 w-[calc(100%-7rem)] max-w-2xl p-5 sm:w-[calc(100%-13rem)] sm:p-10 ${
+                isRtl ? "ml-auto" : "mr-auto"
+              }`}
+            >
               <h1 className="text-3xl sm:text-4xl font-bold font-fredoka text-gray-800">
                 {t.welcomeBack}, <span className="text-[#007229]">{firstName}</span>! 👋
               </h1>
@@ -259,9 +263,9 @@ export default function DashboardPage() {
                     className="group relative overflow-hidden rounded-3xl p-6 sm:p-7 min-h-[180px] flex transition-all hover:-translate-y-1 hover:shadow-xl animate-pop-in"
                     style={{ animationDelay: `${index * 0.1}s` }}
                   >
-                    <SubjectScene variant={variant} />
+                    <SubjectScene variant={variant} mirrored={isRtl} />
 
-                    <div className="relative z-10 flex-1 max-w-[58%]">
+                    <div className={`relative z-10 w-[58%] max-w-[58%] ${isRtl ? "ml-auto" : "mr-auto"}`}>
                       <h3 className={`text-2xl font-bold font-fredoka ${titleColor}`}>
                         {language === "ar" ? subject.name_ar : subject.name_en}
                       </h3>
@@ -271,7 +275,11 @@ export default function DashboardPage() {
                       </span>
                     </div>
 
-                    <div className="absolute bottom-2 right-3 sm:right-6 z-10 drop-shadow-md group-hover:animate-wiggle">
+                    <div
+                      className={`absolute bottom-2 z-10 drop-shadow-md group-hover:animate-wiggle ${
+                        isRtl ? "left-3 sm:left-6" : "right-3 sm:right-6"
+                      }`}
+                    >
                       {getSubjectIcon(subject, "w-28 h-28 sm:w-36 sm:h-36")}
                     </div>
                   </Link>

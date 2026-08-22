@@ -2,6 +2,11 @@
 
 import { OwlWaving, OwlMath, OwlEnglish } from '@/components/illustrations';
 
+function sunRayCoordinate(angle: number, radius: number, axis: 'x' | 'y') {
+  const trig = axis === 'x' ? Math.cos(angle) : Math.sin(angle);
+  return Number((32 + trig * radius).toFixed(4));
+}
+
 // Illustrated scenes for the dashboard + landing page, in the same inline-SVG
 // "learning world" style as the Lessons backdrop: a sky with sun + rainbow +
 // clouds + a little school over rolling hills. Pure SVG/CSS — a few KB, crisp,
@@ -302,7 +307,7 @@ export function LandingHeroScene() {
           <g stroke="#ffd23f" strokeWidth="3" strokeLinecap="round">
             {Array.from({ length: 12 }, (_, i) => {
               const a = (i * Math.PI) / 6;
-              return <line key={i} x1={32 + Math.cos(a) * 24} y1={32 + Math.sin(a) * 24} x2={32 + Math.cos(a) * 31} y2={32 + Math.sin(a) * 31} />;
+              return <line key={i} x1={sunRayCoordinate(a, 24, 'x')} y1={sunRayCoordinate(a, 24, 'y')} x2={sunRayCoordinate(a, 31, 'x')} y2={sunRayCoordinate(a, 31, 'y')} />;
             })}
           </g>
           <circle cx="32" cy="32" r="20" fill="#ffe16b" />
@@ -391,7 +396,7 @@ export function HeroScene({ mirrored = false }: { mirrored?: boolean }) {
           <g stroke="#ffd23f" strokeWidth="3" strokeLinecap="round">
             {Array.from({ length: 12 }, (_, i) => {
               const a = (i * Math.PI) / 6;
-              return <line key={i} x1={32 + Math.cos(a) * 24} y1={32 + Math.sin(a) * 24} x2={32 + Math.cos(a) * 31} y2={32 + Math.sin(a) * 31} />;
+              return <line key={i} x1={sunRayCoordinate(a, 24, 'x')} y1={sunRayCoordinate(a, 24, 'y')} x2={sunRayCoordinate(a, 31, 'x')} y2={sunRayCoordinate(a, 31, 'y')} />;
             })}
           </g>
           <circle cx="32" cy="32" r="20" fill="#ffe16b" />
@@ -456,7 +461,13 @@ export function HeroScene({ mirrored = false }: { mirrored?: boolean }) {
 }
 
 /* ── Subject card scene ── */
-export function SubjectScene({ variant }: { variant: 'math' | 'english' | 'default' }) {
+export function SubjectScene({
+  variant,
+  mirrored = false,
+}: {
+  variant: 'math' | 'english' | 'default';
+  mirrored?: boolean;
+}) {
   const tint =
     variant === 'math'
       ? 'linear-gradient(135deg, #e8f6ec 0%, #d9efdd 100%)'
@@ -467,7 +478,11 @@ export function SubjectScene({ variant }: { variant: 'math' | 'english' | 'defau
   const hill2 = variant === 'english' ? '#f3bcc8' : '#aedbb8';
 
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+      style={{ transform: mirrored ? 'scaleX(-1)' : undefined }}
+    >
       <div className="absolute inset-0" style={{ background: tint }} />
 
       {/* Illustrative subject symbols, spaced around the card (clear of the owl
@@ -479,7 +494,7 @@ export function SubjectScene({ variant }: { variant: 'math' | 'english' | 'defau
             <path d="M6 26c2-12 14-18 26-14" /><path d="M26 6l8 6-8 6" />
           </svg>
           {/* square root √x */}
-          <div className="absolute top-[13%] left-[66%] text-2xl font-bold font-fredoka opacity-65">√x</div>
+          <div className="absolute top-[13%] left-[66%] text-2xl font-bold font-fredoka opacity-65" style={{ transform: mirrored ? 'scaleX(-1)' : undefined }}>√x</div>
           {/* triangle */}
           <svg className="absolute top-[8%] left-[76%] w-10 h-10 opacity-55 -rotate-6" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinejoin="round">
             <path d="M24 8l16 30H8z" />
@@ -500,13 +515,13 @@ export function SubjectScene({ variant }: { variant: 'math' | 'english' | 'defau
             <path d="M6 9h28v18H18l-7 6v-6H6z" />
           </svg>
           {/* A in a circle badge */}
-          <div className="absolute top-[13%] left-[66%] w-9 h-9 rounded-full bg-[#f6d3dd] flex items-center justify-center text-lg font-bold font-fredoka text-[#d2456a] opacity-80">A</div>
+          <div className="absolute top-[13%] left-[66%] w-9 h-9 rounded-full bg-[#f6d3dd] flex items-center justify-center text-lg font-bold font-fredoka text-[#d2456a] opacity-80" style={{ transform: mirrored ? 'scaleX(-1)' : undefined }}>A</div>
           {/* B in a square badge */}
-          <div className="absolute top-[8%] left-[76%] w-9 h-9 rounded-xl bg-[#cfe6d4] flex items-center justify-center text-lg font-bold font-fredoka text-[#3f9c63] opacity-80 rotate-6">B</div>
+          <div className="absolute top-[8%] left-[76%] w-9 h-9 rounded-xl bg-[#cfe6d4] flex items-center justify-center text-lg font-bold font-fredoka text-[#3f9c63] opacity-80 rotate-6" style={{ transform: mirrored ? 'scaleX(-1)' : undefined }}>B</div>
           {/* ampersand curl */}
-          <div className="absolute top-[58%] left-[57%] text-2xl font-bold font-fredoka text-[#e0a25f] opacity-70">&amp;</div>
+          <div className="absolute top-[58%] left-[57%] text-2xl font-bold font-fredoka text-[#e0a25f] opacity-70" style={{ transform: mirrored ? 'scaleX(-1)' : undefined }}>&amp;</div>
           {/* C */}
-          <div className="absolute top-[54%] left-[67%] text-2xl font-bold font-fredoka text-[#e58aa0] opacity-70">C</div>
+          <div className="absolute top-[54%] left-[67%] text-2xl font-bold font-fredoka text-[#e58aa0] opacity-70" style={{ transform: mirrored ? 'scaleX(-1)' : undefined }}>C</div>
         </div>
       )}
 

@@ -13,6 +13,11 @@ import {
 import PracticeOwl, { type OwlMood } from "./PracticeOwl";
 import ConfettiBurst from "./ConfettiBurst";
 import PracticeHud from "./PracticeHud";
+import {
+  isNumberSequenceOption,
+  PracticeOptionVisual,
+  PracticeQuestionVisual,
+} from "./PracticeVisual";
 import { drawPhrase, type PracticeLang } from "./encouragement";
 import { normalizeArabicDigits } from "@/lib/whatsapp-login";
 
@@ -189,10 +194,11 @@ export default function PracticePlayer({
     stopAudio();
     setAudioStatus("loading");
     try {
-      let url = audioByQuestion[question.id] || question.audioUrl || null;
+      const cacheKey = `${lang}:${question.id}`;
+      let url = audioByQuestion[cacheKey] || question.audioUrl || null;
       if (!url && onRequestAudio) {
         url = await onRequestAudio(question.id);
-        if (url) setAudioByQuestion((current) => ({ ...current, [question.id]: url as string }));
+        if (url) setAudioByQuestion((current) => ({ ...current, [cacheKey]: url as string }));
       }
       if (!url) {
         setAudioStatus("error");
@@ -210,10 +216,12 @@ export default function PracticePlayer({
         setAudioStatus("error");
       };
       await audio.play();
-    } catch {
-      setAudioStatus("error");
+    } catch (error) {
+      // Browsers can block the first unmuted autoplay. Keep the replay control
+      // available instead of describing that policy block as missing audio.
+      setAudioStatus(error instanceof DOMException && error.name === "NotAllowedError" ? "idle" : "error");
     }
-  }, [audioByQuestion, onRequestAudio, question, stopAudio]);
+  }, [audioByQuestion, lang, onRequestAudio, question, stopAudio]);
 
   const toggleNarration = useCallback(() => {
     if (audioStatus === "playing" || audioStatus === "loading") {
@@ -239,14 +247,16 @@ export default function PracticePlayer({
   }, [playQuestionAudio]);
 
   useEffect(() => {
-    if (narrationEnabledRef.current) void playQuestionAudioRef.current();
+    narrationEnabledRef.current = true;
+    const timer = window.setTimeout(() => void playQuestionAudioRef.current(), 220);
     return () => {
+      window.clearTimeout(timer);
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
     };
-  }, [index]);
+  }, [index, lang]);
 
   const goNext = useCallback(async () => {
     if (advanceTimer.current) {
@@ -423,6 +433,8 @@ export default function PracticePlayer({
               </div>
             </section>
 
+            <PracticeQuestionVisual prompt={question.prompt} lang={lang} />
+
             {question.imageUrl && (
               <div className="border-t border-gray-100 px-5 py-5 sm:px-8">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -474,6 +486,7 @@ export default function PracticePlayer({
                   {question.options.map((option, optionIndex) => {
                     const isChosen = selected === option;
                     const isCorrectOption = answersMatch(option, question.correctAnswer);
+                    const sequenceOption = isNumberSequenceOption(option);
                     const revealCorrect = phase === "feedback" && isCorrectOption;
                     const revealWrongChoice = phase === "feedback" && isChosen && !isCorrectOption;
 
@@ -506,8 +519,9 @@ export default function PracticePlayer({
                         >
                           {OPTION_MARKERS[lang][optionIndex] ?? optionIndex + 1}
                         </span>
-                        <span className="min-w-0 flex-1 break-words text-lg font-bold leading-snug sm:text-xl">
-                          {option}
+                        <span className="flex min-w-0 flex-1 items-center gap-3 break-words text-lg font-bold leading-snug sm:text-xl">
+                          <PracticeOptionVisual option={option} />
+                          {!sequenceOption && <span className="min-w-0 flex-1">{option}</span>}
                         </span>
                         {revealCorrect && (
                           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-600 text-white">
