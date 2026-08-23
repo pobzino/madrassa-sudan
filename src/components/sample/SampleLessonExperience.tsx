@@ -25,7 +25,7 @@ type SampleStage = "lesson" | "practice" | "complete";
 
 const COPY = {
   ar: {
-    sample: "درس حقيقي من آمال",
+    sample: "درس حقيقي من مدرسة آمال",
     noSignup: "بدون تسجيل حساب",
     back: "الرئيسية",
     lesson: "الدرس",
@@ -40,13 +40,13 @@ const COPY = {
     replay: "أعد مشاهدة الدرس",
     completeTitle: "أكملت الدرس والتدريب!",
     completeBody:
-      "هذا هو نفس المسار الذي يراه طلاب آمال: شرح مسجل، أنشطة أثناء الدرس، ثم تدريب من 10 أسئلة.",
+      "هذا هو نفس المسار الذي يراه طلاب مدرسة آمال: شرح مسجل، أنشطة أثناء الدرس، ثم تدريب من 10 أسئلة.",
     signup: "أنشئ حساباً مجانياً",
     home: "العودة للرئيسية",
     finish: "شاهد النتيجة",
   },
   en: {
-    sample: "A real lesson from Amal",
+    sample: "A real lesson from Amal School",
     noSignup: "No signup required",
     back: "Home",
     lesson: "Lesson",
@@ -61,7 +61,7 @@ const COPY = {
     replay: "Replay lesson",
     completeTitle: "You completed the lesson and Practice!",
     completeBody:
-      "This is the same flow Amal students use: a recorded explanation, activities during the lesson, then a 10-question Practice.",
+      "This is the same flow Amal School students use: a recorded explanation, activities during the lesson, then a 10-question Practice.",
     signup: "Create a free account",
     home: "Back to homepage",
     finish: "See result",

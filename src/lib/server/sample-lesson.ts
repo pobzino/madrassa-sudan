@@ -11,7 +11,9 @@ import type {
 export const SAMPLE_LESSON_ID = "6618d1b9-d0f2-41cb-b153-19b7d477e2b5";
 const SAMPLE_TITLE_AR = "الأسبوع 3: اسمي... كم عمرك؟";
 const SAMPLE_DESCRIPTION_AR =
-  "تعلّم تقديم نفسك بقول اسمك وعمرك، وطرح أسئلة بسيطة على الآخرين.";
+  "تعلّم كيف تعرّف بنفسك، وتقول اسمك وعمرك، وتسأل الآخرين عن أعمارهم.";
+const SAMPLE_DESCRIPTION_EN =
+  "Learn to introduce yourself, say your name and age, and ask someone how old they are.";
 
 function containsArabic(value: string | null): value is string {
   return Boolean(value && /[\u0600-\u06ff]/.test(value));
@@ -125,10 +127,8 @@ export async function loadSampleLesson(): Promise<SampleLessonData> {
       id: lesson.id,
       titleAr: containsArabic(lesson.title_ar) ? lesson.title_ar : SAMPLE_TITLE_AR,
       titleEn: lesson.title_en || lesson.title_ar,
-      descriptionAr: containsArabic(lesson.description_ar)
-        ? lesson.description_ar
-        : SAMPLE_DESCRIPTION_AR,
-      descriptionEn: lesson.description_en || lesson.description_ar || "",
+      descriptionAr: SAMPLE_DESCRIPTION_AR,
+      descriptionEn: SAMPLE_DESCRIPTION_EN,
       gradeLevel: lesson.grade_level,
       subjectAr: subjectResult.data.name_ar,
       subjectEn: subjectResult.data.name_en,

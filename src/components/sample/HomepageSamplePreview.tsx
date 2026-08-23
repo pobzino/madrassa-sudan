@@ -14,8 +14,7 @@ interface HomepageSamplePreviewProps {
 
 const COPY = {
   ar: {
-    realLesson: "درس حقيقي من آمال",
-    subject: "الرياضيات · الصف الأول",
+    realLesson: "درس حقيقي من مدرسة آمال",
     questionLabel: "جرّب سؤالاً من التدريب",
     correct: "ممتاز! إجابة صحيحة.",
     wrong: "محاولة جيدة. الإجابة الصحيحة موضحة باللون الأخضر.",
@@ -25,8 +24,7 @@ const COPY = {
     unavailable: "الدرس النموذجي غير متاح الآن.",
   },
   en: {
-    realLesson: "A real lesson from Amal",
-    subject: "Mathematics · Grade 1",
+    realLesson: "A real lesson from Amal School",
     questionLabel: "Try one Practice question",
     correct: "Excellent! That is correct.",
     wrong: "Good try. The correct answer is highlighted in green.",
@@ -99,13 +97,17 @@ export default function HomepageSamplePreview({
   const answered = selected !== null;
   const isCorrect = selected === questionView.correctIndex;
   const DirectionIcon = isRtl ? ArrowLeft : ArrowRight;
+  const subject = language === "ar" ? sample.lesson.subjectAr : sample.lesson.subjectEn;
+  const grade = language === "ar"
+    ? `الصف ${sample.lesson.gradeLevel}`
+    : `Grade ${sample.lesson.gradeLevel}`;
 
   return (
     <div className="mx-auto mb-10 max-w-5xl overflow-hidden rounded-lg border border-gray-200 bg-white shadow-[0_20px_55px_rgba(29,59,39,0.14)] sm:mb-14">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 sm:px-5">
         <div>
           <p className="text-xs font-extrabold uppercase text-emerald-800">{t.realLesson}</p>
-          <p className="mt-0.5 text-sm font-bold text-gray-600">{t.subject}</p>
+          <p className="mt-0.5 text-sm font-bold text-gray-600">{subject} · {grade}</p>
         </div>
         <Link
           href="/sample-lesson"
