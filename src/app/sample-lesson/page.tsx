@@ -5,7 +5,7 @@ import { loadSampleLesson } from "@/lib/server/sample-lesson";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "My Name Is & How Old Are You? | Amal School Sample Lesson",
+  title: "Hello, Please, Thank You & Goodbye | Amal School Sample Lesson",
   description: "Try a real Amal School Grade 1 English lesson without creating an account.",
 };
 

@@ -8,12 +8,12 @@ import type {
   SamplePracticeQuestion,
 } from "@/lib/sample-lesson.types";
 
-export const SAMPLE_LESSON_ID = "6618d1b9-d0f2-41cb-b153-19b7d477e2b5";
-const SAMPLE_TITLE_AR = "الأسبوع 3: اسمي... كم عمرك؟";
+export const SAMPLE_LESSON_ID = "40cd0100-abf4-4e6a-a2bf-9a1a3b49d010";
+const SAMPLE_TITLE_AR = "الأسبوع 1: Hello وPlease وThank You وGoodbye";
 const SAMPLE_DESCRIPTION_AR =
-  "تعلّم كيف تعرّف بنفسك، وتقول اسمك وعمرك، وتسأل الآخرين عن أعمارهم.";
+  "تعلّم واستخدم كلمات المجاملة الإنجليزية الأساسية: Hello وPlease وThank You وGoodbye.";
 const SAMPLE_DESCRIPTION_EN =
-  "Learn to introduce yourself, say your name and age, and ask someone how old they are.";
+  "Learn and practise the everyday English words Hello, Please, Thank You, and Goodbye through simple activities and role-play.";
 
 function containsArabic(value: string | null): value is string {
   return Boolean(value && /[\u0600-\u06ff]/.test(value));
