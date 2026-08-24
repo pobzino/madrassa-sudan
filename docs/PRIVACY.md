@@ -33,9 +33,9 @@ Please do not submit home addresses, identity documents, medical records, or oth
 
 ### Anonymous platform analytics
 
-We collect limited, cookieless analytics to understand whether the website and learning journey are working. An analytics record may contain the action taken, page path, interface language, a small amount of non-identifying context such as which call-to-action was used, and the time of the action.
+We collect limited, cookieless analytics to understand whether the website and learning journey are working. An analytics record may contain the action taken, page path, interface language, a campaign label or referring website domain, lesson or Practice content identifiers, progress milestones, score percentages, broad error categories, and the time of the action. We do not store full referring URLs.
 
-Our analytics records do not contain names, account IDs, IP addresses, advertising IDs, device fingerprints, Practice answers, or persistent visitor identifiers. They are used only in aggregate by authorised Amal School administrators.
+Our anonymous analytics records do not contain names, account IDs, IP addresses, advertising IDs, device fingerprints, Practice answers, or persistent visitor identifiers. Saved account, lesson progress, and Practice attempt records may be aggregated separately to report participation, completion, pass, retry, and return rates without exposing individual learners in the analytics dashboard. These measures are used only by authorised Amal School administrators.
 
 ## 3. How We Use Information
 
@@ -96,7 +96,7 @@ We may need to verify the request and may retain limited information where law, 
 
 Amal School uses cookies and similar browser storage for sign-in, language preference, lesson progress, offline features, security, and essential platform operation. We do not use them to sell personal information or deliver behavioural advertising to children.
 
-Our aggregate analytics do not set analytics cookies and do not follow a person across websites. Anonymous analytics events are kept for up to 13 months and then deleted. Account and learning records follow the retention approach described in Section 6.
+Our aggregate analytics do not set analytics cookies and do not follow a person across websites. Campaign and referral context is held only for the current browser tab so a signup can be attributed to its source; it contains no visitor identifier. Anonymous analytics events are kept for up to 13 months and then deleted. Account and learning records follow the retention approach described in Section 6.
 
 ## 9. Changes to This Policy
 

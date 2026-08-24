@@ -3,13 +3,22 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import { classifyAnalyticsSection } from "@/lib/analytics.metadata";
 import type { AnalyticsEventName, AnalyticsProperties } from "@/lib/analytics.shared";
 
 export default function AnalyticsTracker() {
   const pathname = usePathname();
 
   useEffect(() => {
-    trackAnalyticsEvent("page_view");
+    trackAnalyticsEvent("landing_view", {
+      section: classifyAnalyticsSection(window.location.pathname),
+    });
+  }, []);
+
+  useEffect(() => {
+    trackAnalyticsEvent("page_view", {
+      section: classifyAnalyticsSection(pathname),
+    });
   }, [pathname]);
 
   useEffect(() => {

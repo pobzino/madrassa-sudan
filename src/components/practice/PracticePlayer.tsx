@@ -47,6 +47,7 @@ interface PracticePlayerProps {
   onContinue: () => void;
   onExit?: () => void;
   onRequestAudio?: (questionId: string) => Promise<string | null>;
+  onAudioError?: (reason: string) => void;
   continueLabel?: string;
 }
 
@@ -146,6 +147,7 @@ export default function PracticePlayer({
   onContinue,
   onExit,
   onRequestAudio,
+  onAudioError,
   continueLabel,
 }: PracticePlayerProps) {
   const t = UI[lang];
@@ -204,6 +206,7 @@ export default function PracticePlayer({
       }
       if (!url) {
         setAudioStatus("error");
+        onAudioError?.("audio_unavailable");
         return;
       }
       const audio = new Audio(url);
@@ -216,14 +219,17 @@ export default function PracticePlayer({
       audio.onerror = () => {
         audioRef.current = null;
         setAudioStatus("error");
+        onAudioError?.("audio_playback");
       };
       await audio.play();
     } catch (error) {
       // Browsers can block the first unmuted autoplay. Keep the replay control
       // available instead of describing that policy block as missing audio.
-      setAudioStatus(error instanceof DOMException && error.name === "NotAllowedError" ? "idle" : "error");
+      const blocked = error instanceof DOMException && error.name === "NotAllowedError";
+      setAudioStatus(blocked ? "idle" : "error");
+      if (!blocked) onAudioError?.("audio_exception");
     }
-  }, [audioByQuestion, lang, onRequestAudio, question, stopAudio]);
+  }, [audioByQuestion, lang, onAudioError, onRequestAudio, question, stopAudio]);
 
   const toggleNarration = useCallback(() => {
     if (audioStatus === "playing" || audioStatus === "loading") {

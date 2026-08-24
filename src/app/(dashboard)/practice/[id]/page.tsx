@@ -14,12 +14,17 @@ import PracticePlayer, {
   type PracticeQuestionInput,
 } from "@/components/practice/PracticePlayer";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
+import { trackAnalyticsEvent } from "@/lib/analytics";
 
 interface LoadedPractice {
   title: string;
   passingPercent: number;
   alreadyPassed: boolean;
   hasSubmission: boolean;
+  lessonId: string | null;
+  subjectId: string | null;
+  gradeLevel: number | null;
+  attemptNumber: number;
   questions: PracticeQuestionInput[];
 }
 
@@ -69,6 +74,7 @@ export default function PracticePage() {
     Record<string, Record<string, string>>
   >({});
   const loadVersionRef = useRef(0);
+  const trackedStartsRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const loadVersion = ++loadVersionRef.current;
@@ -90,12 +96,15 @@ export default function PracticePage() {
         return;
       }
 
+      let gradeLevel: number | null = null;
       if (data.lesson_id) {
         const { data: currentLesson } = await supabase
           .from("lessons")
-          .select("subject_id")
+          .select("subject_id, grade_level")
           .eq("id", data.lesson_id)
           .maybeSingle();
+
+        gradeLevel = currentLesson?.grade_level ?? null;
 
         if (currentLesson?.subject_id) {
           const { data: subjectLessons } = await supabase
@@ -182,24 +191,36 @@ export default function PracticePage() {
       // If a graded submission exists: passed -> offer continue/replay screen;
       // failed -> reset it now so this fresh run can submit cleanly.
       let alreadyPassed = false;
+      let attemptNumber = 1;
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
         const { data: sub } = await supabase
           .from("homework_submissions")
-          .select("status, score")
+          .select("status, score, attempt_count")
           .eq("assignment_id", assignmentId)
           .eq("student_id", user.id)
           .maybeSingle();
         if (sub && (sub.status === "graded" || sub.status === "returned")) {
+          attemptNumber = (sub.attempt_count ?? 0) + 1;
           const totalPoints = data.total_points ?? 0;
           const threshold = ((data.passing_score ?? PRACTICE_PASSING_SCORE) / 100) * totalPoints;
           if (sub.score != null && totalPoints > 0 && sub.score >= threshold) {
             alreadyPassed = true;
           } else {
-            await fetch(`/api/homework/${assignmentId}/retake`, { method: "POST" });
+            const retryResponse = await fetch(`/api/homework/${assignmentId}/retake`, { method: "POST" });
+            if (retryResponse.ok) {
+              trackAnalyticsEvent("practice_retry", {
+                assignment_id: assignmentId,
+                lesson_id: data.lesson_id || "",
+                attempt_number: attemptNumber,
+                source: "resume_failed_attempt",
+              });
+            }
           }
+        } else if (sub?.attempt_count) {
+          attemptNumber = sub.attempt_count + 1;
         }
       }
 
@@ -210,6 +231,10 @@ export default function PracticePage() {
         passingPercent: data.passing_score ?? PRACTICE_PASSING_SCORE,
         alreadyPassed,
         hasSubmission: false,
+        lessonId: data.lesson_id ?? null,
+        subjectId: data.subject_id ?? null,
+        gradeLevel,
+        attemptNumber,
         questions,
       });
       setStatus(questions.length > 0 ? "ready" : "error");
@@ -224,8 +249,23 @@ export default function PracticePage() {
     return () => window.clearTimeout(timeout);
   }, [load]);
 
+  useEffect(() => {
+    if (status !== "ready" || !practice || practice.alreadyPassed) return;
+    const startKey = `${assignmentId}:${round}`;
+    if (trackedStartsRef.current.has(startKey)) return;
+    trackedStartsRef.current.add(startKey);
+    trackAnalyticsEvent("practice_start", {
+      assignment_id: assignmentId,
+      lesson_id: practice.lessonId || "",
+      subject_id: practice.subjectId || "",
+      grade_level: practice.gradeLevel ?? 0,
+      attempt_number: practice.attemptNumber + round,
+      question_count: practice.questions.length,
+    });
+  }, [assignmentId, practice, round, status]);
+
   const handleFinish = useCallback(
-    async ({ answers }: { correctCount: number; total: number; answers: PracticeAnswer[] }) => {
+    async ({ correctCount, total, answers }: { correctCount: number; total: number; answers: PracticeAnswer[] }) => {
       try {
         const res = await fetch(`/api/homework/${assignmentId}/submit`, {
           method: "POST",
@@ -238,35 +278,78 @@ export default function PracticePage() {
             })),
           }),
         });
-        return res.ok;
+        const payload = await res.json().catch(() => null);
+        if (!res.ok) {
+          trackAnalyticsEvent("media_error", {
+            assignment_id: assignmentId,
+            error_type: `practice_submit_${res.status}`,
+            media_type: "practice_submission",
+          });
+          return false;
+        }
+
+        const scorePercent = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+        const attemptNumber = payload?.data?.attempt_number ?? practice?.attemptNumber ?? 1;
+        const context = {
+          assignment_id: assignmentId,
+          lesson_id: practice?.lessonId || "",
+          subject_id: practice?.subjectId || "",
+          grade_level: practice?.gradeLevel ?? 0,
+          attempt_number: attemptNumber,
+          question_count: total,
+          score_percent: scorePercent,
+        };
+        trackAnalyticsEvent("practice_submit", context);
+        trackAnalyticsEvent(
+          scorePercent >= (practice?.passingPercent ?? PRACTICE_PASSING_SCORE)
+            ? "practice_pass"
+            : "practice_fail",
+          context,
+        );
+        return true;
       } catch (err) {
         console.error("Failed to submit practice:", err);
+        trackAnalyticsEvent("media_error", {
+          assignment_id: assignmentId,
+          error_type: "practice_submit_network",
+          media_type: "practice_submission",
+        });
         return false;
       }
     },
-    [assignmentId, submissionValueByQuestion]
+    [assignmentId, practice, submissionValueByQuestion]
   );
 
   const requestQuestionAudio = useCallback(
     async (questionId: string) => {
-      const response = await fetch(`/api/practice/questions/${questionId}/audio`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language }),
-      });
-      if (!response.ok) return null;
-      const payload = (await response.json()) as { audio_url?: string };
-      return payload.audio_url ?? null;
+      try {
+        const response = await fetch(`/api/practice/questions/${questionId}/audio`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ language }),
+        });
+        if (!response.ok) return null;
+        const payload = (await response.json()) as { audio_url?: string };
+        return payload.audio_url ?? null;
+      } catch {
+        return null;
+      }
     },
     [language]
   );
 
   const handleRetry = useCallback(() => {
     // Reset the graded submission server-side, then remount the player.
+    trackAnalyticsEvent("practice_retry", {
+      assignment_id: assignmentId,
+      lesson_id: practice?.lessonId || "",
+      attempt_number: (practice?.attemptNumber ?? 1) + round + 1,
+      source: "results_screen",
+    });
     void fetch(`/api/homework/${assignmentId}/retake`, { method: "POST" }).finally(() =>
       setRound((r) => r + 1)
     );
-  }, [assignmentId]);
+  }, [assignmentId, practice, round]);
 
   const returnToLessons = useCallback(() => {
     router.push("/lessons");
@@ -274,6 +357,10 @@ export default function PracticePage() {
   }, [router]);
 
   const handleContinue = useCallback(() => {
+    trackAnalyticsEvent("next_lesson_open", {
+      lesson_id: nextLessonId || "",
+      source: "practice_complete",
+    });
     router.push(nextLessonId ? `/lessons/${nextLessonId}` : "/lessons");
     router.refresh();
   }, [router, nextLessonId]);
@@ -305,6 +392,12 @@ export default function PracticePage() {
 
   if (practice.alreadyPassed && round === 0) {
     const replay = () => {
+      trackAnalyticsEvent("practice_retry", {
+        assignment_id: assignmentId,
+        lesson_id: practice.lessonId || "",
+        attempt_number: practice.attemptNumber,
+        source: "replay_passed_practice",
+      });
       void fetch(`/api/homework/${assignmentId}/retake`, { method: "POST" }).finally(() =>
         setPractice((p) => (p ? { ...p, alreadyPassed: false } : p))
       );
@@ -340,6 +433,14 @@ export default function PracticePage() {
         onContinue={handleContinue}
         onExit={returnToLessons}
         onRequestAudio={requestQuestionAudio}
+        onAudioError={(reason) => {
+          trackAnalyticsEvent("media_error", {
+            assignment_id: assignmentId,
+            error_type: reason,
+            media_type: "question_audio",
+            content_language: language,
+          });
+        }}
       />
     </div>
   );

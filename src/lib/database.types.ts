@@ -2443,6 +2443,10 @@ export type Database = {
         Args: { p_days?: number }
         Returns: Json
       }
+      get_product_analytics_summary: {
+        Args: { p_days?: number }
+        Returns: Json
+      }
       get_assignment_submission_stats: {
         Args: { assignment_uuid: string }
         Returns: {

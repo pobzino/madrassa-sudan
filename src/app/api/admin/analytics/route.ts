@@ -31,39 +31,23 @@ export async function GET(request: NextRequest) {
 
   const requestedDays = Number(request.nextUrl.searchParams.get("days") || 30);
   const days = ALLOWED_RANGES.has(requestedDays) ? requestedDays : 30;
-  const since = new Date();
-  since.setUTCDate(since.getUTCDate() - (days - 1));
-  since.setUTCHours(0, 0, 0, 0);
 
   const service = createServiceClient();
-  const [analyticsResult, registrationsResult, completionsResult, attemptsResult] = await Promise.all([
+  const [analyticsResult, productResult] = await Promise.all([
     service.rpc("get_analytics_summary", { p_days: days }),
-    service
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", since.toISOString()),
-    service
-      .from("lesson_progress")
-      .select("id", { count: "exact", head: true })
-      .eq("completed", true)
-      .gte("completed_at", since.toISOString()),
-    service
-      .from("homework_attempts")
-      .select("id", { count: "exact", head: true })
-      .gte("submitted_at", since.toISOString()),
+    service.rpc("get_product_analytics_summary", { p_days: days }),
   ]);
 
-  if (analyticsResult.error) {
-    console.error("Admin analytics summary failed:", analyticsResult.error.message);
+  if (analyticsResult.error || productResult.error) {
+    console.error(
+      "Admin analytics summary failed:",
+      analyticsResult.error?.message || productResult.error?.message,
+    );
     return NextResponse.json({ error: "Failed to load analytics" }, { status: 500 });
   }
 
   return NextResponse.json({
     analytics: analyticsResult.data,
-    product: {
-      lessonCompletions: completionsResult.count || 0,
-      practiceAttempts: attemptsResult.count || 0,
-      registrations: registrationsResult.count || 0,
-    },
+    product: productResult.data,
   });
 }

@@ -59,6 +59,28 @@ describe("parseAnalyticsPayload", () => {
     });
   });
 
+  it("accepts content context without accepting learner identifiers", () => {
+    const payload = parseAnalyticsPayload({
+      eventName: "practice_pass",
+      locale: "en",
+      path: "/practice/example",
+      properties: {
+        assignment_id: "assignment-1",
+        attempt_number: 2,
+        lesson_id: "lesson-1",
+        score_percent: 80,
+        student_id: "must-not-be-stored",
+      },
+    });
+
+    expect(payload?.properties).toEqual({
+      assignment_id: "assignment-1",
+      attempt_number: 2,
+      lesson_id: "lesson-1",
+      score_percent: 80,
+    });
+  });
+
   it("rejects unknown events and invalid paths", () => {
     expect(parseAnalyticsPayload({ eventName: "student_answer", path: "/" })).toBeNull();
     expect(parseAnalyticsPayload({ eventName: "page_view", path: "https://example.com" })).toBeNull();

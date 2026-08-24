@@ -19,6 +19,9 @@ import {
   MousePointerClick,
   ClipboardCheck,
   UserPlus,
+  Activity,
+  AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -84,25 +87,74 @@ type AdminLesson = {
 type AnalyticsSummary = {
   range_days: number;
   totals: {
+    application_starts: number;
+    application_submissions: number;
     homepage_views: number;
+    landing_views: number;
     page_views: number;
+    platform_page_views: number;
+    public_page_views: number;
+    reliability_errors: number;
     sample_lesson_views: number;
     sample_practice_completions: number;
     sample_practice_starts: number;
     signup_clicks: number;
     signup_completions: number;
+    signup_starts: number;
   };
-  daily: Array<{ date: string; page_views: number; signup_clicks: number }>;
-  top_pages: Array<{ path: string; views: number }>;
+  learning: {
+    lesson_starts: number;
+    next_lessons_opened: number;
+    practice_failures: number;
+    practice_passes: number;
+    practice_retries: number;
+    practice_starts: number;
+    practice_submissions: number;
+    video_completions: number;
+    video_starts: number;
+  };
+  daily: Array<{
+    date: string;
+    page_views: number;
+    platform_page_views: number;
+    public_page_views: number;
+    signup_clicks: number;
+  }>;
+  top_pages: Array<{ path: string; section: string; views: number }>;
   top_events: Array<{ event_name: string; count: number }>;
+  page_sections: Array<{ section: string; views: number }>;
+  acquisition_sources: Array<{ source: string; visits: number }>;
+  reliability: Array<{
+    count: number;
+    error_type: string;
+    event_name: string;
+    media_type: string;
+  }>;
 };
 
 type AnalyticsResponse = {
   analytics: AnalyticsSummary;
   product: {
-    lessonCompletions: number;
-    practiceAttempts: number;
+    active_learners: number;
+    average_practice_score: number;
+    lesson_completions: number;
+    lessons_started: number;
+    parent_applications: number;
+    practice_attempts: number;
+    practice_failures: number;
+    practice_passes: number;
+    practice_retries: number;
+    range_days: number;
     registrations: number;
+    returning_learners: number;
+    top_lessons: Array<{
+      completions: number;
+      id: string;
+      starts: number;
+      title_ar: string;
+      title_en: string;
+    }>;
+    volunteer_applications: number;
   };
 };
 
@@ -619,49 +671,142 @@ export default function AdminPage() {
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <AnalyticsMetric
                   icon={<Eye className="h-5 w-5 text-emerald-700" />}
-                  label="Page views"
-                  value={analytics.analytics.totals.page_views}
+                  label="Public page views"
+                  value={analytics.analytics.totals.public_page_views}
+                />
+                <AnalyticsMetric
+                  icon={<LayoutDashboard className="h-5 w-5 text-sky-700" />}
+                  label="Learning platform views"
+                  value={analytics.analytics.totals.platform_page_views}
+                />
+                <AnalyticsMetric
+                  icon={<Activity className="h-5 w-5 text-violet-700" />}
+                  label="Active learners"
+                  value={analytics.product.active_learners}
                 />
                 <AnalyticsMetric
                   icon={<UserPlus className="h-5 w-5 text-blue-700" />}
                   label="Registrations"
                   value={analytics.product.registrations}
                 />
-                <AnalyticsMetric
-                  icon={<BookOpen className="h-5 w-5 text-purple-700" />}
-                  label="Lessons completed"
-                  value={analytics.product.lessonCompletions}
-                />
-                <AnalyticsMetric
-                  icon={<ClipboardCheck className="h-5 w-5 text-amber-700" />}
-                  label="Practice attempts"
-                  value={analytics.product.practiceAttempts}
-                />
               </div>
 
               <section className="border-y border-gray-200 py-5">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
+                    <h3 className="text-sm font-semibold text-gray-900">Learning impact</h3>
+                    <p className="text-xs text-gray-500">Authoritative activity from saved lesson progress and Practice attempts.</p>
+                  </div>
+                  <BookOpen className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                </div>
+                <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-4 lg:grid-cols-8">
+                  <JourneyMetric label="Returning learners" value={analytics.product.returning_learners} />
+                  <JourneyMetric label="Lessons started" value={analytics.product.lessons_started} />
+                  <JourneyMetric label="Lessons completed" value={analytics.product.lesson_completions} />
+                  <JourneyMetric label="Practice attempts" value={analytics.product.practice_attempts} />
+                  <JourneyMetric label="Practice passes" value={analytics.product.practice_passes} />
+                  <JourneyMetric label="Practice retries" value={analytics.product.practice_retries} />
+                  <JourneyMetric
+                    label="Practice pass rate %"
+                    value={analytics.product.practice_attempts > 0
+                      ? Math.round((analytics.product.practice_passes / analytics.product.practice_attempts) * 100)
+                      : 0}
+                  />
+                  <JourneyMetric label="Average score %" value={Math.round(analytics.product.average_practice_score)} />
+                </div>
+              </section>
+
+              <section className="border-b border-gray-200 pb-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">Student learning funnel</h3>
+                    <p className="text-xs text-gray-500">Cookieless interaction events recorded from the student experience.</p>
+                  </div>
+                  <ClipboardCheck className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                </div>
+                <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-4 lg:grid-cols-8">
+                  <JourneyMetric label="Lesson opens" value={analytics.analytics.learning.lesson_starts} />
+                  <JourneyMetric label="Video starts" value={analytics.analytics.learning.video_starts} />
+                  <JourneyMetric label="Video finishes" value={analytics.analytics.learning.video_completions} />
+                  <JourneyMetric label="Practice starts" value={analytics.analytics.learning.practice_starts} />
+                  <JourneyMetric label="Practice submits" value={analytics.analytics.learning.practice_submissions} />
+                  <JourneyMetric label="Practice passes" value={analytics.analytics.learning.practice_passes} />
+                  <JourneyMetric label="Practice retries" value={analytics.analytics.learning.practice_retries} />
+                  <JourneyMetric label="Next lesson opens" value={analytics.analytics.learning.next_lessons_opened} />
+                </div>
+              </section>
+
+              <section className="border-b border-gray-200 pb-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
                     <h3 className="text-sm font-semibold text-gray-900">Public journey</h3>
-                    <p className="text-xs text-gray-500">Actions recorded during the selected period.</p>
+                    <p className="text-xs text-gray-500">From arrival through sample lesson, signup and application.</p>
                   </div>
                   <MousePointerClick className="h-5 w-5 text-gray-400" aria-hidden="true" />
                 </div>
-                <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-4 lg:grid-cols-8">
+                  <JourneyMetric label="Landing visits" value={analytics.analytics.totals.landing_views} />
                   <JourneyMetric label="Homepage views" value={analytics.analytics.totals.homepage_views} />
                   <JourneyMetric label="Sample views" value={analytics.analytics.totals.sample_lesson_views} />
-                  <JourneyMetric label="Practice starts" value={analytics.analytics.totals.sample_practice_starts} />
-                  <JourneyMetric label="Practice finishes" value={analytics.analytics.totals.sample_practice_completions} />
                   <JourneyMetric label="Signup clicks" value={analytics.analytics.totals.signup_clicks} />
+                  <JourneyMetric label="Signup starts" value={analytics.analytics.totals.signup_starts} />
                   <JourneyMetric label="Signup completed" value={analytics.analytics.totals.signup_completions} />
+                  <JourneyMetric label="Application starts" value={analytics.analytics.totals.application_starts} />
+                  <JourneyMetric label="Applications saved" value={analytics.analytics.totals.application_submissions} />
                 </div>
               </section>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <section>
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-gray-900">Acquisition sources</h3>
+                    <p className="text-xs text-gray-500">Campaign source or external referral domain. No full referral URLs.</p>
+                  </div>
+                  {analytics.analytics.acquisition_sources.length === 0 ? (
+                    <p className="border-y border-gray-100 py-4 text-sm text-gray-400">No attributed visits yet.</p>
+                  ) : (
+                    <div className="divide-y divide-gray-100 border-y border-gray-100">
+                      {analytics.analytics.acquisition_sources.map((source) => (
+                        <div key={source.source} className="flex items-center justify-between gap-3 py-2.5">
+                          <span className="truncate text-sm text-gray-600">{source.source}</span>
+                          <span className="text-sm font-semibold text-gray-900">{source.visits}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section>
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">Reliability</h3>
+                      <p className="text-xs text-gray-500">Playback, narration, signup and application failures.</p>
+                    </div>
+                    <AlertTriangle className={`h-5 w-5 ${analytics.analytics.totals.reliability_errors > 0 ? "text-amber-500" : "text-emerald-600"}`} />
+                  </div>
+                  {analytics.analytics.reliability.length === 0 ? (
+                    <p className="border-y border-gray-100 py-4 text-sm font-medium text-emerald-700">No tracked errors in this period.</p>
+                  ) : (
+                    <div className="divide-y divide-gray-100 border-y border-gray-100">
+                      {analytics.analytics.reliability.map((item) => (
+                        <div key={`${item.event_name}:${item.error_type}:${item.media_type}`} className="flex items-center justify-between gap-3 py-2.5">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm text-gray-700">{item.error_type.replaceAll("_", " ")}</p>
+                            <p className="text-xs text-gray-400">{item.media_type.replaceAll("_", " ")}</p>
+                          </div>
+                          <span className="text-sm font-semibold text-amber-700">{item.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </div>
 
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(16rem,0.75fr)]">
                 <section className="min-w-0">
                   <div className="mb-4">
                     <h3 className="text-sm font-semibold text-gray-900">Page views by day</h3>
-                    <p className="text-xs text-gray-500">Daily activity across the website.</p>
+                    <p className="text-xs text-gray-500">Public and signed-in platform activity combined.</p>
                   </div>
                   <div className="flex h-52 items-end gap-1 border-b border-gray-200 px-1" aria-label="Daily page views chart">
                     {analytics.analytics.daily.map((day) => (
@@ -669,7 +814,7 @@ export default function AdminPage() {
                         <div
                           className="w-full rounded-t-sm bg-emerald-600 transition-colors group-hover:bg-emerald-700"
                           style={{ height: `${Math.max(2, (day.page_views / maxDailyViews) * 100)}%` }}
-                          title={`${new Date(`${day.date}T00:00:00`).toLocaleDateString()}: ${day.page_views} page views`}
+                          title={`${new Date(`${day.date}T00:00:00`).toLocaleDateString()}: ${day.page_views} views (${day.public_page_views} public, ${day.platform_page_views} platform)`}
                         />
                       </div>
                     ))}
@@ -683,15 +828,18 @@ export default function AdminPage() {
                 <section>
                   <div className="mb-4">
                     <h3 className="text-sm font-semibold text-gray-900">Top pages</h3>
-                    <p className="text-xs text-gray-500">Most-viewed routes.</p>
+                    <p className="text-xs text-gray-500">Most-viewed routes, labelled by section.</p>
                   </div>
                   {analytics.analytics.top_pages.length === 0 ? (
                     <p className="border-t border-gray-100 py-4 text-sm text-gray-400">No page views yet.</p>
                   ) : (
                     <div className="divide-y divide-gray-100 border-y border-gray-100">
                       {analytics.analytics.top_pages.map((page) => (
-                        <div key={page.path} className="flex items-center justify-between gap-3 py-2.5">
-                          <span className="truncate font-mono text-xs text-gray-600">{page.path}</span>
+                        <div key={`${page.section}:${page.path}`} className="flex items-center justify-between gap-3 py-2.5">
+                          <div className="min-w-0">
+                            <p className="truncate font-mono text-xs text-gray-600">{page.path}</p>
+                            <p className="mt-0.5 text-[10px] font-semibold uppercase text-gray-400">{page.section}</p>
+                          </div>
                           <span className="text-sm font-semibold text-gray-900">{page.views}</span>
                         </div>
                       ))}
@@ -699,6 +847,29 @@ export default function AdminPage() {
                   )}
                 </section>
               </div>
+
+              <section className="border-t border-gray-200 pt-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">Lesson performance</h3>
+                    <p className="text-xs text-gray-500">Lessons with the most saved starts and completions.</p>
+                  </div>
+                  <RotateCcw className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                </div>
+                {analytics.product.top_lessons.length === 0 ? (
+                  <p className="border-y border-gray-100 py-4 text-sm text-gray-400">No lesson activity in this period.</p>
+                ) : (
+                  <div className="divide-y divide-gray-100 border-y border-gray-100">
+                    {analytics.product.top_lessons.map((lesson) => (
+                      <div key={lesson.id} className="grid grid-cols-[minmax(0,1fr)_5rem_6rem] items-center gap-3 py-3 text-sm">
+                        <span className="truncate font-medium text-gray-800">{lesson.title_en || lesson.title_ar}</span>
+                        <span className="text-right text-gray-500">{lesson.starts} starts</span>
+                        <span className="text-right font-semibold text-emerald-700">{lesson.completions} complete</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
             </>
           ) : (
             <div className="border-y border-gray-200 py-10 text-center">

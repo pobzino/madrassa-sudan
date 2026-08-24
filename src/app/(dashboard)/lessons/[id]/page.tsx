@@ -34,6 +34,9 @@ import {
   type StoredSlideInteractionResponses,
 } from "@/lib/slide-interactions";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
+import { trackAnalyticsEvent } from "@/lib/analytics";
+
+const VIDEO_ANALYTICS_MILESTONES = [25, 50, 75, 100] as const;
 
 const translations = {
   ar: {
@@ -206,6 +209,9 @@ export default function LessonPlayerPage() {
   const lastSimPctRef = useRef(0);
   const furthestSecRef = useRef(0);
   const watchTimeSecRef = useRef(0);
+  const lessonStartTrackedRef = useRef<string | null>(null);
+  const videoStartedTrackedRef = useRef(false);
+  const videoMilestonesTrackedRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -275,6 +281,50 @@ export default function LessonPlayerPage() {
   const [slideInteractionResponses, setSlideInteractionResponses] = useState<StoredSlideInteractionResponses>({});
   const lessonContentLanguage =
     slideLanguageMode === "ar" || slideLanguageMode === "en" ? slideLanguageMode : language;
+
+  useEffect(() => {
+    videoStartedTrackedRef.current = false;
+    videoMilestonesTrackedRef.current = new Set();
+  }, [lessonId]);
+
+  useEffect(() => {
+    if (!lesson || lessonStartTrackedRef.current === lessonId) return;
+    lessonStartTrackedRef.current = lessonId;
+    trackAnalyticsEvent("lesson_start", {
+      lesson_id: lessonId,
+      subject_id: lesson.subject_id,
+      grade_level: lesson.grade_level,
+      content_language: lessonContentLanguage,
+    });
+  }, [lesson, lessonContentLanguage, lessonId]);
+
+  const trackVideoPlayback = useCallback((percent: number) => {
+    if (!lesson) return;
+
+    const context = {
+      lesson_id: lessonId,
+      subject_id: lesson.subject_id,
+      grade_level: lesson.grade_level,
+      content_language: lessonContentLanguage,
+    };
+
+    if (percent > 0 && !videoStartedTrackedRef.current) {
+      videoStartedTrackedRef.current = true;
+      trackAnalyticsEvent("lesson_video_start", context);
+    }
+
+    for (const milestone of VIDEO_ANALYTICS_MILESTONES) {
+      if (percent < milestone || videoMilestonesTrackedRef.current.has(milestone)) continue;
+      videoMilestonesTrackedRef.current.add(milestone);
+      trackAnalyticsEvent("lesson_video_progress", {
+        ...context,
+        progress_percent: milestone,
+      });
+      if (milestone === 100) {
+        trackAnalyticsEvent("lesson_video_complete", context);
+      }
+    }
+  }, [lesson, lessonContentLanguage, lessonId]);
 
   // Progress gate state
   const [showProgressGate, setShowProgressGate] = useState(false);
@@ -547,6 +597,7 @@ export default function LessonPlayerPage() {
   // SimPlayer's memo mid-playback.
   const simDurationSec = lessonSim?.sim?.duration_ms ? Math.ceil(lessonSim.sim.duration_ms / 1000) : lesson?.video_duration_seconds || 0;
   const handleSimProgress = useCallback(async (pct: number) => {
+    trackVideoPlayback(pct);
     if (!userId || !lessonId) return;
     // Only save when progress crosses a 10% threshold
     const bucket = pct >= 99 ? 100 : Math.floor(pct / 10) * 10;
@@ -599,7 +650,7 @@ export default function LessonPlayerPage() {
     if (pct >= 99 && practiceAssignmentId && !practicePassed) {
       router.push(`/practice/${practiceAssignmentId}?from=lesson`);
     }
-  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practicePassed, router]);
+  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practicePassed, router, trackVideoPlayback]);
 
   // Close progress gate and let sim handle replay
   const handleRewatchQuiz = useCallback(() => {
@@ -775,7 +826,23 @@ export default function LessonPlayerPage() {
             controls
             playsInline
             className="w-full h-full"
+            onPlay={() => trackVideoPlayback(0.1)}
+            onTimeUpdate={(event) => {
+              const video = event.currentTarget;
+              if (Number.isFinite(video.duration) && video.duration > 0) {
+                trackVideoPlayback((video.currentTime / video.duration) * 100);
+              }
+            }}
+            onError={() => {
+              trackAnalyticsEvent("media_error", {
+                error_type: "video_playback",
+                media_type: "lesson_video",
+                lesson_id: lessonId,
+                content_language: lessonContentLanguage,
+              });
+            }}
             onEnded={() => {
+              trackVideoPlayback(100);
               if (practiceAssignmentId) {
                 if (!practicePassed) {
                   router.push(`/practice/${practiceAssignmentId}?from=lesson`);
@@ -872,6 +939,12 @@ export default function LessonPlayerPage() {
               ) : adjacentLessons.next ? (
                 <Link
                   href={`/lessons/${adjacentLessons.next.id}`}
+                  onClick={() => {
+                    trackAnalyticsEvent("next_lesson_open", {
+                      lesson_id: adjacentLessons.next?.id || "",
+                      source: "lesson_navigation",
+                    });
+                  }}
                   className="group flex items-center gap-2 px-4 py-2.5 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-sm min-w-0 max-w-[45%]"
                 >
                   <span className="truncate text-sm">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -252,6 +252,32 @@ export default function SignupPage() {
   const supabase = createClient();
   const { language } = useLanguage();
   const t = translations[language];
+  const signupStartedRef = useRef(false);
+  const applicationRolesStartedRef = useRef<Set<string>>(new Set());
+
+  const markSignupStarted = () => {
+    if (signupStartedRef.current) return;
+    signupStartedRef.current = true;
+    trackAnalyticsEvent("signup_start", { role });
+    if (
+      (role === "parent" || role === "teacher") &&
+      !applicationRolesStartedRef.current.has(role)
+    ) {
+      applicationRolesStartedRef.current.add(role);
+      trackAnalyticsEvent("application_start", { role });
+    }
+  };
+
+  const selectRole = (selectedRole: UserRole) => {
+    setRole(selectedRole);
+    if (
+      (selectedRole === "parent" || selectedRole === "teacher") &&
+      !applicationRolesStartedRef.current.has(selectedRole)
+    ) {
+      applicationRolesStartedRef.current.add(selectedRole);
+      trackAnalyticsEvent("application_start", { role: selectedRole });
+    }
+  };
 
   const roleOptions = [
     { id: "student" as UserRole, label: t.student, icon: RoleIcons.student },
@@ -310,6 +336,7 @@ export default function SignupPage() {
     setResendMessage(null);
 
     if (role === "teacher" && involvementAreas.length === 0) {
+      trackAnalyticsEvent("signup_error", { role, error_type: "validation_involvement" });
       setError(
         language === "ar"
           ? "اختر مجالاً واحداً على الأقل للمساعدة."
@@ -361,6 +388,7 @@ export default function SignupPage() {
     // from the WhatsApp number instead (they log in with number + password).
     const trimmedEmail = email.trim();
     if (role === "parent" && !trimmedEmail && whatsappDigits(parentWhatsapp).length < 7) {
+      trackAnalyticsEvent("signup_error", { role, error_type: "validation_contact" });
       setError(
         language === "ar"
           ? "أدخل بريداً إلكترونياً أو رقم واتساب صحيحاً."
@@ -393,6 +421,7 @@ export default function SignupPage() {
     });
 
     if (error) {
+      trackAnalyticsEvent("signup_error", { role, error_type: "auth_signup" });
       setError(error.message);
       setLoading(false);
       return;
@@ -404,7 +433,7 @@ export default function SignupPage() {
     // the account exists either way and the same details live in user metadata.
     if (data.session && (role === "parent" || role === "teacher")) {
       try {
-        await fetch("/api/applications", {
+        const applicationResponse = await fetch("/api/applications", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
@@ -448,8 +477,17 @@ export default function SignupPage() {
                 }
           ),
         });
+        if (applicationResponse.ok) {
+          trackAnalyticsEvent("application_submit", { role });
+        } else {
+          trackAnalyticsEvent("application_error", {
+            role,
+            error_type: `application_${applicationResponse.status}`,
+          });
+        }
       } catch (applicationError) {
         console.error("Failed to save application details:", applicationError);
+        trackAnalyticsEvent("application_error", { role, error_type: "application_network" });
       }
     }
 
@@ -536,7 +574,7 @@ export default function SignupPage() {
           <p className="text-gray-500">{t.joinSubtitle}</p>
         </div>
 
-        <form className="space-y-6" onSubmit={handleSignup}>
+        <form className="space-y-6" onSubmit={handleSignup} onFocusCapture={markSignupStarted}>
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
               <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -615,7 +653,7 @@ export default function SignupPage() {
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => setRole(option.id)}
+                    onClick={() => selectRole(option.id)}
                     className={`flex flex-col items-center justify-center p-3 rounded-xl border text-sm transition-all ${
                       role === option.id
                         ? "bg-green-50 border-[var(--primary)] text-[var(--primary)] ring-1 ring-[var(--primary)]"
