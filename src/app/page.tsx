@@ -291,6 +291,8 @@ export default function Home() {
                 </Link>
                 <Link
                   href="/auth/signup"
+                  data-analytics="signup_click"
+                  data-analytics-source="navbar"
                   className="px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-white bg-[#007229] rounded-full hover:bg-[#005C22] transition-all shadow-lg shadow-[#007229]/30"
                 >
                   {txt.getStarted}
@@ -349,6 +351,8 @@ export default function Home() {
                 ) : (
                   <Link
                     href="/auth/signup"
+                    data-analytics="signup_click"
+                    data-analytics-source="hero"
                     className="group w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg font-bold text-white bg-[#007229] rounded-full hover:bg-[#005C22] transition-all shadow-xl shadow-[#007229]/30 hover:shadow-2xl hover:shadow-[#007229]/40 hover:-translate-y-1 flex items-center justify-center gap-2"
                   >
                     {txt.hero.cta1}
@@ -445,6 +449,8 @@ export default function Home() {
                 <Link
                   key={i}
                   href="/auth/signup"
+                  data-analytics="signup_click"
+                  data-analytics-source="subject_card"
                   className="group relative overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-8 lg:p-10 text-center transition-all hover:-translate-y-2 hover:shadow-2xl min-h-[120px] sm:min-h-[180px] lg:min-h-[220px] flex items-center justify-center"
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${subject.color}`} />
@@ -647,6 +653,9 @@ export default function Home() {
 
                   <Link
                     href="/auth/signup?role=teacher"
+                    data-analytics="signup_click"
+                    data-analytics-source="teacher_section"
+                    data-analytics-role="teacher"
                     className="inline-flex items-center gap-2 px-5 sm:px-8 py-3 sm:py-4 bg-white text-amber-600 rounded-full font-bold hover:bg-gray-100 transition-all shadow-xl text-sm sm:text-base"
                   >
                     {txt.teachers.cta}
@@ -725,6 +734,8 @@ export default function Home() {
             ) : (
               <Link
                 href="/auth/signup"
+                data-analytics="signup_click"
+                data-analytics-source="final_cta"
                 className="inline-flex items-center gap-2 sm:gap-3 px-6 sm:px-10 py-3.5 sm:py-5 text-base sm:text-xl font-bold text-white bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full hover:from-emerald-600 hover:to-cyan-600 transition-all shadow-xl shadow-emerald-500/30 hover:shadow-2xl hover:-translate-y-1"
               >
                 {txt.finalCta.cta}

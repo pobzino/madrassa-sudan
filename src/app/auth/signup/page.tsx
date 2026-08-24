@@ -8,6 +8,7 @@ import type { UserRole } from "@/lib/database.types";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getAuthCallbackUrl } from "@/lib/site-url";
 import { whatsappDigits, whatsappLoginEmail } from "@/lib/whatsapp-login";
+import { trackAnalyticsEvent } from "@/lib/analytics";
 
 // Icons for role selection
 const RoleIcons = {
@@ -396,6 +397,8 @@ export default function SignupPage() {
       setLoading(false);
       return;
     }
+
+    trackAnalyticsEvent("signup_complete", { role });
 
     // Persist the application details for the team's review queue. Best-effort:
     // the account exists either way and the same details live in user metadata.

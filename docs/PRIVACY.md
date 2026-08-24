@@ -1,6 +1,6 @@
 # Privacy Policy - Amal School
 
-**Last Updated:** August 22, 2026
+**Last Updated:** August 24, 2026
 
 ## 1. About Amal School
 
@@ -30,6 +30,12 @@ We may collect a volunteer's name, verified email, WhatsApp number, city and cou
 We may collect a student's name, grade level, preferred language, account details, enrolled programme or cohort, lesson progress, Practice answers and scores, teacher feedback, and learning activity. We may also process basic technical information needed to keep accounts secure and make the service work, such as device, browser, login, and error information.
 
 Please do not submit home addresses, identity documents, medical records, or other sensitive information unless an authorised Amal School team member has specifically requested it through an appropriate process.
+
+### Anonymous platform analytics
+
+We collect limited, cookieless analytics to understand whether the website and learning journey are working. An analytics record may contain the action taken, page path, interface language, a small amount of non-identifying context such as which call-to-action was used, and the time of the action.
+
+Our analytics records do not contain names, account IDs, IP addresses, advertising IDs, device fingerprints, Practice answers, or persistent visitor identifiers. They are used only in aggregate by authorised Amal School administrators.
 
 ## 3. How We Use Information
 
@@ -86,9 +92,11 @@ Depending on where you live, you or your parent or caregiver may ask us to:
 
 We may need to verify the request and may retain limited information where law, safeguarding, or legitimate educational record-keeping requires it. You may also have the right to complain to your local data protection authority.
 
-## 8. Cookies and Local Storage
+## 8. Cookies, Local Storage, and Analytics
 
 Amal School uses cookies and similar browser storage for sign-in, language preference, lesson progress, offline features, security, and essential platform operation. We do not use them to sell personal information or deliver behavioural advertising to children.
+
+Our aggregate analytics do not set analytics cookies and do not follow a person across websites. Anonymous analytics events are kept for up to 13 months and then deleted. Account and learning records follow the retention approach described in Section 6.
 
 ## 9. Changes to This Policy
 

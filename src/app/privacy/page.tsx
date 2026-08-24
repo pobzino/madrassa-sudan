@@ -124,7 +124,7 @@ export default function PrivacyPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-10">
           <div className="mb-8 pb-6 border-b border-gray-100">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
-            <p className="text-sm text-gray-500">Last Updated: August 22, 2026</p>
+            <p className="text-sm text-gray-500">Last Updated: August 24, 2026</p>
           </div>
 
           <MarkdownContent content={content} />

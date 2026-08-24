@@ -14,6 +14,11 @@ import {
   Copy,
   Check,
   ChevronDown,
+  BarChart3,
+  Eye,
+  MousePointerClick,
+  ClipboardCheck,
+  UserPlus,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -76,7 +81,32 @@ type AdminLesson = {
   creator: { id: string; full_name: string } | null;
 };
 
-type Tab = "overview" | "members" | "classes" | "content";
+type AnalyticsSummary = {
+  range_days: number;
+  totals: {
+    homepage_views: number;
+    page_views: number;
+    sample_lesson_views: number;
+    sample_practice_completions: number;
+    sample_practice_starts: number;
+    signup_clicks: number;
+    signup_completions: number;
+  };
+  daily: Array<{ date: string; page_views: number; signup_clicks: number }>;
+  top_pages: Array<{ path: string; views: number }>;
+  top_events: Array<{ event_name: string; count: number }>;
+};
+
+type AnalyticsResponse = {
+  analytics: AnalyticsSummary;
+  product: {
+    lessonCompletions: number;
+    practiceAttempts: number;
+    registrations: number;
+  };
+};
+
+type Tab = "overview" | "analytics" | "members" | "classes" | "content";
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -192,6 +222,11 @@ export default function AdminPage() {
   });
   const [loadingCounts, setLoadingCounts] = useState(true);
 
+  // Analytics state
+  const [analyticsDays, setAnalyticsDays] = useState<7 | 30 | 90>(30);
+  const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+
   // ─── Data Fetchers ──────────────────────────────────────────────
 
   const loadCounts = useCallback(async () => {
@@ -272,15 +307,30 @@ export default function AdminPage() {
     }
   }, [lessonFilter]);
 
+  const loadAnalytics = useCallback(async () => {
+    setLoadingAnalytics(true);
+    try {
+      const res = await fetch(`/api/admin/analytics?days=${analyticsDays}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setAnalytics(data);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  }, [analyticsDays]);
+
   // Load data when tab changes
   useEffect(() => {
     if (!authLoading && isAdmin) {
       if (tab === "overview") void loadCounts();
+      if (tab === "analytics") void loadAnalytics();
       if (tab === "members") void loadUsers();
       if (tab === "classes") void loadCohorts();
       if (tab === "content") void loadLessons();
     }
-  }, [authLoading, isAdmin, tab, loadCounts, loadUsers, loadCohorts, loadLessons]);
+  }, [authLoading, isAdmin, tab, loadCounts, loadAnalytics, loadUsers, loadCohorts, loadLessons]);
 
   // ─── Actions ────────────────────────────────────────────────────
 
@@ -426,10 +476,16 @@ export default function AdminPage() {
         ? users.filter((u) => u.role === userFilter)
         : users;
 
+  const maxDailyViews = Math.max(
+    1,
+    ...(analytics?.analytics.daily.map((day) => day.page_views) || [])
+  );
+
   // ─── Tabs Config ────────────────────────────────────────────────
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: "overview", label: "Overview", icon: <LayoutDashboard className="w-4 h-4" /> },
+    { key: "analytics", label: "Analytics", icon: <BarChart3 className="w-4 h-4" /> },
     { key: "members", label: "Members", icon: <Users className="w-4 h-4" /> },
     { key: "classes", label: "Classes", icon: <School className="w-4 h-4" /> },
     { key: "content", label: "Content", icon: <BookOpen className="w-4 h-4" /> },
@@ -520,6 +576,136 @@ export default function AdminPage() {
               <p className="text-sm text-gray-500 mt-1">{counts.totalClasses} classes</p>
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ─── Analytics Tab ────────────────────────────────────── */}
+      {tab === "analytics" && (
+        <div className="space-y-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Platform analytics</h2>
+              <p className="text-sm text-gray-500">Cookieless, aggregate activity with no visitor identifiers.</p>
+            </div>
+            <div className="inline-flex w-fit rounded-lg bg-gray-100 p-1" aria-label="Analytics date range">
+              {([7, 30, 90] as const).map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => setAnalyticsDays(days)}
+                  className={`min-w-14 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    analyticsDays === days
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {days}d
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {loadingAnalytics ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[...Array(4)].map((_, index) => (
+                  <div key={index} className="h-24 animate-pulse rounded-lg bg-gray-100" />
+                ))}
+              </div>
+              <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
+            </div>
+          ) : analytics ? (
+            <>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <AnalyticsMetric
+                  icon={<Eye className="h-5 w-5 text-emerald-700" />}
+                  label="Page views"
+                  value={analytics.analytics.totals.page_views}
+                />
+                <AnalyticsMetric
+                  icon={<UserPlus className="h-5 w-5 text-blue-700" />}
+                  label="Registrations"
+                  value={analytics.product.registrations}
+                />
+                <AnalyticsMetric
+                  icon={<BookOpen className="h-5 w-5 text-purple-700" />}
+                  label="Lessons completed"
+                  value={analytics.product.lessonCompletions}
+                />
+                <AnalyticsMetric
+                  icon={<ClipboardCheck className="h-5 w-5 text-amber-700" />}
+                  label="Practice attempts"
+                  value={analytics.product.practiceAttempts}
+                />
+              </div>
+
+              <section className="border-y border-gray-200 py-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">Public journey</h3>
+                    <p className="text-xs text-gray-500">Actions recorded during the selected period.</p>
+                  </div>
+                  <MousePointerClick className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                </div>
+                <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3 lg:grid-cols-6">
+                  <JourneyMetric label="Homepage views" value={analytics.analytics.totals.homepage_views} />
+                  <JourneyMetric label="Sample views" value={analytics.analytics.totals.sample_lesson_views} />
+                  <JourneyMetric label="Practice starts" value={analytics.analytics.totals.sample_practice_starts} />
+                  <JourneyMetric label="Practice finishes" value={analytics.analytics.totals.sample_practice_completions} />
+                  <JourneyMetric label="Signup clicks" value={analytics.analytics.totals.signup_clicks} />
+                  <JourneyMetric label="Signup completed" value={analytics.analytics.totals.signup_completions} />
+                </div>
+              </section>
+
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(16rem,0.75fr)]">
+                <section className="min-w-0">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-gray-900">Page views by day</h3>
+                    <p className="text-xs text-gray-500">Daily activity across the website.</p>
+                  </div>
+                  <div className="flex h-52 items-end gap-1 border-b border-gray-200 px-1" aria-label="Daily page views chart">
+                    {analytics.analytics.daily.map((day) => (
+                      <div key={day.date} className="group relative flex h-full min-w-0 flex-1 items-end">
+                        <div
+                          className="w-full rounded-t-sm bg-emerald-600 transition-colors group-hover:bg-emerald-700"
+                          style={{ height: `${Math.max(2, (day.page_views / maxDailyViews) * 100)}%` }}
+                          title={`${new Date(`${day.date}T00:00:00`).toLocaleDateString()}: ${day.page_views} page views`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex justify-between text-[11px] text-gray-400">
+                    <span>{analytics.analytics.daily[0]?.date || ""}</span>
+                    <span>{analytics.analytics.daily.at(-1)?.date || ""}</span>
+                  </div>
+                </section>
+
+                <section>
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-gray-900">Top pages</h3>
+                    <p className="text-xs text-gray-500">Most-viewed routes.</p>
+                  </div>
+                  {analytics.analytics.top_pages.length === 0 ? (
+                    <p className="border-t border-gray-100 py-4 text-sm text-gray-400">No page views yet.</p>
+                  ) : (
+                    <div className="divide-y divide-gray-100 border-y border-gray-100">
+                      {analytics.analytics.top_pages.map((page) => (
+                        <div key={page.path} className="flex items-center justify-between gap-3 py-2.5">
+                          <span className="truncate font-mono text-xs text-gray-600">{page.path}</span>
+                          <span className="text-sm font-semibold text-gray-900">{page.views}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </div>
+            </>
+          ) : (
+            <div className="border-y border-gray-200 py-10 text-center">
+              <BarChart3 className="mx-auto h-8 w-8 text-gray-300" />
+              <p className="mt-3 text-sm font-medium text-gray-600">Analytics data is not available yet.</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -845,6 +1031,35 @@ function StatCard({
         </span>
       </div>
       <p className="text-sm text-gray-500">{label}</p>
+    </div>
+  );
+}
+
+function AnalyticsMetric({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        {icon}
+        <span className="text-2xl font-bold text-gray-950">{value.toLocaleString()}</span>
+      </div>
+      <p className="text-xs font-medium text-gray-500">{label}</p>
+    </div>
+  );
+}
+
+function JourneyMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <p className="text-xl font-bold text-gray-950">{value.toLocaleString()}</p>
+      <p className="mt-0.5 text-xs font-medium text-gray-500">{label}</p>
     </div>
   );
 }

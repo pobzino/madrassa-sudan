@@ -20,6 +20,7 @@ import PracticePlayer, {
   type PracticeQuestionInput,
 } from "@/components/practice/PracticePlayer";
 import type { SampleLessonData } from "@/lib/sample-lesson.types";
+import { trackAnalyticsEvent } from "@/lib/analytics";
 
 type SampleStage = "lesson" | "practice" | "complete";
 
@@ -157,8 +158,14 @@ export default function SampleLessonExperience({
   const handleProgress = useCallback((progress: number) => {
     if (progress < 99.5 || autoAdvancedRef.current) return;
     autoAdvancedRef.current = true;
+    trackAnalyticsEvent("sample_practice_start", { source: "video_complete" });
     window.setTimeout(() => setStage("practice"), 500);
   }, []);
+
+  const startPractice = (source: string) => {
+    trackAnalyticsEvent("sample_practice_start", { source });
+    setStage("practice");
+  };
 
   const BackIcon = isRtl ? ArrowRight : ArrowLeft;
   const stageIndex = stage === "lesson" ? 0 : stage === "practice" ? 1 : 2;
@@ -233,7 +240,13 @@ export default function SampleLessonExperience({
                   <button
                     type="button"
                     disabled={index === 2}
-                    onClick={() => setStage(index === 0 ? "lesson" : "practice")}
+                    onClick={() => {
+                      if (index === 0) {
+                        setStage("lesson");
+                      } else {
+                        startPractice("progress_tabs");
+                      }
+                    }}
                     className={`flex min-h-14 w-full items-center justify-center gap-2 border-b-4 px-2 text-sm font-extrabold transition-colors sm:text-base ${
                       isActive
                         ? "border-emerald-700 text-emerald-800"
@@ -265,7 +278,7 @@ export default function SampleLessonExperience({
               <p className="text-sm font-bold text-gray-600">{t.ready}</p>
               <button
                 type="button"
-                onClick={() => setStage("practice")}
+                onClick={() => startPractice("lesson_cta")}
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-6 font-extrabold text-white shadow-md transition-colors hover:bg-emerald-800"
               >
                 <Play className="h-4 w-4" aria-hidden="true" />
@@ -284,7 +297,10 @@ export default function SampleLessonExperience({
             passingPercent={data.practice.passingPercent}
             onFinish={async () => true}
             onRetry={() => setPracticeRound((round) => round + 1)}
-            onContinue={() => setStage("complete")}
+            onContinue={() => {
+              trackAnalyticsEvent("sample_practice_complete");
+              setStage("complete");
+            }}
             onExit={() => setStage("lesson")}
             continueLabel={t.finish}
           />
@@ -303,7 +319,9 @@ export default function SampleLessonExperience({
             </p>
             <div className="mt-8 flex w-full max-w-md flex-col gap-3 sm:flex-row sm:justify-center">
               <Link
-                href="/signup"
+                href="/auth/signup"
+                data-analytics="signup_click"
+                data-analytics-source="sample_complete"
                 className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-5 font-extrabold text-white shadow-md transition-colors hover:bg-emerald-800"
               >
                 <UserPlus className="h-5 w-5" aria-hidden="true" />

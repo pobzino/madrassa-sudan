@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, Check, LoaderCircle, Play, RotateCcw } from "luc
 import SimPlayer from "@/components/slides/SimPlayer";
 import { OwlCorrect, OwlThinking, OwlWrong } from "@/components/illustrations";
 import type { SampleLessonData } from "@/lib/sample-lesson.types";
+import { trackAnalyticsEvent } from "@/lib/analytics";
 
 interface HomepageSamplePreviewProps {
   language: "ar" | "en";
@@ -156,7 +157,13 @@ export default function HomepageSamplePreview({
                   key={`${option}-${index}`}
                   type="button"
                   disabled={answered}
-                  onClick={() => setSelected(index)}
+                  onClick={() => {
+                    setSelected(index);
+                    trackAnalyticsEvent("sample_question_answered", {
+                      correct: index === questionView.correctIndex,
+                      source: "homepage_preview",
+                    });
+                  }}
                   className={`min-h-12 rounded-lg border-2 px-3 text-lg font-extrabold shadow-[0_3px_0_rgba(31,52,38,0.12)] transition-all ${
                     revealCorrect
                       ? "border-emerald-500 bg-emerald-50 text-emerald-900"
@@ -193,6 +200,8 @@ export default function HomepageSamplePreview({
             )}
             <Link
               href="/sample-lesson?practice=1"
+              data-analytics="sample_practice_start"
+              data-analytics-source="homepage_preview"
               className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-5 font-extrabold text-white shadow-md transition-colors hover:bg-emerald-800"
             >
               {t.continue}

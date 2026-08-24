@@ -5,6 +5,7 @@ import { LanguageWrapper } from "@/components/LanguageWrapper";
 import { getCanonicalSiteUrl } from "@/lib/site-url";
 import { Toaster } from "sonner";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import AnalyticsTracker from "@/components/AnalyticsTracker";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -74,6 +75,7 @@ export default function RootLayout({
         <LanguageWrapper>
           {children}
         </LanguageWrapper>
+        <AnalyticsTracker />
         <Toaster position="top-center" richColors closeButton />
         <ServiceWorkerRegister />
       </body>

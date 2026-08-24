@@ -145,6 +145,33 @@ export type Database = {
           },
         ]
       }
+      analytics_events: {
+        Row: {
+          created_at: string
+          event_name: string
+          id: number
+          locale: string
+          path: string
+          properties: Json
+        }
+        Insert: {
+          created_at?: string
+          event_name: string
+          id?: never
+          locale?: string
+          path: string
+          properties?: Json
+        }
+        Update: {
+          created_at?: string
+          event_name?: string
+          id?: never
+          locale?: string
+          path?: string
+          properties?: Json
+        }
+        Relationships: []
+      }
       ai_messages: {
         Row: {
           content: string
@@ -2411,6 +2438,10 @@ export type Database = {
       get_active_student_cohort_ids: {
         Args: { p_student_id: string }
         Returns: string[]
+      }
+      get_analytics_summary: {
+        Args: { p_days?: number }
+        Returns: Json
       }
       get_assignment_submission_stats: {
         Args: { assignment_uuid: string }

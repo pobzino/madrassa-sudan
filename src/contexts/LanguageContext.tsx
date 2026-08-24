@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { trackAnalyticsEvent } from "@/lib/analytics";
 
 export type Language = "ar" | "en";
 
@@ -95,6 +96,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, [language, isInitialized]);
 
   const setLanguage = (lang: Language) => {
+    trackAnalyticsEvent("language_change", { target_language: lang });
     setLanguageState(lang);
   };
 
