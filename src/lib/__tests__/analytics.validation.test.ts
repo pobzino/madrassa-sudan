@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { parseAnalyticsPayload } from "@/lib/analytics.validation";
+import {
+  isTrustedAnalyticsOrigin,
+  parseAnalyticsPayload,
+} from "@/lib/analytics.validation";
+
+describe("isTrustedAnalyticsOrigin", () => {
+  it("accepts Netlify's forwarded public host", () => {
+    expect(isTrustedAnalyticsOrigin(
+      "https://amalschool.org",
+      "internal.netlify",
+      "amalschool.org",
+    )).toBe(true);
+  });
+
+  it("accepts local hosts with ports", () => {
+    expect(isTrustedAnalyticsOrigin(
+      "http://localhost:3219",
+      "localhost:3219",
+      null,
+    )).toBe(true);
+  });
+
+  it("rejects cross-origin and malformed origins", () => {
+    expect(isTrustedAnalyticsOrigin("https://example.com", "amalschool.org", null)).toBe(false);
+    expect(isTrustedAnalyticsOrigin("not a URL", "amalschool.org", null)).toBe(false);
+  });
+});
 
 describe("parseAnalyticsPayload", () => {
   it("accepts an allowlisted anonymous event", () => {

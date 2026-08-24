@@ -14,6 +14,27 @@ export type AnalyticsPayload = {
   properties: AnalyticsProperties;
 };
 
+export function isTrustedAnalyticsOrigin(
+  origin: string | null,
+  host: string | null,
+  forwardedHost: string | null,
+): boolean {
+  if (!origin) return true;
+
+  const requestHost = forwardedHost?.split(",")[0]?.trim() || host?.trim();
+  if (!requestHost) return false;
+
+  try {
+    const parsedOrigin = new URL(origin);
+    return (
+      (parsedOrigin.protocol === "https:" || parsedOrigin.protocol === "http:") &&
+      parsedOrigin.host === requestHost
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function parseAnalyticsPayload(value: unknown): AnalyticsPayload | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 

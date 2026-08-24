@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseAnalyticsPayload } from "@/lib/analytics.validation";
+import {
+  isTrustedAnalyticsOrigin,
+  parseAnalyticsPayload,
+} from "@/lib/analytics.validation";
 import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
 
 const MAX_BODY_BYTES = 4096;
@@ -12,7 +15,11 @@ export async function POST(request: NextRequest) {
   }
 
   const origin = request.headers.get("origin");
-  if (origin && origin !== request.nextUrl.origin) {
+  if (!isTrustedAnalyticsOrigin(
+    origin,
+    request.headers.get("host"),
+    request.headers.get("x-forwarded-host"),
+  )) {
     return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
   }
 
