@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Cairo, Fredoka } from "next/font/google";
 import "./globals.css";
 import { LanguageWrapper } from "@/components/LanguageWrapper";
-import { getSiteUrl } from "@/lib/site-url";
+import { getCanonicalSiteUrl } from "@/lib/site-url";
 import { Toaster } from "sonner";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
@@ -34,9 +34,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL(getSiteUrl()),
-  title: "مدرسة آمال | Amal School",
-  description: "AI-powered online learning platform providing educational continuity for Sudanese children affected by conflict. Access quality education anywhere, anytime.",
+  metadataBase: new URL(getCanonicalSiteUrl()),
+  title: "Amal School | مدرسة آمال",
+  description: "Amal School is a free learning platform for Sudanese children, with interactive online lessons and curriculum-aligned practice in English and Arabic.",
   keywords: ["Sudan", "education", "online learning", "AI tutor", "refugee education", "Arabic", "children"],
   manifest: "/manifest.json",
   appleWebApp: {
@@ -48,16 +48,17 @@ export const metadata: Metadata = {
     "mobile-web-app-capable": "yes",
   },
   openGraph: {
-    title: "مدرسة آمال | Amal School",
-    description: "Quality education for every Sudanese child, anywhere in the world.",
+    title: "Amal School | مدرسة آمال",
+    description: "Free interactive online lessons and curriculum-aligned practice for Sudanese children.",
     type: "website",
     siteName: "Amal School",
-    locale: "ar_SD",
+    locale: "en_GB",
+    alternateLocale: ["ar_SD"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "مدرسة آمال | Amal School",
-    description: "Quality education for every Sudanese child, anywhere in the world.",
+    title: "Amal School | مدرسة آمال",
+    description: "Free interactive online lessons and curriculum-aligned practice for Sudanese children.",
   },
 };
 
@@ -66,9 +67,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Default to Arabic (RTL) - client-side will update based on user preference
+  // Default to English for first-time visitors and crawlers; saved preferences hydrate client-side.
   return (
-    <html lang="ar" dir="rtl" suppressHydrationWarning>
+    <html lang="en" dir="ltr" suppressHydrationWarning>
       <body className={`${inter.variable} ${cairo.variable} ${fredoka.variable} font-cairo antialiased`}>
         <LanguageWrapper>
           {children}

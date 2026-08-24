@@ -30,7 +30,7 @@ function getBrowserLanguageState(): BrowserLanguageState {
   const resetParam = urlParams.get("reset-lang");
   const storedLanguage = localStorage.getItem(LANGUAGE_KEY);
   const storedHasSelected = localStorage.getItem(HAS_SELECTED_KEY);
-  const nextLanguage = storedLanguage === "ar" || storedLanguage === "en" ? storedLanguage : "ar";
+  const nextLanguage = storedLanguage === "ar" || storedLanguage === "en" ? storedLanguage : "en";
 
   if (resetParam !== null) {
     localStorage.removeItem(HAS_SELECTED_KEY);
@@ -59,7 +59,7 @@ function getBrowserLanguageState(): BrowserLanguageState {
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>("ar");
+  const [language, setLanguageState] = useState<Language>("en");
   const [hasSelectedLanguage, setHasSelectedLanguageState] = useState(true); // Match SSR on first render.
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -75,7 +75,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
         window.history.replaceState({}, "", newUrl);
       }
 
-      if (nextState.language !== "ar") {
+      if (nextState.language !== "en") {
         setLanguageState(nextState.language);
       }
       setHasSelectedLanguageState(nextState.hasSelectedLanguage);
