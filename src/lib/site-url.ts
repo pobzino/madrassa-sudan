@@ -1,4 +1,5 @@
 const LOCAL_SITE_URL = "http://localhost:3000";
+const CANONICAL_SITE_URL = "https://amalschool.org";
 
 function normalizeSiteUrl(value: string | undefined | null): string | null {
   const trimmed = value?.trim();
@@ -22,6 +23,12 @@ export function getSiteUrl(): string {
     normalizeSiteUrl(process.env.DEPLOY_PRIME_URL) ??
     normalizeSiteUrl(process.env.DEPLOY_URL) ??
     LOCAL_SITE_URL
+  );
+}
+
+export function getCanonicalSiteUrl(): string {
+  return (
+    normalizeSiteUrl(process.env.NEXT_PUBLIC_CANONICAL_SITE_URL) ?? CANONICAL_SITE_URL
   );
 }
 
