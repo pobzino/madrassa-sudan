@@ -75,11 +75,14 @@ export default function PracticePage() {
     Record<string, Record<string, string>>
   >({});
   const loadVersionRef = useRef(0);
+  const nextLessonPromiseRef = useRef<Promise<string | null> | null>(null);
   const trackedStartsRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const loadVersion = ++loadVersionRef.current;
     setStatus("loading");
+    setNextLessonId(null);
+    nextLessonPromiseRef.current = null;
     try {
       const res = await fetch(`/api/homework/${assignmentId}`);
       if (res.status === 404 || res.status === 403) {
@@ -97,23 +100,26 @@ export default function PracticePage() {
         return;
       }
 
-      let gradeLevel: number | null = null;
+      const gradeLevel: number | null = data.lesson?.grade_level ?? null;
       if (data.lesson_id) {
-        const { data: currentLesson } = await supabase
-          .from("lessons")
-          .select("subject_id, grade_level")
-          .eq("id", data.lesson_id)
-          .maybeSingle();
-
-        gradeLevel = currentLesson?.grade_level ?? null;
-
-        if (currentLesson?.subject_id) {
-          const navigation = await loadLessonNavigation(
-            supabase,
-            currentLesson.subject_id,
-            data.lesson_id,
-          );
-          setNextLessonId(navigation.next?.id ?? null);
+        const subjectId = data.lesson?.subject_id ?? data.subject_id ?? null;
+        if (subjectId) {
+          const nextLessonPromise = loadLessonNavigation(supabase, subjectId, data.lesson_id)
+            .then((navigation) => {
+              const resolvedNextLessonId = navigation.next?.id ?? null;
+              if (loadVersion === loadVersionRef.current) {
+                setNextLessonId(resolvedNextLessonId);
+                if (resolvedNextLessonId) {
+                  router.prefetch(`/lessons/${resolvedNextLessonId}`);
+                }
+              }
+              return resolvedNextLessonId;
+            })
+            .catch(() => {
+              // Navigation is helpful after completion but must not delay Practice.
+              return null;
+            });
+          nextLessonPromiseRef.current = nextLessonPromise;
         }
       }
 
@@ -189,17 +195,9 @@ export default function PracticePage() {
       // failed -> reset it now so this fresh run can submit cleanly.
       let alreadyPassed = false;
       let attemptNumber = 1;
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        const { data: sub } = await supabase
-          .from("homework_submissions")
-          .select("status, score, attempt_count")
-          .eq("assignment_id", assignmentId)
-          .eq("student_id", user.id)
-          .maybeSingle();
-        if (sub && (sub.status === "graded" || sub.status === "returned")) {
+      const sub = data.viewer_submission;
+      if (sub) {
+        if (sub.status === "graded" || sub.status === "returned") {
           attemptNumber = (sub.attempt_count ?? 0) + 1;
           const totalPoints = data.total_points ?? 0;
           const threshold = ((data.passing_score ?? PRACTICE_PASSING_SCORE) / 100) * totalPoints;
@@ -216,7 +214,7 @@ export default function PracticePage() {
               });
             }
           }
-        } else if (sub?.attempt_count) {
+        } else if (sub.attempt_count) {
           attemptNumber = sub.attempt_count + 1;
         }
       }
@@ -239,7 +237,7 @@ export default function PracticePage() {
       console.error("Failed to load practice:", err);
       setStatus("error");
     }
-  }, [assignmentId, language, supabase]);
+  }, [assignmentId, language, router, supabase]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void load(), 0);
@@ -354,12 +352,16 @@ export default function PracticePage() {
   }, [router]);
 
   const handleContinue = useCallback(() => {
-    trackAnalyticsEvent("next_lesson_open", {
-      lesson_id: nextLessonId || "",
-      source: "practice_complete",
-    });
-    router.push(nextLessonId ? `/lessons/${nextLessonId}` : "/lessons");
-    router.refresh();
+    void (async () => {
+      const resolvedNextLessonId =
+        nextLessonId ?? (await nextLessonPromiseRef.current);
+      trackAnalyticsEvent("next_lesson_open", {
+        lesson_id: resolvedNextLessonId || "",
+        source: "practice_complete",
+      });
+      router.push(resolvedNextLessonId ? `/lessons/${resolvedNextLessonId}` : "/lessons");
+      router.refresh();
+    })();
   }, [router, nextLessonId]);
 
   if (status === "loading") {

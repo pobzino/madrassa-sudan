@@ -23,28 +23,43 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get assignment with questions
-    const { data: assignment, error: assignmentError } = await supabase
-      .from("homework_assignments")
-      .select(`
-        *,
-        cohorts(id, name, grade_level),
-        subjects(id, name_ar, name_en),
-        homework_questions(*)
-      `)
-      .eq("id", id)
-      .single();
+    // Fetch independent data together. Practice players need the viewer's
+    // submission and lesson metadata, so returning both here avoids several
+    // extra browser-to-Supabase round trips before the first question renders.
+    const [assignmentResult, profileResult, viewerSubmissionResult] = await Promise.all([
+      supabase
+        .from("homework_assignments")
+        .select(`
+          *,
+          cohorts(id, name, grade_level),
+          subjects(id, name_ar, name_en),
+          lesson:lessons(id, subject_id, grade_level),
+          homework_questions(*)
+        `)
+        .eq("id", id)
+        .single(),
+      supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single(),
+      supabase
+        .from("homework_submissions")
+        .select("status, score, attempt_count")
+        .eq("assignment_id", id)
+        .eq("student_id", user.id)
+        .maybeSingle(),
+    ]);
+
+    const { data: assignment, error: assignmentError } = assignmentResult;
 
     if (assignmentError || !assignment) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
     }
 
     // Check if user has access (teacher of the cohort or admin)
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+    const profile = profileResult.data;
+    const viewerSubmission = viewerSubmissionResult.data;
 
     const isAdmin = profile?.role === "admin";
 
@@ -112,6 +127,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           data: {
             ...assignment,
             questions,
+            viewer_submission: viewerSubmission,
           },
         });
       }
@@ -122,32 +138,33 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .sort((a, b) => a.display_order - b.display_order);
 
     // Get submission stats
-    const { count: submissionsCount } = await supabase
-      .from("homework_submissions")
-      .select("*", { count: "exact", head: true })
-      .eq("assignment_id", id);
-
-    const { count: gradedCount } = await supabase
-      .from("homework_submissions")
-      .select("*", { count: "exact", head: true })
-      .eq("assignment_id", id)
-      .in("status", ["graded", "returned"]);
-
-    const { count: pendingCount } = await supabase
-      .from("homework_submissions")
-      .select("*", { count: "exact", head: true })
-      .eq("assignment_id", id)
-      .eq("status", "submitted");
+    const [submissionsResult, gradedResult, pendingResult] = await Promise.all([
+      supabase
+        .from("homework_submissions")
+        .select("*", { count: "exact", head: true })
+        .eq("assignment_id", id),
+      supabase
+        .from("homework_submissions")
+        .select("*", { count: "exact", head: true })
+        .eq("assignment_id", id)
+        .in("status", ["graded", "returned"]),
+      supabase
+        .from("homework_submissions")
+        .select("*", { count: "exact", head: true })
+        .eq("assignment_id", id)
+        .eq("status", "submitted"),
+    ]);
 
     return NextResponse.json({
       success: true,
       data: {
         ...assignment,
         questions,
+        viewer_submission: viewerSubmission,
         stats: {
-          total_submissions: submissionsCount || 0,
-          graded: gradedCount || 0,
-          pending: pendingCount || 0,
+          total_submissions: submissionsResult.count || 0,
+          graded: gradedResult.count || 0,
+          pending: pendingResult.count || 0,
         },
       },
     });

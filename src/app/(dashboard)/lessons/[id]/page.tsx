@@ -529,13 +529,21 @@ export default function LessonPlayerPage() {
       // Follow the published learning path's week/step sequence. Subjects that
       // do not have a path (for example, a camp-managed track) use a stable
       // display-order fallback inside the shared resolver.
-      const navigation = await loadLessonNavigation(supabase, lessonData.subject_id, lessonId);
-      setAdjacentLessons({
-        prev: navigation.previous as unknown as Lesson | null,
-        next: navigation.next as unknown as Lesson | null,
-      });
-
       setLoading(false);
+
+      void loadLessonNavigation(supabase, lessonData.subject_id, lessonId)
+        .then((navigation) => {
+          setAdjacentLessons({
+            prev: navigation.previous as unknown as Lesson | null,
+            next: navigation.next as unknown as Lesson | null,
+          });
+          if (navigation.next?.id) {
+            router.prefetch(`/lessons/${navigation.next.id}`);
+          }
+        })
+        .catch(() => {
+          // Navigation should not keep the lesson itself on a loading screen.
+        });
     }
     loadData();
   }, [lessonId, router, supabase]);
