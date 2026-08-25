@@ -35,6 +35,7 @@ import {
 } from "@/lib/slide-interactions";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import { loadLessonNavigation } from "@/lib/lessons/path-navigation";
 
 const VIDEO_ANALYTICS_MILESTONES = [25, 50, 75, 100] as const;
 
@@ -525,21 +526,14 @@ export default function LessonPlayerPage() {
         watchTimeSecRef.current = progressData.total_watch_time_seconds ?? 0;
       }
 
-      // Fetch adjacent lessons
-      const { data: allLessons } = await supabase
-        .from("lessons")
-        .select("id, title_ar, title_en, display_order")
-        .eq("subject_id", lessonData.subject_id)
-        .eq("is_published", true)
-        .order("display_order");
-
-      if (allLessons) {
-        const currentIndex = allLessons.findIndex((l) => l.id === lessonId);
-        setAdjacentLessons({
-          prev: currentIndex > 0 ? allLessons[currentIndex - 1] as unknown as Lesson : null,
-          next: currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] as unknown as Lesson : null,
-        });
-      }
+      // Follow the published learning path's week/step sequence. Subjects that
+      // do not have a path (for example, a camp-managed track) use a stable
+      // display-order fallback inside the shared resolver.
+      const navigation = await loadLessonNavigation(supabase, lessonData.subject_id, lessonId);
+      setAdjacentLessons({
+        prev: navigation.previous as unknown as Lesson | null,
+        next: navigation.next as unknown as Lesson | null,
+      });
 
       setLoading(false);
     }

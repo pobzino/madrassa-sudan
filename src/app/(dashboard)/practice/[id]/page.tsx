@@ -15,6 +15,7 @@ import PracticePlayer, {
 } from "@/components/practice/PracticePlayer";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import { loadLessonNavigation } from "@/lib/lessons/path-navigation";
 
 interface LoadedPractice {
   title: string;
@@ -107,16 +108,12 @@ export default function PracticePage() {
         gradeLevel = currentLesson?.grade_level ?? null;
 
         if (currentLesson?.subject_id) {
-          const { data: subjectLessons } = await supabase
-            .from("lessons")
-            .select("id")
-            .eq("subject_id", currentLesson.subject_id)
-            .eq("is_published", true)
-            .order("display_order", { ascending: true });
-          const currentIndex = subjectLessons?.findIndex((item) => item.id === data.lesson_id) ?? -1;
-          setNextLessonId(
-            currentIndex >= 0 ? subjectLessons?.[currentIndex + 1]?.id ?? null : null
+          const navigation = await loadLessonNavigation(
+            supabase,
+            currentLesson.subject_id,
+            data.lesson_id,
           );
+          setNextLessonId(navigation.next?.id ?? null);
         }
       }
 
