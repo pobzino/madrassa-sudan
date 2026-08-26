@@ -4,8 +4,14 @@ import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/servic
 
 type UserMetadata = Record<string, unknown>;
 
+type AuthUserSummary = {
+  email: string | null;
+  emailConfirmedAt: string | null;
+  metadata: UserMetadata;
+};
+
 async function loadAuthMetadataByUserId() {
-  const metadataByUserId = new Map<string, UserMetadata>();
+  const metadataByUserId = new Map<string, AuthUserSummary>();
 
   if (!hasServiceRoleConfig()) {
     return metadataByUserId;
@@ -24,7 +30,11 @@ async function loadAuthMetadataByUserId() {
     }
 
     for (const authUser of data.users) {
-      metadataByUserId.set(authUser.id, authUser.user_metadata as UserMetadata);
+      metadataByUserId.set(authUser.id, {
+        email: authUser.email ?? null,
+        emailConfirmedAt: authUser.email_confirmed_at ?? authUser.confirmed_at ?? null,
+        metadata: authUser.user_metadata as UserMetadata,
+      });
     }
   } catch (error) {
     console.warn("Admin users metadata lookup failed:", error);
@@ -82,11 +92,14 @@ export async function GET(request: NextRequest) {
 
     const metadataByUserId = await loadAuthMetadataByUserId();
     const enrichedUsers = (users || []).map((profile) => {
-      const metadata = metadataByUserId.get(profile.id) || {};
+      const authSummary = metadataByUserId.get(profile.id);
+      const metadata = authSummary?.metadata || {};
       return {
         ...profile,
         signup_details: metadata.signup_details ?? null,
         contact_phone: profile.phone ?? metadata.phone ?? null,
+        auth_email: authSummary?.email ?? null,
+        email_confirmed_at: authSummary?.emailConfirmedAt ?? null,
       };
     });
 

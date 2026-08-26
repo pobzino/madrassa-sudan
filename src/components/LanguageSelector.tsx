@@ -1,10 +1,22 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { BookOpen, Globe } from "lucide-react";
 import { useLanguage, Language } from "@/contexts/LanguageContext";
 
 export function LanguageSelector() {
   const { hasSelectedLanguage, setLanguage, setHasSelectedLanguage } = useLanguage();
+  const arabicButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (hasSelectedLanguage) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    arabicButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [hasSelectedLanguage]);
 
   const handleSelectLanguage = (lang: Language) => {
     setLanguage(lang);
@@ -18,7 +30,12 @@ export function LanguageSelector() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="relative max-w-md w-full mx-4 bg-white rounded-3xl shadow-2xl overflow-hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="language-dialog-title"
+        className="relative max-w-md w-full mx-4 bg-white rounded-3xl shadow-2xl overflow-hidden"
+      >
         {/* Gradient top accent */}
         <div className="h-2 bg-gradient-to-r from-emerald-500 via-emerald-600 to-amber-500" />
 
@@ -29,9 +46,9 @@ export function LanguageSelector() {
           </div>
 
           {/* Title - Both languages */}
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          <h2 id="language-dialog-title" className="text-2xl font-bold text-gray-900 mb-2">
             مرحباً بكم في مدرسة آمال
-          </h1>
+          </h2>
           <p className="text-lg text-gray-600 mb-8">
             Welcome to Amal School
           </p>
@@ -44,6 +61,7 @@ export function LanguageSelector() {
           <div className="space-y-3">
             {/* Arabic option */}
             <button
+              ref={arabicButtonRef}
               onClick={() => handleSelectLanguage("ar")}
               className="w-full py-4 px-6 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl font-semibold hover:from-emerald-700 hover:to-emerald-800 transition-all shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/30 hover:-translate-y-0.5 flex items-center justify-center gap-3"
             >

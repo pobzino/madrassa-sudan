@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/service";
 import { signAudioUrl } from "@/lib/server/sim-storage";
 import type { SimEvent, SimPayload, SimRow } from "@/lib/sim.types";
@@ -30,7 +31,7 @@ function practiceType(value: string): SamplePracticeQuestion["type"] {
   return "multiple_choice";
 }
 
-export async function loadSampleLesson(): Promise<SampleLessonData> {
+async function loadSampleLessonUncached(): Promise<SampleLessonData> {
   const supabase = createServiceClient();
 
   const [{ data: lesson, error: lessonError }, { data: sim, error: simError }] =
@@ -159,3 +160,9 @@ export async function loadSampleLesson(): Promise<SampleLessonData> {
     },
   };
 }
+
+export const loadSampleLesson = unstable_cache(
+  loadSampleLessonUncached,
+  ["public-sample-lesson"],
+  { revalidate: 300, tags: ["public-sample-lesson"] },
+);

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getServiceRoleKey } from "@/lib/supabase/service";
 import {
   clampSlideCount,
   parseSlideGenerationContext,
@@ -39,7 +38,7 @@ async function queueBackgroundGeneration({
   languageMode: "ar" | "en";
   generationContext: ReturnType<typeof parseSlideGenerationContext>;
 }): Promise<QueueOutcome> {
-  const internalSecret = getServiceRoleKey();
+  const internalSecret = process.env.SLIDE_JOB_SECRET?.trim() || null;
   if (!internalSecret && !accessToken) {
     return {
       ok: false,
@@ -73,7 +72,6 @@ async function queueBackgroundGeneration({
         slideCount,
         languageMode,
         generationContext,
-        internalSecret,
         queuedAt,
         accessToken,
       }),

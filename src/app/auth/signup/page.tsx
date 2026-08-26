@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { UserRole } from "@/lib/database.types";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -44,7 +44,7 @@ const translations = {
     emailLoginHint: "يُستخدم لتسجيل الدخول وتأكيد الحساب. الواتساب هو جهة التواصل الأساسية.",
     passwordLabel: "كلمة المرور",
     iAmA: "أنا...",
-    student: "طالب",
+    student: "طالب مع ولي أمر",
     teacher: "معلم / متطوع",
     parent: "ولي أمر",
     parentDetailsTitle: "معلومات ولي الأمر",
@@ -116,6 +116,8 @@ const translations = {
     sendingConfirmation: "جاري الإرسال...",
     confirmationSent: "تم إرسال رسالة تأكيد جديدة. تحقق من البريد والرسائل غير المرغوب فيها.",
     resendHint: "إذا لم تصلك الرسالة خلال دقيقة، أعد الإرسال.",
+    applicationReceived: "تم استلام طلبك",
+    whatsappApprovalHint: "سنراجع طلبك ونتواصل معك عبر واتساب. بعد الموافقة، سجّل الدخول برقم واتساب وكلمة المرور.",
     backToLogin: "العودة لتسجيل الدخول",
   },
   en: {
@@ -127,7 +129,7 @@ const translations = {
     emailLoginHint: "Used for login and verification. WhatsApp remains the primary contact channel.",
     passwordLabel: "Password",
     iAmA: "I am a...",
-    student: "Student",
+    student: "Student with a caregiver",
     teacher: "Teacher / Volunteer",
     parent: "Parent",
     parentDetailsTitle: "Parent information",
@@ -199,6 +201,8 @@ const translations = {
     sendingConfirmation: "Sending...",
     confirmationSent: "A new confirmation email has been sent. Check your inbox and spam folder.",
     resendHint: "If you don't receive it within a minute, resend it.",
+    applicationReceived: "Application received",
+    whatsappApprovalHint: "We will review your application and contact you on WhatsApp. Once approved, sign in with your WhatsApp number and password.",
     backToLogin: "Back to Login",
   },
 };
@@ -206,23 +210,19 @@ const translations = {
 type YesNoAnswer = "" | "yes" | "no" | "unsure";
 type InvolvementArea = "teaching" | "tech_platform" | "content_video" | "operations" | "outreach" | "other";
 
-function getInitialSignupRole(): UserRole {
-  if (typeof window === "undefined") {
-    return "student";
-  }
-
-  const requestedRole = new URLSearchParams(window.location.search).get("role");
-  return requestedRole === "teacher" || requestedRole === "parent" ? requestedRole : "student";
-}
-
-export default function SignupPage() {
+function SignupForm() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<UserRole>(() => getInitialSignupRole());
+  const [role, setRole] = useState<UserRole>(
+    searchParams.get("role") === "teacher" ? "teacher" : "parent",
+  );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [pendingWhatsappApproval, setPendingWhatsappApproval] = useState(false);
+  const [website, setWebsite] = useState("");
   const [resendLoading, setResendLoading] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
@@ -280,7 +280,6 @@ export default function SignupPage() {
   };
 
   const roleOptions = [
-    { id: "student" as UserRole, label: t.student, icon: RoleIcons.student },
     { id: "teacher" as UserRole, label: t.teacher, icon: RoleIcons.teacher },
     { id: "parent" as UserRole, label: t.parent, icon: RoleIcons.parent },
   ];
@@ -400,6 +399,36 @@ export default function SignupPage() {
     const loginEmail =
       role === "parent" && !trimmedEmail ? whatsappLoginEmail(parentWhatsapp) : trimmedEmail;
 
+    if (role === "parent" && !trimmedEmail) {
+      const response = await fetch("/api/auth/parent-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName,
+          password,
+          whatsapp: parentWhatsapp,
+          language,
+          website,
+          parent: parentDetails,
+        }),
+      }).catch(() => null);
+
+      if (!response?.ok) {
+        const body = await response?.json().catch(() => null);
+        trackAnalyticsEvent("signup_error", { role, error_type: "parent_signup" });
+        setError(body?.error || (language === "ar" ? "تعذر إنشاء الحساب. حاول مرة أخرى." : "The account could not be created. Please try again."));
+        setLoading(false);
+        return;
+      }
+
+      trackAnalyticsEvent("signup_complete", { role });
+      trackAnalyticsEvent("application_submit", { role });
+      setPendingWhatsappApproval(true);
+      setSuccess(true);
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email: loginEmail,
       password,
@@ -428,71 +457,11 @@ export default function SignupPage() {
     }
 
     trackAnalyticsEvent("signup_complete", { role });
-
-    // Persist the application details for the team's review queue. Best-effort:
-    // the account exists either way and the same details live in user metadata.
-    if (data.session && (role === "parent" || role === "teacher")) {
-      try {
-        const applicationResponse = await fetch("/api/applications", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            role === "parent"
-              ? {
-                  role,
-                  parent: {
-                    parent_name: fullName.trim(),
-                    profession: parentProfession.trim(),
-                    whatsapp: parentWhatsapp.trim(),
-                    email: trimmedEmail || null,
-                    sudanese_descent: sudaneseDescent,
-                    child_war_affected: affectedByWar,
-                    missed_schooling: missedSchooling,
-                    out_of_school: outOfSchool,
-                    out_of_school_duration: outOfSchoolDuration,
-                    out_of_school_details: outOfSchoolDetails.trim(),
-                    children_count: childrenCount,
-                    children_ages: childrenAges.filter(Boolean),
-                    can_access_website: canAccessWebsite,
-                    can_access_zoom: canAccessZoom,
-                    device_type: deviceType,
-                    access_notes: accessNotes.trim(),
-                    country: parentCountry.trim(),
-                    city: parentCity.trim(),
-                    preferred_language: language,
-                  },
-                }
-              : {
-                  role,
-                  volunteer: {
-                    name: fullName.trim(),
-                    whatsapp: teacherWhatsapp.trim(),
-                    email: trimmedEmail,
-                    location_city: teacherLocation.trim(),
-                    education_background: educationalBackground.trim(),
-                    areas: involvementAreas,
-                    hours_per_week: weeklyHours.trim(),
-                    preferred_language: language,
-                  },
-                }
-          ),
-        });
-        if (applicationResponse.ok) {
-          trackAnalyticsEvent("application_submit", { role });
-        } else {
-          trackAnalyticsEvent("application_error", {
-            role,
-            error_type: `application_${applicationResponse.status}`,
-          });
-        }
-      } catch (applicationError) {
-        console.error("Failed to save application details:", applicationError);
-        trackAnalyticsEvent("application_error", { role, error_type: "application_network" });
-      }
+    if (role === "parent" || role === "teacher") {
+      trackAnalyticsEvent("application_submit", { role });
     }
 
     if (data.session) {
-      // Email confirmation is disabled — user is signed in immediately.
       router.push("/dashboard");
       router.refresh();
     } else {
@@ -526,14 +495,22 @@ export default function SignupPage() {
         <div className="absolute inset-0 grid-pattern opacity-60 pointer-events-none" />
         <div className="max-w-md w-full mx-4 bg-white rounded-3xl shadow-xl border border-gray-100 p-8 text-center relative z-10 animate-fade-up">
           <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
-            {RoleIcons.email}
+            {pendingWhatsappApproval ? RoleIcons.parent : RoleIcons.email}
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">{t.checkEmail}</h2>
-          <p className="text-gray-600 mb-6">
-            {t.sentConfirmation} <br />
-            <span className="font-semibold text-gray-900" dir="ltr">{email}</span>
-          </p>
-          <p className="text-sm text-gray-500 mb-4">{t.resendHint}</p>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            {pendingWhatsappApproval ? t.applicationReceived : t.checkEmail}
+          </h2>
+          {pendingWhatsappApproval ? (
+            <p className="text-gray-600 mb-6">{t.whatsappApprovalHint}</p>
+          ) : (
+            <>
+              <p className="text-gray-600 mb-6">
+                {t.sentConfirmation} <br />
+                <span className="font-semibold text-gray-900" dir="ltr">{email}</span>
+              </p>
+              <p className="text-sm text-gray-500 mb-4">{t.resendHint}</p>
+            </>
+          )}
           {resendError && (
             <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm mb-4">
               {resendError}
@@ -544,14 +521,16 @@ export default function SignupPage() {
               {resendMessage}
             </div>
           )}
-          <button
-            type="button"
-            onClick={handleResendConfirmation}
-            disabled={resendLoading}
-            className="w-full mb-3 inline-flex items-center justify-center px-6 py-3 border border-[var(--primary)] text-[var(--primary)] font-semibold rounded-xl hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {resendLoading ? t.sendingConfirmation : t.resendConfirmation}
-          </button>
+          {!pendingWhatsappApproval && (
+            <button
+              type="button"
+              onClick={handleResendConfirmation}
+              disabled={resendLoading}
+              className="w-full mb-3 inline-flex items-center justify-center px-6 py-3 border border-[var(--primary)] text-[var(--primary)] font-semibold rounded-xl hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {resendLoading ? t.sendingConfirmation : t.resendConfirmation}
+            </button>
+          )}
           <Link
             href="/auth/login"
             className="inline-flex items-center justify-center px-6 py-3 bg-[var(--primary)] text-white font-semibold rounded-xl hover:bg-[var(--primary-light)] transition-colors shadow-lg shadow-green-900/20"
@@ -575,6 +554,18 @@ export default function SignupPage() {
         </div>
 
         <form className="space-y-6" onSubmit={handleSignup} onFocusCapture={markSignupStarted}>
+          <div className="absolute -left-[10000px]" aria-hidden="true">
+            <label htmlFor="website">Website</label>
+            <input
+              id="website"
+              name="website"
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={website}
+              onChange={(event) => setWebsite(event.target.value)}
+            />
+          </div>
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
               <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -634,7 +625,7 @@ export default function SignupPage() {
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={6}
+                minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="block w-full px-4 py-3 bg-gray-50 border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:bg-white transition-all"
@@ -648,7 +639,7 @@ export default function SignupPage() {
               <label htmlFor="role" className="block text-sm font-semibold text-gray-700 mb-1.5">
                 {t.iAmA}
               </label>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 {roleOptions.map((option) => (
                   <button
                     key={option.id}
@@ -1050,5 +1041,17 @@ export default function SignupPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={(
+        <div className="min-h-screen bg-gray-50" aria-label="Loading signup form" />
+      )}
+    >
+      <SignupForm />
+    </Suspense>
   );
 }

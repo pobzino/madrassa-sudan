@@ -167,8 +167,8 @@ export async function downloadLesson(
 
     await saveOfflineLesson(offlineLesson);
 
-    // 7. Pre-cache page shells so the lesson renders offline
-    await precachePageShells(lessonId);
+    // 7. Ensure the non-personal offline fallback is available.
+    await precachePageShells();
 
     updateState({
       status: "completed",
@@ -202,38 +202,15 @@ export async function deleteDownloadedLesson(lessonId: string): Promise<void> {
   ]);
 }
 
-/**
- * Pre-cache the page shells needed for offline rendering.
- * Fetches the lesson page + key app pages so the SW caches them.
- */
-async function precachePageShells(lessonId: string): Promise<void> {
+/** Keep only the non-personal offline fallback in Cache Storage. */
+async function precachePageShells(): Promise<void> {
   const PAGE_CACHE = "amal-pages-v2";
-  const urls = [
-    `/lessons/${lessonId}`,
-    "/lessons",
-    "/dashboard",
-    "/downloads",
-  ];
 
   try {
     const cache = await caches.open(PAGE_CACHE);
-    await Promise.all(
-      urls.map(async (url) => {
-        try {
-          // Only fetch if not already cached
-          const existing = await cache.match(url);
-          if (existing) return;
-          const response = await fetch(url);
-          if (response.ok) {
-            await cache.put(url, response);
-          }
-        } catch {
-          // Non-critical — page will use /offline fallback
-        }
-      })
-    );
+    if (!(await cache.match("/offline"))) await cache.add("/offline");
   } catch {
-    // Cache API unavailable
+    // Cache API unavailable; lesson content remains available from IndexedDB.
   }
 }
 

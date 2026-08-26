@@ -33,6 +33,8 @@ type AdminUser = {
   is_approved: boolean;
   preferred_language?: string | null;
   contact_phone?: string | null;
+  auth_email?: string | null;
+  email_confirmed_at?: string | null;
   signup_details?: {
     role?: string;
     parent?: {
@@ -42,10 +44,20 @@ type AdminUser = {
         sudanese_descent?: string;
         child_affected_by_war?: string;
         child_missed_significant_schooling?: string;
+        out_of_school?: string;
+        out_of_school_duration?: string;
         out_of_school_details?: string;
       };
-      eligible_children?: string;
-      access_logistics?: string;
+      children_count?: number;
+      children_ages?: Array<string | number>;
+      access?: {
+        can_access_website?: string;
+        can_access_zoom?: string;
+        device_type?: string;
+        notes?: string;
+      };
+      country?: string;
+      city?: string;
     } | null;
     teacher_volunteer?: {
       whatsapp_number?: string;
@@ -205,16 +217,36 @@ function UserSignupDetails({ user }: { user: AdminUser }) {
       {parent && (
         <>
           {parent.profession && <p><span className="font-medium text-gray-700">Profession:</span> {parent.profession}</p>}
-          {parent.eligible_children && <p><span className="font-medium text-gray-700">Children:</span> {parent.eligible_children}</p>}
-          {parent.access_logistics && <p><span className="font-medium text-gray-700">Access:</span> {parent.access_logistics}</p>}
+          {parent.children_count && (
+            <p>
+              <span className="font-medium text-gray-700">Children:</span>{" "}
+              {parent.children_count}
+              {parent.children_ages?.length ? ` (ages ${parent.children_ages.join(", ")})` : ""}
+            </p>
+          )}
+          {parent.access && (
+            <p>
+              <span className="font-medium text-gray-700">Access:</span>{" "}
+              website {formatYesNo(parent.access.can_access_website) || "-"}; Zoom {formatYesNo(parent.access.can_access_zoom) || "-"}; device {parent.access.device_type || "-"}
+              {parent.access.notes ? `; ${parent.access.notes}` : ""}
+            </p>
+          )}
+          {(parent.city || parent.country) && (
+            <p><span className="font-medium text-gray-700">Location:</span> {[parent.city, parent.country].filter(Boolean).join(", ")}</p>
+          )}
           <p>
             <span className="font-medium text-gray-700">Eligibility:</span>{" "}
             Sudanese descent: {formatYesNo(parent.eligibility?.sudanese_descent) || "-"};{" "}
             affected by war: {formatYesNo(parent.eligibility?.child_affected_by_war) || "-"};{" "}
             missed schooling: {formatYesNo(parent.eligibility?.child_missed_significant_schooling) || "-"}
           </p>
-          {parent.eligibility?.out_of_school_details && (
-            <p><span className="font-medium text-gray-700">Out of school:</span> {parent.eligibility.out_of_school_details}</p>
+          {(parent.eligibility?.out_of_school || parent.eligibility?.out_of_school_duration || parent.eligibility?.out_of_school_details) && (
+            <p>
+              <span className="font-medium text-gray-700">Out of school:</span>{" "}
+              {formatYesNo(parent.eligibility.out_of_school) || "-"}
+              {parent.eligibility.out_of_school_duration ? `; ${parent.eligibility.out_of_school_duration}` : ""}
+              {parent.eligibility.out_of_school_details ? `; ${parent.eligibility.out_of_school_details}` : ""}
+            </p>
           )}
         </>
       )}
@@ -936,6 +968,19 @@ export default function AdminPage() {
                       }`}>
                         {user.is_approved ? "Approved" : "Not approved"}
                       </span>
+                      {user.auth_email?.endsWith("@parents.amalschool.app") ? (
+                        <span className="inline-flex items-center rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">
+                          WhatsApp login
+                        </span>
+                      ) : (
+                        <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ${
+                          user.email_confirmed_at
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-amber-50 text-amber-700"
+                        }`}>
+                          {user.email_confirmed_at ? "Email verified" : "Email not verified"}
+                        </span>
+                      )}
                       <span className="text-[11px] text-gray-400">
                         Joined {new Date(user.created_at).toLocaleDateString()}
                       </span>

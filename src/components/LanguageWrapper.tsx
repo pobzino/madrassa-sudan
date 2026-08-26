@@ -6,7 +6,7 @@ import { LanguageSelector } from "./LanguageSelector";
 
 
 function LanguageDirectionHandler({ children }: { children: ReactNode }) {
-  const { language, isInitialized } = useLanguage();
+  const { language, isInitialized, hasSelectedLanguage } = useLanguage();
 
   useEffect(() => {
     if (isInitialized) {
@@ -15,14 +15,22 @@ function LanguageDirectionHandler({ children }: { children: ReactNode }) {
     }
   }, [language, isInitialized]);
 
-  return <>{children}</>;
+  return (
+    <div
+      className="contents"
+      aria-hidden={!hasSelectedLanguage}
+      inert={hasSelectedLanguage ? undefined : true}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function LanguageWrapper({ children }: { children: ReactNode }) {
   return (
     <LanguageProvider>
+      <LanguageSelector />
       <LanguageDirectionHandler>
-        <LanguageSelector />
         {children}
       </LanguageDirectionHandler>
     </LanguageProvider>

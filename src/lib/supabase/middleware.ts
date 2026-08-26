@@ -69,8 +69,9 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    // If profile doesn't exist yet (race condition) or is not approved, redirect
-    if (profile && !profile.is_approved && profile.role !== "admin") {
+    // A missing profile is not an authorization grant. Every role, including
+    // administrators, must have an explicitly approved profile.
+    if (!profile || !profile.is_approved) {
       const url = request.nextUrl.clone();
       url.pathname = "/auth/pending-approval";
       return NextResponse.redirect(url);

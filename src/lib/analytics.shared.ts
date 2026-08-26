@@ -2,6 +2,7 @@ export const ANALYTICS_EVENT_NAMES = [
   "application_error",
   "application_start",
   "application_submit",
+  "app_error",
   "landing_view",
   "language_change",
   "lesson_start",

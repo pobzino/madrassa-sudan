@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { Profile } from "@/lib/database.types";
 import { getCachedProfile, getCachedUser, primeCachedProfile } from "@/lib/supabase/auth-cache";
+import { clearPrivateOfflineData } from "@/lib/offline/db";
 
 const translations = {
   ar: {
@@ -307,6 +308,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/account/delete", { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
+      await clearPrivateOfflineData();
       router.push("/");
     } catch {
       setSaveMessage({ type: "error", text: t.error });

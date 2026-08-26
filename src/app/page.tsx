@@ -86,7 +86,7 @@ export default function Home() {
         titleAnd: "و",
         titleHighlight2: "اللعب",
         title2: "لأطفال السودان",
-        subtitle: "منصة تعليمية مجانية ممتعة مع دروس تفاعلية، واجبات، ومنهج سوداني معتمد",
+        subtitle: "منصة تعليمية مجانية مع دروس تفاعلية وتدريب متوافق مع المنهج السوداني",
         cta1: "ابدأ مجاناً",
         cta2: "جرّب درساً نموذجياً",
       },
@@ -96,9 +96,9 @@ export default function Home() {
         titleHighlight: "ممتعة",
         items: [
           { title: "دروس ممتعة", desc: "فيديوهات تفاعلية مع رسوم متحركة تجعل التعلم مغامرة", color: "from-[#007229] to-[#00913D]", iconType: "video" },
-          { title: "واجبات وتقييم", desc: "واجبات ممتعة مع تقييم فوري يساعدك تعرف مستواك وتتحسّن", color: "from-[#D21034] to-[#E8334F]", iconType: "trophy" },
+          { title: "تدريب وتقييم", desc: "تدريب ممتع مع تقييم فوري يساعدك تعرف مستواك وتتحسّن", color: "from-[#D21034] to-[#E8334F]", iconType: "trophy" },
           { title: "الألعاب التعليمية", desc: "اختبارات وتحديات ممتعة تجعلك تتعلم وأنت تلعب", color: "from-[#005C22] to-[#007229]", iconType: "gamepad" },
-          { title: "شهادات وجوائز", desc: "اجمع النقاط واحصل على شهادات وشارات تقدير", color: "from-amber-500 to-orange-600", iconType: "trophy" },
+          { title: "متابعة التقدم", desc: "تابع الدروس والتدريبات التي أكملتها وواصل من مكانك", color: "from-amber-500 to-orange-600", iconType: "trophy" },
         ],
       },
       subjects: {
@@ -106,7 +106,6 @@ export default function Home() {
         title: "اختر مادتك المفضلة",
         items: [
           { name: "الرياضيات", iconType: "math", color: "from-[#007229] to-[#00913D]" },
-          { name: "العلوم", iconType: "science", color: "from-[#D21034] to-[#E8334F]" },
           { name: "اللغة الإنجليزية", iconType: "globe", color: "from-[#005C22] to-[#007229]" },
         ],
       },
@@ -119,7 +118,7 @@ export default function Home() {
         steps: [
           { num: "1", title: "سجّل حسابك", desc: "أنشئ حساباً مجانياً في أقل من دقيقة", iconType: "sparkle" },
           { num: "2", title: "اختر موادك", desc: "حدد صفك الدراسي والمواد التي تريد تعلمها", iconType: "bookopen" },
-          { num: "3", title: "ابدأ المغامرة", desc: "تعلم، العب، واجمع النقاط والشهادات", iconType: "rocketlaunch" },
+          { num: "3", title: "ابدأ المغامرة", desc: "شاهد الدرس، أكمل التدريب، وتابع تقدمك", iconType: "rocketlaunch" },
         ],
       },
       sims: {
@@ -145,7 +144,7 @@ export default function Home() {
         title: "أسئلة شائعة",
         items: [
           { q: "هل المنصة مجانية حقاً؟", a: "نعم، مجانية ١٠٠٪ لجميع الطلاب. نحن مبادرة غير ربحية." },
-          { q: "ما هي المراحل المتوفرة؟", a: "نغطي المرحلة الابتدائية (١-٨)، والثانوية قريباً." },
+          { q: "ما هي المواد المتوفرة؟", a: "تتوفر حالياً دروس الرياضيات واللغة الإنجليزية، ونضيف محتوى جديداً باستمرار." },
           { q: "هل أحتاج إنترنت دائم؟", a: "نعم، تحتاج اتصال بالإنترنت لمشاهدة الدروس." },
         ],
       },
@@ -156,7 +155,7 @@ export default function Home() {
       },
       footer: {
         tagline: "نبني مستقبل السودان، طفل بطفل",
-        links: { privacy: "الخصوصية", contact: "تواصل معنا", donate: "تبرّع" },
+        links: { privacy: "الخصوصية", contact: "تواصل معنا", donate: "ادعم آمال" },
         copyright: "© ٢٠٢٦ مدرسة آمال",
       },
     },
@@ -171,7 +170,7 @@ export default function Home() {
         titleAnd: "and",
         titleHighlight2: "play",
         title2: "for Sudanese kids",
-        subtitle: "A free fun learning platform with interactive lessons, practice, and certified Sudanese curriculum",
+        subtitle: "A free learning platform with interactive lessons and curriculum-aligned Practice for Sudanese children",
         cta1: "Start Now",
         cta2: "Try a sample lesson",
       },
@@ -183,7 +182,7 @@ export default function Home() {
           { title: "Fun Lessons", desc: "Interactive videos with animations that make learning an adventure", color: "from-[#007229] to-[#00913D]", iconType: "video" },
           { title: "Practice & Feedback", desc: "Fun practice with instant feedback so you know your level and improve", color: "from-[#D21034] to-[#E8334F]", iconType: "trophy" },
           { title: "Learning Games", desc: "Fun quizzes and challenges that let you learn while playing", color: "from-[#005C22] to-[#007229]", iconType: "gamepad" },
-          { title: "Badges & Awards", desc: "Collect points and earn certificates and achievement badges", color: "from-amber-500 to-orange-600", iconType: "trophy" },
+          { title: "Progress Tracking", desc: "See completed lessons and Practice, then continue where you left off", color: "from-amber-500 to-orange-600", iconType: "trophy" },
         ],
       },
       subjects: {
@@ -191,7 +190,6 @@ export default function Home() {
         title: "Pick your favorite subject",
         items: [
           { name: "Mathematics", iconType: "math", color: "from-[#007229] to-[#00913D]" },
-          { name: "Science", iconType: "science", color: "from-[#D21034] to-[#E8334F]" },
           { name: "English", iconType: "globe", color: "from-[#005C22] to-[#007229]" },
         ],
       },
@@ -204,7 +202,7 @@ export default function Home() {
         steps: [
           { num: "1", title: "Create Account", desc: "Sign up for free in less than a minute.", iconType: "sparkle" },
           { num: "2", title: "Choose Subjects", desc: "Select your grade and subjects you want to learn.", iconType: "bookopen" },
-          { num: "3", title: "Start Adventure", desc: "Learn, play, and collect points and certificates.", iconType: "rocketlaunch" },
+          { num: "3", title: "Start Adventure", desc: "Watch the lesson, complete Practice, and track your progress.", iconType: "rocketlaunch" },
         ],
       },
       sims: {
@@ -230,7 +228,7 @@ export default function Home() {
         title: "Common Questions",
         items: [
           { q: "Is the platform really free?", a: "Yes, 100% free for all students. We're a non-profit initiative." },
-          { q: "What grade levels are available?", a: "We cover primary school (1-8), with secondary coming soon." },
+          { q: "Which subjects are available?", a: "Maths and English lessons are available now, with new content added regularly." },
           { q: "Do I need constant internet?", a: "Yes, you need an internet connection to watch lessons." },
         ],
       },
@@ -241,7 +239,7 @@ export default function Home() {
       },
       footer: {
         tagline: "Building Sudan's future, one child at a time",
-        links: { privacy: "Privacy", contact: "Contact", donate: "Donate" },
+        links: { privacy: "Privacy", contact: "Contact", donate: "Support Amal" },
         copyright: "© 2026 Amal School",
       },
     },
@@ -444,7 +442,7 @@ export default function Home() {
               </h2>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 sm:gap-6 lg:gap-8">
+            <div className="mx-auto grid max-w-4xl grid-cols-2 gap-3 sm:gap-6 lg:gap-8">
               {txt.subjects.items.map((subject, i) => (
                 <Link
                   key={i}
@@ -757,8 +755,8 @@ export default function Home() {
 
             <div className="flex items-center gap-4 sm:gap-8 text-xs sm:text-sm text-gray-600">
               <a href="/privacy" className="hover:text-[#007229] transition-colors">{txt.footer.links.privacy}</a>
-              <a href="/terms" className="hover:text-[#007229] transition-colors">{txt.footer.links.contact}</a>
-              <a href="#" className="hover:text-[#D21034] transition-colors">{txt.footer.links.donate}</a>
+              <a href="mailto:admin@amalschool.org" className="hover:text-[#007229] transition-colors">{txt.footer.links.contact}</a>
+              <a href="mailto:admin@amalschool.org?subject=Support%20Amal%20School" className="hover:text-[#D21034] transition-colors">{txt.footer.links.donate}</a>
             </div>
 
             <p className="text-xs sm:text-sm text-gray-500">{txt.footer.copyright}</p>

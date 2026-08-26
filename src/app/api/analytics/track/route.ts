@@ -6,7 +6,6 @@ import {
 import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
 
 const MAX_BODY_BYTES = 4096;
-const RETENTION_MONTHS = 13;
 
 export async function POST(request: NextRequest) {
   const contentLength = Number(request.headers.get("content-length") || 0);
@@ -43,15 +42,6 @@ export async function POST(request: NextRequest) {
   if (error) {
     console.error("Analytics insert failed:", error.message);
     return new NextResponse(null, { status: 204 });
-  }
-
-  if (Math.random() < 0.01) {
-    const cutoff = new Date();
-    cutoff.setMonth(cutoff.getMonth() - RETENTION_MONTHS);
-    void service
-      .from("analytics_events")
-      .delete()
-      .lt("created_at", cutoff.toISOString());
   }
 
   return new NextResponse(null, { status: 204 });

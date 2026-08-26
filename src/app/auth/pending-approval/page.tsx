@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { clearAuthCache } from "@/lib/supabase/auth-cache";
+import { clearPrivateOfflineData } from "@/lib/offline/db";
 
 const translations = {
   ar: {
@@ -69,6 +70,7 @@ export default function PendingApprovalPage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    await clearPrivateOfflineData();
     clearAuthCache();
     router.push("/");
   };

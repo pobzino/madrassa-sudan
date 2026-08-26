@@ -17,6 +17,7 @@ import {
   getAllOfflineLessons,
   getQueuedUpdates,
   clearQueuedUpdates,
+  prepareOfflineStorageForUser,
   type DownloadState,
 } from "@/lib/offline/db";
 import {
@@ -116,8 +117,11 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
-    queueMicrotask(() => {
-      void loadState();
+    queueMicrotask(async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) await prepareOfflineStorageForUser(user.id);
+      await loadState();
     });
 
     return () => {

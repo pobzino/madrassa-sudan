@@ -35,7 +35,7 @@ Please do not submit home addresses, identity documents, medical records, or oth
 
 We collect limited, cookieless analytics to understand whether the website and learning journey are working. An analytics record may contain the action taken, page path, interface language, a campaign label or referring website domain, lesson or Practice content identifiers, progress milestones, score percentages, broad error categories, and the time of the action. We do not store full referring URLs.
 
-Our anonymous analytics records do not contain names, account IDs, IP addresses, advertising IDs, device fingerprints, Practice answers, or persistent visitor identifiers. Saved account, lesson progress, and Practice attempt records may be aggregated separately to report participation, completion, pass, retry, and return rates without exposing individual learners in the analytics dashboard. These measures are used only by authorised Amal School administrators.
+Our anonymous analytics records do not contain names, account IDs, IP addresses, advertising IDs, device fingerprints, Practice answers, or persistent visitor identifiers. To prevent automated signup abuse, we retain a one-way hashed request fingerprint for no more than 48 hours. Saved account, lesson progress, and Practice attempt records may be aggregated separately to report participation, completion, pass, retry, and return rates without exposing individual learners in the analytics dashboard. These measures are used only by authorised Amal School administrators.
 
 ## 3. How We Use Information
 
@@ -62,6 +62,7 @@ Information may be shared only when needed with:
 - Partner organisations supporting the relevant programme or refugee community
 - Service providers that host or operate the platform, including Supabase and Netlify
 - OpenAI when authorised staff use AI tools to help draft lesson or Practice content; generated content should be reviewed before publication
+- ElevenLabs when Amal School generates Arabic or English narration for published Practice questions; we send the question text, not a learner's identity or answer
 - WhatsApp, Zoom, or email providers when those services are used for communication or lessons
 - Safeguarding or legal authorities when necessary to protect a child or comply with law
 
@@ -69,7 +70,7 @@ These organisations may process information in other countries. We take reasonab
 
 ## 5. Children's Privacy and Safety
 
-We design Amal School for children and aim to collect only the information needed to provide and improve learning. Children's accounts and programme participation may require parent or caregiver involvement. Student progress is not public, and children should not share passwords or unnecessary personal information in answers or messages.
+We design Amal School for children and aim to collect only the information needed to provide and improve learning. Public enrolment is completed by a parent or caregiver; children do not create public accounts independently. Student progress is not public, and children should not share passwords or unnecessary personal information in answers or messages.
 
 If we become aware that personal information was collected without appropriate permission, a parent or caregiver can ask us to review or delete it.
 

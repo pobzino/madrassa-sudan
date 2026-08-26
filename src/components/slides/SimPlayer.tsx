@@ -26,6 +26,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import SlideCard from './SlideCard';
 import {
@@ -49,6 +50,26 @@ import ExplorationOverlay from '@/components/explorations/ExplorationOverlay';
 import { slideToInteraction } from '@/lib/interactions/adapters';
 import { gradeInteraction } from '@/lib/interactions/grader';
 import { OwlCorrect, OwlWrong, OwlPointing } from '@/components/illustrations';
+
+const LASER_FADE_MS = 300;
+const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2] as const;
+
+function subscribeToNetworkStatus(onStoreChange: () => void) {
+  window.addEventListener('online', onStoreChange);
+  window.addEventListener('offline', onStoreChange);
+  return () => {
+    window.removeEventListener('online', onStoreChange);
+    window.removeEventListener('offline', onStoreChange);
+  };
+}
+
+function getOfflineSnapshot() {
+  return !navigator.onLine;
+}
+
+function getServerOfflineSnapshot() {
+  return false;
+}
 
 function isEditableKeyTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -369,7 +390,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   );
   const [playbackMs, setPlaybackMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(!audio_url);
   const [error, setError] = useState<string | null>(null);
   const [activeGate, setActiveGate] = useState<AnyGate | null>(null);
   const [activeGateIdx, setActiveGateIdx] = useState<number | null>(null);
@@ -395,7 +416,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showChapters, setShowChapters] = useState(false);
   const [notesExpanded, setNotesExpanded] = useState(false);
-  const [isOffline, setIsOffline] = useState(false);
+  const isOffline = useSyncExternalStore(
+    subscribeToNetworkStatus,
+    getOfflineSnapshot,
+    getServerOfflineSnapshot
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   // Gate indices already surfaced to the viewer (cleared on seek so going
   // backwards re-arms them). A Set keyed by index into `gates` lets us do
@@ -443,6 +468,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   // Audio-less sims: mark ready immediately so the play button is enabled.
   useEffect(() => {
     if (!audio_url) {
+      // This synchronizes readiness with an external media source prop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       markAudioReady();
     }
   }, [audio_url, markAudioReady]);
@@ -454,11 +481,15 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   // Keep audioSrc in sync when the prop changes (e.g. parent re-fetches).
   useEffect(() => {
     audioRefreshAttemptRef.current = 0;
+    // The source may be refreshed by the parent after a signed URL changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAudioSrc(audio_url);
   }, [audio_url]);
 
   useEffect(() => {
     if (!audioSrc) return;
+    // Readiness belongs to the current external audio resource.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setReady(false);
 
     const audio = audioRef.current;
@@ -604,6 +635,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       const realMs = virtualToRealMs(savedMs, effectiveClips);
       const audio = audioRef.current;
       if (audio) audio.currentTime = realMs / 1000;
+      // Restore the externally persisted media position after metadata loads.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       applyAt(realMs, true);
     } catch { /* ignore */ }
   }, [resumeKey, ready, virtualTotalMs, effectiveClips, applyAt]);
@@ -739,6 +772,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     if (audio && !audio.paused) return;
     const realMs = audio ? audio.currentTime * 1000 : 0;
     appliedEventCountRef.current = eventsAtMs(realMs);
+    // Re-project the event-sourced surface when the external deck changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSurface(rebuildSimState(deck, projectedEvents, realMs));
     setPlaybackMs(realToVirtualMs(realMs, effectiveClips));
     lastEmitWallMsRef.current = 0;
@@ -1019,6 +1054,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     if (!activeGate || !currentSlide || !savedResponses) return;
     const saved = savedResponses[currentSlide.id];
     if (!saved || saved.answer == null) return;
+    // Hydrate an answer from the persisted response supplied by the parent.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStudentAnswer(saved.answer as InteractionAnswer);
     // Detect teacher-reviewed types
     const interaction = slideToInteraction(currentSlide);
@@ -1098,8 +1135,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   }, [currentSlide, language]);
 
   // Find the most recent laser event within 300ms of current playback time
-  const LASER_FADE_MS = 300;
-  const activeLaser = useMemo(() => {
+  const activeLaser = (() => {
     const realMs = virtualToRealMs(playbackMs, effectiveClips);
     for (let i = projectedEvents.length - 1; i >= 0; i--) {
       const e = projectedEvents[i];
@@ -1112,7 +1148,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       if (e.t < realMs - LASER_FADE_MS) break;
     }
     return null;
-  }, [playbackMs, effectiveClips, projectedEvents]);
+  })();
 
   const progressPct = virtualTotalMs > 0
     ? Math.min(100, (playbackMs / virtualTotalMs) * 100)
@@ -1149,6 +1185,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     }
     if (Object.keys(initial).length > 0) {
       initialGateResultsApplied.current = true;
+      // Seed marker state once from persisted responses.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setGateResults(initial);
     }
   }, [gates, slideIdAtMs]);
@@ -1192,7 +1230,6 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isPlaying, handlePlay, handlePause]);
 
-  const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2] as const;
   const cyclePlaybackRate = useCallback(() => {
     setPlaybackRate((prev) => {
       const idx = PLAYBACK_RATES.indexOf(prev as typeof PLAYBACK_RATES[number]);
@@ -1231,19 +1268,6 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
 
-  // Offline detection
-  useEffect(() => {
-    const goOffline = () => setIsOffline(true);
-    const goOnline = () => setIsOffline(false);
-    setIsOffline(!navigator.onLine);
-    window.addEventListener('offline', goOffline);
-    window.addEventListener('online', goOnline);
-    return () => {
-      window.removeEventListener('offline', goOffline);
-      window.removeEventListener('online', goOnline);
-    };
-  }, []);
-
   // Close chapters dropdown on outside click
   useEffect(() => {
     if (!showChapters) return;
@@ -1255,15 +1279,6 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     document.addEventListener('click', onClick, true);
     return () => document.removeEventListener('click', onClick, true);
   }, [showChapters]);
-
-  const handleProgressBarClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      handleSeek(pct * virtualTotalMs);
-    },
-    [handleSeek, virtualTotalMs]
-  );
 
   const handleProgressBarPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {

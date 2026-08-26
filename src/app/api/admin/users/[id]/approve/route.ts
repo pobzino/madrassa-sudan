@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
 
 export async function PATCH(
   request: NextRequest,
@@ -38,7 +39,45 @@ export async function PATCH(
       );
     }
 
-    const { data: updated, error: updateError } = await supabase
+    if (!hasServiceRoleConfig()) {
+      return NextResponse.json({ error: "Admin approval is not configured" }, { status: 503 });
+    }
+
+    const service = createServiceClient();
+    const { data: targetAuthData, error: targetAuthError } =
+      await service.auth.admin.getUserById(targetUserId);
+    if (targetAuthError || !targetAuthData.user) {
+      return NextResponse.json({ error: "Authentication account not found" }, { status: 404 });
+    }
+
+    if (approved) {
+      const authUser = targetAuthData.user;
+      const isConfirmed = Boolean(authUser.email_confirmed_at || authUser.confirmed_at);
+      const isWhatsappOnly = authUser.email?.endsWith("@parents.amalschool.app") ?? false;
+
+      if (!isConfirmed && !isWhatsappOnly) {
+        return NextResponse.json(
+          { error: "The applicant must verify their email before approval." },
+          { status: 409 },
+        );
+      }
+
+      if (!isConfirmed && isWhatsappOnly) {
+        const { error: confirmError } = await service.auth.admin.updateUserById(
+          targetUserId,
+          { email_confirm: true },
+        );
+        if (confirmError) {
+          console.error("Approve WhatsApp parent confirmation error:", confirmError);
+          return NextResponse.json(
+            { error: "Could not activate the parent's WhatsApp login" },
+            { status: 500 },
+          );
+        }
+      }
+    }
+
+    const { data: updated, error: updateError } = await service
       .from("profiles")
       .update({ is_approved: approved })
       .eq("id", targetUserId)

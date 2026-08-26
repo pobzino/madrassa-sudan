@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../../src/lib/database.types";
 import {
@@ -10,6 +11,12 @@ function logSlideJob(level: "log" | "warn" | "error", message: string, details: 
   console[level](JSON.stringify({ message, ...details }));
 }
 
+function secretsMatch(left: string, right: string) {
+  const leftBytes = Buffer.from(left);
+  const rightBytes = Buffer.from(right);
+  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
+}
+
 export async function handler(event: {
   headers: Record<string, string | undefined>;
   body: string | null;
@@ -20,6 +27,7 @@ export async function handler(event: {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     "";
+  const slideJobSecret = process.env.SLIDE_JOB_SECRET?.trim() || "";
 
   let payload: Record<string, unknown> | null = null;
 
@@ -38,7 +46,6 @@ export async function handler(event: {
   const requestSecret =
     event.headers["x-slide-job-secret"] ||
     event.headers["X-Slide-Job-Secret"] ||
-    (typeof payload?.internalSecret === "string" ? payload.internalSecret : "") ||
     "";
   const accessToken = typeof payload?.accessToken === "string" ? payload.accessToken : "";
 
@@ -58,7 +65,7 @@ export async function handler(event: {
   }
 
   const usesInternalSecret =
-    Boolean(requestSecret) && Boolean(serviceRoleKey) && requestSecret === serviceRoleKey;
+    Boolean(requestSecret) && Boolean(slideJobSecret) && secretsMatch(requestSecret, slideJobSecret);
 
   let authenticatedUserId: string | null = null;
 

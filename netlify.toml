@@ -1,3 +1,6 @@
+[build.environment]
+  NODE_VERSION = "22"
+
 [functions]
   # Increase timeout for AI generation routes (requires Netlify Pro for >10s)
   external_node_modules = ["openai"]

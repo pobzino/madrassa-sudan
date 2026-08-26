@@ -4,6 +4,7 @@ const STATIC_CACHE = 'amal-static-v2';
 const PAGE_CACHE = 'amal-pages-v2';
 const SIM_AUDIO_CACHE = 'sim-audio-downloads';
 const OFFLINE_URL = '/offline';
+const PUBLIC_PAGE_PATHS = new Set(['/', '/sample-lesson', '/privacy', '/terms', OFFLINE_URL]);
 
 // Install — pre-cache offline fallback page
 self.addEventListener('install', (event) => {
@@ -32,6 +33,9 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET and non-http(s)
   if (request.method !== 'GET') return;
   if (!url.protocol.startsWith('http')) return;
+
+  // Never put personalized React Server Component payloads in a shared cache.
+  if (url.searchParams.has('_rsc') || request.headers.get('RSC') === '1') return;
 
   // 1. Static assets (/_next/static/) — cache-first (immutable hashed files)
   if (url.pathname.startsWith('/_next/static/')) {
@@ -62,8 +66,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. Sim audio / Supabase storage — cache-first
-  if (url.pathname.startsWith('/offline-audio/') || url.pathname.includes('/storage/') || url.pathname.includes('/sim-audio/')) {
+  // 3. Explicit offline audio copies are safe to cache. Signed/private storage
+  // responses stay network-only and are copied here only by the download manager.
+  if (url.pathname.startsWith('/offline-audio/')) {
     event.respondWith(
       caches.open(SIM_AUDIO_CACHE).then((cache) =>
         cache.match(request).then((cached) => {
@@ -75,13 +80,30 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (url.pathname.includes('/storage/')) return;
+
   // 4. API routes — network-only
   if (url.pathname.startsWith('/api/')) {
     return;
   }
 
-  // 5. Navigation requests — network-first, cache response, fallback to cached page then /offline
+  // 5. Public navigation requests may be cached. Authenticated pages are always
+  // network-only so one family cannot see another account's cached dashboard on
+  // a shared device after logout.
   if (request.mode === 'navigate') {
+    if (!PUBLIC_PAGE_PATHS.has(url.pathname)) {
+      event.respondWith(
+        fetch(request).catch(() =>
+          caches.open(PAGE_CACHE).then((cache) =>
+            cache.match(OFFLINE_URL).then((cached) =>
+              cached || new Response('Offline', { status: 503 })
+            )
+          )
+        )
+      );
+      return;
+    }
+
     event.respondWith(
       caches.open(PAGE_CACHE).then((cache) =>
         fetch(request).then((response) => {

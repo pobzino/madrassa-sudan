@@ -1,6 +1,6 @@
 // Parents can create an account without an email address: we derive a stable
 // login identifier from their WhatsApp number. The domain never receives mail
-// (email confirmations are disabled); it only satisfies the email format.
+// (it is activated only after admin approval); it only satisfies the email format.
 
 /** Convert Arabic-Indic (٠-٩) and Eastern Arabic (۰-۹) digits to Latin. */
 export function normalizeArabicDigits(value: string): string {

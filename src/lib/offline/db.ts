@@ -53,6 +53,7 @@ export interface DownloadState {
 
 const DB_NAME = "amal-offline";
 const DB_VERSION = 1;
+const OFFLINE_OWNER_KEY = "amal-offline-owner";
 
 let dbInstance: IDBDatabase | null = null;
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -262,4 +263,43 @@ export async function deleteCachedSimAudio(lessonId: string): Promise<void> {
   } catch {
     // Ignore cache errors
   }
+}
+
+/** Remove account-scoped offline data when a user signs out or deletes an account. */
+export async function clearPrivateOfflineData(): Promise<void> {
+  if (dbInstance) {
+    dbInstance.close();
+    dbInstance = null;
+    dbPromise = null;
+  }
+
+  const deleteDatabase = new Promise<void>((resolve) => {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = () => resolve();
+    request.onerror = () => resolve();
+    request.onblocked = () => resolve();
+  });
+
+  await Promise.all([
+    deleteDatabase,
+    caches.delete(SIM_AUDIO_CACHE),
+    caches.delete("amal-pages-v2"),
+  ]);
+  localStorage.removeItem(OFFLINE_OWNER_KEY);
+
+  // Restore the non-personal fallback removed with the page cache.
+  try {
+    const pages = await caches.open("amal-pages-v2");
+    await pages.add("/offline");
+  } catch {
+    // The user may already be offline; the next service-worker update restores it.
+  }
+}
+
+export async function prepareOfflineStorageForUser(userId: string): Promise<void> {
+  const existingOwner = localStorage.getItem(OFFLINE_OWNER_KEY);
+  if (existingOwner && existingOwner !== userId) {
+    await clearPrivateOfflineData();
+  }
+  localStorage.setItem(OFFLINE_OWNER_KEY, userId);
 }

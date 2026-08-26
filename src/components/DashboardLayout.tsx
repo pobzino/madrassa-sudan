@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { clearPrivateOfflineData } from "@/lib/offline/db";
 import type { Profile } from "@/lib/database.types";
 import { clearAuthCache, getCachedProfile, getCachedUser } from "@/lib/supabase/auth-cache";
 import FeedbackModal from "@/components/FeedbackModal";
@@ -167,6 +168,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
+    await clearPrivateOfflineData();
     clearAuthCache();
     router.push("/");
   };

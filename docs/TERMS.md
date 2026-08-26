@@ -6,7 +6,7 @@
 
 These Terms and Conditions govern use of Amal School. Amal School is a free learning platform focused on helping Sudanese children continue their education through online Maths and English lessons, interactive Practice, progress tracking, and teacher support.
 
-By using the platform, you agree to these terms. A parent or caregiver must agree on behalf of a child where local law or the programme requires it. If you do not agree, do not create an account or use the platform.
+By using the platform, you agree to these terms. A parent or caregiver must complete public enrolment and agree on behalf of a child. If you do not agree, do not create an account or use the platform.
 
 ## 2. The Programme
 
