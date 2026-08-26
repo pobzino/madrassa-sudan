@@ -163,6 +163,6 @@ async function loadSampleLessonUncached(): Promise<SampleLessonData> {
 
 export const loadSampleLesson = unstable_cache(
   loadSampleLessonUncached,
-  ["public-sample-lesson"],
-  { revalidate: 300, tags: ["public-sample-lesson"] },
+  ["public-sample-lesson-v2"],
+  { revalidate: 300, tags: ["public-sample-lesson-v2"] },
 );

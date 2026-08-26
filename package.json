@@ -14,6 +14,7 @@
     "ingest:lessons": "node scripts/ingest-lesson-embeddings.mjs",
     "render:lesson": "node scripts/render-lesson-video.mjs",
     "inspect:slides": "node scripts/inspect-slides.mjs",
+    "audit:practices": "node scripts/audit-practice-quality.mjs",
     "test:prod-sim": "node scripts/sim-prod-smoke.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
