@@ -302,7 +302,15 @@ export function LandingHeroScene() {
           <g stroke="#ffd23f" strokeWidth="3" strokeLinecap="round">
             {Array.from({ length: 12 }, (_, i) => {
               const a = (i * Math.PI) / 6;
-              return <line key={i} x1={32 + Math.cos(a) * 24} y1={32 + Math.sin(a) * 24} x2={32 + Math.cos(a) * 31} y2={32 + Math.sin(a) * 31} />;
+              return (
+                <line
+                  key={i}
+                  x1={(32 + Math.cos(a) * 24).toFixed(3)}
+                  y1={(32 + Math.sin(a) * 24).toFixed(3)}
+                  x2={(32 + Math.cos(a) * 31).toFixed(3)}
+                  y2={(32 + Math.sin(a) * 31).toFixed(3)}
+                />
+              );
             })}
           </g>
           <circle cx="32" cy="32" r="20" fill="#ffe16b" />
@@ -347,7 +355,10 @@ export function LandingHeroScene() {
       <svg className="absolute bottom-0 left-0 w-full h-[96px]" viewBox="0 0 1440 96" preserveAspectRatio="none" fill="#aed7b6"><path d="M0 50c320-44 540-20 720 14s440 34 720-14v46H0z" /></svg>
 
       {/* owl trio standing on the hills */}
-      <div className="absolute bottom-[26px] left-1/2 -translate-x-1/2 flex items-end justify-center gap-4 sm:gap-12">
+      <div
+        data-amal-hero-owls
+        className="absolute bottom-[26px] left-1/2 -translate-x-1/2 flex items-end justify-center gap-4 sm:gap-12"
+      >
         <div className="relative w-20 sm:w-28 hidden sm:block">
           <OwlMath className="w-full" />
           <GroundShadow className="w-16 h-3" />
@@ -375,9 +386,13 @@ export function LandingHeroScene() {
 }
 
 /* ── Hero banner scene ── */
-export function HeroScene() {
+export function HeroScene({ mirrored = false }: { mirrored?: boolean }) {
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+      style={{ transform: mirrored ? 'scaleX(-1)' : undefined }}
+    >
       {/* Sky → meadow */}
       <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, #dcefff 0%, #e9f3ff 38%, #eaf7ec 70%, #dff1e2 100%)' }} />
 
