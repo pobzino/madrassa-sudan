@@ -6,6 +6,7 @@ import { getCanonicalSiteUrl } from "@/lib/site-url";
 import { Toaster } from "sonner";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
+import { LEGAL_ENTITY } from "@/lib/legal-entity";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -67,10 +68,35 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const organisationJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "EducationalOrganization",
+    name: LEGAL_ENTITY.brandName,
+    legalName: LEGAL_ENTITY.registeredName,
+    url: getCanonicalSiteUrl(),
+    identifier: {
+      "@type": "PropertyValue",
+      propertyID: "Companies House company number",
+      value: LEGAL_ENTITY.companyNumber,
+    },
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: "3 Pinedene Carlton Grove",
+      addressLocality: "London",
+      postalCode: "SE15 2UL",
+      addressCountry: "GB",
+    },
+    sameAs: [LEGAL_ENTITY.companiesHouseUrl],
+  };
+
   // Default to English for first-time visitors and crawlers; saved preferences hydrate client-side.
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>
       <body className={`${inter.variable} ${cairo.variable} ${fredoka.variable} font-cairo antialiased`}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organisationJsonLd) }}
+        />
         <LanguageWrapper>
           {children}
         </LanguageWrapper>

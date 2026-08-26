@@ -12,6 +12,32 @@ export default function ServiceWorkerRegister() {
   useEffect(() => {
     if (!canUseServiceWorker()) return;
 
+    // Development chunks are not content-hashed like production bundles. A
+    // stale worker can otherwise mix old client code with fresh server HTML.
+    if (process.env.NODE_ENV !== "production") {
+      const disableDevelopmentWorker = async () => {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+
+        if ("caches" in window) {
+          const cacheNames = await window.caches.keys();
+          await Promise.all(
+            cacheNames
+              .filter(
+                (name) =>
+                  name.startsWith("amal-sw-") ||
+                  name.startsWith("amal-static-") ||
+                  name.startsWith("amal-pages-"),
+              )
+              .map((name) => window.caches.delete(name)),
+          );
+        }
+      };
+
+      void disableDevelopmentWorker();
+      return;
+    }
+
     let cancelled = false;
 
     const register = async () => {

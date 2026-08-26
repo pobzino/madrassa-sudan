@@ -1,8 +1,10 @@
 # Privacy Policy - Amal School
 
-**Last Updated:** August 24, 2026
+**Last Updated:** August 26, 2026
 
 ## 1. About Amal School
+
+Amal School is operated by **AMAL SCHOOL COMMUNITY INTEREST COMPANY**, a community interest company limited by guarantee registered in England and Wales with company number **17421047**. The company is the data controller for the personal information described in this policy. Our registered office is **3 Pinedene Carlton Grove, London, England, SE15 2UL**.
 
 Amal School is a free online learning platform focused on helping Sudanese children continue their education. We provide Maths and English lessons, interactive Practice activities, progress tracking, and teacher support. We work with families, volunteers, and partner organisations, including teams supporting refugee communities.
 
@@ -108,3 +110,9 @@ We may update this policy as Amal School and its programmes develop. The date at
 For privacy questions, safeguarding concerns, account requests, or complaints, contact:
 
 **Email:** [admin@amalschool.org](mailto:admin@amalschool.org)
+
+- **Registered name:** AMAL SCHOOL COMMUNITY INTEREST COMPANY
+- **Legal form:** Community interest company limited by guarantee
+- **Registration:** England and Wales · Company number 17421047
+- **Registered office:** 3 Pinedene Carlton Grove, London, England, SE15 2UL
+- **Website:** [https://amalschool.org](https://amalschool.org)

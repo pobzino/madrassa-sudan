@@ -1,10 +1,10 @@
 # Terms and Conditions - Amal School
 
-**Last Updated:** August 22, 2026
+**Last Updated:** August 26, 2026
 
 ## 1. About These Terms
 
-These Terms and Conditions govern use of Amal School. Amal School is a free learning platform focused on helping Sudanese children continue their education through online Maths and English lessons, interactive Practice, progress tracking, and teacher support.
+These Terms and Conditions govern use of Amal School, which is operated by **AMAL SCHOOL COMMUNITY INTEREST COMPANY**, a community interest company limited by guarantee registered in England and Wales with company number **17421047**. Our registered office is **3 Pinedene Carlton Grove, London, England, SE15 2UL**. Amal School is a free learning platform focused on helping Sudanese children continue their education through online Maths and English lessons, interactive Practice, progress tracking, and teacher support.
 
 By using the platform, you agree to these terms. A parent or caregiver must complete public enrolment and agree on behalf of a child. If you do not agree, do not create an account or use the platform.
 
@@ -85,3 +85,9 @@ We may update these terms as the platform and programmes develop. The date at th
 Questions about these terms, accounts, content, or safeguarding can be sent to:
 
 **Email:** [admin@amalschool.org](mailto:admin@amalschool.org)
+
+- **Registered name:** AMAL SCHOOL COMMUNITY INTEREST COMPANY
+- **Legal form:** Community interest company limited by guarantee
+- **Registration:** England and Wales · Company number 17421047
+- **Registered office:** 3 Pinedene Carlton Grove, London, England, SE15 2UL
+- **Website:** [https://amalschool.org](https://amalschool.org)

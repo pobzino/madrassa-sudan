@@ -29,6 +29,8 @@ import {
 } from "@/components/illustrations";
 import { LandingHeroScene, SectionScene, StepGraphic, LeafyGreenBg, TeacherScene } from "@/components/dashboard/DashboardScenes";
 import HomepageSamplePreview from "@/components/sample/HomepageSamplePreview";
+import { SudanFlagToAmalOwl } from "@/components/brand/SudanFlagToAmalOwl";
+import { LEGAL_ENTITY } from "@/lib/legal-entity";
 
 // Helper function to render feature icons
 const FeatureIcon = ({ type, className }: { type: string; className?: string }) => {
@@ -143,7 +145,7 @@ export default function Home() {
       faq: {
         title: "أسئلة شائعة",
         items: [
-          { q: "هل المنصة مجانية حقاً؟", a: "نعم، مجانية ١٠٠٪ لجميع الطلاب. نحن مبادرة غير ربحية." },
+          { q: "هل المنصة مجانية حقاً؟", a: "نعم، مجانية ١٠٠٪ لجميع الطلاب. تديرها شركة آمال سكول للمصلحة المجتمعية، وهي شركة مسجلة في إنجلترا وويلز." },
           { q: "ما هي المواد المتوفرة؟", a: "تتوفر حالياً دروس الرياضيات واللغة الإنجليزية، ونضيف محتوى جديداً باستمرار." },
           { q: "هل أحتاج إنترنت دائم؟", a: "نعم، تحتاج اتصال بالإنترنت لمشاهدة الدروس." },
         ],
@@ -155,7 +157,7 @@ export default function Home() {
       },
       footer: {
         tagline: "نبني مستقبل السودان، طفل بطفل",
-        links: { privacy: "الخصوصية", contact: "تواصل معنا", donate: "ادعم آمال" },
+        links: { privacy: "الخصوصية", terms: "الشروط", contact: "تواصل معنا", donate: "ادعم آمال" },
         copyright: "© ٢٠٢٦ مدرسة آمال",
       },
     },
@@ -227,7 +229,7 @@ export default function Home() {
       faq: {
         title: "Common Questions",
         items: [
-          { q: "Is the platform really free?", a: "Yes, 100% free for all students. We're a non-profit initiative." },
+          { q: "Is the platform really free?", a: "Yes, 100% free for all students. Amal School is operated by a registered community interest company." },
           { q: "Which subjects are available?", a: "Maths and English lessons are available now, with new content added regularly." },
           { q: "Do I need constant internet?", a: "Yes, you need an internet connection to watch lessons." },
         ],
@@ -239,7 +241,7 @@ export default function Home() {
       },
       footer: {
         tagline: "Building Sudan's future, one child at a time",
-        links: { privacy: "Privacy", contact: "Contact", donate: "Support Amal" },
+        links: { privacy: "Privacy", terms: "Terms", contact: "Contact", donate: "Support Amal" },
         copyright: "© 2026 Amal School",
       },
     },
@@ -252,9 +254,17 @@ export default function Home() {
       {/* Navbar */}
       <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center">
-            <MadrassaLogo size="sm" className="flex sm:hidden" />
-            <MadrassaLogo size="md" className="hidden sm:flex" />
+          <Link href="/" className="flex items-center gap-1.5 sm:gap-2">
+            <span className="block h-8 w-8 shrink-0 sm:h-10 sm:w-10">
+              <SudanFlagToAmalOwl
+                markOnly
+                showReplay={false}
+                className="h-full w-full"
+              />
+            </span>
+            <span className="font-fredoka text-xl font-semibold tracking-tight text-[#007229] sm:text-2xl">
+              amal school
+            </span>
           </Link>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
@@ -303,12 +313,18 @@ export default function Home() {
 
       <main className="pt-14 sm:pt-16">
         {/* Hero Section */}
-        <section className="relative pt-6 sm:pt-8 overflow-hidden">
+        <section
+          data-amal-home-hero
+          className="relative min-h-[calc(100svh-3.5rem)] overflow-hidden pt-6 sm:min-h-[calc(100svh-4rem)] sm:pt-8"
+        >
           {/* Illustrated "learning world" backdrop with the owl trio on the hills */}
           <LandingHeroScene />
 
           <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 pt-4 sm:pt-8 pb-[230px] sm:pb-[300px]">
-            <div className="text-center">
+            <div data-amal-hero-content className="text-center">
+              <p className="mb-3 font-fredoka text-sm font-medium tracking-[0.08em] text-[#007229] sm:mb-4 sm:text-base">
+                For the children of Sudan
+              </p>
               {/* Main headline with colorful highlights */}
               <h1 className="font-fredoka text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-medium text-gray-900 leading-[1.15] sm:leading-[1.1] mb-4 sm:mb-6">
                 {txt.hero.title1}
@@ -755,12 +771,30 @@ export default function Home() {
 
             <div className="flex items-center gap-4 sm:gap-8 text-xs sm:text-sm text-gray-600">
               <a href="/privacy" className="hover:text-[#007229] transition-colors">{txt.footer.links.privacy}</a>
+              <a href="/terms" className="hover:text-[#007229] transition-colors">{txt.footer.links.terms}</a>
               <a href="mailto:admin@amalschool.org" className="hover:text-[#007229] transition-colors">{txt.footer.links.contact}</a>
               <a href="mailto:admin@amalschool.org?subject=Support%20Amal%20School" className="hover:text-[#D21034] transition-colors">{txt.footer.links.donate}</a>
             </div>
 
             <p className="text-xs sm:text-sm text-gray-500">{txt.footer.copyright}</p>
           </div>
+
+          <p
+            dir="ltr"
+            className="mx-auto mt-6 max-w-4xl border-t border-gray-100 pt-5 text-center text-[11px] leading-relaxed text-gray-500 sm:text-xs"
+          >
+            {LEGAL_ENTITY.registeredName} is a community interest company
+            limited by guarantee, registered in {LEGAL_ENTITY.registeredIn}.{" "}
+            <a
+              href={LEGAL_ENTITY.companiesHouseUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline decoration-gray-300 underline-offset-2 hover:text-[#007229]"
+            >
+              Company number {LEGAL_ENTITY.companyNumber}
+            </a>
+            . Registered office: {LEGAL_ENTITY.registeredOffice}.
+          </p>
         </div>
       </footer>
     </div>
