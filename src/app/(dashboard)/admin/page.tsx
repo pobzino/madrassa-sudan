@@ -66,6 +66,10 @@ type AdminUser = {
       involvement_areas?: string[];
       weekly_hours?: string;
     } | null;
+    referral?: {
+      source?: string;
+      other?: string;
+    } | null;
   } | null;
   created_at: string;
 };
@@ -203,16 +207,36 @@ function formatInvolvementArea(value: string) {
   return labels[value] || value;
 }
 
+function formatReferralSource(source: string | undefined, other: string | undefined) {
+  if (!source) return null;
+  if (source === "other") return other ? `Other — ${other}` : "Other";
+
+  const labels: Record<string, string> = {
+    word_of_mouth: "Word of mouth",
+    facebook: "Facebook",
+    instagram: "Instagram",
+    whatsapp: "WhatsApp",
+  };
+  return labels[source] || source;
+}
+
 function UserSignupDetails({ user }: { user: AdminUser }) {
   const parent = user.signup_details?.parent;
   const volunteer = user.signup_details?.teacher_volunteer;
+  const referral = user.signup_details?.referral;
 
-  if (!parent && !volunteer && !user.contact_phone) return null;
+  if (!parent && !volunteer && !user.contact_phone && !referral?.source) return null;
 
   return (
     <div className="mt-2 grid gap-1.5 text-xs text-gray-600">
       {user.contact_phone && (
         <p><span className="font-medium text-gray-700">WhatsApp:</span> {user.contact_phone}</p>
+      )}
+      {referral?.source && (
+        <p>
+          <span className="font-medium text-gray-700">Heard about Amal:</span>{" "}
+          {formatReferralSource(referral.source, referral.other)}
+        </p>
       )}
       {parent && (
         <>

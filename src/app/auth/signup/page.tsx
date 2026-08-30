@@ -102,6 +102,15 @@ const translations = {
     involvementOps: "العمليات",
     involvementOutreach: "التواصل",
     involvementOther: "أخرى",
+    heardAboutLabel: "كيف عرفت عن مدرسة آمال؟",
+    heardAboutPlaceholder: "اختر",
+    heardWordOfMouth: "عن طريق الأصدقاء أو العائلة",
+    heardFacebook: "فيسبوك",
+    heardInstagram: "إنستغرام",
+    heardWhatsapp: "واتساب",
+    heardOther: "أخرى",
+    heardOtherLabel: "يرجى إخبارنا أين",
+    heardOtherPlaceholder: "اكتب إجابتك",
     createAccountBtn: "إنشاء حساب",
     creatingAccount: "جاري إنشاء الحساب...",
     consentLabel: "أوافق على",
@@ -187,6 +196,15 @@ const translations = {
     involvementOps: "Operations",
     involvementOutreach: "Outreach",
     involvementOther: "Other",
+    heardAboutLabel: "Where did you hear about Amal School?",
+    heardAboutPlaceholder: "Select an option",
+    heardWordOfMouth: "Word of mouth",
+    heardFacebook: "Facebook",
+    heardInstagram: "Instagram",
+    heardWhatsapp: "WhatsApp",
+    heardOther: "Other",
+    heardOtherLabel: "Please tell us where",
+    heardOtherPlaceholder: "Type your answer",
     createAccountBtn: "Create Account",
     creatingAccount: "Creating account...",
     consentLabel: "I agree to the",
@@ -209,6 +227,7 @@ const translations = {
 
 type YesNoAnswer = "" | "yes" | "no" | "unsure";
 type InvolvementArea = "teaching" | "tech_platform" | "content_video" | "operations" | "outreach" | "other";
+type ReferralSource = "" | "word_of_mouth" | "facebook" | "instagram" | "whatsapp" | "other";
 
 function SignupForm() {
   const searchParams = useSearchParams();
@@ -248,6 +267,8 @@ function SignupForm() {
   const [educationalBackground, setEducationalBackground] = useState("");
   const [involvementAreas, setInvolvementAreas] = useState<InvolvementArea[]>([]);
   const [weeklyHours, setWeeklyHours] = useState("");
+  const [referralSource, setReferralSource] = useState<ReferralSource>("");
+  const [referralOther, setReferralOther] = useState("");
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
@@ -299,6 +320,14 @@ function SignupForm() {
     { value: "other", label: t.involvementOther },
   ];
 
+  const referralOptions: Array<{ value: Exclude<ReferralSource, "">; label: string }> = [
+    { value: "word_of_mouth", label: t.heardWordOfMouth },
+    { value: "facebook", label: t.heardFacebook },
+    { value: "instagram", label: t.heardInstagram },
+    { value: "whatsapp", label: t.heardWhatsapp },
+    { value: "other", label: t.heardOther },
+  ];
+
   const toggleInvolvementArea = (area: InvolvementArea) => {
     setInvolvementAreas((prev) =>
       prev.includes(area)
@@ -344,6 +373,22 @@ function SignupForm() {
       setLoading(false);
       return;
     }
+
+    if (!referralSource || (referralSource === "other" && !referralOther.trim())) {
+      trackAnalyticsEvent("signup_error", { role, error_type: "validation_referral" });
+      setError(
+        language === "ar"
+          ? "اختر كيف عرفت عن مدرسة آمال، وأدخل إجابتك إذا اخترت أخرى."
+          : "Choose where you heard about Amal School and enter an answer if you select Other."
+      );
+      setLoading(false);
+      return;
+    }
+
+    const referralDetails = {
+      source: referralSource,
+      other: referralSource === "other" ? referralOther.trim() : "",
+    };
 
     const parentDetails =
       role === "parent"
@@ -410,6 +455,7 @@ function SignupForm() {
           language,
           website,
           parent: parentDetails,
+          referral: referralDetails,
         }),
       }).catch(() => null);
 
@@ -439,10 +485,13 @@ function SignupForm() {
           role: role,
           preferred_language: language,
           phone: role === "parent" ? parentWhatsapp.trim() : role === "teacher" ? teacherWhatsapp.trim() : null,
+          referral_source: referralDetails.source,
+          referral_source_other: referralDetails.other || null,
           signup_details: {
             role,
             parent: parentDetails,
             teacher_volunteer: teacherDetails,
+            referral: referralDetails,
           },
           consent_given_at: new Date().toISOString(),
         },
@@ -995,6 +1044,46 @@ function SignupForm() {
                 </div>
               </div>
             )}
+
+            <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4">
+              <label htmlFor="referralSource" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                {t.heardAboutLabel}
+              </label>
+              <select
+                id="referralSource"
+                name="referralSource"
+                required
+                value={referralSource}
+                onChange={(event) => {
+                  const nextSource = event.target.value as ReferralSource;
+                  setReferralSource(nextSource);
+                  if (nextSource !== "other") setReferralOther("");
+                }}
+                className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+              >
+                <option value="">{t.heardAboutPlaceholder}</option>
+                {referralOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+
+              {referralSource === "other" && (
+                <label htmlFor="referralOther" className="block mt-3">
+                  <span className="block text-sm font-semibold text-gray-700 mb-1.5">{t.heardOtherLabel}</span>
+                  <input
+                    id="referralOther"
+                    name="referralOther"
+                    type="text"
+                    required
+                    maxLength={200}
+                    value={referralOther}
+                    onChange={(event) => setReferralOther(event.target.value)}
+                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                    placeholder={t.heardOtherPlaceholder}
+                  />
+                </label>
+              )}
+            </div>
           </div>
 
           {/* Consent Checkbox */}
