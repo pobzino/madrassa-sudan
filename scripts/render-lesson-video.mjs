@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
+import * as tus from 'tus-js-client';
 import { webpackOverride } from '../remotion/webpack-override.mjs';
 
 const projectRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -37,6 +38,8 @@ const VIDEO_BUCKET = 'lesson-videos';
 const COMPOSITION_ID = 'LessonVideo';
 const SIM_AUDIO_BUCKET = 'sim-audio';
 const AUDIO_SIGNED_URL_TTL_SECONDS = 60 * 60 * 6;
+const STANDARD_UPLOAD_LIMIT_BYTES = 50 * 1024 * 1024;
+const TUS_CHUNK_SIZE_BYTES = 6 * 1024 * 1024;
 
 function loadDotEnvLocal() {
   const envPath = path.join(projectRoot, '.env.local');
@@ -119,6 +122,34 @@ function totalClipMs(clipSegments) {
 
 function log(msg) {
   console.log(`[render-lesson-video] ${new Date().toISOString()} ${msg}`);
+}
+
+function uploadLargeVideo({ supabaseUrl, serviceKey, filePath, storagePath, size }) {
+  return new Promise((resolve, reject) => {
+    const source = fs.createReadStream(filePath);
+    const upload = new tus.Upload(source, {
+      endpoint: `${supabaseUrl.replace(/\/$/, '')}/storage/v1/upload/resumable`,
+      headers: {
+        authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
+        'x-upsert': 'true',
+      },
+      metadata: {
+        bucketName: VIDEO_BUCKET,
+        objectName: storagePath,
+        contentType: 'video/mp4',
+        cacheControl: '3600',
+      },
+      uploadSize: size,
+      chunkSize: TUS_CHUNK_SIZE_BYTES,
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      retryDelays: [0, 1_000, 3_000, 5_000, 10_000],
+      onError: (error) => reject(error),
+      onSuccess: () => resolve(),
+    });
+    upload.start();
+  });
 }
 
 async function requestPracticeGeneration(lessonId) {
@@ -345,13 +376,30 @@ async function main() {
 
     const storagePath = `${lessonId}/video_720p.mp4`;
     log(`Uploading to ${VIDEO_BUCKET}/${storagePath}...`);
-    const { error: uploadError } = await supabase.storage
-      .from(VIDEO_BUCKET)
-      .upload(storagePath, fs.readFileSync(outputLocation), {
-        contentType: 'video/mp4',
-        upsert: true,
-      });
-    if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+    if (stat.size >= STANDARD_UPLOAD_LIMIT_BYTES) {
+      log(`Using resumable upload for ${(stat.size / (1024 * 1024)).toFixed(1)} MB video.`);
+      try {
+        await uploadLargeVideo({
+          supabaseUrl,
+          serviceKey,
+          filePath: outputLocation,
+          storagePath,
+          size: stat.size,
+        });
+      } catch (uploadError) {
+        throw new Error(
+          `Resumable upload failed: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`
+        );
+      }
+    } else {
+      const { error: uploadError } = await supabase.storage
+        .from(VIDEO_BUCKET)
+        .upload(storagePath, fs.readFileSync(outputLocation), {
+          contentType: 'video/mp4',
+          upsert: true,
+        });
+      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+    }
 
     const { data: pub } = supabase.storage.from(VIDEO_BUCKET).getPublicUrl(storagePath);
     // Version param busts browser/CDN caches when a lesson is re-exported
