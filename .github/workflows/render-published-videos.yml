@@ -2,6 +2,11 @@ name: Render published lesson videos
 
 on:
   workflow_dispatch:
+    inputs:
+      shard:
+        description: Stable lesson shard as INDEX/TOTAL
+        required: false
+        default: "0/1"
   schedule:
     - cron: "23 * * * *"
 
@@ -9,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: render-published-lesson-videos
+  group: render-published-lesson-videos-${{ inputs.shard || 'scheduled' }}
   cancel-in-progress: false
 
 jobs:
@@ -28,4 +33,6 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Render missing or stale published lesson videos
-        run: npm run render:published
+        env:
+          RENDER_SHARD: ${{ inputs.shard || '0/1' }}
+        run: npm run render:published -- --shard="$RENDER_SHARD"

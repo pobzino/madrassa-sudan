@@ -9,6 +9,7 @@
  *   node scripts/render-published-videos.mjs
  *   node scripts/render-published-videos.mjs --concurrency=2 --limit=5
  *   node scripts/render-published-videos.mjs --lesson=<uuid> --force
+ *   node scripts/render-published-videos.mjs --shard=0/4
  */
 
 import { spawn } from 'node:child_process';
@@ -62,6 +63,8 @@ function parseArgs(argv) {
     force: false,
     language: 'ar',
     lessonId: null,
+    shardIndex: 0,
+    shardTotal: 1,
   };
   for (const arg of argv) {
     if (arg.startsWith('--concurrency=')) {
@@ -74,6 +77,21 @@ function parseArgs(argv) {
       args.language = language;
     } else if (arg.startsWith('--lesson=')) {
       args.lessonId = arg.slice('--lesson='.length).trim() || null;
+    } else if (arg.startsWith('--shard=')) {
+      const [indexValue, totalValue] = arg.slice('--shard='.length).split('/');
+      const shardIndex = Number.parseInt(indexValue, 10);
+      const shardTotal = Number.parseInt(totalValue, 10);
+      if (
+        !Number.isInteger(shardIndex) ||
+        !Number.isInteger(shardTotal) ||
+        shardTotal < 1 ||
+        shardIndex < 0 ||
+        shardIndex >= shardTotal
+      ) {
+        throw new Error('shard must use INDEX/TOTAL with 0 <= INDEX < TOTAL.');
+      }
+      args.shardIndex = shardIndex;
+      args.shardTotal = shardTotal;
     } else if (arg === '--force') {
       args.force = true;
     } else {
@@ -81,6 +99,15 @@ function parseArgs(argv) {
     }
   }
   return args;
+}
+
+function lessonShard(lessonId, shardTotal) {
+  let hash = 2166136261;
+  for (let index = 0; index < lessonId.length; index++) {
+    hash ^= lessonId.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % shardTotal;
 }
 
 function needsRender(lesson, sim, force) {
@@ -168,9 +195,12 @@ async function main() {
     );
   }
 
-  const queue = candidates.slice(0, args.limit);
+  const shardedCandidates = candidates.filter(
+    (lesson) => lessonShard(lesson.id, args.shardTotal) === args.shardIndex
+  );
+  const queue = shardedCandidates.slice(0, args.limit);
   console.log(
-    `[render-published] ${queue.length} render(s) queued (${candidates.length} stale/missing, concurrency=${args.concurrency}).`
+    `[render-published] ${queue.length} render(s) queued (${candidates.length} stale/missing, shard=${args.shardIndex}/${args.shardTotal}, concurrency=${args.concurrency}).`
   );
   if (queue.length === 0) return;
 
