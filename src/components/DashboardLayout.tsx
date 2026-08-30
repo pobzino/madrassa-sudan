@@ -178,6 +178,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const teacherDevBypass = process.env.NEXT_PUBLIC_DEV_ALLOW_TEACHER_VIEW === "1";
 
   const isTeacherOrAdmin = teacherDevBypass || profile?.role === "teacher" || profile?.role === "admin";
+  const hideUnusedStudentNavigation = process.env.NODE_ENV === "production";
 
   // Show teacher nav when on /teacher/* or /admin routes, student nav otherwise
   const isInTeacherView = pathname.startsWith("/teacher") || pathname.startsWith("/admin");
@@ -187,7 +188,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const studentNavItems = [
     { href: "/dashboard", label: t.dashboard, icon: <HomeNavIcon className="w-6 h-6" />, color: "bg-emerald-100 text-emerald-600" },
     { href: "/lessons", label: t.lessons, icon: <BookNavIcon className="w-6 h-6" />, color: "bg-violet-100 text-violet-600" },
-    { href: "/homework", label: t.homework, icon: <ClipboardNavIcon className="w-6 h-6" />, color: "bg-amber-100 text-amber-600" },
+    ...(!hideUnusedStudentNavigation
+      ? [{ href: "/homework", label: t.homework, icon: <ClipboardNavIcon className="w-6 h-6" />, color: "bg-amber-100 text-amber-600" }]
+      : []),
     { href: "/progress", label: t.progress, icon: <ChartNavIcon className="w-6 h-6" />, color: "bg-cyan-100 text-cyan-600" },
   ];
 
@@ -195,7 +198,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   // AI Tutor and Level Test (diagnostic) are intentionally hidden for the first
   // cohort to keep the site simple — the routes still exist for later use.
   const studentSecondaryNavItems = [
-    { href: "/cohorts", label: t.myClasses, icon: <UsersNavIcon className="w-5 h-5" /> },
+    ...(!hideUnusedStudentNavigation
+      ? [{ href: "/cohorts", label: t.myClasses, icon: <UsersNavIcon className="w-5 h-5" /> }]
+      : []),
     { href: "/downloads", label: t.downloads, icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
