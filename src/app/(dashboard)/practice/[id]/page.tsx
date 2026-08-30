@@ -6,7 +6,7 @@
 // routes back into the learning path afterwards.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
 import PracticePlayer, {
@@ -61,6 +61,8 @@ export default function PracticePage() {
   const params = useParams<{ id: string }>();
   const assignmentId = params.id;
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const replayRequested = searchParams.get("replay") === "1";
   const { language, isRtl } = useLanguage();
   const t = STR[language];
 
@@ -68,6 +70,7 @@ export default function PracticePage() {
   const [practice, setPractice] = useState<LoadedPractice | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "not_found" | "not_practice">("loading");
   const [round, setRound] = useState(0);
+  const [isReplayMode, setIsReplayMode] = useState(false);
   const [nextLessonId, setNextLessonId] = useState<string | null>(null);
   // Displayed bilingual choices map back to the canonical value stored for
   // server-side grading.
@@ -81,6 +84,7 @@ export default function PracticePage() {
   const load = useCallback(async () => {
     const loadVersion = ++loadVersionRef.current;
     setStatus("loading");
+    setIsReplayMode(false);
     setNextLessonId(null);
     nextLessonPromiseRef.current = null;
     try {
@@ -202,7 +206,8 @@ export default function PracticePage() {
           const totalPoints = data.total_points ?? 0;
           const threshold = ((data.passing_score ?? PRACTICE_PASSING_SCORE) / 100) * totalPoints;
           if (sub.score != null && totalPoints > 0 && sub.score >= threshold) {
-            alreadyPassed = true;
+            alreadyPassed = !replayRequested;
+            setIsReplayMode(replayRequested);
           } else {
             const retryResponse = await fetch(`/api/homework/${assignmentId}/retake`, { method: "POST" });
             if (retryResponse.ok) {
@@ -237,7 +242,7 @@ export default function PracticePage() {
       console.error("Failed to load practice:", err);
       setStatus("error");
     }
-  }, [assignmentId, language, router, supabase]);
+  }, [assignmentId, language, replayRequested, router, supabase]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void load(), 0);
@@ -261,6 +266,28 @@ export default function PracticePage() {
 
   const handleFinish = useCallback(
     async ({ correctCount, total, answers }: { correctCount: number; total: number; answers: PracticeAnswer[] }) => {
+      if (isReplayMode) {
+        const scorePercent = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+        const context = {
+          assignment_id: assignmentId,
+          lesson_id: practice?.lessonId || "",
+          subject_id: practice?.subjectId || "",
+          grade_level: practice?.gradeLevel ?? 0,
+          attempt_number: (practice?.attemptNumber ?? 1) + round,
+          question_count: total,
+          score_percent: scorePercent,
+          source: "completed_practice_replay",
+        };
+        trackAnalyticsEvent("practice_submit", context);
+        trackAnalyticsEvent(
+          scorePercent >= (practice?.passingPercent ?? PRACTICE_PASSING_SCORE)
+            ? "practice_pass"
+            : "practice_fail",
+          context,
+        );
+        return true;
+      }
+
       try {
         const res = await fetch(`/api/homework/${assignmentId}/submit`, {
           method: "POST",
@@ -312,7 +339,7 @@ export default function PracticePage() {
         return false;
       }
     },
-    [assignmentId, practice, submissionValueByQuestion]
+    [assignmentId, isReplayMode, practice, round, submissionValueByQuestion]
   );
 
   const requestQuestionAudio = useCallback(
@@ -334,17 +361,22 @@ export default function PracticePage() {
   );
 
   const handleRetry = useCallback(() => {
-    // Reset the graded submission server-side, then remount the player.
+    // Completed practices replay locally so the canonical passed submission —
+    // and therefore the student's unlocked path — is never reset.
     trackAnalyticsEvent("practice_retry", {
       assignment_id: assignmentId,
       lesson_id: practice?.lessonId || "",
       attempt_number: (practice?.attemptNumber ?? 1) + round + 1,
       source: "results_screen",
     });
+    if (isReplayMode) {
+      setRound((r) => r + 1);
+      return;
+    }
     void fetch(`/api/homework/${assignmentId}/retake`, { method: "POST" }).finally(() =>
       setRound((r) => r + 1)
     );
-  }, [assignmentId, practice, round]);
+  }, [assignmentId, isReplayMode, practice, round]);
 
   const returnToLessons = useCallback(() => {
     router.push("/lessons");
@@ -397,9 +429,8 @@ export default function PracticePage() {
         attempt_number: practice.attemptNumber,
         source: "replay_passed_practice",
       });
-      void fetch(`/api/homework/${assignmentId}/retake`, { method: "POST" }).finally(() =>
-        setPractice((p) => (p ? { ...p, alreadyPassed: false } : p))
-      );
+      setIsReplayMode(true);
+      setPractice((p) => (p ? { ...p, alreadyPassed: false } : p));
     };
     return (
       <div dir={isRtl ? "rtl" : "ltr"} className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">

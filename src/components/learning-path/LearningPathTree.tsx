@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { OwlExcited } from "@/components/illustrations";
-import DownloadButton from "@/components/lessons/DownloadButton";
 import LessonComputerDownloadButton from "@/components/lessons/LessonComputerDownloadButton";
 import type {
   SubjectLearningPath,
@@ -12,8 +11,8 @@ import type {
 } from "@/lib/lessons/useLearningPath";
 
 const translations = {
-  ar: { startTest: "ابدأ الاختبار", retake: "أعد المحاولة", passed: "ناجح", passMark: "75% للنجاح", open: "افتح", test: "اختبار", practice: "التدريب", practiceRetry: "أعد التدريب", watched: (p: number) => `شاهدت ${p}%`, resume: "أكمل" },
-  en: { startTest: "Start test", retake: "Retake", passed: "Passed", passMark: "75% to pass", open: "Open", test: "Test", practice: "Practice", practiceRetry: "Retry practice", watched: (p: number) => `${p}% watched`, resume: "Continue" },
+  ar: { startTest: "ابدأ الاختبار", retake: "أعد المحاولة", passed: "ناجح", passMark: "75% للنجاح", open: "افتح", test: "اختبار", practice: "التدريب", practiceRetry: "أعد التدريب", practiceAgain: "تدرّب مرة أخرى", watched: (p: number) => `شاهدت ${p}%`, resume: "أكمل" },
+  en: { startTest: "Start test", retake: "Retake", passed: "Passed", passMark: "75% to pass", open: "Open", test: "Test", practice: "Practice", practiceRetry: "Retry practice", practiceAgain: "Practice again", watched: (p: number) => `${p}% watched`, resume: "Continue" },
 };
 
 type TreeNode =
@@ -394,16 +393,24 @@ export default function LearningPathTree({
                     </Link>
                     {node.kind === "lesson" &&
                       node.step.practiceAssignmentId &&
-                      (node.step.practiceState === "available" || node.step.practiceState === "failed") && (
+                      (node.step.practiceState === "available" ||
+                        node.step.practiceState === "failed" ||
+                        node.step.practiceState === "passed") && (
                         <Link
-                          href={`/practice/${node.step.practiceAssignmentId}`}
+                          href={`/practice/${node.step.practiceAssignmentId}${node.step.practiceState === "passed" ? "?replay=1" : ""}`}
                           className={`inline-block px-3.5 py-1 rounded-full text-white text-[11px] font-bold font-fredoka shadow-sm transition-colors ${
                             node.step.practiceState === "failed"
                               ? "bg-amber-500 hover:bg-amber-600"
+                              : node.step.practiceState === "passed"
+                                ? "bg-emerald-600 hover:bg-emerald-700"
                               : "bg-[#D97706] hover:bg-[#B45309]"
                           }`}
                         >
-                          {node.step.practiceState === "failed" ? t.practiceRetry : t.practice}
+                          {node.step.practiceState === "failed"
+                            ? t.practiceRetry
+                            : node.step.practiceState === "passed"
+                              ? t.practiceAgain
+                              : t.practice}
                         </Link>
                       )}
                     {node.kind === "lesson" && (
@@ -416,7 +423,6 @@ export default function LearningPathTree({
                           iconOnly
                           className="w-8 h-8 rounded-full bg-white text-gray-600 hover:text-[#007229] shadow-sm flex items-center justify-center transition-colors"
                         />
-                        <DownloadButton lessonId={node.step.lessonId} size="sm" className="shadow-sm" />
                       </>
                     )}
                   </div>
