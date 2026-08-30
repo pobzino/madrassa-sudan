@@ -17,7 +17,8 @@
  *   3. Encode with the browser's hardware H.264 encoder (WebCodecs) and mux
  *      to MP4 with mp4-muxer. Audio comes from the sim's recorded track:
  *      decoded, cut to the clip segments sample-accurately, then encoded
- *      AAC (fallback Opus).
+ *      AAC. MP4 export fails when the browser cannot encode compatible
+ *      audio instead of silently producing a video-only file.
  *
  * Requires WebCodecs (Chrome/Edge, Safari 16.4+, Firefox 130+) — gate on
  * `isVideoExportSupported()`.
@@ -89,6 +90,9 @@ export function isVideoExportSupported(): boolean {
     typeof window !== 'undefined' &&
     typeof VideoEncoder !== 'undefined' &&
     typeof VideoFrame !== 'undefined' &&
+    typeof AudioEncoder !== 'undefined' &&
+    typeof AudioData !== 'undefined' &&
+    typeof AudioContext !== 'undefined' &&
     typeof createImageBitmap === 'function'
   );
 }
@@ -120,11 +124,13 @@ async function pickVideoCodec(): Promise<string | null> {
 
 async function pickAudioCodec(
   numberOfChannels: number
-): Promise<{ webCodec: string; muxCodec: 'aac' | 'opus' } | null> {
+): Promise<{ webCodec: string; muxCodec: 'aac' } | null> {
   if (typeof AudioEncoder === 'undefined') return null;
-  const candidates: { webCodec: string; muxCodec: 'aac' | 'opus' }[] = [
+  // Do not put Opus in an MP4 fallback. Although browsers may encode it,
+  // native Android/iOS and desktop players commonly expose the result as a
+  // silent video. AAC is the interoperable audio codec for our MP4 downloads.
+  const candidates: { webCodec: string; muxCodec: 'aac' }[] = [
     { webCodec: 'mp4a.40.2', muxCodec: 'aac' },
-    { webCodec: 'opus', muxCodec: 'opus' },
   ];
   for (const candidate of candidates) {
     try {
@@ -303,16 +309,21 @@ export async function exportSimVideo(
     throw new Error('This browser cannot encode H.264 video. Try Chrome or Edge.');
   }
 
-  // Audio (optional): decode + clip-cut before opening encoders.
+  // Audio is mandatory for lesson downloads. A successful silent export is
+  // worse than a clear compatibility error because it looks like lost work.
   report('preparing', 2);
-  let audio: { channels: Float32Array[]; sampleRate: number } | null = null;
-  if (audio_url) {
-    audio = await loadClippedAudio(audio_url, clips, rawTotalMs, signal);
+  if (!audio_url) {
+    throw new Error('This lesson recording has no audio track.');
   }
-  const audioCodec = audio ? await pickAudioCodec(audio.channels.length) : null;
-  if (audio && !audioCodec) {
-    // No usable audio encoder — degrade to silent video rather than failing.
-    audio = null;
+  const audio = await loadClippedAudio(audio_url, clips, rawTotalMs, signal);
+  if (!audio) {
+    throw new Error('The lesson audio track is empty.');
+  }
+  const audioCodec = await pickAudioCodec(audio.channels.length);
+  if (!audioCodec) {
+    throw new Error(
+      'This browser cannot create a compatible MP4 with audio. Try Download again later or use Chrome or Edge on a computer.'
+    );
   }
 
   report('preparing', 5);
@@ -326,15 +337,11 @@ export async function exportSimVideo(
       height: DESIGN_HEIGHT,
       frameRate: FPS,
     },
-    ...(audio && audioCodec
-      ? {
-          audio: {
-            codec: audioCodec.muxCodec,
-            sampleRate: audio.sampleRate,
-            numberOfChannels: audio.channels.length,
-          },
-        }
-      : {}),
+    audio: {
+      codec: audioCodec.muxCodec,
+      sampleRate: audio.sampleRate,
+      numberOfChannels: audio.channels.length,
+    },
     fastStart: 'in-memory',
   });
 
@@ -365,47 +372,45 @@ export async function exportSimVideo(
 
   try {
     // ── Audio encode (fast, do it first) ─────────────────────────────────
-    if (audio && audioCodec) {
-      const audioEncoder = new AudioEncoder({
-        output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-        error: (e) => {
-          encoderError = e instanceof Error ? e : new Error(String(e));
-        },
-      });
-      audioEncoder.configure({
-        codec: audioCodec.webCodec,
-        sampleRate: audio.sampleRate,
-        numberOfChannels: audio.channels.length,
-        bitrate: AUDIO_BITRATE,
-      });
+    const audioEncoder = new AudioEncoder({
+      output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+      error: (e) => {
+        encoderError = e instanceof Error ? e : new Error(String(e));
+      },
+    });
+    audioEncoder.configure({
+      codec: audioCodec.webCodec,
+      sampleRate: audio.sampleRate,
+      numberOfChannels: audio.channels.length,
+      bitrate: AUDIO_BITRATE,
+    });
 
-      const { channels, sampleRate } = audio;
-      const totalSamples = channels[0].length;
-      const chunkSamples = sampleRate / 10; // 100ms per AudioData
-      for (let offset = 0; offset < totalSamples; offset += chunkSamples) {
-        throwIfAborted(signal);
-        if (encoderError) throw encoderError;
-        const frames = Math.min(chunkSamples, totalSamples - offset);
-        const planar = new Float32Array(frames * channels.length);
-        for (let ch = 0; ch < channels.length; ch++) {
-          planar.set(channels[ch].subarray(offset, offset + frames), ch * frames);
-        }
-        const data = new AudioData({
-          format: 'f32-planar',
-          sampleRate,
-          numberOfFrames: frames,
-          numberOfChannels: channels.length,
-          timestamp: Math.round((offset / sampleRate) * 1_000_000),
-          data: planar,
-        });
-        audioEncoder.encode(data);
-        data.close();
-        await waitForQueue(audioEncoder, 16);
-      }
-      await audioEncoder.flush();
-      audioEncoder.close();
+    const { channels, sampleRate } = audio;
+    const totalSamples = channels[0].length;
+    const chunkSamples = sampleRate / 10; // 100ms per AudioData
+    for (let offset = 0; offset < totalSamples; offset += chunkSamples) {
+      throwIfAborted(signal);
       if (encoderError) throw encoderError;
+      const frames = Math.min(chunkSamples, totalSamples - offset);
+      const planar = new Float32Array(frames * channels.length);
+      for (let ch = 0; ch < channels.length; ch++) {
+        planar.set(channels[ch].subarray(offset, offset + frames), ch * frames);
+      }
+      const data = new AudioData({
+        format: 'f32-planar',
+        sampleRate,
+        numberOfFrames: frames,
+        numberOfChannels: channels.length,
+        timestamp: Math.round((offset / sampleRate) * 1_000_000),
+        data: planar,
+      });
+      audioEncoder.encode(data);
+      data.close();
+      await waitForQueue(audioEncoder, 16);
     }
+    await audioEncoder.flush();
+    audioEncoder.close();
+    if (encoderError) throw encoderError;
     report('rendering', 10);
 
     // ── Video frames over the virtual timeline ───────────────────────────

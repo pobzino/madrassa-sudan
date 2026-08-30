@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "ingest:lessons": "node scripts/ingest-lesson-embeddings.mjs",
     "render:lesson": "node scripts/render-lesson-video.mjs",
+    "render:published": "node scripts/render-published-videos.mjs",
     "inspect:slides": "node scripts/inspect-slides.mjs",
     "audit:practices": "node scripts/audit-practice-quality.mjs",
     "test:prod-sim": "node scripts/sim-prod-smoke.mjs",
