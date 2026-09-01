@@ -78,7 +78,7 @@ export default function Home() {
 
   const t = {
     ar: {
-      nav: { features: "المميزات", howItWorks: "كيف يعمل", sample: "درس نموذجي", teachers: "للمعلمين", faq: "الأسئلة" },
+      nav: { features: "المميزات", howItWorks: "كيف يعمل", sample: "درس نموذجي", parents: "للأهل", teachers: "للمعلمين", faq: "الأسئلة" },
       login: "تسجيل الدخول",
       getStarted: "ابدأ الآن",
       goToDashboard: "لوحة التحكم",
@@ -157,12 +157,12 @@ export default function Home() {
       },
       footer: {
         tagline: "نبني مستقبل السودان، طفل بطفل",
-        links: { privacy: "الخصوصية", terms: "الشروط", contact: "تواصل معنا", donate: "ادعم آمال" },
+        links: { parents: "للأهل", privacy: "الخصوصية", terms: "الشروط", contact: "تواصل معنا", donate: "ادعم آمال" },
         copyright: "© ٢٠٢٦ مدرسة آمال",
       },
     },
     en: {
-      nav: { features: "Features", howItWorks: "How it works", sample: "Sample lesson", teachers: "For Teachers", faq: "FAQ" },
+      nav: { features: "Features", howItWorks: "How it works", sample: "Sample lesson", parents: "For Parents", teachers: "For Teachers", faq: "FAQ" },
       login: "Log in",
       getStarted: "Start Now",
       goToDashboard: "Dashboard",
@@ -241,7 +241,7 @@ export default function Home() {
       },
       footer: {
         tagline: "Building Sudan's future, one child at a time",
-        links: { privacy: "Privacy", terms: "Terms", contact: "Contact", donate: "Support Amal" },
+        links: { parents: "For Parents", privacy: "Privacy", terms: "Terms", contact: "Contact", donate: "Support Amal" },
         copyright: "© 2026 Amal School",
       },
     },
@@ -267,10 +267,11 @@ export default function Home() {
             </span>
           </Link>
 
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
+          <div className="hidden lg:flex items-center gap-6 text-sm font-medium text-gray-600">
             <a href="#features" className="hover:text-[#007229] transition-colors">{txt.nav.features}</a>
             <a href="#how-it-works" className="hover:text-[#007229] transition-colors">{txt.nav.howItWorks}</a>
             <Link href="/sample-lesson" className="hover:text-[#007229] transition-colors">{txt.nav.sample}</Link>
+            <Link href="/parents" className="hover:text-[#007229] transition-colors">{txt.nav.parents}</Link>
             <a href="#teachers" className="hover:text-[#007229] transition-colors">{txt.nav.teachers}</a>
             <a href="#faq" className="hover:text-[#007229] transition-colors">{txt.nav.faq}</a>
           </div>
@@ -769,7 +770,8 @@ export default function Home() {
               <p className="text-xs sm:text-sm text-gray-500 text-center md:text-left">{txt.footer.tagline}</p>
             </div>
 
-            <div className="flex items-center gap-4 sm:gap-8 text-xs sm:text-sm text-gray-600">
+            <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs sm:text-sm text-gray-600">
+              <Link href="/parents" className="hover:text-[#007229] transition-colors">{txt.footer.links.parents}</Link>
               <a href="/privacy" className="hover:text-[#007229] transition-colors">{txt.footer.links.privacy}</a>
               <a href="/terms" className="hover:text-[#007229] transition-colors">{txt.footer.links.terms}</a>
               <a href="mailto:admin@amalschool.org" className="hover:text-[#007229] transition-colors">{txt.footer.links.contact}</a>
