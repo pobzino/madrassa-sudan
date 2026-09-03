@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import SimPreviewModal from '@/components/slides/SimPreviewModal';
 import type { SimPayload } from '@/lib/sim.types';
 
 interface SimVersion {
@@ -25,6 +26,7 @@ interface SimVersion {
 
 interface SimVersionHistoryProps {
   lessonId: string;
+  language: 'ar' | 'en';
   /** Bump to refetch (e.g. after a splice). */
   refreshKey?: number;
   onRestored: (payload: SimPayload) => void;
@@ -57,12 +59,16 @@ function formatWhen(iso: string): string {
 
 export default function SimVersionHistory({
   lessonId,
+  language,
   refreshKey = 0,
   onRestored,
 }: SimVersionHistoryProps) {
   const [versions, setVersions] = useState<SimVersion[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  // A version being watched before any decision to restore it.
+  const [preview, setPreview] = useState<{ payload: SimPayload; version: SimVersion } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -85,6 +91,27 @@ export default function SimVersionHistory({
   useEffect(() => {
     void load();
   }, [load, refreshKey]);
+
+  // Restoring on metadata alone is guesswork, so fetch the version as a
+  // playable payload and let the teacher watch it first.
+  const watch = async (version: SimVersion) => {
+    setLoadingPreview(version.id);
+    try {
+      const res = await fetch(
+        `/api/teacher/lessons/${lessonId}/sims/versions?version_id=${version.id}`,
+        { credentials: 'include', cache: 'no-store' }
+      );
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.sim) {
+        throw new Error(body?.error || `Could not load version ${version.version_number}`);
+      }
+      setPreview({ payload: { sim: body.sim, audio_url: body.audio_url }, version });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not load that version');
+    } finally {
+      setLoadingPreview(null);
+    }
+  };
 
   const restore = async (version: SimVersion) => {
     const ok = window.confirm(
@@ -155,6 +182,15 @@ export default function SimVersionHistory({
                 </p>
               </div>
               {version.restorable ? (
+                <>
+                <button
+                  type="button"
+                  disabled={restoringId !== null || loadingPreview !== null}
+                  onClick={() => watch(version)}
+                  className="shrink-0 rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 disabled:opacity-40"
+                >
+                  {loadingPreview === version.id ? 'Loading…' : 'Watch'}
+                </button>
                 <button
                   type="button"
                   disabled={restoringId !== null}
@@ -163,6 +199,7 @@ export default function SimVersionHistory({
                 >
                   {restoringId === version.id ? 'Restoring…' : 'Restore'}
                 </button>
+                </>
               ) : (
                 <span
                   className="shrink-0 text-[11px] text-gray-400"
@@ -174,6 +211,24 @@ export default function SimVersionHistory({
             </li>
           ))}
         </ul>
+      )}
+
+      {preview && (
+        <SimPreviewModal
+          payload={preview.payload}
+          language={language}
+          title={`Version ${preview.version.version_number}`}
+          subtitle={`${formatClock(preview.version.duration_ms)} — saved ${formatWhen(preview.version.created_at)}`}
+          onClose={() => setPreview(null)}
+          action={{
+            label: 'Restore this version',
+            onClick: () => {
+              const v = preview.version;
+              setPreview(null);
+              void restore(v);
+            },
+          }}
+        />
       )}
     </div>
   );
