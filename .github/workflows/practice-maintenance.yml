@@ -19,11 +19,9 @@ jobs:
           node-version: 22
       - name: Verify correction plan
         run: node --test scripts/practice-maintenance/plan.test.mjs
-      - name: Require deployed overwrite protection and corrected marking
-        run: |
-          node --input-type=module -e "const r = await fetch('https://amalschool.org/api/runtime/version'); const data = await r.json(); if (data.version !== 'e835e1520d6e831e3214a74d45d2d40dbceab811') throw new Error('Expected application release is not live'); console.log('Verified application release');"
-      - name: Apply and read back reviewed corrections
-        run: node scripts/practice-maintenance/apply-plan.mjs --apply
+      # One-off application completed in run 34332459171. Further pushes are read-only.
+      - name: Verify reviewed corrections without writing
+        run: node scripts/practice-maintenance/apply-plan.mjs
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
