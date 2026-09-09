@@ -72,4 +72,14 @@ if(apply){
     }else if(!matches(row,entry.after))throw new Error(`Readback failed ${entry.id}`);
   }
   console.log(`Verified all ${plan.entries.length} planned curriculum row corrections. Question IDs and student work retained.`);
+  // Also verify untouched questions: the final bank must match the reviewed bank.
+  for(let offset=0;offset<plan.questions.length;offset+=60){
+    const expected=plan.questions.slice(offset,offset+60);
+    const rows=await request('homework_questions',{
+      id:`in.(${expected.map(q=>q.id).join(',')})`,
+      select:Object.keys(expected[0]).join(','),
+    });
+    for(const q of expected)if(!matches(rows.find(row=>row.id===q.id)??{},q))throw new Error(`Final bank verification failed: ${q.id}`);
+  }
+  console.log(`Verified all ${plan.questions.length} questions across ${plan.assignments.length} Practices against the reviewed final bank.`);
 }
