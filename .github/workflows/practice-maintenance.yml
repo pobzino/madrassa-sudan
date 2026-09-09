@@ -17,13 +17,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Export published curriculum only (no students or credentials)
-        run: node scripts/practice-maintenance/export.mjs
+      - name: Verify correction plan
+        run: node --test scripts/practice-maintenance/plan.test.mjs
+      - name: Preflight reviewed corrections without writing
+        run: node scripts/practice-maintenance/apply-plan.mjs
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       - uses: actions/upload-artifact@v4
         with:
-          name: published-curriculum
-          path: curriculum.json
+          name: practice-correction-backup
+          path: practice-maintenance-backup.json
           retention-days: 3
