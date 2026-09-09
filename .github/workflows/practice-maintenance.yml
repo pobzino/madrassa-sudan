@@ -1,0 +1,29 @@
+name: Practice curriculum maintenance
+on:
+  push:
+    branches: [codex/practice-bank-maintenance]
+    paths: ['scripts/practice-maintenance/**', '.github/workflows/practice-maintenance.yml']
+permissions:
+  contents: read
+concurrency:
+  group: practice-curriculum-maintenance
+  cancel-in-progress: false
+jobs:
+  curriculum:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Export published curriculum only (no students or credentials)
+        run: node scripts/practice-maintenance/export.mjs
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: published-curriculum
+          path: curriculum.json
+          retention-days: 3
