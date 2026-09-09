@@ -338,7 +338,7 @@ export function QuestionBuilder({
           </div>
           <p className="text-xs text-gray-500 mt-2">
             {bilingualOptions
-              ? "Keep each Arabic option aligned with its English translation, then select the one correct answer."
+              ? "Keep choices aligned by position and select one correct answer. In English lessons, keep the target English words or letters in Latin script in both columns."
               : "Select the radio button next to the correct answer"}
           </p>
         </div>
@@ -413,7 +413,7 @@ export function QuestionBuilder({
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
           />
           <p className="text-xs text-gray-500 mt-1">
-            Optional. Leave blank for manual grading.
+            {bilingualOptions ? "Required for automatic Practice marking. Use one unambiguous answer." : "Optional. Leave blank for manual grading."}
           </p>
         </div>
       )}
