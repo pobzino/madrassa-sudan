@@ -30,6 +30,7 @@ import {
 import { LandingHeroScene, SectionScene, StepGraphic, LeafyGreenBg, TeacherScene } from "@/components/dashboard/DashboardScenes";
 import HomepageSamplePreview from "@/components/sample/HomepageSamplePreview";
 import { SudanFlagToAmalOwl } from "@/components/brand/SudanFlagToAmalOwl";
+import { OwlLessonPortal } from "@/components/brand/OwlLessonPortal";
 import { LEGAL_ENTITY } from "@/lib/legal-entity";
 
 // Helper function to render feature icons
@@ -250,7 +251,7 @@ export default function Home() {
   const txt = t[language];
 
   return (
-    <div dir={isRtl ? "rtl" : "ltr"} className="min-h-screen bg-white overflow-x-hidden">
+    <div dir={isRtl ? "rtl" : "ltr"} className="min-h-screen bg-white overflow-x-clip">
       {/* Navbar */}
       <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
@@ -547,8 +548,16 @@ export default function Home() {
           </div>
         </section>
 
+        <OwlLessonPortal
+          isRtl={isRtl}
+          label={txt.sims.label}
+          title={txt.sims.title}
+          subtitle={txt.sims.subtitle}
+          steps={txt.sims.steps}
+        />
+
         {/* How Sims Work */}
-        <section id="sims" className="py-10 sm:py-16 bg-white relative overflow-hidden">
+        <section aria-label={txt.sims.title} className="py-10 sm:py-16 bg-white relative overflow-hidden">
           <div className="absolute inset-0">
             <div className="absolute top-20 right-20 w-72 h-72 bg-emerald-100/30 rounded-full blur-3xl hidden sm:block" />
             <div className="absolute bottom-20 left-10 w-64 h-64 bg-amber-100/30 rounded-full blur-3xl hidden sm:block" />
@@ -556,18 +565,6 @@ export default function Home() {
           <SectionScene sky="linear-gradient(180deg,#ecfbf4 0%,#eef5ff 100%)" hills={false} />
 
           <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="text-center mb-8 sm:mb-12">
-              <span className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 bg-emerald-100 text-emerald-700 rounded-full text-xs sm:text-sm font-bold mb-3 sm:mb-4">
-                {txt.sims.label}
-              </span>
-              <h2 className="font-fredoka text-2xl sm:text-3xl md:text-5xl font-semibold text-gray-900 mb-3 sm:mb-4">
-                {txt.sims.title}
-              </h2>
-              <p className="text-base sm:text-lg text-gray-600 max-w-2xl mx-auto">
-                {txt.sims.subtitle}
-              </p>
-            </div>
-
             {/* Real lesson + one live Practice question */}
             <HomepageSamplePreview language={language} isRtl={isRtl} />
 

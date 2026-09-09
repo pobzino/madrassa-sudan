@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { updateAssignmentSchema } from "@/lib/homework.validation";
+import { updateAssignmentSchema, practicePublicationError } from "@/lib/homework.validation";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -253,6 +253,23 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const data = validationResult.data;
 
+    if (existingAssignment.is_practice && (data.is_published ?? existingAssignment.is_published)) {
+      const qualityError = practicePublicationError(data.questions ?? existingAssignment.homework_questions);
+      if (qualityError) return NextResponse.json({ error: qualityError }, { status: 400 });
+    }
+
+    const existingIds = new Set(existingAssignment.homework_questions.map(q => q.id));
+    if (data.questions) {
+      const incomingIds = data.questions.flatMap(q => q.id ? [q.id] : []);
+      if (new Set(incomingIds).size !== incomingIds.length || incomingIds.some(qid => !existingIds.has(qid))) {
+        return NextResponse.json({ error: "Invalid or duplicate question IDs" }, { status: 400 });
+      }
+      // Preserve question IDs and all historical responses for Practices.
+      if (existingAssignment.is_practice && [...existingIds].some(qid => !incomingIds.includes(qid))) {
+        return NextResponse.json({ error: "Practice questions must retain their original IDs. Reload before editing." }, { status: 409 });
+      }
+    }
+
     // Update assignment
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
@@ -272,48 +289,57 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       updateData.total_points = data.questions.reduce((sum, q) => sum + q.points, 0);
     }
 
-    const { error: updateError } = await supabase
-      .from("homework_assignments")
-      .update(updateData)
-      .eq("id", id);
-
-    if (updateError) {
-      console.error("Error updating assignment:", updateError);
-      return NextResponse.json({ error: "Failed to update assignment" }, { status: 500 });
-    }
-
     // Update questions if provided
     if (data.questions && data.questions.length > 0) {
-      // Delete existing questions
-      await supabase
-        .from("homework_questions")
-        .delete()
-        .eq("assignment_id", id);
-
-      // Insert new questions
+      // Upsert by stable ID; never delete/reinsert the whole assignment.
       const questionsToInsert = data.questions.map((q, index) => ({
+        id: q.id ?? crypto.randomUUID(),
         assignment_id: id,
         question_type: q.question_type,
         question_text_ar: q.question_text_ar,
         question_text_en: q.question_text_en || null,
         options: q.options || null,
+        options_ar: q.options_ar || null,
+        options_en: q.options_en || null,
+        correct_option_index: q.correct_option_index ?? null,
         correct_answer: q.correct_answer || null,
         points: q.points,
         display_order: q.display_order || index + 1,
         rubric: q.rubric || null,
         instructions: q.instructions || null,
         hints: q.hints || [],
+        audio_url_ar: null,
+        audio_url_en: null,
+        audio_text_hash_ar: null,
+        audio_text_hash_en: null,
       }));
 
       const { error: questionsError } = await supabase
         .from("homework_questions")
-        .insert(questionsToInsert);
+        .upsert(questionsToInsert, { onConflict: "id" });
 
       if (questionsError) {
         console.error("Error updating questions:", questionsError);
         return NextResponse.json({ error: "Failed to update questions" }, { status: 500 });
       }
+      const retainedIds = new Set(questionsToInsert.map(q => q.id));
+      const removedIds = [...existingIds].filter(qid => !retainedIds.has(qid));
+      if (removedIds.length) {
+        const { count, error: responseError } = await supabase.from("homework_responses")
+          .select("id", { count: "exact", head: true }).in("question_id", removedIds);
+        if (responseError || count) {
+          return NextResponse.json({ error: "Cannot remove questions with saved student responses" }, { status: 409 });
+        }
+        const { error: removalError } = await supabase.from("homework_questions").delete()
+          .eq("assignment_id", id).in("id", removedIds);
+        if (removalError) return NextResponse.json({ error: "Could not remove questions" }, { status: 500 });
+      }
     }
+
+    // Publish only after the question writes have succeeded.
+    const { error: updateError } = await supabase.from("homework_assignments")
+      .update(updateData).eq("id", id);
+    if (updateError) return NextResponse.json({ error: "Failed to update assignment" }, { status: 500 });
 
     // If publishing for the first time, create submission records. Practices
     // have no cohort roster — submissions are created lazily on first attempt.

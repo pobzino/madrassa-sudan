@@ -55,10 +55,14 @@ export interface HomeworkQuestionWithRubric extends HomeworkQuestion {
 
 // For creating questions
 export interface CreateQuestionInput {
+  id?: string;
   question_type: HomeworkQuestionType | "true_false";
   question_text_ar: string;
   question_text_en?: string | null;
   options?: string[] | null;
+  options_ar?: string[] | null;
+  options_en?: string[] | null;
+  correct_option_index?: number | null;
   correct_answer?: string | null;
   points: number;
   display_order?: number;

@@ -75,6 +75,9 @@ export async function POST(request: NextRequest) {
       assignment_id: result.assignmentId,
       question_count: result.questionCount,
       generated: result.generated,
+      review_protected: result.reviewProtected,
+      reviewed_at: result.reviewedAt,
+      published: result.published,
     });
   } catch (error) {
     console.error("Practice automation error:", error);

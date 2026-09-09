@@ -17,6 +17,7 @@ import {
 gsap.registerPlugin(MorphSVGPlugin);
 
 type SudanFlagToAmalOwlProps = {
+  animated?: boolean;
   className?: string;
   loop?: boolean;
   markOnly?: boolean;
@@ -30,6 +31,7 @@ type SudanFlagToAmalOwlProps = {
  * the flag geometry is visibly on its way to becoming the mascot.
  */
 export function SudanFlagToAmalOwl({
+  animated = true,
   className = "",
   loop = false,
   markOnly = false,
@@ -57,7 +59,7 @@ export function SudanFlagToAmalOwl({
     ).matches;
 
     const context = gsap.context(() => {
-      if (prefersReducedMotion) {
+      if (!animated || prefersReducedMotion) {
         gsap.set("[data-flag-outline]", { opacity: 0 });
         gsap.set("[data-morph-body]", {
           attr: { d: OWL_BODY },
@@ -180,7 +182,7 @@ export function SudanFlagToAmalOwl({
       timeline.current = null;
       context.revert();
     };
-  }, [loop, onComplete]);
+  }, [animated, loop, onComplete]);
 
   return (
     <div ref={scope} className={`flex flex-col items-center ${className}`}>
@@ -212,40 +214,40 @@ export function SudanFlagToAmalOwl({
 
         <g data-amal-owl-graphic>
           {/* Ear tufts appear behind the body as the flag resolves. */}
-          <g data-owl-feature opacity="0">
+          <g data-owl-feature opacity={animated ? "0" : "1"}>
             <ellipse cx="190" cy="205" rx="36" ry="49" fill="#A01028" />
             <ellipse cx="450" cy="205" rx="36" ry="49" fill="#A01028" />
           </g>
 
           {/* These are the four physical flag shapes that perform the morph. */}
           <g data-morph-shapes opacity="1">
-            <path data-morph-body d={FLAG_RED} fill="#D21034" />
-            <path data-morph-face d={FLAG_WHITE} fill="#FFFFFF" />
-            <path data-morph-band d={FLAG_BLACK} fill="#171717" />
-            <path data-morph-cap d={FLAG_GREEN} fill="#007229" />
+            <path data-morph-body d={animated ? FLAG_RED : OWL_BODY} fill="#D21034" />
+            <path data-morph-face d={animated ? FLAG_WHITE : OWL_FACE} fill={animated ? "#FFFFFF" : "#E8334F"} />
+            <path data-morph-band d={animated ? FLAG_BLACK : OWL_CAP_BAND} fill="#171717" />
+            <path data-morph-cap d={animated ? FLAG_GREEN : OWL_CAP_TOP} fill="#007229" />
           </g>
 
-          <g data-owl-feature opacity="0">
+          <g data-owl-feature opacity={animated ? "0" : "1"}>
             <ellipse cx="320" cy="438" rx="86" ry="59" fill="#FFF5F5" />
           </g>
 
-          <g data-owl-feature opacity="0">
+          <g data-owl-feature opacity={animated ? "0" : "1"}>
             <ellipse cx="257" cy="305" rx="57" ry="65" fill="#FFFFFF" />
             <ellipse cx="383" cy="305" rx="57" ry="65" fill="#FFFFFF" />
           </g>
-          <g data-owl-feature opacity="0">
+          <g data-owl-feature data-owl-eyes opacity={animated ? "0" : "1"}>
             <circle cx="272" cy="306" r="36" fill="#000000" />
             <circle cx="368" cy="306" r="36" fill="#000000" />
             <circle cx="287" cy="287" r="13" fill="#FFFFFF" />
             <circle cx="383" cy="287" r="13" fill="#FFFFFF" />
           </g>
 
-          <g data-owl-feature opacity="0">
+          <g data-owl-feature opacity={animated ? "0" : "1"}>
             <ellipse cx="320" cy="371" rx="28" ry="22" fill="#F59E0B" />
             <path d="M292 371Q320 412 348 371" fill="#E08A05" />
           </g>
 
-          <g data-owl-feature opacity="0">
+          <g data-owl-feature data-owl-tassel opacity={animated ? "0" : "1"}>
             <circle cx="320" cy="126" r="17" fill="#171717" />
             <path
               d="M320 126Q372 144 394 205"
@@ -257,7 +259,7 @@ export function SudanFlagToAmalOwl({
             <ellipse cx="400" cy="222" rx="19" ry="25" fill="#F59E0B" />
           </g>
 
-          <g data-owl-feature opacity="0">
+          <g data-owl-feature opacity={animated ? "0" : "1"}>
             <ellipse cx="264" cy="509" rx="30" ry="18" fill="#F59E0B" />
             <ellipse cx="376" cy="509" rx="30" ry="18" fill="#F59E0B" />
           </g>
@@ -274,7 +276,7 @@ export function SudanFlagToAmalOwl({
           fontSize="64"
           fontWeight="600"
           letterSpacing="-2"
-          opacity="0"
+          opacity={animated ? "0" : "1"}
         >
           amal school
         </text>

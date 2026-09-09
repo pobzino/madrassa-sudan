@@ -23,4 +23,5 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: node --test scripts/practice-maintenance/plan.test.mjs
       - run: npm run build

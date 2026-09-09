@@ -29,6 +29,8 @@ export interface PracticeGenerationResult {
   questionCount: number;
   generated: boolean;
   published: boolean;
+  reviewProtected: boolean;
+  reviewedAt: string | null;
   titleAr: string;
   titleEn: string;
 }
@@ -52,7 +54,7 @@ type StoredPracticeQuestion = Pick<
   | "correct_answer"
 >;
 
-function hasCompletePracticeQuestions(
+export function hasCompletePracticeQuestions(
   questions: StoredPracticeQuestion[] | null | undefined,
   expectedCount = PRACTICE_QUESTION_COUNT
 ) {
@@ -96,6 +98,19 @@ function hasCompletePracticeQuestions(
       expectedCount
     ).length === 0
   );
+}
+
+export function shouldRegenerateExistingPractice({
+  ...request
+}: {
+  force: boolean;
+  reviewedAt: string | null | undefined;
+  hasCompleteQuestions: boolean;
+}) {
+  // Generation is create-only, including force requests and incomplete drafts.
+  // Existing questions may have student responses or teacher corrections.
+  void request;
+  return false;
 }
 
 function cleanText(value: unknown): string {
@@ -417,7 +432,7 @@ function generatedPracticeSchema(questionCount: number) {
   } as const;
 }
 
-async function generatePracticeContent(args: {
+export async function generatePracticeContent(args: {
   content: string;
   lessonTitleAr: string;
   lessonTitleEn: string;
@@ -444,6 +459,9 @@ ${args.content}`;
 - Every question must be self-contained. Never refer to a picture, audio, gesture, slide, text above/below, or "the lesson" because that context is not shown in Practice.
 - A mnemonic gesture or visual property explicitly taught in the source may be tested only when the prompt fully describes the action or property in text.
 - Give every question exactly one unambiguous correct answer. Avoid opinions, personal preferences, trick wording, and teacher-dependent activities.
+- Independently check factual correctness. Reject incorrect source definitions instead of reproducing them. Half means one of two equal parts; quarter means one of four equal parts of the same whole.
+- Do not reveal the answer in a translated prompt. For English vocabulary, retain an Arabic meaning cue inside the English instruction. English target words and spelling letters must stay in Latin script in BOTH choice arrays; do not append Arabic translations to scored choices.
+- Distinguish printed letter forms, letter names and sounds. Without a real audio cue, label an item as print recognition or spelling, not listening. Supply a meaning cue for spelling gaps whenever multiple valid words could fit.
 - Keep prompts concise and age-appropriate. Include the specific word, number, object, sentence, or situation being tested; never ask generic prompts such as "What is the correct word?"
 - Use varied, plausible distractors that are clearly wrong for the stated prompt. Do not duplicate choices and do not use "all of the above".
 - Arabic and English prompts and options must be natural, accurate, and meaning-aligned. Every question_text_ar must contain a real Arabic instruction or sentence; do not copy the English prompt into it. In English lessons, keep the specific target English word in Latin script inside that Arabic instruction where translating it would remove the skill being tested.
@@ -647,7 +665,6 @@ export async function ensureLessonPractice({
   client,
   lessonId,
   createdBy,
-  force = false,
   numQuestions = PRACTICE_QUESTION_COUNT,
 }: EnsureLessonPracticeOptions): Promise<PracticeGenerationResult> {
   const questionCount = Math.min(Math.max(Math.round(numQuestions), 4), 12);
@@ -667,7 +684,7 @@ export async function ensureLessonPractice({
     .maybeSingle();
   if (existingError) throw existingError;
 
-  if (existingAssignment && !force) {
+  if (existingAssignment) {
     const { data: existingQuestions, error: questionsError } = await client
       .from("homework_questions")
       .select(
@@ -675,26 +692,19 @@ export async function ensureLessonPractice({
       )
       .eq("assignment_id", existingAssignment.id);
     if (questionsError) throw questionsError;
-    if (hasCompletePracticeQuestions(existingQuestions, questionCount)) {
-      const shouldPublish = !!lesson.is_published;
-      if (existingAssignment.is_published !== shouldPublish) {
-        const { error: publishError } = await client
-          .from("homework_assignments")
-          .update({ is_published: shouldPublish, passing_score: PRACTICE_PASSING_SCORE })
-          .eq("id", existingAssignment.id);
-        if (publishError) throw publishError;
-      }
+
       await linkPracticeToLessonSteps(client, lessonId, existingAssignment.id);
       return {
         assignmentId: existingAssignment.id,
         lessonId,
-        questionCount: existingQuestions.length,
+        questionCount: existingQuestions?.length ?? 0,
         generated: false,
-        published: shouldPublish,
+        published: existingAssignment.is_published,
+        reviewProtected: true,
+        reviewedAt: null,
         titleAr: existingAssignment.title_ar,
         titleEn: existingAssignment.title_en ?? existingAssignment.title_ar,
       };
-    }
   }
 
   const deck = await loadLessonSource(client, lessonId);
@@ -713,26 +723,11 @@ export async function ensureLessonPractice({
   });
 
   const totalPoints = generated.questions.length * 10;
-  const shouldPublish = !!lesson.is_published;
+  // AI output is always a draft requiring explicit teacher publication.
+  const shouldPublish = false;
   const ownerId = createdBy || lesson.created_by;
   if (!ownerId) throw new Error("Practice generation requires a content owner.");
-  let assignmentId = existingAssignment?.id ?? null;
-
-  if (assignmentId) {
-    const { error } = await client
-      .from("homework_assignments")
-      .update({
-        title_ar: generated.title_ar,
-        title_en: generated.title_en,
-        total_points: totalPoints,
-        is_published: shouldPublish,
-        passing_score: PRACTICE_PASSING_SCORE,
-        show_instant_feedback: true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", assignmentId);
-    if (error) throw error;
-  } else {
+  let assignmentId: string;
     const { data: created, error } = await client
       .from("homework_assignments")
       .insert({
@@ -754,38 +749,36 @@ export async function ensureLessonPractice({
     if (error?.code === "23505") {
       const { data: concurrentAssignment, error: concurrentError } = await client
         .from("homework_assignments")
-        .select("id")
+        .select("id, title_ar, title_en, is_published")
         .eq("lesson_id", lessonId)
         .eq("is_practice", true)
         .single();
       if (concurrentError || !concurrentAssignment) {
         throw concurrentError ?? new Error("Failed to load the canonical Practice assignment.");
       }
-      assignmentId = concurrentAssignment.id;
-      const { error: updateError } = await client
-        .from("homework_assignments")
-        .update({
-          title_ar: generated.title_ar,
-          title_en: generated.title_en,
-          total_points: totalPoints,
-          is_published: shouldPublish,
-          passing_score: PRACTICE_PASSING_SCORE,
-          show_instant_feedback: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", assignmentId);
-      if (updateError) throw updateError;
+
+      // Another request won creation. Never overwrite its questions.
+        const { count, error: countError } = await client
+          .from("homework_questions")
+          .select("id", { count: "exact", head: true })
+          .eq("assignment_id", concurrentAssignment.id);
+        if (countError) throw countError;
+        await linkPracticeToLessonSteps(client, lessonId, concurrentAssignment.id);
+        return {
+          assignmentId: concurrentAssignment.id,
+          lessonId,
+          questionCount: count ?? 0,
+          generated: false,
+          published: concurrentAssignment.is_published,
+          reviewProtected: true,
+          reviewedAt: null,
+          titleAr: concurrentAssignment.title_ar,
+          titleEn: concurrentAssignment.title_en ?? concurrentAssignment.title_ar,
+        };
     } else {
       if (error || !created) throw error ?? new Error("Failed to create Practice assignment.");
       assignmentId = created.id;
     }
-  }
-
-  const { error: deleteError } = await client
-    .from("homework_questions")
-    .delete()
-    .eq("assignment_id", assignmentId);
-  if (deleteError) throw deleteError;
 
   const rows: Database["public"]["Tables"]["homework_questions"]["Insert"][] =
     generated.questions.map((question, index) => ({
@@ -812,6 +805,8 @@ export async function ensureLessonPractice({
     questionCount: generated.questions.length,
     generated: true,
     published: shouldPublish,
+    reviewProtected: false,
+    reviewedAt: null,
     titleAr: generated.title_ar,
     titleEn: generated.title_en,
   };
@@ -827,7 +822,7 @@ export async function findNextLessonMissingPractice(client: PracticeClient) {
       client
         .from("homework_assignments")
         .select(
-          "id, lesson_id, is_published, homework_questions(question_type, question_text_ar, question_text_en, options_ar, options_en, correct_option_index, correct_answer)"
+          "id, lesson_id"
         )
         .eq("is_practice", true),
     ]);
@@ -845,12 +840,7 @@ export async function findNextLessonMissingPractice(client: PracticeClient) {
         Boolean(lesson.video_url_720p);
       if (!eligible) return false;
       const practice = practiceByLesson.get(lesson.id);
-      const questions = practice?.homework_questions as StoredPracticeQuestion[] | undefined;
-      return (
-        !practice ||
-        !hasCompletePracticeQuestions(questions) ||
-        (lesson.is_published && !practice.is_published)
-      );
+      return !practice;
     }) ?? null
   );
 }

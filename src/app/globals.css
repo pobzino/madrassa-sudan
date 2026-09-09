@@ -180,7 +180,27 @@ body {
 .anim-node-glow { animation: node-glow 2.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
   .anim-cloud, .anim-cloud-2, .anim-sway, .anim-butterfly, .anim-node-glow, .anim-sun,
-  .bird-fly, .bird-fly-2, .bird-fly-3, .bird-wing-a, .bird-wing-b, .anim-leaf-fall { animation: none !important; }
+  .bird-fly, .bird-fly-2, .bird-fly-3, .bird-wing-a, .bird-wing-b, .anim-leaf-fall,
+  .owl-arm-wave { animation: none !important; }
+
+  [data-portal-track] {
+    height: auto !important;
+  }
+
+  [data-portal-stage] {
+    position: relative !important;
+    top: auto !important;
+    min-height: clamp(32rem, 78svh, 46rem);
+  }
+
+  [data-portal-story] {
+    top: auto !important;
+    bottom: 1rem;
+    transform: none !important;
+    border-radius: 1.5rem;
+    background: rgba(160, 16, 40, 0.94);
+    padding: 1.25rem;
+  }
 }
 
 

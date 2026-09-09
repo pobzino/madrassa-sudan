@@ -13,13 +13,8 @@ import {
 import PracticeOwl, { type OwlMood } from "./PracticeOwl";
 import ConfettiBurst from "./ConfettiBurst";
 import PracticeHud from "./PracticeHud";
-import {
-  isNumberSequenceOption,
-  PracticeOptionVisual,
-  PracticeQuestionVisual,
-} from "./PracticeVisual";
 import { drawPhrase, type PracticeLang } from "./encouragement";
-import { normalizeArabicDigits } from "@/lib/whatsapp-login";
+import { practiceAnswerMatches } from "@/lib/practice-answer";
 
 export interface PracticeQuestionInput {
   id: string;
@@ -114,26 +109,6 @@ const SCENES = [
   { stage: "bg-[#BFE7F7]", tray: "bg-[#A5D9EF]", frame: "border-[#72BFDF]" },
   { stage: "bg-[#FFE7A3]", tray: "bg-[#FBD477]", frame: "border-[#EAB94E]" },
 ] as const;
-
-function answersMatch(response: string, correct: string): boolean {
-  const norm = (value: string) => normalizeArabicDigits(value).trim();
-  const normalizedResponse = norm(response);
-  const normalizedCorrect = norm(correct);
-  if (normalizedResponse === normalizedCorrect) return true;
-
-  const responseNumber = Number(normalizedResponse.replace(",", "."));
-  const correctNumber = Number(normalizedCorrect.replace(",", "."));
-  if (
-    normalizedResponse !== "" &&
-    normalizedCorrect !== "" &&
-    Number.isFinite(responseNumber) &&
-    Number.isFinite(correctNumber)
-  ) {
-    return Math.abs(responseNumber - correctNumber) < 1e-9;
-  }
-
-  return normalizedResponse.toLowerCase() === normalizedCorrect.toLowerCase();
-}
 
 type Phase = "question" | "feedback" | "summary";
 
@@ -306,7 +281,7 @@ export default function PracticePlayer({
 
       stopAudio();
 
-      const isCorrect = answersMatch(response, question.correctAnswer);
+      const isCorrect = practiceAnswerMatches(response, question.correctAnswer, question.type);
       answersRef.current = [
         ...answersRef.current,
         { questionId: question.id, response, isCorrect },
@@ -432,7 +407,7 @@ export default function PracticePlayer({
                     {phrase}
                   </p>
                 )}
-                <h1 className="break-words pe-10 text-2xl font-extrabold leading-snug text-gray-900 sm:text-3xl lg:text-[2rem]">
+                <h1 className="whitespace-pre-line break-words pe-10 text-2xl font-extrabold leading-snug text-gray-900 sm:text-3xl lg:text-[2rem]">
                   {question.prompt}
                 </h1>
                 {audioStatus === "error" && (
@@ -441,8 +416,8 @@ export default function PracticePlayer({
               </div>
             </section>
 
-            <PracticeQuestionVisual prompt={question.prompt} lang={lang} />
-
+            {/* Only show authored images: keyword-inferred pictures can contradict
+                word problems or give away vocabulary/colour answers. */}
             {question.imageUrl && (
               <div className="border-t border-gray-100 px-5 py-5 sm:px-8">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -465,7 +440,7 @@ export default function PracticePlayer({
                 >
                   <input
                     autoFocus
-                    inputMode="decimal"
+                    inputMode={/^[\d٠-٩۰-۹.,+-]+$/.test(question.correctAnswer) ? "decimal" : "text"}
                     value={typed}
                     onChange={(event) => setTyped(event.target.value)}
                     disabled={phase === "feedback"}
@@ -493,8 +468,7 @@ export default function PracticePlayer({
                 <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
                   {question.options.map((option, optionIndex) => {
                     const isChosen = selected === option;
-                    const isCorrectOption = answersMatch(option, question.correctAnswer);
-                    const sequenceOption = isNumberSequenceOption(option);
+                    const isCorrectOption = practiceAnswerMatches(option, question.correctAnswer, question.type);
                     const revealCorrect = phase === "feedback" && isCorrectOption;
                     const revealWrongChoice = phase === "feedback" && isChosen && !isCorrectOption;
 
@@ -528,8 +502,7 @@ export default function PracticePlayer({
                           {OPTION_MARKERS[lang][optionIndex] ?? optionIndex + 1}
                         </span>
                         <span className="flex min-w-0 flex-1 items-center gap-3 break-words text-lg font-bold leading-snug sm:text-xl">
-                          <PracticeOptionVisual option={option} />
-                          {!sequenceOption && <span className="min-w-0 flex-1">{option}</span>}
+                          <span className="min-w-0 flex-1" dir="auto">{option}</span>
                         </span>
                         {revealCorrect && (
                           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-600 text-white">

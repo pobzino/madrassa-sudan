@@ -198,6 +198,9 @@ function CreateHomeworkContent() {
               question_text_ar: q.question_text_ar,
               question_text_en: q.question_text_en || null,
               options: q.options || null,
+              options_ar: q.options_ar || null,
+              options_en: q.options_en || null,
+              correct_option_index: q.correct_option_index ?? null,
               correct_answer: q.correct_answer || null,
               points: q.points || 10,
               display_order: q.display_order || i + 1,
@@ -241,23 +244,39 @@ function CreateHomeworkContent() {
             question_text_ar: string;
             question_text_en: string | null;
             options: string[] | null;
+            options_ar: string[] | null;
+            options_en: string[] | null;
+            correct_option_index: number | null;
             correct_answer: string | null;
             points: number;
             display_order: number;
             rubric: unknown;
             instructions: string | null;
-          }) => ({
-            id: q.id,
-            type: q.question_type,
-            question_ar: q.question_text_ar,
-            question_en: q.question_text_en || "",
-            options: q.options || ["", "", "", ""],
-            correct_answer: q.correct_answer || "",
-            points: q.points,
-            display_order: q.display_order,
-            rubric: q.rubric,
-            instructions: q.instructions,
-          })
+          }) => {
+            const optionsAr = q.options_ar?.length
+              ? q.options_ar
+              : q.options || ["", "", "", ""];
+            const optionsEn = q.options_en?.length ? q.options_en : optionsAr.map(() => "");
+            const inferredCorrectIndex = optionsAr.findIndex(
+              (option) => option === q.correct_answer
+            );
+            return {
+              id: q.id,
+              question_type: q.question_type as CreateQuestionInput["question_type"],
+              question_text_ar: q.question_text_ar,
+              question_text_en: q.question_text_en || "",
+              options: optionsAr,
+              options_ar: optionsAr,
+              options_en: optionsEn,
+              correct_option_index:
+                q.correct_option_index ?? (inferredCorrectIndex >= 0 ? inferredCorrectIndex : null),
+              correct_answer: q.correct_answer || "",
+              points: q.points,
+              display_order: q.display_order,
+              rubric: q.rubric as CreateQuestionInput["rubric"],
+              instructions: q.instructions,
+            };
+          }
         );
         setQuestions(formattedQuestions);
       }
@@ -302,6 +321,7 @@ function CreateHomeworkContent() {
     const question = questions[index];
     const duplicated = {
       ...question,
+      id: undefined,
       display_order: questions.length + 1,
     };
     setQuestions([...questions, duplicated]);
@@ -351,6 +371,9 @@ function CreateHomeworkContent() {
           question_text_ar: q.question_text_ar as string,
           question_text_en: (q.question_text_en as string) || null,
           options: (q.options as string[]) || null,
+          options_ar: (q.options_ar as string[]) || null,
+          options_en: (q.options_en as string[]) || null,
+          correct_option_index: typeof q.correct_option_index === "number" ? q.correct_option_index : null,
           correct_answer: (q.correct_answer as string) || null,
           points: (q.points as number) || 10,
           display_order: (q.display_order as number) || i + 1,
@@ -407,6 +430,9 @@ function CreateHomeworkContent() {
           question_text_ar: q.question_text_ar as string,
           question_text_en: (q.question_text_en as string) || null,
           options: (q.options as string[]) || null,
+          options_ar: (q.options_ar as string[]) || null,
+          options_en: (q.options_en as string[]) || null,
+          correct_option_index: typeof q.correct_option_index === "number" ? q.correct_option_index : null,
           correct_answer: (q.correct_answer as string) || null,
           points: (q.points as number) || 10,
           display_order: (q.display_order as number) || i + 1,
@@ -461,6 +487,9 @@ function CreateHomeworkContent() {
           question_text_ar: q.question_text_ar as string,
           question_text_en: (q.question_text_en as string) || null,
           options: (q.options as string[]) || null,
+          options_ar: (q.options_ar as string[]) || null,
+          options_en: (q.options_en as string[]) || null,
+          correct_option_index: typeof q.correct_option_index === "number" ? q.correct_option_index : null,
           correct_answer: (q.correct_answer as string) || null,
           points: (q.points as number) || 10,
           display_order: (q.display_order as number) || i + 1,
@@ -505,10 +534,14 @@ function CreateHomeworkContent() {
         is_published: publish,
         ...(isPractice ? { passing_score: PRACTICE_PASSING_SCORE } : {}),
         questions: questions.map((q, index) => ({
+          id: q.id,
           question_type: q.question_type,
           question_text_ar: q.question_text_ar,
           question_text_en: q.question_text_en || null,
           options: q.options,
+          options_ar: q.options_ar,
+          options_en: q.options_en,
+          correct_option_index: q.correct_option_index,
           correct_answer: q.correct_answer,
           points: q.points,
           display_order: q.display_order || index + 1,
@@ -565,6 +598,11 @@ function CreateHomeworkContent() {
           <h1 className="text-2xl font-bold text-gray-900">
             {isPractice ? "Review Practice" : assignmentId ? "Edit Assignment" : "Create Assignment"}
           </h1>
+          {isPractice && assignmentId && (
+            <p className="mt-1 text-sm font-medium text-emerald-700">
+              Existing questions are protected from automatic regeneration. Review both languages before publishing.
+            </p>
+          )}
         </div>
 
         <div className="text-right">
@@ -706,7 +744,8 @@ function CreateHomeworkContent() {
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setShowAiPanel(!showAiPanel)}
-                disabled={generating}
+                disabled={generating || (isPractice && Boolean(assignmentId))}
+                title={isPractice && assignmentId ? "Edit the existing questions individually to preserve student work" : undefined}
                 className="px-3 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-lg hover:from-violet-600 hover:to-purple-700 transition-colors text-sm font-medium flex items-center gap-1.5 shadow-sm"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -915,6 +954,7 @@ function CreateHomeworkContent() {
                   key={index}
                   question={question}
                   index={index}
+                  bilingualOptions={isPractice}
                   onUpdate={(updates) => updateQuestion(index, updates)}
                   onRemove={() => removeQuestion(index)}
                   onDuplicate={() => duplicateQuestion(index)}
@@ -937,14 +977,14 @@ function CreateHomeworkContent() {
             disabled={saving}
             className="px-6 py-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
-            {saving ? "Saving..." : "Save as Draft"}
+            {saving ? "Saving..." : isPractice ? "Save Review Draft" : "Save as Draft"}
           </button>
           <button
             onClick={() => saveAssignment(true)}
             disabled={saving}
             className="px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50"
           >
-            {saving ? "Publishing..." : "Publish Assignment"}
+            {saving ? "Publishing..." : isPractice ? "Approve & Publish Practice" : "Publish Assignment"}
           </button>
         </div>
       </div>

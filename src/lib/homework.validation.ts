@@ -22,10 +22,14 @@ const rubricCriterionSchema = z.object({
 
 // Create question schema
 export const createQuestionSchema = z.object({
+  id: z.string().uuid().optional(),
   question_type: questionTypeSchema,
   question_text_ar: z.string().min(1, "Question text in Arabic is required"),
   question_text_en: z.string().optional().nullable(),
   options: z.array(z.string()).optional().nullable(),
+  options_ar: z.array(z.string()).optional().nullable(),
+  options_en: z.array(z.string()).optional().nullable(),
+  correct_option_index: z.number().int().min(0).max(5).optional().nullable(),
   correct_answer: z.string().optional().nullable(),
   points: z.number().int().min(1, "Points must be at least 1"),
   display_order: z.number().int().optional(),
@@ -55,6 +59,34 @@ export const createAssignmentSchema = z.object({
 export const updateAssignmentSchema = createAssignmentSchema.partial().extend({
   id: z.string().uuid(),
 });
+
+export function practicePublicationError(questions: Array<{
+  question_type: string; question_text_ar: string; question_text_en?: string | null;
+  options?: unknown; options_ar?: unknown; options_en?: unknown;
+  correct_option_index?: number | null; correct_answer?: string | null;
+}>): string | null {
+  if (!questions.length) return "Practice needs questions before publication.";
+  for (const [i, q] of questions.entries()) {
+    const fail = (message: string) => `Question ${i + 1}: ${message}`;
+    if (!q.question_text_ar.trim() || !q.question_text_en?.trim()) return fail("complete both question languages.");
+    if (!q.correct_answer?.trim()) return fail("provide a correct answer.");
+    if (q.question_type === "short_answer") continue;
+    if (q.question_type !== "multiple_choice" && q.question_type !== "true_false") return fail("use an automatically markable question type.");
+    const ar = q.options_ar;
+    const en = q.options_en;
+    if (!Array.isArray(ar) || !Array.isArray(en) || ar.length !== en.length || ar.length < 2) return fail("provide aligned choices in both languages.");
+    for (const choices of [ar, en]) {
+      if (choices.some(c => typeof c !== "string" || !c.trim())) return fail("complete every choice.");
+      if (new Set(choices.map(c => c.trim())).size !== choices.length) return fail("remove duplicate choices.");
+    }
+    const index = q.correct_option_index;
+    if (index == null || index < 0 || index >= ar.length) return fail("select the correct choice.");
+    const expected = q.question_type === "true_false" ? (index === 0 ? "true" : "false") : ar[index];
+    if (q.correct_answer !== expected) return fail("answer and choice index disagree.");
+    if (q.question_type === "true_false" && (JSON.stringify(ar) !== JSON.stringify(["صحيح", "خطأ"]) || JSON.stringify(en) !== JSON.stringify(["True", "False"]))) return fail("use standard true/false choices.");
+  }
+  return null;
+}
 
 // Submit answer schema
 export const submitAnswerSchema = z.object({

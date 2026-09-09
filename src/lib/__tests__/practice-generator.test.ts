@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   getPracticeQualityIssues,
   normalizeGeneratedPractice,
+  shouldRegenerateExistingPractice,
+  ensureLessonPractice,
 } from "@/lib/server/practice-generator";
 
 const choice = {
@@ -13,6 +15,34 @@ const choice = {
   correct_option_index: 2,
   correct_answer: "",
 };
+
+describe('ensureLessonPractice create-only boundary', () => {
+  it.each([0, 1, 10])('preserves existing questions (%i rows), even with force', async count => {
+    const calls: string[] = [];
+    const client = {from: vi.fn((table: string) => {
+      const result = {data: table === 'lessons' ? {id: 'lesson'}
+        : table === 'homework_assignments' ? {id: 'practice', title_ar: 'تدريب', title_en: 'Practice', is_published: true}
+        : table === 'homework_questions' ? Array.from({length: count}, () => ({})) : null, error: null};
+      const query = {
+        select: () => query,
+        eq: () => query,
+        maybeSingle: () => Promise.resolve(result),
+        update: () => { calls.push(`${table}:update`); return query; },
+        insert: () => { throw new Error(`Unexpected insert into ${table}`); },
+        delete: () => { throw new Error(`Unexpected delete from ${table}`); },
+        then: (resolve: (value: typeof result) => unknown) => Promise.resolve(result).then(resolve),
+      };
+      return query;
+    })};
+    const result = await ensureLessonPractice({
+      client: client as unknown as Parameters<typeof ensureLessonPractice>[0]['client'],
+      lessonId: 'lesson', createdBy: 'owner', force: true,
+    });
+    expect(result).toMatchObject({assignmentId: 'practice', generated: false, published: true, questionCount: count});
+    expect(calls).toEqual(['learning_path_steps:update']);
+    expect(client.from.mock.calls.map(([table]) => table)).not.toContain('lesson_sims');
+  });
+});
 
 describe("normalizeGeneratedPractice", () => {
   it("derives the canonical Arabic choice answer by aligned option index", () => {
@@ -139,5 +169,47 @@ describe("normalizeGeneratedPractice", () => {
     );
 
     expect(issues.some((issue) => issue.includes("missing context"))).toBe(false);
+  });
+});
+
+describe("shouldRegenerateExistingPractice", () => {
+  it("never overwrites a human-reviewed Practice, even when regeneration is forced", () => {
+    expect(
+      shouldRegenerateExistingPractice({
+        force: true,
+        reviewedAt: "2026-09-06T12:00:00.000Z",
+        hasCompleteQuestions: true,
+      })
+    ).toBe(false);
+  });
+
+  it("preserves an existing Practice even when explicitly forced", () => {
+    expect(
+      shouldRegenerateExistingPractice({
+        force: true,
+        reviewedAt: null,
+        hasCompleteQuestions: true,
+      })
+    ).toBe(false);
+  });
+
+  it("keeps a complete unreviewed draft during normal background ensure calls", () => {
+    expect(
+      shouldRegenerateExistingPractice({
+        force: false,
+        reviewedAt: null,
+        hasCompleteQuestions: true,
+      })
+    ).toBe(false);
+  });
+
+  it("preserves incomplete drafts for manual repair", () => {
+    expect(
+      shouldRegenerateExistingPractice({
+        force: false,
+        reviewedAt: null,
+        hasCompleteQuestions: false,
+      })
+    ).toBe(false);
   });
 });

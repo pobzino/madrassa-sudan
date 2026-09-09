@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { submitHomeworkSchema, saveDraftSchema } from "@/lib/homework.validation";
+import { practiceAnswerMatches } from "@/lib/practice-answer";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 
 interface RouteParams {
@@ -192,12 +193,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         q.question_type === "true_false" ||
         (isPractice && q.question_type === "short_answer"));
     const isCorrectAnswer = (
-      q: { correct_answer: string | null },
+      q: { correct_answer: string | null; question_type: string },
       response: string | null | undefined
     ) => {
       if (!response || !q.correct_answer) return false;
       return isPractice
-        ? practiceAnswerMatches(response, q.correct_answer)
+        ? practiceAnswerMatches(response, q.correct_answer, q.question_type)
         : response === q.correct_answer;
     };
 
@@ -512,28 +513,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       { status: 500 }
     );
   }
-}
-
-// Arabic-Indic (٠-٩) and Eastern Arabic (۰-۹) digits → Latin, so a child
-// typing ٤٥ matches a stored answer of 45.
-function normalizeDigits(value: string): string {
-  return value
-    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
-    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0));
-}
-
-// Forgiving comparison for practice answers: trims, ignores case, understands
-// numbers (including Arabic-Indic digits and decimal commas).
-function practiceAnswerMatches(response: string, correct: string): boolean {
-  const r = normalizeDigits(response).trim();
-  const c = normalizeDigits(correct).trim();
-  if (r === c) return true;
-  const rn = Number(r.replace(",", "."));
-  const cn = Number(c.replace(",", "."));
-  if (r !== "" && c !== "" && Number.isFinite(rn) && Number.isFinite(cn)) {
-    return Math.abs(rn - cn) < 1e-9;
-  }
-  return r.toLowerCase() === c.toLowerCase();
 }
 
 // Helper function to update student streak — returns current streak days

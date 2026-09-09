@@ -420,7 +420,6 @@ export async function POST(
           client: createServiceClient(),
           lessonId,
           createdBy: user.id,
-          force: true,
         });
       } catch (practiceError) {
         console.error('Automatic Practice generation after recording failed:', {

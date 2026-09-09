@@ -142,11 +142,23 @@ export async function POST(
     language === "ar"
       ? { audio_url_ar: publicUrl.publicUrl, audio_text_hash_ar: hash }
       : { audio_url_en: publicUrl.publicUrl, audio_text_hash_en: hash };
-  const { error: updateError } = await service
+  // Do not attach old narration if a teacher corrected the prompt/options
+  // while speech generation was running. JSON comparisons are server-side.
+  let cacheUpdate = service
     .from("homework_questions")
     .update(update)
-    .eq("id", questionId);
+    .eq("id", questionId)
+    .eq("question_text_ar", question.question_text_ar);
+  for (const field of ["question_text_en", "options", "options_ar", "options_en"] as const) {
+    cacheUpdate = question[field] === null
+      ? cacheUpdate.is(field, null)
+      : cacheUpdate.eq(field, typeof question[field] === "object" ? JSON.stringify(question[field]) : question[field]!);
+  }
+  const { data: updated, error: updateError } = await cacheUpdate.select("id");
   if (updateError) console.error("Practice narration cache update failed:", updateError);
+  if (!updated?.length) {
+    return NextResponse.json({ error: "Question changed. Reload to hear its current narration." }, { status: 409 });
+  }
 
   return NextResponse.json({ audio_url: publicUrl.publicUrl, cached: false });
 }

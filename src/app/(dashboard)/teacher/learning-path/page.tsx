@@ -170,6 +170,14 @@ export default function LearningPathEditorPage() {
   const generatePractice = async (lessonId: string) => {
     const info = stepByLesson[lessonId];
     if (!info) return;
+    if (
+      info.practiceAssignmentId &&
+      !window.confirm(
+        "Replace this unreviewed Practice draft with a newly generated set? Approved Practices are protected and will open unchanged."
+      )
+    ) {
+      return;
+    }
     setGeneratingFor(lessonId);
     try {
       const res = await fetch("/api/teacher/learning-path/generate-practice", {
@@ -179,7 +187,12 @@ export default function LearningPathEditorPage() {
       });
       const text = await res.text();
       const lastLine = text.trim().split("\n").pop() ?? "";
-      const data = JSON.parse(lastLine) as { assignment_id?: string; error?: string };
+      const data = JSON.parse(lastLine) as {
+        assignment_id?: string;
+        error?: string;
+        generated?: boolean;
+        review_protected?: boolean;
+      };
       if (!res.ok || data.error || !data.assignment_id) {
         toast.error("Practice generation failed: " + (data.error || "Unknown error"));
       } else {
@@ -187,7 +200,13 @@ export default function LearningPathEditorPage() {
           ...prev,
           [lessonId]: { ...info, practiceAssignmentId: data.assignment_id! },
         }));
-        toast.success("Practice generated — review the questions before students see them");
+        if (data.review_protected) {
+          toast.info("Approved Practice is protected and was not regenerated");
+        } else if (data.generated) {
+          toast.success("Practice draft generated — review and approve it before students see it");
+        } else {
+          toast.info("Existing Practice draft kept");
+        }
       }
     } catch {
       toast.error("Practice generation failed");

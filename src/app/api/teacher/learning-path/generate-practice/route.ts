@@ -62,6 +62,10 @@ export async function POST(request: NextRequest) {
                   title_ar: result.titleAr,
                   title_en: result.titleEn,
                   question_count: result.questionCount,
+                  generated: result.generated,
+                  review_protected: result.reviewProtected,
+                  reviewed_at: result.reviewedAt,
+                  published: result.published,
                 })
             )
           );

@@ -50,9 +50,13 @@ function slideContent(deck) {
 }
 
 async function loadRows(table, select, configure = (query) => query) {
-  const { data, error } = await configure(supabase.from(table).select(select));
-  if (error) throw error;
-  return data || [];
+  const rows = [];
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await configure(supabase.from(table).select(select)).order("id").range(offset, offset + 499);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < 500) return rows;
+  }
 }
 
 const [lessons, assignments, questions, sims, slideDecks] = await Promise.all([

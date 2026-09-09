@@ -1108,7 +1108,6 @@ function GeneratePracticeButton({ lessonId, hasSource }: { lessonId: string; has
   }, [lessonId]);
 
   async function handleGenerate() {
-    setGenerating(true);
     setError(null);
 
     try {
@@ -1116,6 +1115,13 @@ function GeneratePracticeButton({ lessonId, hasSource }: { lessonId: string; has
         setError("Add this lesson to the independent learning path first.");
         return;
       }
+
+      if (step.practice_assignment_id) {
+        router.push(`/teacher/homework/create?assignment=${step.practice_assignment_id}`);
+        return;
+      }
+
+      setGenerating(true);
 
       const res = await fetch("/api/teacher/learning-path/generate-practice", {
         method: "POST",
@@ -1145,12 +1151,14 @@ function GeneratePracticeButton({ lessonId, hasSource }: { lessonId: string; has
     <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between">
       <div>
         <p className="text-sm font-medium text-gray-900">
-          {step?.practice_assignment_id ? "Regenerate Practice" : "Generate Practice"}
+          {step?.practice_assignment_id ? "Review Practice" : "Generate Practice"}
         </p>
         <p className="text-xs text-gray-500">
           {step === null
             ? "Add this lesson to the independent learning path before generating Practice."
-            : `Create ${PRACTICE_QUESTION_COUNT} editable questions from this lesson. Students pass at ${PRACTICE_PASSING_SCORE}%.`}
+            : step?.practice_assignment_id
+              ? "Open the existing questions to review, correct, and approve them."
+              : `Create ${PRACTICE_QUESTION_COUNT} editable draft questions from this lesson. Students pass at ${PRACTICE_PASSING_SCORE}%.`}
         </p>
       </div>
       <div className="flex items-center gap-3">
@@ -1166,7 +1174,7 @@ function GeneratePracticeButton({ lessonId, hasSource }: { lessonId: string; has
               Generating...
             </>
           ) : (
-            step?.practice_assignment_id ? "Regenerate Practice" : "Generate Practice"
+            step?.practice_assignment_id ? "Review Practice" : "Generate Practice"
           )}
         </button>
       </div>

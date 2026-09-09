@@ -9,6 +9,7 @@ type QuestionType = CreateQuestionInput["question_type"];
 interface QuestionBuilderProps {
   question: CreateQuestionInput;
   index: number;
+  bilingualOptions?: boolean;
   onUpdate: (updates: Partial<CreateQuestionInput>) => void;
   onRemove: () => void;
   onDuplicate: () => void;
@@ -25,24 +26,92 @@ const questionTypeLabels: Record<QuestionType, { ar: string; en: string; Icon: L
 export function QuestionBuilder({
   question,
   index,
+  bilingualOptions = false,
   onUpdate,
   onRemove,
   onDuplicate,
 }: QuestionBuilderProps) {
   const [showRubric, setShowRubric] = useState(false);
   const [newOption, setNewOption] = useState("");
+  const [newOptionEn, setNewOptionEn] = useState("");
+
+  const optionsAr = bilingualOptions
+    ? question.options_ar?.length
+      ? question.options_ar
+      : question.options || []
+    : question.options || [];
+  const optionsEn = bilingualOptions
+    ? question.options_en?.length
+      ? question.options_en
+      : optionsAr.map(() => "")
+    : [];
+  const inferredCorrectIndex = optionsAr.findIndex(
+    (option) => option === question.correct_answer
+  );
+  const correctOptionIndex =
+    question.correct_option_index ?? (inferredCorrectIndex >= 0 ? inferredCorrectIndex : null);
 
   const handleAddOption = () => {
-    if (newOption.trim()) {
-      const newOptions = [...(question.options || []), newOption.trim()];
-      onUpdate({ options: newOptions });
-      setNewOption("");
+    if (!newOption.trim()) return;
+    if (bilingualOptions && !newOptionEn.trim()) return;
+
+    const newOptionsAr = [...optionsAr, newOption.trim()];
+    if (bilingualOptions) {
+      onUpdate({
+        options: newOptionsAr,
+        options_ar: newOptionsAr,
+        options_en: [...optionsEn, newOptionEn.trim()],
+      });
+      setNewOptionEn("");
+    } else {
+      onUpdate({ options: newOptionsAr });
     }
+    setNewOption("");
   };
 
   const handleRemoveOption = (optionIndex: number) => {
-    const newOptions = (question.options || []).filter((_, i) => i !== optionIndex);
-    onUpdate({ options: newOptions });
+    const newOptionsAr = optionsAr.filter((_, i) => i !== optionIndex);
+    if (!bilingualOptions) {
+      onUpdate({ options: newOptionsAr });
+      return;
+    }
+
+    const newOptionsEn = optionsEn.filter((_, i) => i !== optionIndex);
+    const nextCorrectIndex =
+      correctOptionIndex === optionIndex
+        ? null
+        : correctOptionIndex !== null && correctOptionIndex > optionIndex
+          ? correctOptionIndex - 1
+          : correctOptionIndex;
+    onUpdate({
+      options: newOptionsAr,
+      options_ar: newOptionsAr,
+      options_en: newOptionsEn,
+      correct_option_index: nextCorrectIndex,
+      correct_answer:
+        nextCorrectIndex === null ? null : newOptionsAr[nextCorrectIndex] || null,
+    });
+  };
+
+  const updateBilingualOption = (
+    language: "ar" | "en",
+    optionIndex: number,
+    value: string
+  ) => {
+    const nextAr = [...optionsAr];
+    const nextEn = [...optionsEn];
+    if (language === "ar") nextAr[optionIndex] = value;
+    else nextEn[optionIndex] = value;
+
+    onUpdate({
+      options: nextAr,
+      options_ar: nextAr,
+      options_en: nextEn,
+      correct_answer:
+        language === "ar" && correctOptionIndex === optionIndex
+          ? value
+          : question.correct_answer,
+    });
   };
 
   const handleAddRubricCriterion = () => {
@@ -82,7 +151,17 @@ export function QuestionBuilder({
           </span>
           <select
             value={question.question_type}
-            onChange={(e) => onUpdate({ question_type: e.target.value as QuestionType })}
+            onChange={(e) => {
+              const type = e.target.value as QuestionType;
+              onUpdate({
+                question_type: type,
+                options: type === "true_false" ? ["صحيح", "خطأ"] : null,
+                options_ar: type === "true_false" ? ["صحيح", "خطأ"] : null,
+                options_en: type === "true_false" ? ["True", "False"] : null,
+                correct_option_index: null,
+                correct_answer: null,
+              });
+            }}
             className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white"
           >
             {Object.entries(questionTypeLabels).map(([type, labels]) => (
@@ -147,31 +226,67 @@ export function QuestionBuilder({
       {question.question_type === "multiple_choice" && (
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Options
+            {bilingualOptions ? "Answer options (Arabic and English)" : "Options"}
           </label>
           <div className="space-y-2">
-            {(question.options || []).map((option, i) => (
-              <div key={i} className="flex items-center gap-2">
+            {optionsAr.map((option, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-2"
+              >
                 <input
                   type="radio"
                   name={`correct-${index}`}
-                  checked={question.correct_answer === option}
-                  onChange={() => onUpdate({ correct_answer: option })}
-                  className="text-emerald-600"
+                  checked={correctOptionIndex === i}
+                  onChange={() =>
+                    onUpdate({
+                      correct_option_index: i,
+                      correct_answer: option,
+                      ...(bilingualOptions
+                        ? { options: optionsAr, options_ar: optionsAr, options_en: optionsEn }
+                        : {}),
+                    })
+                  }
+                  className="mt-3 text-emerald-600"
                 />
-                <input
-                  type="text"
-                  value={option}
-                  onChange={(e) => {
-                    const newOptions = [...(question.options || [])];
-                    newOptions[i] = e.target.value;
-                    onUpdate({ options: newOptions });
-                  }}
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                />
+                <div className={`grid min-w-0 flex-1 gap-2 ${bilingualOptions ? "md:grid-cols-2" : "grid-cols-1"}`}>
+                  <input
+                    type="text"
+                    value={option}
+                    onChange={(e) => {
+                      if (bilingualOptions) {
+                        updateBilingualOption("ar", i, e.target.value);
+                      } else {
+                        const newOptions = [...optionsAr];
+                        newOptions[i] = e.target.value;
+                        onUpdate({
+                          options: newOptions,
+                          correct_answer:
+                            correctOptionIndex === i ? e.target.value : question.correct_answer,
+                        });
+                      }
+                    }}
+                    dir={bilingualOptions ? "rtl" : undefined}
+                    aria-label={bilingualOptions ? `Arabic option ${i + 1}` : `Option ${i + 1}`}
+                    placeholder={bilingualOptions ? "الخيار بالعربية" : undefined}
+                    className="min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  />
+                  {bilingualOptions && (
+                    <input
+                      type="text"
+                      value={optionsEn[i] || ""}
+                      onChange={(e) => updateBilingualOption("en", i, e.target.value)}
+                      aria-label={`English option ${i + 1}`}
+                      placeholder="English option"
+                      className="min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    />
+                  )}
+                </div>
                 <button
+                  type="button"
                   onClick={() => handleRemoveOption(i)}
-                  className="p-1 text-gray-400 hover:text-red-600"
+                  className="mt-2 p-1 text-gray-400 hover:text-red-600"
+                  aria-label={`Remove option ${i + 1}`}
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -179,30 +294,52 @@ export function QuestionBuilder({
                 </button>
               </div>
             ))}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={newOption}
-                onChange={(e) => setNewOption(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddOption();
-                  }
-                }}
-                placeholder="Add new option..."
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
-              />
+            <div className="flex items-start gap-2">
+              <div className={`grid min-w-0 flex-1 gap-2 ${bilingualOptions ? "md:grid-cols-2" : "grid-cols-1"}`}>
+                <input
+                  type="text"
+                  value={newOption}
+                  onChange={(e) => setNewOption(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddOption();
+                    }
+                  }}
+                  dir={bilingualOptions ? "rtl" : undefined}
+                  placeholder={bilingualOptions ? "خيار عربي جديد" : "Add new option..."}
+                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                />
+                {bilingualOptions && (
+                  <input
+                    type="text"
+                    value={newOptionEn}
+                    onChange={(e) => setNewOptionEn(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddOption();
+                      }
+                    }}
+                    placeholder="New English option"
+                    className="min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  />
+                )}
+              </div>
               <button
+                type="button"
                 onClick={handleAddOption}
-                className="px-3 py-2 bg-emerald-100 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-200"
+                disabled={!newOption.trim() || (bilingualOptions && !newOptionEn.trim())}
+                className="px-3 py-2 bg-emerald-100 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Add
               </button>
             </div>
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            Select the radio button next to the correct answer
+            {bilingualOptions
+              ? "Keep each Arabic option aligned with its English translation, then select the one correct answer."
+              : "Select the radio button next to the correct answer"}
           </p>
         </div>
       )}
@@ -215,7 +352,19 @@ export function QuestionBuilder({
           <div className="flex gap-3">
             <button
               type="button"
-              onClick={() => onUpdate({ correct_answer: "true" })}
+              onClick={() =>
+                onUpdate({
+                  correct_answer: "true",
+                  ...(bilingualOptions
+                    ? {
+                        options: ["صحيح", "خطأ"],
+                        options_ar: ["صحيح", "خطأ"],
+                        options_en: ["True", "False"],
+                        correct_option_index: 0,
+                      }
+                    : {}),
+                })
+              }
               className={`px-4 py-2 rounded-lg border-2 font-medium ${
                 question.correct_answer === "true"
                   ? "border-emerald-500 bg-emerald-50 text-emerald-700"
@@ -226,7 +375,19 @@ export function QuestionBuilder({
             </button>
             <button
               type="button"
-              onClick={() => onUpdate({ correct_answer: "false" })}
+              onClick={() =>
+                onUpdate({
+                  correct_answer: "false",
+                  ...(bilingualOptions
+                    ? {
+                        options: ["صحيح", "خطأ"],
+                        options_ar: ["صحيح", "خطأ"],
+                        options_en: ["True", "False"],
+                        correct_option_index: 1,
+                      }
+                    : {}),
+                })
+              }
               className={`px-4 py-2 rounded-lg border-2 font-medium ${
                 question.correct_answer === "false"
                   ? "border-red-500 bg-red-50 text-red-700"
