@@ -26,6 +26,6 @@ function textDeck(deck) {
 }
 const decks = (await rows('lesson_slides', 'id,lesson_id,slides')).filter(x => lessonIds.has(x.lesson_id)).map(x => ({...x,slides:textDeck(x.slides)}));
 const sims = (await rows('lesson_sims', 'id,lesson_id,deck_snapshot,recorded_at')).filter(x => lessonIds.has(x.lesson_id)).map(x => ({...x,deck_snapshot:textDeck(x.deck_snapshot)}));
-const tasks = (await rows('lesson_tasks', 'id,lesson_id,linked_slide_id,title_ar,title_en,config')).filter(x => lessonIds.has(x.lesson_id));
+const tasks = (await rows('lesson_tasks', 'id,lesson_id,linked_slide_id,title_ar,title_en,instruction_ar,instruction_en,task_type,task_data')).filter(x => lessonIds.has(x.lesson_id));
 await writeFile('curriculum.json', JSON.stringify({lessons,assignments,questions,decks,sims,tasks},null,2));
 console.log(`Exported published curriculum: ${assignments.length} Practices, ${questions.length} questions. No student tables accessed.`);
