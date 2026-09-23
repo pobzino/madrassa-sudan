@@ -7,8 +7,17 @@ import Link from "next/link";
 import type { UserRole } from "@/lib/database.types";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getAuthCallbackUrl } from "@/lib/site-url";
-import { whatsappDigits, whatsappLoginEmail } from "@/lib/whatsapp-login";
+import {
+  normalizeArabicDigits,
+  whatsappDigits,
+  whatsappLoginEmail,
+  whatsappNumberWithCountryCode,
+} from "@/lib/whatsapp-login";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import CountryCodeSelect from "@/components/CountryCodeSelect";
+import { Minus, Plus } from "lucide-react";
+
+const PARENT_WHATSAPP_GROUP_URL = "https://chat.whatsapp.com/ENlNNVC61xT53dQgtQTFrQ?mode=gi_t";
 
 // Icons for role selection
 const RoleIcons = {
@@ -53,6 +62,9 @@ const translations = {
     parentProfessionLabel: "المهنة / العمل",
     professionPlaceholder: "مثال: معلم، ممرض، عمل حر",
     whatsappLabel: "رقم الواتساب (جهة التواصل الأساسية)",
+    countryRegionLabel: "الدولة أو المنطقة",
+    localWhatsappNumberLabel: "رقم واتساب",
+    localWhatsappNumberPlaceholder: "رقم الهاتف المحلي",
     whatsappPlaceholder: "+249...",
     eligibilityTitle: "أسئلة الأهلية",
     sudaneseDescentLabel: "هل أنت من أصل سوداني؟",
@@ -125,8 +137,11 @@ const translations = {
     sendingConfirmation: "جاري الإرسال...",
     confirmationSent: "تم إرسال رسالة تأكيد جديدة. تحقق من البريد والرسائل غير المرغوب فيها.",
     resendHint: "إذا لم تصلك الرسالة خلال دقيقة، أعد الإرسال.",
-    applicationReceived: "تم استلام طلبك",
-    whatsappApprovalHint: "سنراجع طلبك ونتواصل معك عبر واتساب. بعد الموافقة، سجّل الدخول برقم واتساب وكلمة المرور.",
+    parentAccountReady: "حساب ولي الأمر جاهز",
+    parentAccountReadyHint: "انضم إلى مجموعة واتساب الخاصة بأولياء الأمور للحصول على التحديثات والدعم.",
+    parentEmailConfirmationHint: "أكد الرابط الذي أرسلناه إلى بريدك الإلكتروني، ثم سجّل الدخول. يمكنك الانضمام إلى مجموعة أولياء الأمور الآن.",
+    joinParentWhatsAppGroup: "انضم إلى مجموعة أولياء الأمور على واتساب",
+    continueToDashboard: "الانتقال إلى المنصة",
     backToLogin: "العودة لتسجيل الدخول",
   },
   en: {
@@ -147,6 +162,9 @@ const translations = {
     parentProfessionLabel: "Profession / occupation",
     professionPlaceholder: "e.g. teacher, nurse, self-employed",
     whatsappLabel: "WhatsApp number (primary contact)",
+    countryRegionLabel: "Country / region",
+    localWhatsappNumberLabel: "WhatsApp number",
+    localWhatsappNumberPlaceholder: "Local number",
     whatsappPlaceholder: "+249...",
     eligibilityTitle: "Eligibility questions",
     sudaneseDescentLabel: "Are you of Sudanese descent?",
@@ -219,8 +237,11 @@ const translations = {
     sendingConfirmation: "Sending...",
     confirmationSent: "A new confirmation email has been sent. Check your inbox and spam folder.",
     resendHint: "If you don't receive it within a minute, resend it.",
-    applicationReceived: "Application received",
-    whatsappApprovalHint: "We will review your application and contact you on WhatsApp. Once approved, sign in with your WhatsApp number and password.",
+    parentAccountReady: "Your parent account is ready",
+    parentAccountReadyHint: "Join the parent WhatsApp group for updates and support.",
+    parentEmailConfirmationHint: "Confirm the link we sent to your email, then sign in. You can join the parent group now.",
+    joinParentWhatsAppGroup: "Join the parent WhatsApp group",
+    continueToDashboard: "Go to the platform",
     backToLogin: "Back to Login",
   },
 };
@@ -228,6 +249,23 @@ const translations = {
 type YesNoAnswer = "" | "yes" | "no" | "unsure";
 type InvolvementArea = "teaching" | "tech_platform" | "content_video" | "operations" | "outreach" | "other";
 type ReferralSource = "" | "word_of_mouth" | "facebook" | "instagram" | "whatsapp" | "other";
+
+const parentCallingCodeOptions = [
+  { code: "+249", en: "Sudan", ar: "السودان" },
+  { code: "+20", en: "Egypt", ar: "مصر" },
+  { code: "+235", en: "Chad", ar: "تشاد" },
+  { code: "+211", en: "South Sudan", ar: "جنوب السودان" },
+  { code: "+251", en: "Ethiopia", ar: "إثيوبيا" },
+  { code: "+256", en: "Uganda", ar: "أوغندا" },
+  { code: "+254", en: "Kenya", ar: "كينيا" },
+  { code: "+966", en: "Saudi Arabia", ar: "السعودية" },
+  { code: "+971", en: "United Arab Emirates", ar: "الإمارات" },
+  { code: "+974", en: "Qatar", ar: "قطر" },
+  { code: "+968", en: "Oman", ar: "عُمان" },
+  { code: "+90", en: "Turkey", ar: "تركيا" },
+  { code: "+44", en: "United Kingdom", ar: "المملكة المتحدة" },
+  { code: "+1", en: "United States / Canada", ar: "الولايات المتحدة / كندا" },
+];
 
 function SignupForm() {
   const searchParams = useSearchParams();
@@ -240,13 +278,16 @@ function SignupForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [pendingWhatsappApproval, setPendingWhatsappApproval] = useState(false);
+  const [parentSignupComplete, setParentSignupComplete] = useState(false);
+  const [parentEmailConfirmationRequired, setParentEmailConfirmationRequired] = useState(false);
+  const [parentHasSession, setParentHasSession] = useState(false);
   const [website, setWebsite] = useState("");
   const [resendLoading, setResendLoading] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
   const [consentGiven, setConsentGiven] = useState(false);
   const [parentProfession, setParentProfession] = useState("");
+  const [parentCallingCode, setParentCallingCode] = useState("+249");
   const [parentWhatsapp, setParentWhatsapp] = useState("");
   const [sudaneseDescent, setSudaneseDescent] = useState<YesNoAnswer>("");
   const [affectedByWar, setAffectedByWar] = useState<YesNoAnswer>("");
@@ -254,8 +295,8 @@ function SignupForm() {
   const [outOfSchool, setOutOfSchool] = useState<YesNoAnswer>("");
   const [outOfSchoolDuration, setOutOfSchoolDuration] = useState("");
   const [outOfSchoolDetails, setOutOfSchoolDetails] = useState("");
-  const [childrenCount, setChildrenCount] = useState(1);
   const [childrenAges, setChildrenAges] = useState<string[]>([""]);
+  const childrenCount = childrenAges.length;
   const [canAccessWebsite, setCanAccessWebsite] = useState<YesNoAnswer>("");
   const [canAccessZoom, setCanAccessZoom] = useState<YesNoAnswer>("");
   const [deviceType, setDeviceType] = useState("");
@@ -336,10 +377,9 @@ function SignupForm() {
     );
   };
 
-  const updateChildrenCount = (count: number) => {
-    const clamped = Math.min(Math.max(count, 1), 8);
-    setChildrenCount(clamped);
+  const updateChildrenCount = (change: number) => {
     setChildrenAges((prev) => {
+      const clamped = Math.min(Math.max(prev.length + change, 1), 8);
       const next = prev.slice(0, clamped);
       while (next.length < clamped) next.push("");
       return next;
@@ -390,11 +430,24 @@ function SignupForm() {
       other: referralSource === "other" ? referralOther.trim() : "",
     };
 
+    const hasTypedCountryCode = /^(?:\+|00)/.test(normalizeArabicDigits(parentWhatsapp).trim());
+    if (role === "parent" && hasTypedCountryCode) {
+      trackAnalyticsEvent("signup_error", { role, error_type: "validation_contact" });
+      setError(
+        language === "ar"
+          ? "اختر رمز الدولة من القائمة وأدخل رقم واتساب بدون رمز الدولة."
+          : "Choose the country code from the list, then enter your WhatsApp number without the country code."
+      );
+      setLoading(false);
+      return;
+    }
+
+    const parentWhatsappNumber = whatsappNumberWithCountryCode(parentCallingCode, parentWhatsapp);
     const parentDetails =
       role === "parent"
         ? {
             profession: parentProfession.trim(),
-            whatsapp_number: parentWhatsapp.trim(),
+            whatsapp_number: parentWhatsappNumber,
             eligibility: {
               sudanese_descent: sudaneseDescent,
               child_affected_by_war: affectedByWar,
@@ -431,7 +484,7 @@ function SignupForm() {
     // Parents may sign up without an email: derive a stable login identifier
     // from the WhatsApp number instead (they log in with number + password).
     const trimmedEmail = email.trim();
-    if (role === "parent" && !trimmedEmail && whatsappDigits(parentWhatsapp).length < 7) {
+    if (role === "parent" && !trimmedEmail && whatsappDigits(parentWhatsappNumber).length < 7) {
       trackAnalyticsEvent("signup_error", { role, error_type: "validation_contact" });
       setError(
         language === "ar"
@@ -442,7 +495,7 @@ function SignupForm() {
       return;
     }
     const loginEmail =
-      role === "parent" && !trimmedEmail ? whatsappLoginEmail(parentWhatsapp) : trimmedEmail;
+      role === "parent" && !trimmedEmail ? whatsappLoginEmail(parentWhatsappNumber) : trimmedEmail;
 
     if (role === "parent" && !trimmedEmail) {
       const response = await fetch("/api/auth/parent-signup", {
@@ -451,7 +504,7 @@ function SignupForm() {
         body: JSON.stringify({
           fullName,
           password,
-          whatsapp: parentWhatsapp,
+          whatsapp: parentWhatsappNumber,
           language,
           website,
           parent: parentDetails,
@@ -469,7 +522,7 @@ function SignupForm() {
 
       trackAnalyticsEvent("signup_complete", { role });
       trackAnalyticsEvent("application_submit", { role });
-      setPendingWhatsappApproval(true);
+      setParentSignupComplete(true);
       setSuccess(true);
       setLoading(false);
       return;
@@ -484,7 +537,7 @@ function SignupForm() {
           full_name: fullName,
           role: role,
           preferred_language: language,
-          phone: role === "parent" ? parentWhatsapp.trim() : role === "teacher" ? teacherWhatsapp.trim() : null,
+          phone: role === "parent" ? parentWhatsappNumber : role === "teacher" ? teacherWhatsapp.trim() : null,
           referral_source: referralDetails.source,
           referral_source_other: referralDetails.other || null,
           signup_details: {
@@ -510,11 +563,21 @@ function SignupForm() {
       trackAnalyticsEvent("application_submit", { role });
     }
 
+    if (role === "parent") {
+      setParentSignupComplete(true);
+      setParentEmailConfirmationRequired(!data.session);
+      setParentHasSession(Boolean(data.session));
+      setSuccess(true);
+      setLoading(false);
+      return;
+    }
+
     if (data.session) {
       router.push("/dashboard");
       router.refresh();
     } else {
       setSuccess(true);
+      setLoading(false);
     }
   };
 
@@ -544,13 +607,25 @@ function SignupForm() {
         <div className="absolute inset-0 grid-pattern opacity-60 pointer-events-none" />
         <div className="max-w-md w-full mx-4 bg-white rounded-3xl shadow-xl border border-gray-100 p-8 text-center relative z-10 animate-fade-up">
           <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
-            {pendingWhatsappApproval ? RoleIcons.parent : RoleIcons.email}
+            {parentSignupComplete ? RoleIcons.parent : RoleIcons.email}
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            {pendingWhatsappApproval ? t.applicationReceived : t.checkEmail}
+            {parentSignupComplete ? t.parentAccountReady : t.checkEmail}
           </h2>
-          {pendingWhatsappApproval ? (
-            <p className="text-gray-600 mb-6">{t.whatsappApprovalHint}</p>
+          {parentSignupComplete ? (
+            <>
+              <p className="text-gray-600 mb-6">
+                {parentEmailConfirmationRequired ? t.parentEmailConfirmationHint : t.parentAccountReadyHint}
+              </p>
+              <a
+                href={PARENT_WHATSAPP_GROUP_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="mb-3 inline-flex w-full items-center justify-center rounded-xl bg-[#25D366] px-6 py-3 font-semibold text-white transition-colors hover:bg-[#1fb65a]"
+              >
+                {t.joinParentWhatsAppGroup}
+              </a>
+            </>
           ) : (
             <>
               <p className="text-gray-600 mb-6">
@@ -570,7 +645,7 @@ function SignupForm() {
               {resendMessage}
             </div>
           )}
-          {!pendingWhatsappApproval && (
+          {(!parentSignupComplete || parentEmailConfirmationRequired) && (
             <button
               type="button"
               onClick={handleResendConfirmation}
@@ -581,10 +656,10 @@ function SignupForm() {
             </button>
           )}
           <Link
-            href="/auth/login"
+            href={parentHasSession ? "/dashboard" : "/auth/login"}
             className="inline-flex items-center justify-center px-6 py-3 bg-[var(--primary)] text-white font-semibold rounded-xl hover:bg-[var(--primary-light)] transition-colors shadow-lg shadow-green-900/20"
           >
-            {t.backToLogin}
+            {parentHasSession ? t.continueToDashboard : t.backToLogin}
           </Link>
         </div>
       </div>
@@ -708,10 +783,10 @@ function SignupForm() {
             </div>
 
             {role === "parent" && (
-              <div className="space-y-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+              <div className="space-y-6 border-t border-gray-200 pt-6">
                 <div>
-                  <h2 className="text-sm font-bold text-gray-900">{t.parentDetailsTitle}</h2>
-                  <p className="mt-1 text-xs leading-relaxed text-emerald-800">{t.programmeDesc}</p>
+                  <h2 className="text-base font-bold text-gray-900">{t.parentDetailsTitle}</h2>
+                  <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-gray-500">{t.programmeDesc}</p>
                 </div>
 
                 <div>
@@ -728,22 +803,36 @@ function SignupForm() {
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="parentWhatsapp" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <fieldset>
+                  <legend className="mb-2 block text-sm font-semibold text-gray-700">
                     {t.whatsappLabel}
-                  </label>
-                  <input
-                    id="parentWhatsapp"
-                    type="tel"
-                    required
-                    value={parentWhatsapp}
-                    onChange={(e) => setParentWhatsapp(e.target.value)}
-                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
-                    placeholder={t.whatsappPlaceholder}
-                    dir="ltr"
-                    style={{ textAlign: "left" }}
-                  />
-                </div>
+                  </legend>
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)]" dir="ltr">
+                    <CountryCodeSelect value={parentCallingCode} onChange={setParentCallingCode} options={parentCallingCodeOptions} language={language} label={t.countryRegionLabel} />
+                    <label htmlFor="parentWhatsapp" className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-gray-500">
+                        {t.localWhatsappNumberLabel}
+                      </span>
+                      <div className="flex">
+                        <span className="inline-flex shrink-0 items-center rounded-l-xl border border-r-0 border-gray-200 bg-gray-50 px-3 text-sm font-medium tabular-nums text-gray-600">
+                          {parentCallingCode}
+                        </span>
+                        <input
+                          id="parentWhatsapp"
+                          type="tel"
+                          inputMode="tel"
+                          autoComplete="tel-national"
+                          required
+                          value={parentWhatsapp}
+                          onChange={(e) => setParentWhatsapp(e.target.value)}
+                          className="block min-w-0 flex-1 rounded-r-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                          placeholder={t.localWhatsappNumberPlaceholder}
+                          style={{ textAlign: "left" }}
+                        />
+                      </div>
+                    </label>
+                  </div>
+                </fieldset>
 
                 <div className="space-y-3">
                   <h3 className="text-sm font-bold text-gray-900">{t.eligibilityTitle}</h3>
@@ -821,23 +910,25 @@ function SignupForm() {
 
                 <div>
                   <span className="block text-sm font-semibold text-gray-700 mb-1.5">{t.childrenCountLabel}</span>
-                  <div className="flex items-center gap-3" dir="ltr">
+                  <div className="inline-flex items-center overflow-hidden rounded-lg border border-gray-300" dir="ltr">
                     <button
                       type="button"
-                      onClick={() => updateChildrenCount(childrenCount - 1)}
-                      className="w-11 h-11 rounded-xl border border-gray-200 bg-white text-xl font-bold text-gray-600 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
-                      aria-label="-"
+                      onClick={() => updateChildrenCount(-1)}
+                      disabled={childrenCount <= 1}
+                      className="grid h-12 w-12 touch-manipulation place-items-center bg-gray-50 text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-300"
+                      aria-label={language === "ar" ? "تقليل عدد الأطفال" : "Remove a child"}
                     >
-                      −
+                      <Minus className="h-4 w-4" aria-hidden="true" />
                     </button>
-                    <span className="w-10 text-center text-lg font-bold text-gray-900">{childrenCount}</span>
+                    <output aria-label={t.childrenCountLabel} aria-live="polite" className="grid h-12 w-14 place-items-center border-x border-gray-300 text-base font-semibold tabular-nums text-gray-900">{childrenCount}</output>
                     <button
                       type="button"
-                      onClick={() => updateChildrenCount(childrenCount + 1)}
-                      className="w-11 h-11 rounded-xl border border-gray-200 bg-white text-xl font-bold text-gray-600 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
-                      aria-label="+"
+                      onClick={() => updateChildrenCount(1)}
+                      disabled={childrenCount >= 8}
+                      className="grid h-12 w-12 touch-manipulation place-items-center bg-gray-50 text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-300"
+                      aria-label={language === "ar" ? "إضافة طفل" : "Add a child"}
                     >
-                      +
+                      <Plus className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </div>
                 </div>

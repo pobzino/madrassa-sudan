@@ -17,6 +17,7 @@
     "inspect:slides": "node scripts/inspect-slides.mjs",
     "audit:practices": "node scripts/audit-practice-quality.mjs",
     "test:prod-sim": "node scripts/sim-prod-smoke.mjs",
+    "test:mobile-ui": "node scripts/mobile-ui-smoke.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

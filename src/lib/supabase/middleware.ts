@@ -69,8 +69,8 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    // A missing profile is not an authorization grant. Every role, including
-    // administrators, must have an explicitly approved profile.
+    // A missing profile is not an authorization grant. Parent profiles are
+    // approved at creation time; every unapproved profile remains blocked.
     if (!profile || !profile.is_approved) {
       const url = request.nextUrl.clone();
       url.pathname = "/auth/pending-approval";

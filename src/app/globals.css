@@ -1,5 +1,32 @@
 @import "tailwindcss" source("..");
 
+.sim-seek::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, #007229 var(--seek-progress), #d1d5db var(--seek-progress));
+}
+.sim-seek::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;
+  border: 3px solid white;
+  border-radius: 50%;
+  background: #007229;
+  box-shadow: 0 0 0 1px #007229;
+}
+.sim-seek::-moz-range-track { height: 6px; border-radius: 3px; background: #d1d5db; }
+.sim-seek::-moz-range-progress { height: 6px; background: #007229; }
+.sim-seek::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 3px solid white;
+  border-radius: 50%;
+  background: #007229;
+  box-shadow: 0 0 0 1px #007229;
+}
+.sim-seek:focus-visible { outline: 2px solid #007229; outline-offset: 2px; border-radius: 4px; }
+
 :root {
   /* Sudan Flag Brand Palette */
   --sudan-green: #007229;

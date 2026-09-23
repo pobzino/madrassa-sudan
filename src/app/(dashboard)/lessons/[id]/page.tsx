@@ -206,6 +206,8 @@ export default function LessonPlayerPage() {
   const [practicePassed, setPracticePassed] = useState(false);
   const [adjacentLessons, setAdjacentLessons] = useState<{ prev: Lesson | null; next: Lesson | null }>({ prev: null, next: null });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
   const lastSimPctRef = useRef(0);
   const furthestSecRef = useRef(0);
@@ -338,7 +340,17 @@ export default function LessonPlayerPage() {
   const [showConfetti, setShowConfetti] = useState(false);
   // Load lesson data
   useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    let disposed = false;
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+      setLoadError(true);
+      setLoading(false);
+    }, 30_000);
     async function loadData() {
+      setLoading(true);
+      setLoadError(false);
       // Offline mode: load from IndexedDB
       if (!navigator.onLine) {
         try {
@@ -395,23 +407,29 @@ export default function LessonPlayerPage() {
       }
 
       const user = await getCachedUser(supabase);
+      if (signal.aborted) return;
       if (!user) {
         router.push("/auth/login");
         return;
       }
       setUserId(user.id);
       const storageKey = getSlideInteractionStorageKey(lessonId, user.id);
-      const localSlideResponses = readStoredSlideInteractionResponses(
-        window.localStorage.getItem(storageKey)
-      );
-      setSlideInteractionResponses(localSlideResponses);
+      try {
+        setSlideInteractionResponses(readStoredSlideInteractionResponses(window.localStorage.getItem(storageKey)));
+      } catch {
+        // Private browsing can disable storage; server responses still work.
+      }
 
       // Fetch lesson
-      const { data: lessonData } = await supabase
+      const { data: lessonData, error: lessonError } = await supabase
         .from("lessons")
         .select("*")
         .eq("id", lessonId)
+        .abortSignal(signal)
         .single();
+
+      if (signal.aborted) return;
+      if (lessonError && lessonError.code !== "PGRST116") throw lessonError;
 
       if (!lessonData) {
         setLoading(false);
@@ -421,16 +439,20 @@ export default function LessonPlayerPage() {
       setQuizSettings(resolveQuizSettings(lessonData.quiz_settings));
 
       const [slidesRes, slideResponsesRes, simRes] = await Promise.all([
-        fetch(`/api/lessons/${lessonId}/slides`)
+        fetch(`/api/lessons/${lessonId}/slides`, { signal })
           .then((response) => (response.ok ? response.json() : null))
           .catch(() => null),
-        fetch(`/api/lessons/${lessonId}/slide-responses`)
+        fetch(`/api/lessons/${lessonId}/slide-responses`, { signal })
           .then((response) => (response.ok ? response.json() : null))
           .catch(() => null),
-        fetch(`/api/lessons/${lessonId}/sim`)
-          .then((response) => (response.ok ? response.json() : null))
-          .catch(() => null),
+        fetch(`/api/lessons/${lessonId}/sim`, { signal })
+          .then((response) => {
+            if (!response.ok) throw new Error("Recording could not be loaded");
+            return response.json();
+          }),
       ]);
+
+      if (signal.aborted) return;
 
       if (Array.isArray(slidesRes?.slideDeck?.slides)) {
         setSlideDeck(slidesRes.slideDeck.slides as Slide[]);
@@ -449,7 +471,11 @@ export default function LessonPlayerPage() {
           slideResponsesRes.responses as LessonSlideResponse[]
         );
         setSlideInteractionResponses(mappedResponses);
-        window.localStorage.setItem(storageKey, JSON.stringify(mappedResponses));
+        try {
+          window.localStorage.setItem(storageKey, JSON.stringify(mappedResponses));
+        } catch {
+          // The server remains the source of truth when storage is unavailable.
+        }
       }
 
       const sim = (simRes?.sim as SimPayload | null) ?? null;
@@ -464,7 +490,7 @@ export default function LessonPlayerPage() {
         if (baseUrl) {
           const candidate = `${baseUrl}/storage/v1/object/public/lesson-videos/${lessonId}/video_720p.mp4`;
           try {
-            const head = await fetch(candidate, { method: "HEAD" });
+            const head = await fetch(candidate, { method: "HEAD", signal });
             if (head.ok) {
               setLegacyVideoUrl(candidate);
             }
@@ -474,22 +500,31 @@ export default function LessonPlayerPage() {
         }
       }
 
-      // Fetch subject
-      if (lessonData.subject_id) {
-        const { data: subjectData } = await supabase
+      if (signal.aborted) return;
+
+      const [{ data: subjectData }, { data: questionsData }, { data: progressData }] = await Promise.all([
+        supabase
           .from("subjects")
           .select("*")
           .eq("id", lessonData.subject_id)
-          .single();
-        if (subjectData) setSubject(subjectData);
-      }
-
-      // Fetch questions
-      const { data: questionsData } = await supabase
-        .from("lesson_questions")
-        .select("*")
-        .eq("lesson_id", lessonId)
-        .order("timestamp_seconds");
+          .abortSignal(signal)
+          .maybeSingle(),
+        supabase
+          .from("lesson_questions")
+          .select("*")
+          .eq("lesson_id", lessonId)
+          .abortSignal(signal)
+          .order("timestamp_seconds"),
+        supabase
+          .from("lesson_progress")
+          .select("*")
+          .eq("lesson_id", lessonId)
+          .eq("student_id", user.id)
+          .abortSignal(signal)
+          .maybeSingle(),
+      ]);
+      if (signal.aborted) return;
+      if (subjectData) setSubject(subjectData);
       if (questionsData) {
         setQuestions(questionsData);
 
@@ -498,6 +533,7 @@ export default function LessonPlayerPage() {
             .from("lesson_question_responses")
             .select("question_id, is_correct")
             .eq("student_id", user.id)
+            .abortSignal(signal)
             .in("question_id", questionsData.map((question) => question.id));
 
           if (responseData) {
@@ -513,13 +549,7 @@ export default function LessonPlayerPage() {
         }
       }
 
-      // Fetch progress
-      const { data: progressData } = await supabase
-        .from("lesson_progress")
-        .select("*")
-        .eq("lesson_id", lessonId)
-        .eq("student_id", user.id)
-        .maybeSingle();
+      if (signal.aborted) return;
       if (progressData) {
         setProgress(progressData);
         furthestSecRef.current = progressData.last_position_seconds ?? 0;
@@ -533,6 +563,7 @@ export default function LessonPlayerPage() {
 
       void loadLessonNavigation(supabase, lessonData.subject_id, lessonId)
         .then((navigation) => {
+          if (disposed) return;
           setAdjacentLessons({
             prev: navigation.previous as unknown as Lesson | null,
             next: navigation.next as unknown as Lesson | null,
@@ -545,8 +576,18 @@ export default function LessonPlayerPage() {
           // Navigation should not keep the lesson itself on a loading screen.
         });
     }
-    loadData();
-  }, [lessonId, router, supabase]);
+    void loadData().catch(() => {
+      if (!disposed) setLoadError(true);
+    }).finally(() => {
+      window.clearTimeout(timeout);
+      if (!disposed) setLoading(false);
+    });
+    return () => {
+      disposed = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [lessonId, router, supabase, loadAttempt]);
 
   const persistSlideInteractionResponse = useCallback(
     async (slideId: string, result: SlideInteractionResult) => {
@@ -690,6 +731,17 @@ export default function LessonPlayerPage() {
     setShowConfetti(true);
     setTimeout(() => setShowConfetti(false), 3000);
   };
+
+  if (loadError) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center p-6 text-center">
+        <div>
+          <p className="mb-4 text-gray-700">{language === "ar" ? "تعذر تحميل الدرس. تحقق من اتصالك وحاول مرة أخرى." : "The lesson could not load. Check your connection and try again."}</p>
+          <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="min-h-11 rounded-lg bg-[#007229] px-5 py-2 font-semibold text-white">{language === "ar" ? "إعادة المحاولة" : "Try again"}</button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

@@ -17,6 +17,7 @@
 
 import {
   type CSSProperties,
+  type ReactNode,
   type SyntheticEvent,
   forwardRef,
   memo,
@@ -50,6 +51,7 @@ import ExplorationOverlay from '@/components/explorations/ExplorationOverlay';
 import { slideToInteraction } from '@/lib/interactions/adapters';
 import { gradeInteraction } from '@/lib/interactions/grader';
 import { OwlCorrect, OwlWrong, OwlPointing } from '@/components/illustrations';
+import { RotateCcw, RotateCw } from 'lucide-react';
 
 const LASER_FADE_MS = 300;
 const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2] as const;
@@ -133,6 +135,26 @@ export interface SimPlayerHandle {
 // Matches SlideCard's internal design space.
 const DESIGN_WIDTH = 1280;
 const DESIGN_HEIGHT = 720;
+
+function SimSlideViewport({ children }: { children: ReactNode }) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(640);
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
+  const canvasWidth = Math.max(width, 640);
+  return (
+    <div ref={viewportRef} className="relative aspect-video overflow-hidden">
+      <div className="absolute left-0 top-0 origin-top-left" style={{ width: canvasWidth, height: canvasWidth * DESIGN_HEIGHT / DESIGN_WIDTH, transform: `scale(${width / canvasWidth})` }}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function simStrokeToStroke(stroke: SimStroke): Stroke {
   return {
@@ -391,6 +413,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const [playbackMs, setPlaybackMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [ready, setReady] = useState(!audio_url);
+  const [buffering, setBuffering] = useState(false);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const resumeAfterScrubRef = useRef(false);
+  const [seekFeedback, setSeekFeedback] = useState<string | null>(null);
+  const seekFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeGate, setActiveGate] = useState<AnyGate | null>(null);
   const [activeGateIdx, setActiveGateIdx] = useState<number | null>(null);
@@ -413,6 +440,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     setActiveGate(null);
   }, []);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const fullscreen = isFullscreen || expanded;
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showChapters, setShowChapters] = useState(false);
   const [notesExpanded, setNotesExpanded] = useState(false);
@@ -432,6 +461,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const [activeExplorationSlide, setActiveExplorationSlide] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  const pendingSeekRef = useRef<number | null>(null);
   const [audioSrc, setAudioSrc] = useState(audio_url);
   const audioRefreshAttemptRef = useRef(0);
   const rafRef = useRef<number>(0);
@@ -459,6 +489,10 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   );
 
   const markAudioReady = useCallback(() => {
+    if (pendingSeekRef.current !== null && audioRef.current && audioRef.current.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      audioRef.current.currentTime = pendingSeekRef.current;
+      pendingSeekRef.current = null;
+    }
     audioRefreshAttemptRef.current = 0;
     setError(null);
     setReady(true);
@@ -469,7 +503,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   useEffect(() => {
     if (!audio_url) {
       // This synchronizes readiness with an external media source prop.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+
       markAudioReady();
     }
   }, [audio_url, markAudioReady]);
@@ -482,14 +516,14 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   useEffect(() => {
     audioRefreshAttemptRef.current = 0;
     // The source may be refreshed by the parent after a signed URL changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+
     setAudioSrc(audio_url);
   }, [audio_url]);
 
   useEffect(() => {
     if (!audioSrc) return;
     // Readiness belongs to the current external audio resource.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+
     setReady(false);
 
     const audio = audioRef.current;
@@ -533,13 +567,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
         const audio = audioRef.current;
         const currentTime = audio?.currentTime ?? 0;
+        pendingSeekRef.current = currentTime;
         setAudioSrc(freshUrl);
         setReady(false);
-        // Restore playback position after src swap.
-        requestAnimationFrame(() => {
-          const a = audioRef.current;
-          if (a && currentTime > 0) a.currentTime = currentTime;
-        });
         return true;
       } catch {
         // Try the next endpoint.
@@ -558,6 +588,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       );
 
       setReady(false);
+      setBuffering(false);
       setIsPlaying(false);
       onPlayStateChange?.(false);
 
@@ -569,8 +600,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
       setError(
         language === 'ar'
-          ? 'تعذر تشغيل صوت التسجيل. حدّث الصفحة وحاول مرة أخرى. إذا استمرت المشكلة، أعد تسجيل الدرس لأن ملف الصوت قد يكون غير صالح.'
-          : 'Audio could not be played. Refresh and try again. If it still fails, retake the recording because the uploaded audio may be unreadable.'
+          ? 'تعذر تشغيل الصوت. تحقق من اتصالك وحاول مرة أخرى.'
+          : 'Audio could not play. Check your connection and try again.'
       );
     },
     [language, onPlayStateChange, refreshAudioUrl]
@@ -636,7 +667,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       const audio = audioRef.current;
       if (audio) audio.currentTime = realMs / 1000;
       // Restore the externally persisted media position after metadata loads.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+
       applyAt(realMs, true);
     } catch { /* ignore */ }
   }, [resumeKey, ready, virtualTotalMs, effectiveClips, applyAt]);
@@ -773,7 +804,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     const realMs = audio ? audio.currentTime * 1000 : 0;
     appliedEventCountRef.current = eventsAtMs(realMs);
     // Re-project the event-sourced surface when the external deck changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+
     setSurface(rebuildSimState(deck, projectedEvents, realMs));
     setPlaybackMs(realToVirtualMs(realMs, effectiveClips));
     lastEmitWallMsRef.current = 0;
@@ -892,6 +923,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   }, []);
 
   const handlePlay = useCallback(() => {
+    setError(null);
     const audio = audioRef.current;
     if (!audio) {
       // No audio track — timer-driven playback
@@ -916,8 +948,12 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       audio.currentTime = jumpTo / 1000;
     }
     audio.playbackRate = playbackRate;
+    setBuffering(true);
+    // Call play in the tap handler even when mobile Safari has deferred preload.
+    if (audio.error) audio.load();
     audio.play().then(
       () => {
+        setBuffering(false);
         setIsPlaying(true);
         clearActiveGateState();
         onPlayStateChange?.(true);
@@ -925,12 +961,17 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         if (!rafRef.current) rafRef.current = requestAnimationFrame(tick);
       },
       (err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Playback failed');
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setBuffering(false);
+        setIsPlaying(false);
+        onPlayStateChange?.(false);
+        setError(language === 'ar' ? 'تعذر تشغيل الصوت. حاول مرة أخرى.' : 'Audio could not play. Please try again.');
       }
     );
-  }, [clearActiveGateState, effectiveClips, tick, onPlayStateChange, playbackRate]);
+  }, [clearActiveGateState, effectiveClips, tick, onPlayStateChange, playbackRate, language]);
 
   const handlePause = useCallback(() => {
+    setBuffering(false);
     const audio = audioRef.current;
     if (audio && !audio.paused) audio.pause();
     // Save timer position for audio-less mode
@@ -943,13 +984,24 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     }
   }, [getCurrentRealMs, onPlayStateChange]);
 
+  useEffect(() => {
+    if (!buffering) return;
+    const timeout = window.setTimeout(() => {
+      handlePause();
+      setError(language === 'ar' ? 'يستغرق تحميل الصوت وقتاً طويلاً. حاول مرة أخرى.' : 'Audio is taking too long to load. Please try again.');
+    }, 20_000);
+    return () => window.clearTimeout(timeout);
+  }, [buffering, handlePause, language]);
+
   // Scrubber hands us virtual ms; translate to real audio ms before seeking.
   const handleSeek = useCallback(
     (virtualMs: number) => {
-      const realMs = virtualToRealMs(virtualMs, effectiveClips);
+      const realMs = virtualToRealMs(Math.max(0, Math.min(virtualMs, virtualTotalMs)), effectiveClips);
       const audio = audioRef.current;
+      resumeAppliedRef.current = true;
       if (audio) {
-        audio.currentTime = realMs / 1000;
+        if (audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) pendingSeekRef.current = realMs / 1000;
+        else audio.currentTime = realMs / 1000;
       } else {
         timerOffsetRef.current = realMs;
         timerStartRef.current = performance.now();
@@ -958,8 +1010,20 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       clearActiveGateState();
       resetGatesForTime(realMs);
     },
-    [applyAt, clearActiveGateState, effectiveClips, resetGatesForTime]
+    [applyAt, clearActiveGateState, effectiveClips, resetGatesForTime, virtualTotalMs]
   );
+
+  const skipBy = (seconds: number) => {
+    const destination = Math.max(0, Math.min(playbackMs + seconds * 1000, virtualTotalMs));
+    handleSeek(destination);
+    setSeekFeedback(`${seconds > 0 ? '+' : '-'}10s · ${formatMs(destination)}`);
+    if (seekFeedbackTimer.current) clearTimeout(seekFeedbackTimer.current);
+    seekFeedbackTimer.current = setTimeout(() => setSeekFeedback(null), 1200);
+  };
+
+  useEffect(() => () => {
+    if (seekFeedbackTimer.current) clearTimeout(seekFeedbackTimer.current);
+  }, []);
 
   const seekRealSec = useCallback(
     (realSec: number) => {
@@ -1055,7 +1119,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     const saved = savedResponses[currentSlide.id];
     if (!saved || saved.answer == null) return;
     // Hydrate an answer from the persisted response supplied by the parent.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+
     setStudentAnswer(saved.answer as InteractionAnswer);
     // Detect teacher-reviewed types
     const interaction = slideToInteraction(currentSlide);
@@ -1186,7 +1250,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     if (Object.keys(initial).length > 0) {
       initialGateResultsApplied.current = true;
       // Seed marker state once from persisted responses.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+
       setGateResults(initial);
     }
   }, [gates, slideIdAtMs]);
@@ -1252,21 +1316,47 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     [applyAt, clearActiveGateState, resetGatesForTime]
   );
 
-  const toggleFullscreen = useCallback(() => {
+  const toggleFullscreen = useCallback(async () => {
     const el = containerRef.current;
     if (!el) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      el.requestFullscreen();
+    if (expanded) {
+      setExpanded(false);
+      return;
     }
-  }, []);
+    if (document.fullscreenElement === el) {
+      await document.exitFullscreen().catch(() => undefined);
+      return;
+    }
+    if (typeof el.requestFullscreen === 'function') {
+      try {
+        await el.requestFullscreen();
+        return;
+      } catch {
+        // iPhone and embedded browsers can reject element fullscreen.
+      }
+    }
+    setExpanded(true);
+  }, [expanded]);
 
   useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    const onChange = () => setIsFullscreen(document.fullscreenElement === containerRef.current);
     document.addEventListener('fullscreenchange', onChange);
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [expanded]);
 
   // Close chapters dropdown on outside click
   useEffect(() => {
@@ -1280,26 +1370,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     return () => document.removeEventListener('click', onClick, true);
   }, [showChapters]);
 
-  const handleProgressBarPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      const bar = e.currentTarget;
-      bar.setPointerCapture(e.pointerId);
-      const seek = (clientX: number) => {
-        const rect = bar.getBoundingClientRect();
-        const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-        handleSeek(pct * virtualTotalMs);
-      };
-      seek(e.clientX);
-      const onMove = (ev: PointerEvent) => seek(ev.clientX);
-      const onUp = () => {
-        bar.removeEventListener('pointermove', onMove);
-        bar.removeEventListener('pointerup', onUp);
-      };
-      bar.addEventListener('pointermove', onMove);
-      bar.addEventListener('pointerup', onUp);
-    },
-    [handleSeek, virtualTotalMs]
-  );
+  const finishScrubbing = () => {
+    setIsScrubbing(false);
+    if (resumeAfterScrubRef.current) handlePlay();
+    resumeAfterScrubRef.current = false;
+  };
 
   if (!currentSlide) {
     return (
@@ -1310,9 +1385,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   }
 
   return (
-    <div ref={containerRef} className={`overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm ${isFullscreen ? 'flex flex-col h-screen !border-0 !rounded-none !shadow-none' : ''} ${className}`}>
+    <div ref={containerRef} data-sim-player className={`overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm ${className} ${fullscreen ? 'flex flex-col !border-0 !rounded-none !shadow-none' : ''}`} style={fullscreen ? { position: expanded ? 'fixed' : undefined, inset: 0, zIndex: 9999, width: '100%', height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}>
       {/* Slide area */}
-      <div className={`relative ${isFullscreen ? 'flex-1 min-h-0 overflow-hidden' : ''}`}>
+      <div className={fullscreen ? 'flex flex-1 min-h-0 items-center justify-center overflow-hidden bg-black' : ''} style={fullscreen ? { containerType: 'size' } : undefined}>
+      <div className="relative w-full" style={fullscreen ? { width: 'min(100cqw, calc(100cqh * 16 / 9))' } : undefined}>
+          <SimSlideViewport>
           <SlideCard
             // Key on slide id so the entrance animation replays each time
             // the active slide changes during replay. Reveal state flows
@@ -1329,6 +1406,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
             activityAnswer={activeGate ? studentAnswer : (currentSurface?.activity_answer ?? null)}
             onActivityAnswerChange={activeGate ? handleStudentAnswer : undefined}
           />
+          </SimSlideViewport>
           {currentSurface && currentSurface.strokes.length > 0 && (
             <StrokesOverlay strokes={currentSurface.strokes} />
           )}
@@ -1337,6 +1415,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
           )}
           {currentSurface?.spotlight && (
             <SpotlightOverlay spotlight={currentSurface.spotlight} />
+          )}
+          {(isScrubbing || seekFeedback) && (
+            <div role="status" dir="ltr" className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+              <span className="rounded-lg bg-black/80 px-4 py-2 text-base font-semibold tabular-nums text-white">{isScrubbing ? formatMs(playbackMs) : seekFeedback}</span>
+            </div>
           )}
           {/* Confetti on correct answer */}
           {confettiKey > 0 && <SlideConfetti key={confettiKey} id={confettiKey} />}
@@ -1368,6 +1451,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
               onContinue={handleContinueGate}
             />
           )}
+      </div>
+
       </div>
 
       {/* Activity gate — prompt bar between slide and control bar */}
@@ -1445,7 +1530,10 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         <audio
           ref={audioRef}
           src={audioSrc}
-          preload="auto"
+          preload="metadata"
+          onWaiting={() => setBuffering(true)}
+          onPlaying={() => setBuffering(false)}
+          onSeeked={() => setBuffering(false)}
           onLoadedMetadata={markAudioReady}
           onLoadedData={markAudioReady}
           onCanPlay={markAudioReady}
@@ -1455,6 +1543,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
             applyAt(rawTotalMs, true);
           }}
           onPause={() => {
+            setBuffering(false);
             setIsPlaying(false);
             onPlayStateChange?.(false);
           }}
@@ -1474,23 +1563,24 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       )}
 
       {error && (
-        <div className="text-sm text-red-400 px-4 py-2">
-          {error}
+        <div role="alert" className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm text-red-700">
+          <span>{error}</span>
+          <button type="button" onClick={() => { pendingSeekRef.current ??= audioRef.current?.currentTime ?? 0; audioRef.current?.load(); handlePlay(); }} className="min-h-11 rounded-lg border border-red-200 px-3 font-semibold hover:bg-red-50">{language === 'ar' ? 'إعادة المحاولة' : 'Retry audio'}</button>
         </div>
       )}
 
       {/* Control bar — force LTR so play/progress/time order is consistent */}
       {!hideControls && (
-        <div dir="ltr" className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 border-t border-slate-200">
+        <div dir="ltr" className="flex shrink-0 flex-wrap items-center gap-x-1 gap-y-1 px-3 py-2 bg-gray-50 border-t border-gray-200">
           {/* Play / Pause */}
           <button
             type="button"
-            onClick={isPlaying ? handlePause : handlePlay}
-            disabled={!!audio_url && !ready}
-            className="w-9 h-9 rounded-full bg-[#007229] text-white grid place-items-center hover:bg-[#005a20] disabled:bg-slate-300 transition-colors flex-shrink-0 shadow-sm"
-            aria-label={!ready && audio_url ? (language === 'ar' ? 'جارٍ التحميل...' : 'Loading...') : isPlaying ? 'Pause' : 'Play'}
+            onClick={isPlaying || buffering ? handlePause : handlePlay}
+            className="order-2 w-11 h-11 rounded-full bg-[#007229] text-white grid place-items-center hover:bg-[#005a20] transition-colors flex-shrink-0 shadow-sm"
+            aria-label={buffering ? 'Cancel loading' : isPlaying ? 'Pause' : 'Play'}
+            title={isPlaying ? 'Pause' : 'Play'}
           >
-            {!ready && audio_url ? (
+            {buffering ? (
               <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <circle cx="12" cy="12" r="10" strokeOpacity="0.3" />
                 <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
@@ -1507,21 +1597,37 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
             )}
           </button>
 
+          <button type="button" onClick={() => skipBy(-10)} aria-label="Rewind 10 seconds" title="Rewind 10 seconds" className="order-2 relative grid h-11 w-11 shrink-0 place-items-center rounded-lg text-gray-700 hover:bg-gray-200">
+            <RotateCcw className="h-7 w-7" aria-hidden="true" />
+            <span className="absolute mt-0.5 text-[9px] font-bold" aria-hidden="true">10</span>
+          </button>
+          <button type="button" onClick={() => skipBy(10)} aria-label="Forward 10 seconds" title="Forward 10 seconds" className="order-2 relative grid h-11 w-11 shrink-0 place-items-center rounded-lg text-gray-700 hover:bg-gray-200">
+            <RotateCw className="h-7 w-7" aria-hidden="true" />
+            <span className="absolute mt-0.5 text-[9px] font-bold" aria-hidden="true">10</span>
+          </button>
+
           {/* Progress bar — always LTR since timelines flow start→end */}
           <div
             dir="ltr"
-            className="flex-1 relative h-1.5 bg-slate-200 rounded-full cursor-pointer group py-2 -my-2 touch-none"
-            onPointerDown={handleProgressBarPointerDown}
-            role="slider"
-            aria-label="Seek"
-            aria-valuemin={0}
-            aria-valuemax={virtualTotalMs}
-            aria-valuenow={playbackMs}
+            className="order-1 relative h-11 w-full"
           >
-            <div className="absolute inset-y-2 left-0 right-0 bg-slate-200 rounded-full" />
-            <div
-              className="absolute inset-y-2 left-0 bg-[#007229] rounded-full"
-              style={{ width: `${progressPct}%` }}
+            <input
+              type="range" min={0} max={virtualTotalMs} step={100} value={playbackMs}
+              disabled={virtualTotalMs <= 0}
+              aria-label="Seek"
+              aria-valuetext={`${formatMs(playbackMs)} / ${formatMs(virtualTotalMs)}`}
+              onChange={(event) => handleSeek(Number(event.target.value))}
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                resumeAfterScrubRef.current = isPlaying;
+                handlePause();
+                setIsScrubbing(true);
+              }}
+              onPointerUp={finishScrubbing}
+              onPointerCancel={finishScrubbing}
+              onLostPointerCapture={finishScrubbing}
+              className="sim-seek absolute inset-0 m-0 h-11 w-full cursor-pointer touch-none appearance-none bg-transparent"
+              style={{ '--seek-progress': `${progressPct}%` } as CSSProperties}
             />
             {/* Gate markers — colored stars on the timeline */}
             {gateMarkers.map((m, i) => {
@@ -1543,7 +1649,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
                   key={i}
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleGateMarkerClick(m); }}
-                  className={`absolute top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 hover:scale-150 active:scale-100 transition-transform cursor-pointer drop-shadow ${color}`}
+                  className={`absolute top-0 flex items-center justify-center w-6 h-4 hover:scale-125 transition-transform cursor-pointer ${color}`}
                   style={{ left: `${m.pct}%`, marginLeft: -12 }}
                   title={
                     m.gateType === 'exploration_gate'
@@ -1551,21 +1657,16 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
                       : (language === 'ar' ? 'نشاط' : 'Activity')
                   }
                 >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                   </svg>
                 </button>
               );
             })}
-            {/* Playhead thumb */}
-            <div
-              className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#007229] border-2 border-white shadow opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ left: `${progressPct}%`, marginLeft: -7 }}
-            />
           </div>
 
           {/* Time */}
-          <span className="text-xs tabular-nums text-slate-500 flex-shrink-0">
+          <span className="order-3 w-full text-center text-xs tabular-nums text-gray-600 min-[400px]:order-2 min-[400px]:w-auto min-[400px]:flex-1">
             {formatMs(playbackMs)} / {formatMs(virtualTotalMs)}
           </span>
 
@@ -1573,7 +1674,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
           <button
             type="button"
             onClick={cyclePlaybackRate}
-            className="h-7 px-1.5 rounded-md text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200 transition-colors flex-shrink-0 tabular-nums"
+            className="order-2 ms-auto h-11 min-w-11 px-1.5 rounded-md text-xs font-bold text-gray-600 hover:text-gray-800 hover:bg-gray-200 transition-colors flex-shrink-0 tabular-nums"
             aria-label="Playback speed"
             title="Playback speed"
           >
@@ -1582,11 +1683,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
           {/* Chapters */}
           {chapters.length > 1 && (
-            <div className="relative flex-shrink-0" data-chapters-menu>
+            <div className="order-2 relative flex-shrink-0" data-chapters-menu>
               <button
                 type="button"
                 onClick={() => setShowChapters((v) => !v)}
-                className="w-8 h-8 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-200 grid place-items-center transition-colors"
+                className="w-11 h-11 rounded-lg text-gray-600 hover:text-gray-800 hover:bg-gray-200 grid place-items-center transition-colors"
                 aria-label="Chapters"
                 title="Chapters"
               >
@@ -1628,10 +1729,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
           <button
             type="button"
             onClick={toggleFullscreen}
-            className="w-8 h-8 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-200 grid place-items-center transition-colors flex-shrink-0"
-            aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            className="order-2 w-11 h-11 rounded-lg text-gray-600 hover:text-gray-800 hover:bg-gray-200 grid place-items-center transition-colors flex-shrink-0"
+            aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
           >
-            {isFullscreen ? (
+            {fullscreen ? (
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" />
                 <line x1="14" y1="10" x2="21" y2="3" /><line x1="3" y1="21" x2="10" y2="14" />

@@ -137,7 +137,9 @@ export async function POST(request: NextRequest) {
   const { data, error } = await service.auth.admin.createUser({
     email: loginEmail,
     password: input.password,
-    email_confirm: false,
+    // This is a synthetic email address derived from the parent's WhatsApp
+    // number, so it cannot receive a confirmation link.
+    email_confirm: true,
     user_metadata: {
       full_name: input.fullName,
       role: "parent",

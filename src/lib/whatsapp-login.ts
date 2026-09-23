@@ -1,6 +1,6 @@
 // Parents can create an account without an email address: we derive a stable
-// login identifier from their WhatsApp number. The domain never receives mail
-// (it is activated only after admin approval); it only satisfies the email format.
+// login identifier from their WhatsApp number. The domain never receives mail;
+// it only satisfies the email format.
 
 /** Convert Arabic-Indic (٠-٩) and Eastern Arabic (۰-۹) digits to Latin. */
 export function normalizeArabicDigits(value: string): string {
@@ -12,6 +12,13 @@ export function normalizeArabicDigits(value: string): string {
 /** Just the digits of a phone number, Arabic numerals included. */
 export function whatsappDigits(value: string): string {
   return normalizeArabicDigits(value).replace(/\D/g, "");
+}
+
+/** Combine a selected calling code with a local WhatsApp number. */
+export function whatsappNumberWithCountryCode(countryCode: string, localNumber: string): string {
+  const code = whatsappDigits(countryCode);
+  const localDigits = whatsappDigits(localNumber).replace(/^0+/, "");
+  return `+${code}${localDigits}`;
 }
 
 /** Deterministic login email for a parent account created without email. */
