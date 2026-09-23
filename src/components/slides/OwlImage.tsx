@@ -63,7 +63,7 @@ export default function OwlImage({ url, className = '' }: OwlImageProps) {
   if (!Component) return null;
   return (
     <div className={`flex items-center justify-center ${className}`}>
-      <Component />
+      <Component className="block h-full w-full" />
     </div>
   );
 }
