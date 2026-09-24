@@ -19,6 +19,7 @@ const RestoreSchema = z.object({ version_id: z.string().uuid() });
 
 interface VersionRow {
   id: string;
+  audio_mime?: string | null;
   version_number: number;
   duration_ms: number;
   audio_path: string | null;
@@ -53,6 +54,54 @@ export async function GET(
     const access = await assertCanManageLesson(lessonId, user.id, supabase);
     if (!access.ok) return access.response;
 
+    // ?version_id=<id> returns one version as a playable SimPayload, so the
+    // teacher can WATCH it (slides + strokes + audio) before restoring.
+    const versionId = new URL(_request.url).searchParams.get('version_id');
+    if (versionId) {
+      const { data: one, error: oneError } = await supabase
+        .from('lesson_sim_versions')
+        .select('*')
+        .eq('lesson_id', lessonId)
+        .eq('id', versionId)
+        .maybeSingle();
+
+      if (oneError || !one) {
+        return NextResponse.json({ error: 'Version not found' }, { status: 404 });
+      }
+      const v = one as unknown as VersionRow & {
+        deck_snapshot: unknown;
+        sim_id: string | null;
+      };
+      if (!v.audio_retained || !v.audio_path) {
+        return NextResponse.json(
+          { error: 'This version\'s audio has been cleared, so it cannot be played' },
+          { status: 409 }
+        );
+      }
+
+      const audioUrl = await signAudioUrl(lessonId, v.audio_path);
+      // Shaped like a sim row so <SimPlayer> can render it unchanged.
+      return NextResponse.json({
+        sim: {
+          id: v.sim_id ?? v.id,
+          lesson_id: lessonId,
+          duration_ms: v.duration_ms,
+          deck_snapshot: v.deck_snapshot,
+          events: v.events,
+          audio_path: v.audio_path,
+          audio_duration_ms: v.audio_duration_ms,
+          audio_mime: v.audio_mime,
+          clip_segments: v.clip_segments,
+          recorded_by: v.created_by,
+          recorded_at: v.created_at,
+          created_at: v.created_at,
+          updated_at: v.created_at,
+        },
+        audio_url: audioUrl,
+        version_number: v.version_number,
+      });
+    }
+
     const { data, error } = await supabase
       .from('lesson_sim_versions')
       .select(
@@ -67,7 +116,19 @@ export async function GET(
     }
 
     const rows = (data ?? []) as unknown as VersionRow[];
-    const versions = rows.map((row) => ({
+
+    // Sign the audio of every version that still has a file, so a tutor can
+    // hear a version before restoring it. Without this the history is just
+    // metadata and restoring is guesswork.
+    const audioUrls = await Promise.all(
+      rows.map((row) =>
+        row.audio_retained && row.audio_path
+          ? signAudioUrl(lessonId, row.audio_path)
+          : Promise.resolve(null)
+      )
+    );
+
+    const versions = rows.map((row, i) => ({
       id: row.id,
       version_number: row.version_number,
       duration_ms: row.duration_ms,
@@ -76,6 +137,7 @@ export async function GET(
       cut_count: Array.isArray(row.clip_segments) ? row.clip_segments.length : 0,
       reason: row.reason,
       restorable: row.audio_retained && !!row.audio_path,
+      audio_url: audioUrls[i],
       created_at: row.created_at,
       created_by: row.created_by,
     }));
