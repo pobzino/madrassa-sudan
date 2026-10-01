@@ -423,6 +423,14 @@ html {
   .owl-blink, .practice-reveal, .practice-question-enter, .owl-anim-speaking { animation: none !important; }
 }
 
+/* Keep the transport on one row when there is enough room. */
+@media (min-width: 640px) {
+  .sim-controls { flex-wrap: nowrap; gap: 4px; }
+  .sim-controls > * { order: 2; }
+  .sim-controls .sim-timeline { order: 2; flex-basis: auto; margin-inline: 8px; }
+  .sim-controls .sim-time { width: 100px; flex-shrink: 0; text-align: center; }
+}
+
 /* RTL Support */
 [dir="rtl"] {
   font-family: var(--font-cairo);

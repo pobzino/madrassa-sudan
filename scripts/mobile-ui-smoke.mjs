@@ -81,6 +81,17 @@ try {
     assert(exitBox.y + exitBox.height <= viewport.height + 1, 'Fullscreen exit must remain in view');
     assert.equal(await timeline.inputValue(), beforeFullscreen, 'Fullscreen must preserve playback position');
     await page.screenshot({ path: path.join(screenshots, `fullscreen-${viewport.width}.png`) });
+    // Start before the first activity so the controls can idle uninterrupted.
+    await timeline.focus();
+    await timeline.press('Home');
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    const revealControls = page.getByRole('button', { name: 'إظهار أدوات التشغيل', exact: true });
+    await revealControls.waitFor({ timeout: 20_000 });
+    assert.equal(await player.getAttribute('data-controls-visible'), 'false');
+    assert.equal(await page.getByRole('button', { name: 'Exit fullscreen' }).count(), 0, 'Hidden controls must not remain in the accessibility tree');
+    await revealControls.click();
+    await page.getByRole('button', { name: 'Pause', exact: true }).click();
+    assert.equal(await player.getAttribute('data-controls-visible'), 'true');
     await exit.click();
     assert.equal(await page.evaluate(() => document.body.style.overflow), '');
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'No horizontal overflow');

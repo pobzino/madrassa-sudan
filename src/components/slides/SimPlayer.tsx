@@ -445,6 +445,13 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showChapters, setShowChapters] = useState(false);
   const [notesExpanded, setNotesExpanded] = useState(false);
+  const [controlsIdle, setControlsIdle] = useState(false);
+  const [controlsActivity, setControlsActivity] = useState(0);
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const wakeControls = useCallback(() => {
+    setControlsIdle(false);
+    setControlsActivity((value) => value + 1);
+  }, []);
   const isOffline = useSyncExternalStore(
     subscribeToNetworkStatus,
     getOfflineSnapshot,
@@ -1286,6 +1293,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code !== 'Space') return;
       if (isEditableKeyTarget(e.target)) return;
+      if (e.target instanceof HTMLElement && e.target.closest('button, a, [role="button"]')) return;
       e.preventDefault();
       if (isPlaying) handlePause();
       else handlePlay();
@@ -1376,6 +1384,21 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     resumeAfterScrubRef.current = false;
   };
 
+  const canHideControls = fullscreen && isPlaying && !buffering && !isScrubbing
+    && !showChapters && !activeGate && !activeExplorationSlide && !error && !isOffline;
+  const controlsVisible = !canHideControls || !controlsIdle;
+
+  useEffect(() => {
+    if (!canHideControls) return;
+    const timeout = window.setTimeout(() => {
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && controlsRef.current?.contains(focused)
+        && focused.matches(':focus-visible')) return;
+      setControlsIdle(true);
+    }, 3000);
+    return () => window.clearTimeout(timeout);
+  }, [canHideControls, controlsActivity]);
+
   if (!currentSlide) {
     return (
       <div className={`flex items-center justify-center text-slate-500 ${className}`}>
@@ -1385,7 +1408,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   }
 
   return (
-    <div ref={containerRef} data-sim-player className={`overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm ${className} ${fullscreen ? 'flex flex-col !border-0 !rounded-none !shadow-none' : ''}`} style={fullscreen ? { position: expanded ? 'fixed' : undefined, inset: 0, zIndex: 9999, width: '100%', height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}>
+    <div ref={containerRef} data-sim-player data-controls-visible={controlsVisible} onPointerDownCapture={wakeControls} onPointerMove={(event) => { if (event.pointerType === 'mouse' && fullscreen) wakeControls(); }} onKeyDownCapture={wakeControls} className={`relative overflow-hidden bg-white border border-gray-200 rounded-lg ${className} ${fullscreen ? 'flex flex-col !border-0 !rounded-none !shadow-none' : ''}`} style={fullscreen ? { position: expanded ? 'fixed' : undefined, inset: 0, zIndex: 9999, width: '100%', height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}>
       {/* Slide area */}
       <div className={fullscreen ? 'flex flex-1 min-h-0 items-center justify-center overflow-hidden bg-black' : ''} style={fullscreen ? { containerType: 'size' } : undefined}>
       <div className="relative w-full" style={fullscreen ? { width: 'min(100cqw, calc(100cqh * 16 / 9))' } : undefined}>
@@ -1395,6 +1418,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
             // the active slide changes during replay. Reveal state flows
             // through `revealedCount` so bullet reveals do NOT remount.
             key={`${currentSlide?.id ?? ''}:${language}`}
+            className={currentSlide.type === 'diagram_description' && (currentSlide.body_ar || '').length <= 80 && (currentSlide.body_en || '').length <= 80 ? 'max-sm:[&_p]:text-[28px] max-sm:[&_p]:leading-relaxed' : ''}
             slide={currentSlide}
             language={language}
             chromeless
@@ -1454,6 +1478,10 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       </div>
 
       </div>
+
+      {fullscreen && !controlsVisible && (
+        <button type="button" onClick={wakeControls} aria-label={language === 'ar' ? 'إظهار أدوات التشغيل' : 'Show playback controls'} className="absolute inset-0 z-40 cursor-default bg-transparent focus-visible:outline-2 focus-visible:outline-white" />
+      )}
 
       {/* Activity gate — prompt bar between slide and control bar */}
       {activeGate && activeGate.type === 'activity_gate' && (
@@ -1571,7 +1599,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
       {/* Control bar — force LTR so play/progress/time order is consistent */}
       {!hideControls && (
-        <div dir="ltr" className="flex shrink-0 flex-wrap items-center gap-x-1 gap-y-1 px-3 py-2 bg-gray-50 border-t border-gray-200">
+        <div className={`grid shrink-0 transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${controlsVisible ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`} inert={!controlsVisible} aria-hidden={!controlsVisible}>
+        <div className={`min-h-0 ${controlsVisible ? '' : 'overflow-hidden'}`}>
+        <div ref={controlsRef} dir="ltr" className="sim-controls flex flex-wrap items-center gap-x-1 px-3 py-1 bg-white border-t border-gray-200">
           {/* Play / Pause */}
           <button
             type="button"
@@ -1609,7 +1639,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
           {/* Progress bar — always LTR since timelines flow start→end */}
           <div
             dir="ltr"
-            className="order-1 relative h-11 w-full"
+            className="sim-timeline order-1 relative h-11 min-w-0 flex-1 basis-[calc(100%-104px)]"
           >
             <input
               type="range" min={0} max={virtualTotalMs} step={100} value={playbackMs}
@@ -1618,6 +1648,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
               aria-valuetext={`${formatMs(playbackMs)} / ${formatMs(virtualTotalMs)}`}
               onChange={(event) => handleSeek(Number(event.target.value))}
               onPointerDown={(event) => {
+                setSeekFeedback(null);
                 event.currentTarget.setPointerCapture(event.pointerId);
                 resumeAfterScrubRef.current = isPlaying;
                 handlePause();
@@ -1666,7 +1697,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
           </div>
 
           {/* Time */}
-          <span className="order-3 w-full text-center text-xs tabular-nums text-gray-600 min-[400px]:order-2 min-[400px]:w-auto min-[400px]:flex-1">
+          <span className="sim-time order-1 w-[100px] text-end text-xs tabular-nums text-gray-600">
             {formatMs(playbackMs)} / {formatMs(virtualTotalMs)}
           </span>
 
@@ -1697,7 +1728,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
                 </svg>
               </button>
               {showChapters && (
-                <div className="absolute bottom-full right-0 mb-2 w-64 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg z-50">
+                <div className="absolute bottom-full right-0 mb-2 w-60 max-h-[min(18rem,50dvh)] overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg z-50">
                   <div className="p-2">
                     <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                       {language === 'ar' ? 'الفصول' : 'Chapters'}
@@ -1746,10 +1777,12 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
             )}
           </button>
         </div>
+        </div>
+        </div>
       )}
 
       {/* Speaker notes panel — collapsible section below controls */}
-      {!hideControls && currentSpeakerNotes && (
+      {!hideControls && !fullscreen && currentSpeakerNotes && (
         <div className="border-t border-slate-200">
           <button
             type="button"

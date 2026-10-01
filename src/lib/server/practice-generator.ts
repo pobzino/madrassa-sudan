@@ -4,6 +4,8 @@ import { extractSlideContent } from "@/lib/ai/homework-slides";
 import { getOpenAIClient, AI_MODEL, AI_MODEL_FAST } from "@/lib/ai/openai-client";
 import { PRACTICE_PASSING_SCORE, PRACTICE_QUESTION_COUNT } from "@/lib/practice";
 import type { Slide } from "@/lib/slides.types";
+import type { SimRow } from "@/lib/sim.types";
+import { recordedLessonSlides } from "@/lib/recorded-lesson-slides";
 
 type PracticeClient = SupabaseClient<Database>;
 
@@ -358,22 +360,26 @@ function balanceMultipleChoiceOptions(practice: GeneratedPractice): GeneratedPra
 }
 
 async function loadLessonSource(client: PracticeClient, lessonId: string) {
-  const [{ data: sims }, { data: slideDeck }] = await Promise.all([
+  const [simResult, deckResult] = await Promise.all([
     client
       .from("lesson_sims")
-      .select("deck_snapshot, recorded_at")
+      .select("deck_snapshot, recorded_at, events, duration_ms, clip_segments")
       .eq("lesson_id", lessonId)
       .order("recorded_at", { ascending: false })
       .limit(1),
-    client.from("lesson_slides").select("slides").eq("lesson_id", lessonId).maybeSingle(),
+    client.from("lesson_slides").select("slides, language_mode").eq("lesson_id", lessonId).maybeSingle(),
   ]);
-
-  const latestSim = (sims ?? [])[0] as { deck_snapshot?: unknown } | undefined;
+  if (simResult.error) throw simResult.error;
+  if (deckResult.error) throw deckResult.error;
+  const slideDeck = deckResult.data;
+  const language: 'ar' | 'en' | undefined = slideDeck?.language_mode === 'ar' || slideDeck?.language_mode === 'en'
+    ? slideDeck.language_mode : undefined;
+  const latestSim = (simResult.data ?? [])[0];
   if (Array.isArray(latestSim?.deck_snapshot) && latestSim.deck_snapshot.length > 0) {
-    return latestSim.deck_snapshot as unknown as Slide[];
+    return { deck: recordedLessonSlides(latestSim as unknown as SimRow), language };
   }
   if (Array.isArray(slideDeck?.slides) && slideDeck.slides.length > 0) {
-    return slideDeck.slides as unknown as Slide[];
+    return { deck: slideDeck.slides as unknown as Slide[], language };
   }
   return null;
 }
@@ -707,9 +713,10 @@ export async function ensureLessonPractice({
       };
   }
 
-  const deck = await loadLessonSource(client, lessonId);
-  if (!deck) throw new Error("This lesson has no slides or recording to generate Practice from.");
-  const content = extractSlideContent(deck).trim();
+  const source = await loadLessonSource(client, lessonId);
+  if (!source) throw new Error("This lesson has no slides or recording to generate Practice from.");
+  // Notes are preparation, not a transcript of what the child actually heard.
+  const content = extractSlideContent(source.deck, { language: source.language, includeSpeakerNotes: false }).trim();
   if (!content) throw new Error("This lesson has no readable content to generate Practice from.");
 
   const subject = Array.isArray(lesson.subject) ? lesson.subject[0] : lesson.subject;
