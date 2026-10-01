@@ -1171,6 +1171,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
               events={props.payload.sim.events}
               durationMs={props.payload.sim.duration_ms}
               audioUrl={props.payload.audio_url}
+              payload={props.payload}
               language={props.language}
               disabled={saving}
               onSelect={props.onRequestSlidePatch}
@@ -1182,6 +1183,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
           <div className="px-6 py-4 border-t border-gray-100">
             <SimVersionHistory
               lessonId={props.lessonId}
+              language={props.language}
               onRestored={props.onRestored}
             />
           </div>
