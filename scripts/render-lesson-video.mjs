@@ -31,6 +31,7 @@ import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import * as tus from 'tus-js-client';
 import { webpackOverride } from '../remotion/webpack-override.mjs';
+import { inspectMp4Audio } from './media-audio.mjs';
 
 const projectRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -275,20 +276,18 @@ async function main() {
       video_processing_error: null,
     });
 
-    let audioUrl = null;
-    if (sim.audio_path) {
-      const { data: signed, error: signError } = await supabase.storage
-        .from(SIM_AUDIO_BUCKET)
-        .createSignedUrl(sim.audio_path, AUDIO_SIGNED_URL_TTL_SECONDS);
-      if (signError || !signed?.signedUrl) {
-        throw new Error(
-          `Failed to sign sim audio URL: ${signError?.message ?? 'no URL returned'}`
-        );
-      }
-      audioUrl = signed.signedUrl;
-    } else {
-      log('Sim has no audio track — rendering silent video.');
+    if (!sim.audio_path) {
+      throw new Error('Sim has no audio track; refusing to publish a silent MP4.');
     }
+    const { data: signed, error: signError } = await supabase.storage
+      .from(SIM_AUDIO_BUCKET)
+      .createSignedUrl(sim.audio_path, AUDIO_SIGNED_URL_TTL_SECONDS);
+    if (signError || !signed?.signedUrl) {
+      throw new Error(
+        `Failed to sign sim audio URL: ${signError?.message ?? 'no URL returned'}`
+      );
+    }
+    const audioUrl = signed.signedUrl;
 
     const inputProps = {
       deck,
@@ -328,7 +327,7 @@ async function main() {
       composition,
       serveUrl,
       codec: 'h264',
-      audioCodec: audioUrl ? 'aac' : null,
+      audioCodec: 'aac',
       outputLocation,
       inputProps,
       // Image preloading + font loading can exceed the 30s default on slow
@@ -345,6 +344,13 @@ async function main() {
 
     const stat = fs.statSync(outputLocation);
     log(`Rendered ${outputLocation} (${(stat.size / (1024 * 1024)).toFixed(1)} MB)`);
+
+    const audioCheck = await inspectMp4Audio(outputLocation);
+    if (audioCheck.status !== 'valid') {
+      throw new Error(
+        `Rendered MP4 failed audio verification: ${audioCheck.reason ?? 'AAC audio could not be confirmed.'}`
+      );
+    }
 
     const virtualMs = Math.max(0, durationMs - totalClipMs(sim.clip_segments));
 
@@ -404,7 +410,7 @@ async function main() {
     const { data: pub } = supabase.storage.from(VIDEO_BUCKET).getPublicUrl(storagePath);
     // Version param busts browser/CDN caches when a lesson is re-exported
     // to the same path.
-    const publicUrl = `${pub.publicUrl}?v=${Date.now()}`;
+    const publicUrl = `${pub.publicUrl}?v=${Date.now()}&audio=aac-v1`;
 
     await setLesson({
       video_url_720p: publicUrl,

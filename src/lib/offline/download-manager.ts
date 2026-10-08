@@ -95,52 +95,57 @@ export async function downloadLesson(
 
     updateState({ progress: 50 });
 
-    // 5. Download sim audio (the largest piece)
+    // 5. Download sim audio (the largest piece). A download without its
+    // narration is not a successful offline lesson, so leave it retryable.
+    if (!simPayload?.audio_url) {
+      throw new Error("This lesson has no downloadable audio.");
+    }
     let audioSize = 0;
-    if (simPayload?.audio_url) {
-      try {
-        const audioRes = await fetch(simPayload.audio_url, {
-          signal: controller.signal,
-        });
-
-        if (audioRes.ok && audioRes.body) {
-          const contentLength = parseInt(
-            audioRes.headers.get("content-length") || "0",
-            10
-          );
-          const reader = audioRes.body.getReader();
-          const chunks: Uint8Array[] = [];
-          let downloaded = 0;
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            downloaded += value.length;
-            audioSize = downloaded;
-
-            const audioProgress = contentLength
-              ? Math.round((downloaded / contentLength) * 45)
-              : Math.min(Math.round((downloaded / (1024 * 1024)) * 10), 45);
-
-            updateState({
-              progress: 50 + audioProgress,
-              totalBytes: contentLength || downloaded,
-              downloadedBytes: downloaded,
-            });
-          }
-
-          // Reconstruct blob and cache it
-          const mimeType =
-            audioRes.headers.get("content-type") || simPayload.sim.audio_mime || "audio/webm";
-          const audioBlob = new Blob(chunks as BlobPart[], { type: mimeType });
-          await cacheSimAudio(lessonId, audioBlob);
-        }
-      } catch (e) {
-        if ((e as Error).name === "AbortError") throw new Error("Cancelled");
-        // Audio download failed — save lesson without audio
-        console.warn("Audio download failed, saving lesson without audio:", e);
+    try {
+      const audioRes = await fetch(simPayload.audio_url, {
+        signal: controller.signal,
+      });
+      if (!audioRes.ok || !audioRes.body) {
+        throw new Error(`Audio download failed (HTTP ${audioRes.status}).`);
       }
+
+      const contentLength = parseInt(
+        audioRes.headers.get("content-length") || "0",
+        10
+      );
+      const reader = audioRes.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let downloaded = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        downloaded += value.length;
+        audioSize = downloaded;
+
+        const audioProgress = contentLength
+          ? Math.round((downloaded / contentLength) * 45)
+          : Math.min(Math.round((downloaded / (1024 * 1024)) * 10), 45);
+
+        updateState({
+          progress: 50 + audioProgress,
+          totalBytes: contentLength || downloaded,
+          downloadedBytes: downloaded,
+        });
+      }
+
+      if (downloaded === 0) throw new Error("Lesson audio was empty.");
+
+      const mimeType =
+        audioRes.headers.get("content-type") || simPayload.sim.audio_mime || "audio/webm";
+      const audioBlob = new Blob(chunks as BlobPart[], { type: mimeType });
+      await cacheSimAudio(lessonId, audioBlob);
+    } catch (error) {
+      if ((error as Error).name === "AbortError") throw new Error("Cancelled");
+      throw new Error(
+        `Could not download lesson audio. Please retry. ${error instanceof Error ? error.message : ""}`.trim()
+      );
     }
 
     updateState({ progress: 95 });

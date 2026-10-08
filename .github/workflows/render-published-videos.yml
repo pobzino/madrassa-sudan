@@ -32,7 +32,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Render missing or stale published lesson videos
+      - name: Render missing, stale, or unverified published lesson videos
         env:
           RENDER_SHARD: ${{ inputs.shard || '0/1' }}
         run: npm run render:published -- --shard="$RENDER_SHARD"

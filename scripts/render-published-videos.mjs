@@ -115,7 +115,16 @@ function needsRender(lesson, sim, force) {
   if (!lesson.video_url_720p || !lesson.video_processed_at) return true;
   const videoTime = Date.parse(lesson.video_processed_at);
   const simTime = Date.parse(sim.updated_at);
-  return !Number.isFinite(videoTime) || (Number.isFinite(simTime) && simTime > videoTime);
+  if (!Number.isFinite(videoTime) || (Number.isFinite(simTime) && simTime > videoTime)) return true;
+
+  // Only renderer outputs which passed the local AAC verification receive this
+  // marker. Older files are re-rendered once, which also repairs historical
+  // silent downloads without probing every public video over the network.
+  try {
+    return new URL(lesson.video_url_720p).searchParams.get('audio') !== 'aac-v1';
+  } catch {
+    return true;
+  }
 }
 
 function runRenderer(lesson, language) {
@@ -186,7 +195,9 @@ async function main() {
       skippedWithoutAudio.push(lesson);
       continue;
     }
-    if (needsRender(lesson, sim, args.force)) candidates.push(lesson);
+    if (needsRender(lesson, sim, args.force)) {
+      candidates.push(lesson);
+    }
   }
 
   if (skippedWithoutAudio.length > 0) {
