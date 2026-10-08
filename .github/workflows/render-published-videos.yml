@@ -2,11 +2,6 @@ name: Render published lesson videos
 
 on:
   workflow_dispatch:
-    inputs:
-      shard:
-        description: Stable lesson shard as INDEX/TOTAL
-        required: false
-        default: "0/1"
   schedule:
     - cron: "23 * * * *"
 
@@ -14,13 +9,17 @@ permissions:
   contents: read
 
 concurrency:
-  group: render-published-lesson-videos-${{ inputs.shard || 'scheduled' }}
+  group: render-published-lesson-videos
   cancel-in-progress: false
 
 jobs:
   render:
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["0/4", "1/4", "2/4", "3/4"]
     env:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -32,7 +31,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Install FFmpeg media tools
+        run: sudo apt-get update && sudo apt-get install --yes ffmpeg
       - name: Render missing, stale, or unverified published lesson videos
         env:
-          RENDER_SHARD: ${{ inputs.shard || '0/1' }}
+          RENDER_SHARD: ${{ matrix.shard }}
         run: npm run render:published -- --shard="$RENDER_SHARD"
