@@ -16,7 +16,6 @@ import LearningPathTree from "@/components/learning-path/LearningPathTree";
 import { watchedPercent } from "@/lib/lessons/watched-percent";
 import LessonsBackground from "@/components/learning-path/LessonsBackground";
 import { loadSubjectLearningPath, type SubjectLearningPath } from "@/lib/lessons/useLearningPath";
-import DownloadButton from "@/components/lessons/DownloadButton";
 import LessonComputerDownloadButton from "@/components/lessons/LessonComputerDownloadButton";
 
 const translations = {
@@ -446,7 +445,6 @@ function LessonCard({
             iconOnly
             className="w-8 h-8 rounded-full bg-white/95 text-gray-600 hover:bg-white hover:text-[#007229] shadow-sm flex items-center justify-center transition-colors"
           />
-          <DownloadButton lessonId={lesson.id} size="sm" className="shadow-sm" />
         </div>
 
         {/* Progress bar */}
