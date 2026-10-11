@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { syncAmalContact } from "@/lib/resend-contacts";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -10,6 +11,26 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role, is_approved")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (profile?.role === "parent") {
+          try {
+            await syncAmalContact(user.email, "parent");
+          } catch (syncError) {
+            console.error("Resend parent contact sync failed:", syncError);
+          }
+        }
+      }
+
       return NextResponse.redirect(`${origin}${next}`);
     }
   }

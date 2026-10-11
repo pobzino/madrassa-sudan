@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { syncAmalContact } from "@/lib/resend-contacts";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
 
@@ -90,6 +91,14 @@ export async function PATCH(
         { error: "Failed to update user" },
         { status: 500 }
       );
+    }
+
+    if (approved && updated.role === "teacher") {
+      try {
+        await syncAmalContact(targetAuthData.user.email, "volunteer");
+      } catch (syncError) {
+        console.error("Resend volunteer contact sync failed:", syncError);
+      }
     }
 
     return NextResponse.json({ user: updated });
