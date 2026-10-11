@@ -20,6 +20,16 @@ function segmentIdFor(role: AmalContactRole) {
     : process.env.RESEND_AMAL_VOLUNTEERS_SEGMENT_ID;
 }
 
+function emailUpdatesSegmentIdFor(emailUpdatesOptIn: boolean) {
+  return emailUpdatesOptIn
+    ? process.env.RESEND_AMAL_EMAIL_UPDATES_SEGMENT_ID
+    : undefined;
+}
+
+function emailUpdatesConsentValue(emailUpdatesOptIn: boolean) {
+  return emailUpdatesOptIn ? "opted_in" : "not_opted_in";
+}
+
 export function isDeliverableAmalEmail(email: string | null | undefined) {
   const normalized = email?.trim().toLowerCase() ?? "";
   return normalized.includes("@") && !normalized.endsWith(WHATSAPP_LOGIN_DOMAIN);
@@ -43,6 +53,7 @@ async function requestResend(
 export async function syncAmalContact(
   email: string | null | undefined,
   role: AmalContactRole,
+  emailUpdatesOptIn = false,
 ): Promise<SyncResult> {
   const normalizedEmail = email?.trim().toLowerCase() ?? "";
   if (!isDeliverableAmalEmail(email)) {
@@ -57,14 +68,19 @@ export async function syncAmalContact(
   if (!apiKey || !segmentId) {
     return { status: "skipped", reason: "not-configured" };
   }
+  const segmentIds = [segmentId, emailUpdatesSegmentIdFor(emailUpdatesOptIn)]
+    .filter((id): id is string => Boolean(id));
 
   const encodedEmail = encodeURIComponent(normalizedEmail);
   const createResponse = await requestResend("/contacts", apiKey, {
     method: "POST",
     body: JSON.stringify({
       email: normalizedEmail,
-      properties: { amal_role: role },
-      segments: [{ id: segmentId }],
+      properties: {
+        amal_role: role,
+        email_updates_opt_in: emailUpdatesConsentValue(emailUpdatesOptIn),
+      },
+      segments: segmentIds.map((id) => ({ id })),
     }),
   });
 
@@ -80,21 +96,28 @@ export async function syncAmalContact(
 
   const updateResponse = await requestResend(`/contacts/${encodedEmail}`, apiKey, {
     method: "PATCH",
-    body: JSON.stringify({ properties: { amal_role: role } }),
+    body: JSON.stringify({
+      properties: {
+        amal_role: role,
+        email_updates_opt_in: emailUpdatesConsentValue(emailUpdatesOptIn),
+      },
+    }),
   });
   if (!updateResponse.ok) {
     const responseText = await updateResponse.text();
     throw new Error(`Resend contact update failed (${updateResponse.status}): ${responseText}`);
   }
 
-  const segmentResponse = await requestResend(
-    `/contacts/${encodedEmail}/segments/${segmentId}`,
-    apiKey,
-    { method: "POST" },
-  );
-  if (!segmentResponse.ok && segmentResponse.status !== 409) {
-    const responseText = await segmentResponse.text();
-    throw new Error(`Resend segment membership failed (${segmentResponse.status}): ${responseText}`);
+  for (const id of segmentIds) {
+    const segmentResponse = await requestResend(
+      `/contacts/${encodedEmail}/segments/${id}`,
+      apiKey,
+      { method: "POST" },
+    );
+    if (!segmentResponse.ok && segmentResponse.status !== 409) {
+      const responseText = await segmentResponse.text();
+      throw new Error(`Resend segment membership failed (${segmentResponse.status}): ${responseText}`);
+    }
   }
 
   return { status: "synced" };

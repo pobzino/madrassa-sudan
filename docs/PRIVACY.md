@@ -1,6 +1,6 @@
 # Privacy Policy - Amal School
 
-**Last Updated:** August 26, 2026
+**Last Updated:** October 11, 2026
 
 ## 1. About Amal School
 
@@ -22,6 +22,7 @@ When a parent or caregiver applies, we may collect:
 - The number and ages of eligible children
 - Website, Zoom, and device access information
 - Preferred language and confirmation that the terms were accepted
+- Whether an adult has chosen to receive optional Amal School updates by email, and when they made that choice
 
 ### Volunteer and teacher applications
 
@@ -49,6 +50,7 @@ We use information to:
 - Help teachers and authorised partner staff understand participation and learning progress
 - Protect children, prevent misuse, investigate technical problems, and keep the platform secure
 - Improve lessons, Practice activities, accessibility, and platform performance
+- Send optional Amal School updates by email only where an adult has asked to receive them
 - Meet safeguarding, legal, and regulatory obligations where they apply
 
 We rely on consent where it is required, on providing the requested service, on legitimate interests such as operating and protecting the platform, and on legal or safeguarding obligations where applicable. Parents and caregivers should supervise young children and provide any consent required by local law.
@@ -91,6 +93,7 @@ Depending on where you live, you or your parent or caregiver may ask us to:
 - Delete information or close an account
 - Restrict or object to certain processing
 - Withdraw consent where processing is based on consent
+- Unsubscribe from optional email updates at any time, using the link in an update or by contacting us
 - Explain a decision or request human review where appropriate
 
 We may need to verify the request and may retain limited information where law, safeguarding, or legitimate educational record-keeping requires it. You may also have the right to complain to your local data protection authority.

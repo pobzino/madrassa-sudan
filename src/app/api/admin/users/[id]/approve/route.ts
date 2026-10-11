@@ -95,7 +95,11 @@ export async function PATCH(
 
     if (approved && updated.role === "teacher") {
       try {
-        await syncAmalContact(targetAuthData.user.email, "volunteer");
+        await syncAmalContact(
+          targetAuthData.user.email,
+          "volunteer",
+          targetAuthData.user.user_metadata.email_updates_opt_in === true,
+        );
       } catch (syncError) {
         console.error("Resend volunteer contact sync failed:", syncError);
       }

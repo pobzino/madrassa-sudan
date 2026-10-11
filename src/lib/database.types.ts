@@ -2114,6 +2114,8 @@ export type Database = {
           can_access_sims: boolean
           created_at: string
           date_of_birth: string | null
+          email_updates_opt_in: boolean
+          email_updates_opt_in_at: string | null
           full_name: string
           grade_level: number | null
           id: string
@@ -2130,6 +2132,8 @@ export type Database = {
           can_access_sims?: boolean
           created_at?: string
           date_of_birth?: string | null
+          email_updates_opt_in?: boolean
+          email_updates_opt_in_at?: string | null
           full_name: string
           grade_level?: number | null
           id: string
@@ -2146,6 +2150,8 @@ export type Database = {
           can_access_sims?: boolean
           created_at?: string
           date_of_birth?: string | null
+          email_updates_opt_in?: boolean
+          email_updates_opt_in_at?: string | null
           full_name?: string
           grade_level?: number | null
           id?: string

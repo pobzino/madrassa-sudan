@@ -24,7 +24,11 @@ export async function GET(request: Request) {
 
         if (profile?.role === "parent") {
           try {
-            await syncAmalContact(user.email, "parent");
+            await syncAmalContact(
+              user.email,
+              "parent",
+              user.user_metadata.email_updates_opt_in === true,
+            );
           } catch (syncError) {
             console.error("Resend parent contact sync failed:", syncError);
           }

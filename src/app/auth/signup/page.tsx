@@ -129,6 +129,7 @@ const translations = {
     termsLink: "الشروط والأحكام",
     andText: "و",
     privacyLink: "سياسة الخصوصية",
+    emailUpdatesOptIn: "أرغب في تلقي تحديثات مدرسة آمال عبر البريد الإلكتروني. يمكنني إلغاء الاشتراك في أي وقت.",
     alreadyHaveAccount: "لديك حساب بالفعل؟",
     signIn: "تسجيل الدخول",
     checkEmail: "تحقق من بريدك الإلكتروني",
@@ -229,6 +230,7 @@ const translations = {
     termsLink: "Terms and Conditions",
     andText: "and",
     privacyLink: "Privacy Policy",
+    emailUpdatesOptIn: "I would like to receive Amal School updates by email. I can unsubscribe at any time.",
     alreadyHaveAccount: "Already have an account?",
     signIn: "Sign In",
     checkEmail: "Check your email",
@@ -286,6 +288,7 @@ function SignupForm() {
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
   const [consentGiven, setConsentGiven] = useState(false);
+  const [emailUpdatesOptIn, setEmailUpdatesOptIn] = useState(false);
   const [parentProfession, setParentProfession] = useState("");
   const [parentCallingCode, setParentCallingCode] = useState("+249");
   const [parentWhatsapp, setParentWhatsapp] = useState("");
@@ -547,6 +550,8 @@ function SignupForm() {
             referral: referralDetails,
           },
           consent_given_at: new Date().toISOString(),
+          email_updates_opt_in: emailUpdatesOptIn,
+          email_updates_opt_in_at: emailUpdatesOptIn ? new Date().toISOString() : null,
         },
       },
     });
@@ -1177,7 +1182,21 @@ function SignupForm() {
             </div>
           </div>
 
-          {/* Consent Checkbox */}
+          {email.trim() && (
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={emailUpdatesOptIn}
+                onChange={(e) => setEmailUpdatesOptIn(e.target.checked)}
+                className="mt-0.5 w-5 h-5 rounded border-gray-300 text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer accent-[var(--primary)]"
+              />
+              <span className="text-sm text-gray-600 leading-snug">
+                {t.emailUpdatesOptIn}
+              </span>
+            </label>
+          )}
+
+          {/* Required account terms and privacy acknowledgement */}
           <label className="flex items-start gap-3 cursor-pointer select-none">
             <input
               type="checkbox"
