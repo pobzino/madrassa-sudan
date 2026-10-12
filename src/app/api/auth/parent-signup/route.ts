@@ -10,26 +10,6 @@ import {
 } from "@/lib/supabase/service";
 
 const answerSchema = z.enum(["yes", "no", "unsure", ""]);
-const referralSourceSchema = z.enum([
-  "word_of_mouth",
-  "facebook",
-  "instagram",
-  "whatsapp",
-  "other",
-]);
-
-const ReferralSchema = z.object({
-  source: referralSourceSchema,
-  other: z.string().trim().max(200),
-}).superRefine((referral, context) => {
-  if (referral.source === "other" && !referral.other) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["other"],
-      message: "Enter where you heard about Amal School",
-    });
-  }
-});
 
 const ParentSignupSchema = z.object({
   fullName: z.string().trim().min(2).max(200),
@@ -37,9 +17,7 @@ const ParentSignupSchema = z.object({
   whatsapp: z.string().trim().min(7).max(40),
   language: z.enum(["ar", "en"]),
   website: z.string().max(0).optional(),
-  referral: ReferralSchema,
   parent: z.object({
-    profession: z.string().trim().max(200),
     eligibility: z.object({
       sudanese_descent: answerSchema,
       child_affected_by_war: answerSchema,
@@ -52,7 +30,6 @@ const ParentSignupSchema = z.object({
     children_ages: z.array(z.coerce.number().int().min(3).max(19)).min(1).max(8),
     access: z.object({
       can_access_website: answerSchema,
-      can_access_zoom: answerSchema,
       device_type: z.enum(["phone", "tablet", "computer", "shared", "none", ""]),
       notes: z.string().trim().max(2000),
     }),
@@ -145,8 +122,6 @@ export async function POST(request: NextRequest) {
       role: "parent",
       preferred_language: input.language,
       phone: input.whatsapp,
-      referral_source: input.referral.source,
-      referral_source_other: input.referral.source === "other" ? input.referral.other : null,
       signup_details: {
         role: "parent",
         parent: {
@@ -154,7 +129,6 @@ export async function POST(request: NextRequest) {
           whatsapp_number: input.whatsapp,
         },
         teacher_volunteer: null,
-        referral: input.referral,
       },
       consent_given_at: new Date().toISOString(),
     },

@@ -59,9 +59,7 @@ const translations = {
     parent: "ولي أمر",
     parentDetailsTitle: "معلومات ولي الأمر",
     programmeTitle: "معلومات البرنامج",
-    programmeDesc: "يغطي البرنامج الرياضيات واللغة الإنجليزية. يتعلم الأطفال عبر الموقع وحصص زوم عند الحاجة، باستخدام هاتف إن لم يتوفر جهاز آخر.",
-    parentProfessionLabel: "المهنة / العمل",
-    professionPlaceholder: "مثال: معلم، ممرض، عمل حر",
+    programmeDesc: "أضف أعمار الأطفال لنساعدك في العثور على الدروس المناسبة لهم.",
     whatsappLabel: "رقم الواتساب (جهة التواصل الأساسية)",
     countryRegionLabel: "الدولة أو المنطقة",
     localWhatsappNumberLabel: "رقم واتساب",
@@ -79,12 +77,11 @@ const translations = {
     durationGt2y: "أكثر من سنتين",
     outOfSchoolDetailsLabel: "الظروف (اختياري)",
     outOfSchoolPlaceholder: "مثال: خارج المدرسة بسبب النزوح",
-    childrenCountLabel: "عدد الأطفال المؤهلين",
+    childrenCountLabel: "عدد الأطفال",
     childrenAgesLabel: "أعمار الأطفال",
     childWord: "طفل",
     agePlaceholder: "العمر",
     canAccessWebsiteLabel: "هل يمكنكم استخدام الموقع؟",
-    canAccessZoomLabel: "هل يمكن للطفل حضور حصص زوم؟",
     deviceLabel: "ما الجهاز المتاح للطفل؟ (الهاتف يكفي تماماً)",
     devicePhone: "هاتف",
     deviceTablet: "جهاز لوحي",
@@ -115,15 +112,6 @@ const translations = {
     involvementOps: "العمليات",
     involvementOutreach: "التواصل",
     involvementOther: "أخرى",
-    heardAboutLabel: "كيف عرفت عن مدرسة آمال؟",
-    heardAboutPlaceholder: "اختر",
-    heardWordOfMouth: "عن طريق الأصدقاء أو العائلة",
-    heardFacebook: "فيسبوك",
-    heardInstagram: "إنستغرام",
-    heardWhatsapp: "واتساب",
-    heardOther: "أخرى",
-    heardOtherLabel: "يرجى إخبارنا أين",
-    heardOtherPlaceholder: "اكتب إجابتك",
     createAccountBtn: "إنشاء حساب",
     creatingAccount: "جاري إنشاء الحساب...",
     consentLabel: "أوافق على",
@@ -161,9 +149,7 @@ const translations = {
     parent: "Parent",
     parentDetailsTitle: "Parent information",
     programmeTitle: "Programme information",
-    programmeDesc: "The programme covers Maths and English. Children learn through the website and Zoom lessons where needed, using a phone if that is the device available.",
-    parentProfessionLabel: "Profession / occupation",
-    professionPlaceholder: "e.g. teacher, nurse, self-employed",
+    programmeDesc: "Add your children's ages so we can help you find suitable lessons.",
     whatsappLabel: "WhatsApp number (primary contact)",
     countryRegionLabel: "Country / region",
     localWhatsappNumberLabel: "WhatsApp number",
@@ -181,12 +167,11 @@ const translations = {
     durationGt2y: "More than 2 years",
     outOfSchoolDetailsLabel: "Circumstances (optional)",
     outOfSchoolPlaceholder: "e.g. out of school because of displacement",
-    childrenCountLabel: "Number of eligible children",
+    childrenCountLabel: "Number of children",
     childrenAgesLabel: "Children's ages",
     childWord: "Child",
     agePlaceholder: "Age",
     canAccessWebsiteLabel: "Can you access the website?",
-    canAccessZoomLabel: "Can your child join Zoom lessons?",
     deviceLabel: "What device will your child use? (a phone is perfectly fine)",
     devicePhone: "Phone",
     deviceTablet: "Tablet",
@@ -217,15 +202,6 @@ const translations = {
     involvementOps: "Operations",
     involvementOutreach: "Outreach",
     involvementOther: "Other",
-    heardAboutLabel: "Where did you hear about Amal School?",
-    heardAboutPlaceholder: "Select an option",
-    heardWordOfMouth: "Word of mouth",
-    heardFacebook: "Facebook",
-    heardInstagram: "Instagram",
-    heardWhatsapp: "WhatsApp",
-    heardOther: "Other",
-    heardOtherLabel: "Please tell us where",
-    heardOtherPlaceholder: "Type your answer",
     createAccountBtn: "Create Account",
     creatingAccount: "Creating account...",
     consentLabel: "I agree to the",
@@ -253,7 +229,6 @@ const translations = {
 
 type YesNoAnswer = "" | "yes" | "no" | "unsure";
 type InvolvementArea = "teaching" | "tech_platform" | "content_video" | "operations" | "outreach" | "other";
-type ReferralSource = "" | "word_of_mouth" | "facebook" | "instagram" | "whatsapp" | "other";
 
 function SignupForm() {
   const searchParams = useSearchParams();
@@ -274,8 +249,7 @@ function SignupForm() {
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
   const [consentGiven, setConsentGiven] = useState(false);
-  const [emailUpdatesOptIn, setEmailUpdatesOptIn] = useState(false);
-  const [parentProfession, setParentProfession] = useState("");
+  const [emailUpdatesOptIn, setEmailUpdatesOptIn] = useState(true);
   const [parentCallingCode, setParentCallingCode] = useState("+249");
   const [parentWhatsapp, setParentWhatsapp] = useState("");
   const [sudaneseDescent, setSudaneseDescent] = useState<YesNoAnswer>("");
@@ -287,18 +261,16 @@ function SignupForm() {
   const [childrenAges, setChildrenAges] = useState<string[]>([""]);
   const childrenCount = childrenAges.length;
   const [canAccessWebsite, setCanAccessWebsite] = useState<YesNoAnswer>("");
-  const [canAccessZoom, setCanAccessZoom] = useState<YesNoAnswer>("");
   const [deviceType, setDeviceType] = useState("");
   const [accessNotes, setAccessNotes] = useState("");
   const [parentCountry, setParentCountry] = useState("");
   const [parentCity, setParentCity] = useState("");
+  const [teacherCallingCode, setTeacherCallingCode] = useState("+249");
   const [teacherWhatsapp, setTeacherWhatsapp] = useState("");
   const [teacherLocation, setTeacherLocation] = useState("");
   const [educationalBackground, setEducationalBackground] = useState("");
   const [involvementAreas, setInvolvementAreas] = useState<InvolvementArea[]>([]);
   const [weeklyHours, setWeeklyHours] = useState("");
-  const [referralSource, setReferralSource] = useState<ReferralSource>("");
-  const [referralOther, setReferralOther] = useState("");
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
@@ -350,14 +322,6 @@ function SignupForm() {
     { value: "other", label: t.involvementOther },
   ];
 
-  const referralOptions: Array<{ value: Exclude<ReferralSource, "">; label: string }> = [
-    { value: "word_of_mouth", label: t.heardWordOfMouth },
-    { value: "facebook", label: t.heardFacebook },
-    { value: "instagram", label: t.heardInstagram },
-    { value: "whatsapp", label: t.heardWhatsapp },
-    { value: "other", label: t.heardOther },
-  ];
-
   const toggleInvolvementArea = (area: InvolvementArea) => {
     setInvolvementAreas((prev) =>
       prev.includes(area)
@@ -403,24 +367,9 @@ function SignupForm() {
       return;
     }
 
-    if (!referralSource || (referralSource === "other" && !referralOther.trim())) {
-      trackAnalyticsEvent("signup_error", { role, error_type: "validation_referral" });
-      setError(
-        language === "ar"
-          ? "اختر كيف عرفت عن مدرسة آمال، وأدخل إجابتك إذا اخترت أخرى."
-          : "Choose where you heard about Amal School and enter an answer if you select Other."
-      );
-      setLoading(false);
-      return;
-    }
-
-    const referralDetails = {
-      source: referralSource,
-      other: referralSource === "other" ? referralOther.trim() : "",
-    };
-
-    const hasTypedCountryCode = /^(?:\+|00)/.test(normalizeArabicDigits(parentWhatsapp).trim());
-    if (role === "parent" && hasTypedCountryCode) {
+    const localWhatsapp = role === "parent" ? parentWhatsapp : teacherWhatsapp;
+    const hasTypedCountryCode = /^(?:\+|00)/.test(normalizeArabicDigits(localWhatsapp).trim());
+    if ((role === "parent" || role === "teacher") && hasTypedCountryCode) {
       trackAnalyticsEvent("signup_error", { role, error_type: "validation_contact" });
       setError(
         language === "ar"
@@ -432,10 +381,10 @@ function SignupForm() {
     }
 
     const parentWhatsappNumber = whatsappNumberWithCountryCode(parentCallingCode, parentWhatsapp);
+    const teacherWhatsappNumber = whatsappNumberWithCountryCode(teacherCallingCode, teacherWhatsapp);
     const parentDetails =
       role === "parent"
         ? {
-            profession: parentProfession.trim(),
             whatsapp_number: parentWhatsappNumber,
             eligibility: {
               sudanese_descent: sudaneseDescent,
@@ -449,7 +398,6 @@ function SignupForm() {
             children_ages: childrenAges.filter(Boolean),
             access: {
               can_access_website: canAccessWebsite,
-              can_access_zoom: canAccessZoom,
               device_type: deviceType,
               notes: accessNotes.trim(),
             },
@@ -462,7 +410,7 @@ function SignupForm() {
     const teacherDetails =
       role === "teacher"
         ? {
-            whatsapp_number: teacherWhatsapp.trim(),
+            whatsapp_number: teacherWhatsappNumber,
             location: teacherLocation.trim(),
             educational_background: educationalBackground.trim(),
             involvement_areas: involvementAreas,
@@ -497,7 +445,6 @@ function SignupForm() {
           language,
           website,
           parent: parentDetails,
-          referral: referralDetails,
         }),
       }).catch(() => null);
 
@@ -530,14 +477,11 @@ function SignupForm() {
           full_name: fullName,
           role: role,
           preferred_language: language,
-          phone: role === "parent" ? parentWhatsappNumber : role === "teacher" ? teacherWhatsapp.trim() : null,
-          referral_source: referralDetails.source,
-          referral_source_other: referralDetails.other || null,
+          phone: role === "parent" ? parentWhatsappNumber : role === "teacher" ? teacherWhatsappNumber : null,
           signup_details: {
             role,
             parent: parentDetails,
             teacher_volunteer: teacherDetails,
-            referral: referralDetails,
           },
           consent_given_at: new Date().toISOString(),
           email_updates_opt_in: emailUpdatesOptIn,
@@ -789,20 +733,6 @@ function SignupForm() {
                   <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-gray-500">{t.programmeDesc}</p>
                 </div>
 
-                <div>
-                  <label htmlFor="parentProfession" className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    {t.parentProfessionLabel}
-                  </label>
-                  <input
-                    id="parentProfession"
-                    type="text"
-                    value={parentProfession}
-                    onChange={(e) => setParentProfession(e.target.value)}
-                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
-                    placeholder={t.professionPlaceholder}
-                  />
-                </div>
-
                 <fieldset>
                   <legend className="mb-2 block text-sm font-semibold text-gray-700">
                     {t.whatsappLabel}
@@ -957,7 +887,6 @@ function SignupForm() {
                 <div className="space-y-3">
                   {[
                     { id: "canAccessWebsite", label: t.canAccessWebsiteLabel, value: canAccessWebsite, setter: setCanAccessWebsite },
-                    { id: "canAccessZoom", label: t.canAccessZoomLabel, value: canAccessZoom, setter: setCanAccessZoom },
                   ].map((field) => (
                     <label key={field.id} htmlFor={field.id} className="block">
                       <span className="block text-sm font-semibold text-gray-700 mb-1.5">{field.label}</span>
@@ -1045,22 +974,36 @@ function SignupForm() {
                   <p className="mt-1 text-xs leading-relaxed text-blue-800">{t.volunteerInfoDesc}</p>
                 </div>
 
-                <div>
-                  <label htmlFor="teacherWhatsapp" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <fieldset>
+                  <legend className="mb-2 block text-sm font-semibold text-gray-700">
                     {t.whatsappLabel}
-                  </label>
-                  <input
-                    id="teacherWhatsapp"
-                    type="tel"
-                    required
-                    value={teacherWhatsapp}
-                    onChange={(e) => setTeacherWhatsapp(e.target.value)}
-                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
-                    placeholder={t.whatsappPlaceholder}
-                    dir="ltr"
-                    style={{ textAlign: "left" }}
-                  />
-                </div>
+                  </legend>
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)]" dir="ltr">
+                    <CountryCodeSelect value={teacherCallingCode} onChange={setTeacherCallingCode} options={PARENT_CALLING_CODE_OPTIONS} language={language} label={t.countryRegionLabel} />
+                    <label htmlFor="teacherWhatsapp" className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-gray-500">
+                        {t.localWhatsappNumberLabel}
+                      </span>
+                      <div className="flex">
+                        <span className="inline-flex shrink-0 items-center rounded-l-xl border border-r-0 border-gray-200 bg-gray-50 px-3 text-sm font-medium tabular-nums text-gray-600">
+                          {teacherCallingCode}
+                        </span>
+                        <input
+                          id="teacherWhatsapp"
+                          type="tel"
+                          inputMode="tel"
+                          autoComplete="tel-national"
+                          required
+                          value={teacherWhatsapp}
+                          onChange={(e) => setTeacherWhatsapp(e.target.value)}
+                          className="block min-w-0 flex-1 rounded-r-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                          placeholder={t.localWhatsappNumberPlaceholder}
+                          style={{ textAlign: "left" }}
+                        />
+                      </div>
+                    </label>
+                  </div>
+                </fieldset>
 
                 <div>
                   <label htmlFor="teacherLocation" className="block text-sm font-semibold text-gray-700 mb-1.5">
@@ -1136,45 +1079,6 @@ function SignupForm() {
               </div>
             )}
 
-            <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4">
-              <label htmlFor="referralSource" className="block text-sm font-semibold text-gray-700 mb-1.5">
-                {t.heardAboutLabel}
-              </label>
-              <select
-                id="referralSource"
-                name="referralSource"
-                required
-                value={referralSource}
-                onChange={(event) => {
-                  const nextSource = event.target.value as ReferralSource;
-                  setReferralSource(nextSource);
-                  if (nextSource !== "other") setReferralOther("");
-                }}
-                className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
-              >
-                <option value="">{t.heardAboutPlaceholder}</option>
-                {referralOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-
-              {referralSource === "other" && (
-                <label htmlFor="referralOther" className="block mt-3">
-                  <span className="block text-sm font-semibold text-gray-700 mb-1.5">{t.heardOtherLabel}</span>
-                  <input
-                    id="referralOther"
-                    name="referralOther"
-                    type="text"
-                    required
-                    maxLength={200}
-                    value={referralOther}
-                    onChange={(event) => setReferralOther(event.target.value)}
-                    className="block w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
-                    placeholder={t.heardOtherPlaceholder}
-                  />
-                </label>
-              )}
-            </div>
           </div>
 
           {email.trim() && (
