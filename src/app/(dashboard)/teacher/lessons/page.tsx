@@ -16,9 +16,12 @@ import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import {
   DEFAULT_SLIDE_LENGTH_PRESET,
   DEFAULT_SLIDE_GOAL_MIX,
+  defaultSlideLanguageModeForSubject,
   getSlideGenerationContextStorageKey,
   getSlideLengthPresetConfig,
+  isEnglishSubject,
   normalizeKeyIdeasInput,
+  normalizeSlideLanguageModeForSubject,
   SLIDE_GOAL_MIX_OPTIONS,
   SLIDE_LENGTH_PRESET_OPTIONS,
   TEACHER_GRADE_OPTIONS,
@@ -173,7 +176,7 @@ export default function TeacherLessonsPage() {
       subject_id: subjects[0]?.id || "",
       grade_level: TEACHER_GRADE_OPTIONS[0],
       curriculum_topic: null,
-      language_mode: "ar",
+      language_mode: defaultSlideLanguageModeForSubject(subjects[0]),
       learning_objective: "",
       key_ideas: "",
       source_notes: "",
@@ -448,7 +451,8 @@ export default function TeacherLessonsPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
                   <select
                     value={quickCreateSubjectId}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const subject = subjects.find((item) => item.id === e.target.value);
                       setQuickCreateForm({
                         ...quickCreateForm,
                         subject_id: e.target.value,
@@ -456,8 +460,12 @@ export default function TeacherLessonsPage() {
                         title: "",
                         learning_objective: "",
                         key_ideas: "",
-                      })
-                    }
+                        language_mode: normalizeSlideLanguageModeForSubject(
+                          subject,
+                          quickCreateForm.language_mode
+                        ),
+                      });
+                    }}
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   >
                     {subjects.map((subject) => (
@@ -591,11 +599,17 @@ export default function TeacherLessonsPage() {
                         language_mode: e.target.value as SlideLanguageMode,
                       })
                     }
+                    disabled={isEnglishSubject(quickCreateSelectedSubject)}
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   >
                     <option value="ar">Arabic Slides</option>
                     <option value="en">English Slides</option>
                   </select>
+                  {isEnglishSubject(quickCreateSelectedSubject) && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      English lesson slides stay in English to match their recorded narration.
+                    </p>
+                  )}
                 </div>
 
                 <div>

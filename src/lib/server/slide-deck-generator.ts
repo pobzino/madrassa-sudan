@@ -9,6 +9,7 @@ import { getOpenAIClient, AI_MODEL_FAST } from "../ai/openai-client";
 import type { Database } from "../database.types";
 import {
   clampSlideCount,
+  normalizeSlideLanguageModeForSubject,
   suggestSlideCount,
   type SlideGenerationContext,
   type SlideLanguageMode,
@@ -199,6 +200,7 @@ export async function generateSlidesForLesson({
   const slideCount = clampSlideCount(requestedCount || 10);
 
   const subject = (lessonRow.subject as SubjectRow | null) || null;
+  const contentLanguageMode = normalizeSlideLanguageModeForSubject(subject, languageMode);
   const subjectName = subject?.name_en || subject?.name_ar || "General";
   const curriculumSelection = getCurriculumSelectionForLesson(
     subject,
@@ -218,9 +220,9 @@ export async function generateSlidesForLesson({
   const subjectKey = curriculumSelection?.subjectKey ?? getSupportedSubjectKey(subject);
 
   const languageInstruction =
-    languageMode === "en"
+    contentLanguageMode === "en"
       ? "- Write clean English slide copy in the English fields and write the corresponding Arabic slide copy separately in the Arabic fields. Do not place Arabic translations inside the English fields."
-      : languageMode === "both"
+      : contentLanguageMode === "both"
         ? "- Write fully polished parallel Arabic and English slide fields. Each language must stand alone cleanly. Do not mix both languages inside a single field."
         : "- Write clean Arabic slide copy in the Arabic fields and write the corresponding English slide copy separately in the English fields. Do not place English translations inside the Arabic fields.";
   const goalMixInstruction =
@@ -1003,7 +1005,7 @@ ${buildSpeakerNotesContext(slides)}`;
       {
         lesson_id: lessonId,
         slides: slidePayload,
-        language_mode: languageMode,
+        language_mode: contentLanguageMode,
         generated_at: generatedAt,
         updated_at: new Date().toISOString(),
       },

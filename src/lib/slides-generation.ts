@@ -1,6 +1,27 @@
 export type SlideLanguageMode = "ar" | "en" | "both";
 export type SlideLengthPreset = "short" | "medium" | "long";
 
+type SubjectLanguage = {
+  name_en?: string | null;
+};
+
+export function isEnglishSubject(subject: SubjectLanguage | null | undefined) {
+  return subject?.name_en?.trim().toLocaleLowerCase("en") === "english";
+}
+
+export function defaultSlideLanguageModeForSubject(
+  subject: SubjectLanguage | null | undefined
+): SlideLanguageMode {
+  return isEnglishSubject(subject) ? "en" : "ar";
+}
+
+export function normalizeSlideLanguageModeForSubject(
+  subject: SubjectLanguage | null | undefined,
+  requestedMode: SlideLanguageMode
+): SlideLanguageMode {
+  return isEnglishSubject(subject) ? "en" : requestedMode;
+}
+
 export type SlideGoalMix =
   | "balanced"
   | "concept_explanation"

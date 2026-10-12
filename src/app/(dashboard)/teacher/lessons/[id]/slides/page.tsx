@@ -22,6 +22,7 @@ import {
   getSlideLengthPresetFromCount,
   MIN_GENERATED_SLIDE_COUNT,
   MAX_GENERATED_SLIDE_COUNT,
+  normalizeSlideLanguageModeForSubject,
   parseSlideGenerationContext,
   SLIDE_LENGTH_PRESET_OPTIONS,
   type SlideGenerationContext,
@@ -105,10 +106,19 @@ export default function SlidesPage({ params }: { params: Promise<{ id: string }>
 
     const loadedMode = slidesRes?.slideDeck?.language_mode;
     if (loadedMode === 'en' || loadedMode === 'ar' || loadedMode === 'both') {
-      setLanguageMode(loadedMode);
+      setLanguageMode(
+        normalizeSlideLanguageModeForSubject(lessonResult.data?.subject, loadedMode)
+      );
+    } else if (lessonResult.data) {
+      setLanguageMode(
+        normalizeSlideLanguageModeForSubject(
+          lessonResult.data.subject,
+          requestedLanguageMode === 'en' ? 'en' : 'ar'
+        )
+      );
     }
     setLoading(false);
-  }, [id]);
+  }, [id, requestedLanguageMode]);
 
   const handleGeneratingChange = useCallback((generating: boolean, progress: string) => {
     setIsGenerating(generating);
