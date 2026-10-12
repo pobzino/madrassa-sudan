@@ -1,0 +1,16 @@
+export const PARENT_CALLING_CODE_OPTIONS = [
+  { code: "+249", en: "Sudan", ar: "السودان" },
+  { code: "+20", en: "Egypt", ar: "مصر" },
+  { code: "+235", en: "Chad", ar: "تشاد" },
+  { code: "+211", en: "South Sudan", ar: "جنوب السودان" },
+  { code: "+251", en: "Ethiopia", ar: "إثيوبيا" },
+  { code: "+256", en: "Uganda", ar: "أوغندا" },
+  { code: "+254", en: "Kenya", ar: "كينيا" },
+  { code: "+966", en: "Saudi Arabia", ar: "السعودية" },
+  { code: "+971", en: "United Arab Emirates", ar: "الإمارات" },
+  { code: "+974", en: "Qatar", ar: "قطر" },
+  { code: "+968", en: "Oman", ar: "عُمان" },
+  { code: "+90", en: "Turkey", ar: "تركيا" },
+  { code: "+44", en: "United Kingdom", ar: "المملكة المتحدة" },
+  { code: "+1", en: "United States / Canada", ar: "الولايات المتحدة / كندا" },
+] as const;

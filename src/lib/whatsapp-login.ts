@@ -37,3 +37,12 @@ export function loginIdentifierToEmail(identifier: string): string {
   const digits = whatsappDigits(trimmed);
   return digits.length >= 7 ? whatsappLoginEmail(trimmed) : trimmed;
 }
+
+/** Build the WhatsApp login identifier from either a local or international number. */
+export function loginWhatsappNumberToEmail(number: string, callingCode: string): string {
+  const normalized = normalizeArabicDigits(number).trim();
+  const internationalNumber = /^(?:\+|00)/.test(normalized)
+    ? normalized
+    : whatsappNumberWithCountryCode(callingCode, normalized);
+  return whatsappLoginEmail(internationalNumber);
+}

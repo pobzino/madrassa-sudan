@@ -8,7 +8,7 @@ type CountryOption = { code: string; en: string; ar: string };
 export default function CountryCodeSelect({ value, onChange, options, language, label }: {
   value: string;
   onChange: (code: string) => void;
-  options: CountryOption[];
+  options: readonly CountryOption[];
   language: "ar" | "en";
   label: string;
 }) {

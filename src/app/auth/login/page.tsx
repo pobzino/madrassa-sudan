@@ -5,15 +5,22 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { loginIdentifierToEmail } from "@/lib/whatsapp-login";
+import { loginWhatsappNumberToEmail } from "@/lib/whatsapp-login";
 import { getAuthCallbackUrl } from "@/lib/site-url";
+import CountryCodeSelect from "@/components/CountryCodeSelect";
+import { PARENT_CALLING_CODE_OPTIONS } from "@/lib/calling-codes";
 
 const translations = {
   ar: {
     welcomeBack: "مرحباً بعودتك",
     signInSubtitle: "سجّل الدخول لمتابعة رحلة التعلم",
-    emailLabel: "البريد الإلكتروني أو رقم الواتساب",
-    parentLoginHint: "أولياء الأمور: أدخل رقم الواتساب الذي سجّلت به.",
+    emailLabel: "البريد الإلكتروني",
+    whatsappLabel: "رقم واتساب",
+    countryRegionLabel: "الدولة أو المنطقة",
+    localWhatsappPlaceholder: "رقم الهاتف بدون رمز الدولة",
+    signInWithEmail: "البريد الإلكتروني",
+    signInWithWhatsapp: "واتساب",
+    parentLoginHint: "اختر نفس الدولة التي استخدمتها عند التسجيل. يمكنك إدخال رقمك المحلي أو الرقم كاملاً.",
     passwordLabel: "كلمة المرور",
     signIn: "تسجيل الدخول",
     signingIn: "جاري تسجيل الدخول...",
@@ -22,6 +29,8 @@ const translations = {
     confirmationSent: "تم إرسال رسالة التأكيد. تحقق من البريد والرسائل غير المرغوب فيها.",
     enterEmailFirst: "أدخل بريدك الإلكتروني أولاً.",
     emailNotConfirmed: "بريدك غير مؤكد بعد.",
+    invalidCredentials: "تعذر تسجيل الدخول. تأكد من رقم واتسابك وكلمة المرور، أو استخدم البريد الإلكتروني الذي سجلت به.",
+    loginUnavailable: "تعذر تسجيل الدخول الآن. حاول مرة أخرى بعد قليل.",
     forgotPassword: "نسيت كلمة المرور؟",
     noAccount: "ليس لديك حساب؟",
     createAccount: "إنشاء حساب",
@@ -29,8 +38,13 @@ const translations = {
   en: {
     welcomeBack: "Welcome Back",
     signInSubtitle: "Sign in to continue your learning journey",
-    emailLabel: "Email or WhatsApp number",
-    parentLoginHint: "Parents: enter the WhatsApp number you signed up with.",
+    emailLabel: "Email address",
+    whatsappLabel: "WhatsApp number",
+    countryRegionLabel: "Country / region",
+    localWhatsappPlaceholder: "Phone number without country code",
+    signInWithEmail: "Email",
+    signInWithWhatsapp: "WhatsApp",
+    parentLoginHint: "Choose the same country you used at signup. You can enter either your local or full international number.",
     passwordLabel: "Password",
     signIn: "Sign In",
     signingIn: "Signing in...",
@@ -39,6 +53,8 @@ const translations = {
     confirmationSent: "Confirmation email sent. Check your inbox and spam folder.",
     enterEmailFirst: "Enter your email first.",
     emailNotConfirmed: "Your email is not confirmed yet.",
+    invalidCredentials: "We could not sign you in. Check your WhatsApp number and password, or use the email you signed up with.",
+    loginUnavailable: "We could not sign you in right now. Please try again shortly.",
     forgotPassword: "Forgot password?",
     noAccount: "Don't have an account?",
     createAccount: "Create Account",
@@ -47,8 +63,12 @@ const translations = {
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [loginMethod, setLoginMethod] = useState<"email" | "whatsapp">("email");
+  const [callingCode, setCallingCode] = useState("+249");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [requiresEmailConfirmation, setRequiresEmailConfirmation] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
@@ -56,9 +76,6 @@ export default function LoginPage() {
   const supabase = createClient();
   const { language, isRtl } = useLanguage();
   const t = translations[language];
-  const isEmailNotConfirmedError =
-    (error ?? "").toLowerCase().includes("email not confirmed");
-
   const getRedirectUrl = () => (
     typeof window !== "undefined"
       ? `${window.location.origin}/auth/callback`
@@ -70,15 +87,27 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     setResendMessage(null);
+    setRequiresEmailConfirmation(false);
+
+    const identifier = loginMethod === "whatsapp"
+      ? loginWhatsappNumberToEmail(whatsapp, callingCode)
+      : email.trim();
 
     const { error } = await supabase.auth.signInWithPassword({
-      // Parents may type their WhatsApp number instead of an email.
-      email: loginIdentifierToEmail(email),
+      email: identifier,
       password,
     });
 
     if (error) {
-      setError(error.message);
+      const message = error.message.toLowerCase();
+      if (message.includes("email not confirmed")) {
+        setError(t.emailNotConfirmed);
+        setRequiresEmailConfirmation(true);
+      } else if (message.includes("invalid login credentials")) {
+        setError(t.invalidCredentials);
+      } else {
+        setError(t.loginUnavailable);
+      }
       setLoading(false);
     } else {
       router.push("/dashboard");
@@ -89,6 +118,7 @@ export default function LoginPage() {
   const handleResendConfirmation = async () => {
     setError(null);
     setResendMessage(null);
+    setRequiresEmailConfirmation(false);
 
     if (!email.trim()) {
       setError(t.enterEmailFirst);
@@ -103,7 +133,7 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setError(error.message);
+      setError(t.loginUnavailable);
     } else {
       setResendMessage(t.confirmationSent);
     }
@@ -139,26 +169,80 @@ export default function LoginPage() {
           )}
 
           <div className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-1.5">
-                {t.emailLabel}
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="text"
-                inputMode="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="block w-full px-4 py-3 bg-gray-50 border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:bg-white transition-all"
-                placeholder="name@example.com / +249..."
-                dir="ltr"
-                style={{ textAlign: "left" }}
-              />
-              <p className="mt-1.5 text-xs text-gray-500">{t.parentLoginHint}</p>
+            <div className="grid grid-cols-2 rounded-lg border border-gray-200 bg-gray-50 p-1" role="group" aria-label={language === "ar" ? "طريقة تسجيل الدخول" : "Sign-in method"}>
+              {([
+                ["email", t.signInWithEmail],
+                ["whatsapp", t.signInWithWhatsapp],
+              ] as const).map(([method, label]) => (
+                <button
+                  key={method}
+                  type="button"
+                  aria-pressed={loginMethod === method}
+                  onClick={() => {
+                    setLoginMethod(method);
+                    setError(null);
+                    setRequiresEmailConfirmation(false);
+                  }}
+                  className={`min-h-10 rounded-md px-3 text-sm font-semibold transition-colors ${loginMethod === method ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
+
+            {loginMethod === "email" ? (
+              <div>
+                <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  {t.emailLabel}
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="block w-full px-4 py-3 bg-gray-50 border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:bg-white transition-all"
+                  placeholder="name@example.com"
+                  dir="ltr"
+                  style={{ textAlign: "left" }}
+                />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-2">
+                  <CountryCodeSelect
+                    value={callingCode}
+                    onChange={setCallingCode}
+                    options={PARENT_CALLING_CODE_OPTIONS}
+                    language={language}
+                    label={t.countryRegionLabel}
+                  />
+                  <div>
+                    <label htmlFor="whatsapp" className="mb-1.5 block text-xs font-medium text-gray-500">
+                      {t.whatsappLabel}
+                    </label>
+                    <input
+                      id="whatsapp"
+                      name="whatsapp"
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      required
+                      value={whatsapp}
+                      onChange={(e) => setWhatsapp(e.target.value)}
+                      className="block min-h-12 w-full rounded-lg border border-gray-300 bg-white px-3 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                      placeholder={t.localWhatsappPlaceholder}
+                      dir="ltr"
+                      style={{ textAlign: "left" }}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">{t.parentLoginHint}</p>
+              </div>
+            )}
 
             <div>
               <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-1.5">
@@ -199,7 +283,7 @@ export default function LoginPage() {
             ) : t.signIn}
           </button>
 
-          {isEmailNotConfirmedError && (
+          {requiresEmailConfirmation && (
             <div className="space-y-2">
               <p className="text-sm text-amber-700">{t.emailNotConfirmed}</p>
               <button

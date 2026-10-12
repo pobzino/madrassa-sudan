@@ -15,6 +15,7 @@ import {
 } from "@/lib/whatsapp-login";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import CountryCodeSelect from "@/components/CountryCodeSelect";
+import { PARENT_CALLING_CODE_OPTIONS } from "@/lib/calling-codes";
 import { Minus, Plus } from "lucide-react";
 
 const PARENT_WHATSAPP_GROUP_URL = "https://chat.whatsapp.com/ENlNNVC61xT53dQgtQTFrQ?mode=gi_t";
@@ -144,6 +145,7 @@ const translations = {
     joinParentWhatsAppGroup: "انضم إلى مجموعة أولياء الأمور على واتساب",
     continueToDashboard: "الانتقال إلى المنصة",
     backToLogin: "العودة لتسجيل الدخول",
+    parentAccountExists: "يوجد حساب مسجل بالفعل بهذا الرقم. سجّل الدخول برقم واتساب وكلمة المرور بدلاً من التسجيل مرة أخرى.",
   },
   en: {
     createAccount: "Create Account",
@@ -245,29 +247,13 @@ const translations = {
     joinParentWhatsAppGroup: "Join the parent WhatsApp group",
     continueToDashboard: "Go to the platform",
     backToLogin: "Back to Login",
+    parentAccountExists: "An account already exists for this number. Sign in with your WhatsApp number and password instead of registering again.",
   },
 };
 
 type YesNoAnswer = "" | "yes" | "no" | "unsure";
 type InvolvementArea = "teaching" | "tech_platform" | "content_video" | "operations" | "outreach" | "other";
 type ReferralSource = "" | "word_of_mouth" | "facebook" | "instagram" | "whatsapp" | "other";
-
-const parentCallingCodeOptions = [
-  { code: "+249", en: "Sudan", ar: "السودان" },
-  { code: "+20", en: "Egypt", ar: "مصر" },
-  { code: "+235", en: "Chad", ar: "تشاد" },
-  { code: "+211", en: "South Sudan", ar: "جنوب السودان" },
-  { code: "+251", en: "Ethiopia", ar: "إثيوبيا" },
-  { code: "+256", en: "Uganda", ar: "أوغندا" },
-  { code: "+254", en: "Kenya", ar: "كينيا" },
-  { code: "+966", en: "Saudi Arabia", ar: "السعودية" },
-  { code: "+971", en: "United Arab Emirates", ar: "الإمارات" },
-  { code: "+974", en: "Qatar", ar: "قطر" },
-  { code: "+968", en: "Oman", ar: "عُمان" },
-  { code: "+90", en: "Turkey", ar: "تركيا" },
-  { code: "+44", en: "United Kingdom", ar: "المملكة المتحدة" },
-  { code: "+1", en: "United States / Canada", ar: "الولايات المتحدة / كندا" },
-];
 
 function SignupForm() {
   const searchParams = useSearchParams();
@@ -518,7 +504,11 @@ function SignupForm() {
       if (!response?.ok) {
         const body = await response?.json().catch(() => null);
         trackAnalyticsEvent("signup_error", { role, error_type: "parent_signup" });
-        setError(body?.error || (language === "ar" ? "تعذر إنشاء الحساب. حاول مرة أخرى." : "The account could not be created. Please try again."));
+        setError(
+          response?.status === 409
+            ? t.parentAccountExists
+            : body?.error || (language === "ar" ? "تعذر إنشاء الحساب. حاول مرة أخرى." : "The account could not be created. Please try again."),
+        );
         setLoading(false);
         return;
       }
@@ -813,7 +803,7 @@ function SignupForm() {
                     {t.whatsappLabel}
                   </legend>
                   <div className="grid gap-3 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)]" dir="ltr">
-                    <CountryCodeSelect value={parentCallingCode} onChange={setParentCallingCode} options={parentCallingCodeOptions} language={language} label={t.countryRegionLabel} />
+                    <CountryCodeSelect value={parentCallingCode} onChange={setParentCallingCode} options={PARENT_CALLING_CODE_OPTIONS} language={language} label={t.countryRegionLabel} />
                     <label htmlFor="parentWhatsapp" className="block">
                       <span className="mb-1.5 block text-xs font-medium text-gray-500">
                         {t.localWhatsappNumberLabel}
