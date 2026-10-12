@@ -33,7 +33,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           *,
           cohorts(id, name, grade_level),
           subjects(id, name_ar, name_en),
-          lesson:lessons(id, subject_id, grade_level),
+          lesson:lessons(id, subject_id, grade_level, lesson_slides(language_mode)),
           homework_questions(*)
         `)
         .eq("id", id)

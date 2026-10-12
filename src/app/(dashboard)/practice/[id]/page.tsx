@@ -16,6 +16,7 @@ import PracticePlayer, {
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { loadLessonNavigation } from "@/lib/lessons/path-navigation";
+import { resolvePracticeContentLanguage, type LessonLanguageMode } from "@/lib/practice-language";
 
 interface LoadedPractice {
   title: string;
@@ -104,6 +105,11 @@ export default function PracticePage() {
         return;
       }
 
+      const practiceLanguage = resolvePracticeContentLanguage(
+        data.lesson?.lesson_slides?.language_mode as LessonLanguageMode,
+        language
+      );
+
       const gradeLevel: number | null = data.lesson?.grade_level ?? null;
       if (data.lesson_id) {
         const subjectId = data.lesson?.subject_id ?? data.subject_id ?? null;
@@ -145,9 +151,9 @@ export default function PracticePage() {
             audio_url_en?: string | null;
           }) => {
             const prompt =
-              (language === "ar" ? q.question_text_ar : q.question_text_en) || q.question_text_ar;
+              (practiceLanguage === "ar" ? q.question_text_ar : q.question_text_en) || q.question_text_ar;
             if (q.question_type === "true_false") {
-              const labels = TRUE_FALSE_LABELS[language];
+              const labels = TRUE_FALSE_LABELS[practiceLanguage];
               submissionMap[q.id] = Object.fromEntries(labels.map((l) => [l.label, l.value]));
               const correctIndex =
                 typeof q.correct_option_index === "number"
@@ -161,7 +167,7 @@ export default function PracticePage() {
                 prompt,
                 options: labels.map((l) => l.label),
                 correctAnswer: labels[correctIndex]?.label ?? labels[0].label,
-                audioUrl: (language === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null,
+                audioUrl: (practiceLanguage === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null,
               };
             }
             if (q.question_type === "short_answer") {
@@ -171,12 +177,12 @@ export default function PracticePage() {
                 prompt,
                 options: [],
                 correctAnswer: q.correct_answer,
-                audioUrl: (language === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null,
+                audioUrl: (practiceLanguage === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null,
               };
             }
             const optionsAr = (q.options_ar?.length ? q.options_ar : q.options) ?? [];
             const optionsEn = (q.options_en?.length ? q.options_en : q.options) ?? optionsAr;
-            const displayOptions = language === "ar" ? optionsAr : optionsEn;
+            const displayOptions = practiceLanguage === "ar" ? optionsAr : optionsEn;
             const correctIndex =
               typeof q.correct_option_index === "number"
                 ? q.correct_option_index
@@ -190,7 +196,7 @@ export default function PracticePage() {
               prompt,
               options: displayOptions,
               correctAnswer: displayOptions[correctIndex] ?? q.correct_answer,
-              audioUrl: (language === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null,
+              audioUrl: (practiceLanguage === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null,
             };
           }
         );
