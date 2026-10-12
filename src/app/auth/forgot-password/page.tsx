@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 const translations = {
   ar: {
     title: "استعادة كلمة المرور",
-    subtitle: "أدخل بريدك الإلكتروني وسنرسل لك رمز استعادة من 6 أرقام",
+    subtitle: "أدخل بريدك الإلكتروني وسنرسل لك رمز استعادة",
     emailLabel: "البريد الإلكتروني",
     send: "إرسال رمز الاستعادة",
     sending: "جاري الإرسال...",
@@ -17,7 +17,7 @@ const translations = {
   },
   en: {
     title: "Reset Password",
-    subtitle: "Enter your email and we'll send you a 6-digit recovery code",
+    subtitle: "Enter your email and we'll send you a recovery code",
     emailLabel: "Email Address",
     send: "Send Recovery Code",
     sending: "Sending...",

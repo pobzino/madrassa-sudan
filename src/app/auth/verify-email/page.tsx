@@ -13,30 +13,30 @@ const translations = {
   ar: {
     signupTitle: "أدخل رمز التأكيد",
     recoveryTitle: "أدخل رمز الاستعادة",
-    signupSubtitle: "أرسلنا رمزاً من 6 أرقام إلى بريدك الإلكتروني.",
-    recoverySubtitle: "أرسلنا رمزاً من 6 أرقام إلى بريدك الإلكتروني.",
-    codeLabel: "رمز من 6 أرقام",
+    signupSubtitle: "أرسلنا رمز تأكيد إلى بريدك الإلكتروني.",
+    recoverySubtitle: "أرسلنا رمز استعادة إلى بريدك الإلكتروني.",
+    codeLabel: "رمز التأكيد",
     verify: "تأكيد الرمز",
     verifying: "جارٍ التأكيد...",
     resend: "إرسال رمز جديد",
     resending: "جارٍ الإرسال...",
     resent: "تم إرسال رمز جديد. تحقق من بريدك والرسائل غير المرغوب فيها.",
-    invalidCode: "أدخل الرمز المكون من 6 أرقام.",
+    invalidCode: "أدخل رمز التأكيد كاملاً.",
     missingEmail: "لم نجد البريد الإلكتروني. ابدأ من جديد.",
     backToLogin: "العودة لتسجيل الدخول",
   },
   en: {
     signupTitle: "Enter your confirmation code",
     recoveryTitle: "Enter your recovery code",
-    signupSubtitle: "We sent a 6-digit code to your email address.",
-    recoverySubtitle: "We sent a 6-digit code to your email address.",
-    codeLabel: "6-digit code",
+    signupSubtitle: "We sent a confirmation code to your email address.",
+    recoverySubtitle: "We sent a recovery code to your email address.",
+    codeLabel: "Confirmation code",
     verify: "Confirm code",
     verifying: "Confirming...",
     resend: "Send a new code",
     resending: "Sending...",
     resent: "A new code was sent. Check your inbox and spam folder.",
-    invalidCode: "Enter the 6-digit code.",
+    invalidCode: "Enter the full confirmation code.",
     missingEmail: "We could not find your email address. Please start again.",
     backToLogin: "Back to login",
   },
@@ -70,7 +70,7 @@ function VerifyEmailContent() {
       setError(t.missingEmail);
       return;
     }
-    if (normalizedCode.length !== 6) {
+    if (normalizedCode.length < 6 || normalizedCode.length > 10) {
       setError(t.invalidCode);
       return;
     }
@@ -139,10 +139,10 @@ function VerifyEmailContent() {
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
-              maxLength={6}
+              maxLength={10}
               required
               value={code}
-              onChange={(event) => setCode(normalizeArabicDigits(event.target.value).replace(/\D/g, "").slice(0, 6))}
+              onChange={(event) => setCode(normalizeArabicDigits(event.target.value).replace(/\D/g, "").slice(0, 10))}
               className="block w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-xl font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
               dir="ltr"
             />
