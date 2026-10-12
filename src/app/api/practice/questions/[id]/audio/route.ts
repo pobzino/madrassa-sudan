@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
+import { resolvePracticeDisplayLanguages, type LessonLanguageMode } from "@/lib/practice-language";
 
 export const maxDuration = 120;
 
@@ -65,7 +66,7 @@ export async function POST(
 
   const { data: assignment } = await supabase
     .from("homework_assignments")
-    .select("is_practice, is_published")
+    .select("is_practice, is_published, lesson_id")
     .eq("id", question.assignment_id)
     .maybeSingle();
   if (!assignment?.is_practice || !assignment.is_published) {
@@ -73,12 +74,23 @@ export async function POST(
   }
 
   const language = parsed.data.language;
+  const { data: slideDeck } = assignment.lesson_id
+    ? await supabase
+        .from("lesson_slides")
+        .select("language_mode")
+        .eq("lesson_id", assignment.lesson_id)
+        .maybeSingle()
+    : { data: null };
+  const practiceLanguages = resolvePracticeDisplayLanguages(
+    slideDeck?.language_mode as LessonLanguageMode,
+    language
+  );
   const prompt =
     language === "ar"
       ? question.question_text_ar
       : question.question_text_en || question.question_text_ar;
   const localizedOptions = stringArray(
-    language === "ar"
+    practiceLanguages.answerLanguage === "ar"
       ? question.options_ar ?? question.options
       : question.options_en ?? question.options
   );

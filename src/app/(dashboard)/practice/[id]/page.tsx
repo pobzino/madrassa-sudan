@@ -109,6 +109,18 @@ export default function PracticePage() {
         data.lesson?.lesson_slides?.language_mode as LessonLanguageMode,
         language
       );
+      // Older Arabic clips for English practices narrated the translated
+      // choices. Requesting fresh audio lets the server read the Arabic prompt
+      // alongside the English material instead.
+      const useStoredNarration =
+        practiceLanguages.narrationLanguage === practiceLanguages.answerLanguage;
+      const audioUrlForQuestion = (q: {
+        audio_url_ar?: string | null;
+        audio_url_en?: string | null;
+      }) =>
+        useStoredNarration
+          ? (practiceLanguages.narrationLanguage === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null
+          : null;
 
       const gradeLevel: number | null = data.lesson?.grade_level ?? null;
       if (data.lesson_id) {
@@ -167,7 +179,7 @@ export default function PracticePage() {
                 prompt,
                 options: labels.map((l) => l.label),
                 correctAnswer: labels[correctIndex]?.label ?? labels[0].label,
-                audioUrl: (practiceLanguages.narrationLanguage === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null,
+                audioUrl: audioUrlForQuestion(q),
               };
             }
             if (q.question_type === "short_answer") {
@@ -177,7 +189,7 @@ export default function PracticePage() {
                 prompt,
                 options: [],
                 correctAnswer: q.correct_answer,
-                audioUrl: (practiceLanguages.narrationLanguage === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null,
+                audioUrl: audioUrlForQuestion(q),
               };
             }
             const optionsAr = (q.options_ar?.length ? q.options_ar : q.options) ?? [];
@@ -196,7 +208,7 @@ export default function PracticePage() {
               prompt,
               options: displayOptions,
               correctAnswer: displayOptions[correctIndex] ?? q.correct_answer,
-              audioUrl: (practiceLanguages.narrationLanguage === "ar" ? q.audio_url_ar : q.audio_url_en) ?? null,
+              audioUrl: audioUrlForQuestion(q),
             };
           }
         );
