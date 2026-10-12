@@ -180,7 +180,7 @@ function VerifyEmailContent() {
 
           <fieldset disabled={verifying}>
             <legend className="mb-2 block text-sm font-semibold text-gray-700">{t.codeLabel}</legend>
-            <div className="grid grid-cols-8 gap-1.5 sm:gap-2" dir="ltr">
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-8" dir="ltr">
               {code.map((digit, index) => (
                 <input
                   key={index}
