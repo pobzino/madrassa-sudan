@@ -2,15 +2,26 @@ export type PracticeLanguage = "ar" | "en";
 export type LessonLanguageMode = PracticeLanguage | "both" | null | undefined;
 
 /**
- * Exercises must stay in the language being taught. Otherwise an English
- * phonics question can be rendered with Arabic answer choices and become
- * impossible to complete.
+ * Keep the learner's instructional language separate from the material being
+ * assessed. An Arabic explanation of English phonics should still show the
+ * word and answer choices in English.
  */
-export function resolvePracticeContentLanguage(
+export function resolvePracticeDisplayLanguages(
   lessonLanguageMode: LessonLanguageMode,
   interfaceLanguage: PracticeLanguage
-): PracticeLanguage {
-  return lessonLanguageMode === "ar" || lessonLanguageMode === "en"
-    ? lessonLanguageMode
-    : interfaceLanguage;
+): {
+  instructionLanguage: PracticeLanguage;
+  answerLanguage: PracticeLanguage;
+  narrationLanguage: PracticeLanguage;
+} {
+  const answerLanguage =
+    lessonLanguageMode === "ar" || lessonLanguageMode === "en"
+      ? lessonLanguageMode
+      : interfaceLanguage;
+
+  return {
+    instructionLanguage: interfaceLanguage,
+    answerLanguage,
+    narrationLanguage: interfaceLanguage,
+  };
 }
