@@ -8,21 +8,21 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { normalizeArabicDigits } from "@/lib/whatsapp-login";
 
 type VerificationType = "signup" | "recovery";
-const OTP_LENGTH = 8;
+const OTP_LENGTH = 6;
 
 const translations = {
   ar: {
     signupTitle: "أدخل رمز التأكيد",
     recoveryTitle: "أدخل رمز الاستعادة",
-    signupSubtitle: "أرسلنا رمز تأكيد من 8 أرقام إلى بريدك الإلكتروني.",
-    recoverySubtitle: "أرسلنا رمز استعادة من 8 أرقام إلى بريدك الإلكتروني.",
-    codeLabel: "رمز التأكيد المكون من 8 أرقام",
+    signupSubtitle: "أرسلنا رمز تأكيد من 6 أرقام إلى بريدك الإلكتروني.",
+    recoverySubtitle: "أرسلنا رمز استعادة من 6 أرقام إلى بريدك الإلكتروني.",
+    codeLabel: "رمز التأكيد المكون من 6 أرقام",
     verify: "تأكيد الرمز",
     verifying: "جارٍ التأكيد...",
     resend: "إرسال رمز جديد",
     resending: "جارٍ الإرسال...",
     resent: "تم إرسال رمز جديد. تحقق من بريدك والرسائل غير المرغوب فيها.",
-    invalidCode: "أدخل رمز التأكيد المكون من 8 أرقام.",
+    invalidCode: "أدخل رمز التأكيد المكون من 6 أرقام.",
     codeDigit: "رقم",
     missingEmail: "لم نجد البريد الإلكتروني. ابدأ من جديد.",
     backToLogin: "العودة لتسجيل الدخول",
@@ -30,15 +30,15 @@ const translations = {
   en: {
     signupTitle: "Enter your confirmation code",
     recoveryTitle: "Enter your recovery code",
-    signupSubtitle: "We sent an 8-digit confirmation code to your email address.",
-    recoverySubtitle: "We sent an 8-digit recovery code to your email address.",
-    codeLabel: "8-digit confirmation code",
+    signupSubtitle: "We sent a 6-digit confirmation code to your email address.",
+    recoverySubtitle: "We sent a 6-digit recovery code to your email address.",
+    codeLabel: "6-digit confirmation code",
     verify: "Confirm code",
     verifying: "Confirming...",
     resend: "Send a new code",
     resending: "Sending...",
     resent: "A new code was sent. Check your inbox and spam folder.",
-    invalidCode: "Enter the 8-digit confirmation code.",
+    invalidCode: "Enter the 6-digit confirmation code.",
     codeDigit: "Digit",
     missingEmail: "We could not find your email address. Please start again.",
     backToLogin: "Back to login",
@@ -180,7 +180,7 @@ function VerifyEmailContent() {
 
           <fieldset disabled={verifying}>
             <legend className="mb-2 block text-sm font-semibold text-gray-700">{t.codeLabel}</legend>
-            <div className="grid grid-cols-4 gap-2 sm:grid-cols-8" dir="ltr">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6" dir="ltr">
               {code.map((digit, index) => (
                 <input
                   key={index}
