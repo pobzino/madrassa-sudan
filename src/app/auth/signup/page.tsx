@@ -559,8 +559,13 @@ function SignupForm() {
     }
 
     if (role === "parent") {
+      if (!data.session) {
+        router.push(`/auth/verify-email?email=${encodeURIComponent(loginEmail)}&type=signup`);
+        setLoading(false);
+        return;
+      }
       setParentSignupComplete(true);
-      setParentEmailConfirmationRequired(!data.session);
+      setParentEmailConfirmationRequired(false);
       setParentHasSession(Boolean(data.session));
       setSuccess(true);
       setLoading(false);
@@ -571,7 +576,7 @@ function SignupForm() {
       router.push("/dashboard");
       router.refresh();
     } else {
-      setSuccess(true);
+      router.push(`/auth/verify-email?email=${encodeURIComponent(loginEmail)}&type=signup`);
       setLoading(false);
     }
   };

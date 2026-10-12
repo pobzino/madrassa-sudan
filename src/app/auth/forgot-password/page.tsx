@@ -4,27 +4,23 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getAuthCallbackUrl } from "@/lib/site-url";
+import { useRouter } from "next/navigation";
 
 const translations = {
   ar: {
     title: "استعادة كلمة المرور",
-    subtitle: "أدخل بريدك الإلكتروني وسنرسل لك رابط إعادة التعيين",
+    subtitle: "أدخل بريدك الإلكتروني وسنرسل لك رمز استعادة من 6 أرقام",
     emailLabel: "البريد الإلكتروني",
-    send: "إرسال رابط الاستعادة",
+    send: "إرسال رمز الاستعادة",
     sending: "جاري الإرسال...",
-    sent: "تم الإرسال!",
-    sentMessage: "تحقق من بريدك الإلكتروني للحصول على رابط إعادة تعيين كلمة المرور. تحقق أيضاً من مجلد الرسائل غير المرغوب فيها.",
     backToLogin: "العودة لتسجيل الدخول",
   },
   en: {
     title: "Reset Password",
-    subtitle: "Enter your email and we'll send you a reset link",
+    subtitle: "Enter your email and we'll send you a 6-digit recovery code",
     emailLabel: "Email Address",
-    send: "Send Reset Link",
+    send: "Send Recovery Code",
     sending: "Sending...",
-    sent: "Email Sent!",
-    sentMessage: "Check your email for a password reset link. Also check your spam folder.",
     backToLogin: "Back to Login",
   },
 };
@@ -32,34 +28,25 @@ const translations = {
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
+  const router = useRouter();
   const { language } = useLanguage();
   const t = translations[language];
-
-  const getRedirectUrl = () => {
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/auth/reset-password`;
-    }
-    return `${getAuthCallbackUrl().replace("/auth/callback", "")}/auth/reset-password`;
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: getRedirectUrl(),
-    });
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
 
     setLoading(false);
 
     if (error) {
       setError(error.message);
     } else {
-      setSent(true);
+      router.push(`/auth/verify-email?email=${encodeURIComponent(email.trim())}&type=recovery`);
     }
   };
 
@@ -73,21 +60,7 @@ export default function ForgotPasswordPage() {
           <p className="text-gray-500">{t.subtitle}</p>
         </div>
 
-        {sent ? (
-          <div className="space-y-6">
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-4 rounded-xl text-sm text-center">
-              <p className="font-semibold mb-1">{t.sent}</p>
-              <p>{t.sentMessage}</p>
-            </div>
-            <Link
-              href="/auth/login"
-              className="block w-full py-3.5 px-4 bg-[var(--primary)] hover:bg-[var(--primary-light)] text-white font-semibold rounded-xl shadow-lg shadow-green-900/20 transition-all text-center"
-            >
-              {t.backToLogin}
-            </Link>
-          </div>
-        ) : (
-          <form className="space-y-6" onSubmit={handleSubmit}>
+        <form className="space-y-6" onSubmit={handleSubmit}>
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
                 <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -139,8 +112,7 @@ export default function ForgotPasswordPage() {
                 {t.backToLogin}
               </Link>
             </p>
-          </form>
-        )}
+        </form>
       </div>
     </div>
   );

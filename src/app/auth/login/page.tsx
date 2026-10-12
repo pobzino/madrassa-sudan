@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { loginWhatsappNumberToEmail } from "@/lib/whatsapp-login";
-import { getAuthCallbackUrl } from "@/lib/site-url";
 import CountryCodeSelect from "@/components/CountryCodeSelect";
 import { PARENT_CALLING_CODE_OPTIONS } from "@/lib/calling-codes";
 
@@ -68,26 +67,15 @@ export default function LoginPage() {
   const [callingCode, setCallingCode] = useState("+249");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [requiresEmailConfirmation, setRequiresEmailConfirmation] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [resendLoading, setResendLoading] = useState(false);
-  const [resendMessage, setResendMessage] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
   const { language, isRtl } = useLanguage();
   const t = translations[language];
-  const getRedirectUrl = () => (
-    typeof window !== "undefined"
-      ? `${window.location.origin}/auth/callback`
-      : getAuthCallbackUrl()
-  );
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setResendMessage(null);
-    setRequiresEmailConfirmation(false);
 
     const identifier = loginMethod === "whatsapp"
       ? loginWhatsappNumberToEmail(whatsapp, callingCode)
@@ -101,8 +89,9 @@ export default function LoginPage() {
     if (error) {
       const message = error.message.toLowerCase();
       if (message.includes("email not confirmed")) {
-        setError(t.emailNotConfirmed);
-        setRequiresEmailConfirmation(true);
+        setLoading(false);
+        router.push(`/auth/verify-email?email=${encodeURIComponent(email.trim())}&type=signup`);
+        return;
       } else if (message.includes("invalid login credentials")) {
         setError(t.invalidCredentials);
       } else {
@@ -113,32 +102,6 @@ export default function LoginPage() {
       router.push("/dashboard");
       router.refresh();
     }
-  };
-
-  const handleResendConfirmation = async () => {
-    setError(null);
-    setResendMessage(null);
-    setRequiresEmailConfirmation(false);
-
-    if (!email.trim()) {
-      setError(t.enterEmailFirst);
-      return;
-    }
-
-    setResendLoading(true);
-    const { error } = await supabase.auth.resend({
-      type: "signup",
-      email: email.trim(),
-      options: { emailRedirectTo: getRedirectUrl() },
-    });
-
-    if (error) {
-      setError(t.loginUnavailable);
-    } else {
-      setResendMessage(t.confirmationSent);
-    }
-
-    setResendLoading(false);
   };
 
   return (
@@ -162,11 +125,6 @@ export default function LoginPage() {
               {error}
             </div>
           )}
-          {resendMessage && (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl text-sm">
-              {resendMessage}
-            </div>
-          )}
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 rounded-lg border border-gray-200 bg-gray-50 p-1" role="group" aria-label={language === "ar" ? "طريقة تسجيل الدخول" : "Sign-in method"}>
@@ -181,7 +139,6 @@ export default function LoginPage() {
                   onClick={() => {
                     setLoginMethod(method);
                     setError(null);
-                    setRequiresEmailConfirmation(false);
                   }}
                   className={`min-h-10 rounded-md px-3 text-sm font-semibold transition-colors ${loginMethod === method ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                 >
@@ -282,20 +239,6 @@ export default function LoginPage() {
               </>
             ) : t.signIn}
           </button>
-
-          {requiresEmailConfirmation && (
-            <div className="space-y-2">
-              <p className="text-sm text-amber-700">{t.emailNotConfirmed}</p>
-              <button
-                type="button"
-                onClick={handleResendConfirmation}
-                disabled={resendLoading}
-                className="w-full py-3 px-4 border border-[var(--primary)] text-[var(--primary)] font-semibold rounded-xl hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {resendLoading ? t.sendingConfirmation : t.resendConfirmation}
-              </button>
-            </div>
-          )}
 
           <p className="text-center text-sm text-gray-500">
             {t.noAccount}{" "}
