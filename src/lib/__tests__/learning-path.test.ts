@@ -121,6 +121,15 @@ describe('evaluatePath', () => {
     expect(r.currentStepId).toBe('a');
   });
 
+  it('unlocks every lesson and test in staff review mode without completing progress', () => {
+    const r = evaluatePath(PATH, progress({}), { unlockAll: true });
+
+    expect(r.weeks[0].steps.map((step) => step.state)).toEqual(['available', 'available']);
+    expect(r.weeks[1].steps.map((step) => step.state)).toEqual(['available', 'available']);
+    expect(r.weeks[0].testState).toBe('available');
+    expect(r.weeks[1].state).toBe('available');
+  });
+
   it('a week with no test completes on lessons alone (finishing everything)', () => {
     const r = evaluatePath(
       PATH,

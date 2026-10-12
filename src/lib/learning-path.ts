@@ -60,6 +60,14 @@ export interface StudentProgressInput {
   testResults: Record<string, TestResultInput | undefined>;
 }
 
+/**
+ * Review mode is used for staff accounts that need to inspect any lesson or
+ * assessment without altering a learner's recorded progress.
+ */
+export interface PathEvaluationOptions {
+  unlockAll?: boolean;
+}
+
 export interface StepResult {
   id: string;
   lessonId: string;
@@ -125,10 +133,11 @@ function lessonsAllCompleted(
 
 function computeTestState(
   week: PathWeekInput,
-  progress: StudentProgressInput
+  progress: StudentProgressInput,
+  unlockAll: boolean
 ): WeekTestState {
   if (!week.testAssignmentId) return "none";
-  if (!lessonsAllCompleted(week, progress)) return "locked";
+  if (!unlockAll && !lessonsAllCompleted(week, progress)) return "locked";
   const result = progress.testResults[week.testAssignmentId];
   if (isTestPassed(result)) return "passed";
   if (isTestFailed(result)) return "failed";
@@ -146,22 +155,24 @@ function weekIsCompleted(
 
 export function evaluatePath(
   path: PathInput,
-  progress: StudentProgressInput
+  progress: StudentProgressInput,
+  options: PathEvaluationOptions = {}
 ): PathEvaluation {
   const weeks = [...path.weeks].sort((a, b) => a.weekNumber - b.weekNumber);
+  const unlockAll = options.unlockAll === true;
 
   let previousWeekCompleted = true; // week 1 has no predecessor → "completed"
   let currentStepId: string | null = null;
   let currentWeekId: string | null = null;
 
   const results: WeekResult[] = weeks.map((week) => {
-    const weekAvailable = previousWeekCompleted;
+    const weekAvailable = unlockAll || previousWeekCompleted;
     const lessonsDone = lessonsAllCompleted(week, progress);
     // A week only counts as completed (and thus unlocks the next) if it was
     // itself reachable — otherwise out-of-order completion data could unlock
     // later weeks while earlier ones are still locked.
     const completed = weekAvailable && weekIsCompleted(week, progress);
-    const testState = computeTestState(week, progress);
+    const testState = computeTestState(week, progress, unlockAll);
 
     const sortedSteps = [...week.steps].sort((a, b) => a.sequence - b.sequence);
     let priorStepCompleted = true; // first step in an available week unlocks
@@ -177,7 +188,7 @@ export function evaluatePath(
         state = "locked";
       } else if (completed) {
         state = "completed";
-      } else if (!priorStepCompleted) {
+      } else if (!unlockAll && !priorStepCompleted) {
         state = "locked";
       } else if (lesson?.completed && step.practiceAssignmentId) {
         // Video done, practice still to pass.

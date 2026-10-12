@@ -78,11 +78,17 @@ export interface SubjectLearningPath {
   currentStepId: string | null;
 }
 
+export interface LearningPathLoadOptions {
+  /** Allows staff to inspect every item without changing student progress. */
+  unlockAll?: boolean;
+}
+
 export async function loadSubjectLearningPath(
   supabase: SupabaseClient,
   subjectId: string,
   userId: string,
-  language: "ar" | "en"
+  language: "ar" | "en",
+  options: LearningPathLoadOptions = {}
 ): Promise<SubjectLearningPath | null> {
   // Untyped view for the newer tables/columns not yet in database.types.ts.
   const db = supabase as unknown as SupabaseClient;
@@ -237,7 +243,7 @@ export async function loadSubjectLearningPath(
     }
   }
 
-  const evaluation = evaluatePath(pathInput, { lessonCompletion, testResults });
+  const evaluation = evaluatePath(pathInput, { lessonCompletion, testResults }, options);
 
   // Merge engine state with lesson metadata for rendering.
   const treeWeeks: TreeWeek[] = evaluation.weeks.map((weekResult) => {

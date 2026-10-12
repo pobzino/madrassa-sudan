@@ -99,6 +99,7 @@ export default function LessonsPage() {
   const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [pathsBySubject, setPathsBySubject] = useState<Record<string, SubjectLearningPath | null>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -115,10 +116,11 @@ export default function LessonsPage() {
       }
       setUserId(user.id);
 
-      const { data: subjectsData } = await supabase
-        .from("subjects")
-        .select("*")
-        .order("display_order");
+      const [{ data: subjectsData }, { data: profile }] = await Promise.all([
+        supabase.from("subjects").select("*").order("display_order"),
+        supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+      ]);
+      setIsAdmin(profile?.role === "admin");
       if (subjectsData) setSubjects(subjectsData.filter((s) => isCoreLessonSubject(s)));
 
       const { data: lessonsData } = await supabase
@@ -156,7 +158,12 @@ export default function LessonsPage() {
       const entries = await Promise.all(
         subjects.map(
           async (s) =>
-            [s.id, await loadSubjectLearningPath(supabase, s.id, userId, language)] as const
+            [
+              s.id,
+              await loadSubjectLearningPath(supabase, s.id, userId, language, {
+                unlockAll: isAdmin,
+              }),
+            ] as const
         )
       );
       if (!cancelled) setPathsBySubject(Object.fromEntries(entries));
@@ -164,7 +171,7 @@ export default function LessonsPage() {
     return () => {
       cancelled = true;
     };
-  }, [subjects, userId, language, supabase]);
+  }, [subjects, userId, language, isAdmin, supabase]);
 
   // One subject at a time. When the student hasn't picked a subject, default
   // (during render — no effect needed) to the one they're working through, then
