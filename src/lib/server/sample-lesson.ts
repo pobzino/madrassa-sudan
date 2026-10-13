@@ -89,7 +89,7 @@ async function loadSampleLessonUncached(): Promise<SampleLessonData> {
   const { data: questions, error: questionsError } = await supabase
     .from("homework_questions")
     .select(
-      "id, question_type, question_text_ar, question_text_en, options, options_ar, options_en, correct_answer, correct_option_index, audio_url_ar, audio_url_en"
+      "id, question_type, question_text_ar, question_text_en, instruction_ar, instruction_en, question_content, question_content_language, answer_language, options, options_ar, options_en, correct_answer, correct_option_index, audio_url_ar, audio_url_en"
     )
     .eq("assignment_id", assignmentResult.data.id)
     .order("display_order", { ascending: true });
@@ -150,6 +150,11 @@ async function loadSampleLessonUncached(): Promise<SampleLessonData> {
           type: practiceType(question.question_type),
           promptAr: question.question_text_ar,
           promptEn: question.question_text_en || question.question_text_ar,
+          instructionAr: question.instruction_ar,
+          instructionEn: question.instruction_en,
+          questionContent: question.question_content,
+          questionContentLanguage: question.question_content_language,
+          answerLanguage: question.answer_language,
           optionsAr: strings(question.options_ar ?? question.options),
           optionsEn: strings(question.options_en ?? question.options),
           correctAnswer: question.correct_answer || "",

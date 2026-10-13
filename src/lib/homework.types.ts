@@ -59,6 +59,11 @@ export interface CreateQuestionInput {
   question_type: HomeworkQuestionType | "true_false";
   question_text_ar: string;
   question_text_en?: string | null;
+  instruction_ar?: string | null;
+  instruction_en?: string | null;
+  question_content?: string | null;
+  question_content_language?: "ar" | "en" | null;
+  answer_language?: "ar" | "en" | null;
   options?: string[] | null;
   options_ar?: string[] | null;
   options_en?: string[] | null;

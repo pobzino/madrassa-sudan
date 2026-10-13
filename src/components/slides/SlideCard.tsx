@@ -170,7 +170,8 @@ export default function SlideCard({
   if (renderMode === 'thumbnail') {
     return (
       <div
-        className={`rounded-2xl overflow-hidden shadow-lg bg-white ${className}`}
+        translate="no"
+        className={`notranslate rounded-2xl overflow-hidden shadow-lg bg-white ${className}`}
         style={{ width: THUMBNAIL_WIDTH, height: THUMBNAIL_HEIGHT }}
       >
         <div
@@ -199,7 +200,8 @@ export default function SlideCard({
   // reconciles keys among siblings in the parent's children array.
   return (
     <div
-      className={`aspect-video overflow-hidden bg-white ${chromeless ? '' : 'rounded-2xl shadow-lg'} ${entranceClass} ${className}`}
+      translate="no"
+      className={`notranslate aspect-video overflow-hidden bg-white ${chromeless ? '' : 'rounded-2xl shadow-lg'} ${entranceClass} ${className}`}
     >
       {renderedContent}
     </div>

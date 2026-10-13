@@ -20,8 +20,11 @@ export interface PracticeQuestionInput {
   id: string;
   type: "multiple_choice" | "true_false" | "short_answer";
   prompt: string;
+  promptContent?: string | null;
+  promptContentLanguage?: PracticeLang | null;
   options: string[];
   correctAnswer: string;
+  answerLanguage?: PracticeLang;
   imageUrl?: string | null;
   audioUrl?: string | null;
 }
@@ -330,7 +333,10 @@ export default function PracticePlayer({
   const questionLabel = t.questionNumber(index + 1, total);
 
   return (
-    <div className="relative min-h-[calc(100vh-5rem)] overflow-hidden bg-[#F7F7F2]">
+    <div
+      translate="no"
+      className="notranslate relative min-h-[calc(100vh-5rem)] overflow-hidden bg-[#F7F7F2]"
+    >
       <div className="absolute inset-x-0 top-0 flex h-1" aria-hidden="true">
         <span className="flex-1 bg-[#007229]" />
         <span className="flex-1 bg-[#F59E0B]" />
@@ -408,7 +414,20 @@ export default function PracticePlayer({
                   </p>
                 )}
                 <h1 className="whitespace-pre-line break-words pe-10 text-2xl font-extrabold leading-snug text-gray-900 sm:text-3xl lg:text-[2rem]">
-                  {question.prompt}
+                  <span>{question.prompt}</span>
+                  {question.promptContent && (
+                    <>
+                      {" "}
+                      <span
+                        lang={question.promptContentLanguage ?? question.answerLanguage ?? lang}
+                        dir={question.promptContentLanguage === "ar" ? "rtl" : "ltr"}
+                        translate="no"
+                        className="notranslate inline-block [unicode-bidi:plaintext]"
+                      >
+                        {question.promptContent}
+                      </span>
+                    </>
+                  )}
                 </h1>
                 {audioStatus === "error" && (
                   <p className="mt-2 text-xs font-bold text-gray-500">{t.audioUnavailable}</p>
@@ -502,7 +521,14 @@ export default function PracticePlayer({
                           {OPTION_MARKERS[lang][optionIndex] ?? optionIndex + 1}
                         </span>
                         <span className="flex min-w-0 flex-1 items-center gap-3 break-words text-lg font-bold leading-snug sm:text-xl">
-                          <span className="min-w-0 flex-1" dir="auto">{option}</span>
+                          <span
+                            lang={question.answerLanguage ?? lang}
+                            dir={question.answerLanguage === "ar" ? "rtl" : "ltr"}
+                            translate="no"
+                            className="notranslate min-w-0 flex-1 [unicode-bidi:plaintext]"
+                          >
+                            {option}
+                          </span>
                         </span>
                         {revealCorrect && (
                           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-600 text-white">

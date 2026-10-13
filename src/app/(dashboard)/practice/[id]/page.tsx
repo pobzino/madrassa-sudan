@@ -16,7 +16,11 @@ import PracticePlayer, {
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { loadLessonNavigation } from "@/lib/lessons/path-navigation";
-import { resolvePracticeDisplayLanguages, type LessonLanguageMode } from "@/lib/practice-language";
+import {
+  resolvePracticeDisplayLanguages,
+  resolvePracticeQuestionPresentation,
+  type LessonLanguageMode,
+} from "@/lib/practice-language";
 
 interface LoadedPractice {
   title: string;
@@ -161,11 +165,32 @@ export default function PracticePage() {
             correct_option_index?: number | null;
             audio_url_ar?: string | null;
             audio_url_en?: string | null;
+            instruction_ar?: string | null;
+            instruction_en?: string | null;
+            question_content?: string | null;
+            question_content_language?: string | null;
+            answer_language?: string | null;
           }) => {
-            const prompt =
-              (practiceLanguages.instructionLanguage === "ar" ? q.question_text_ar : q.question_text_en) || q.question_text_ar;
+            const presentation = resolvePracticeQuestionPresentation({
+              defaultAnswerLanguage: practiceLanguages.answerLanguage,
+              instructionLanguage: practiceLanguages.instructionLanguage,
+              legacyMaterialLanguage: data.lesson?.lesson_slides?.language_mode as LessonLanguageMode,
+              answerLanguage: q.answer_language,
+              instructionAr: q.instruction_ar,
+              instructionEn: q.instruction_en,
+              questionContent: q.question_content,
+              questionContentLanguage: q.question_content_language,
+              questionTextAr: q.question_text_ar,
+              questionTextEn: q.question_text_en,
+            });
+            const prompt = presentation.instruction;
+            const commonQuestionProps = {
+              promptContent: presentation.questionContent,
+              promptContentLanguage: presentation.questionContentLanguage,
+              answerLanguage: presentation.answerLanguage,
+            };
             if (q.question_type === "true_false") {
-              const labels = TRUE_FALSE_LABELS[practiceLanguages.instructionLanguage];
+              const labels = TRUE_FALSE_LABELS[presentation.answerLanguage];
               submissionMap[q.id] = Object.fromEntries(labels.map((l) => [l.label, l.value]));
               const correctIndex =
                 typeof q.correct_option_index === "number"
@@ -177,6 +202,7 @@ export default function PracticePage() {
                 id: q.id,
                 type: "true_false" as const,
                 prompt,
+                ...commonQuestionProps,
                 options: labels.map((l) => l.label),
                 correctAnswer: labels[correctIndex]?.label ?? labels[0].label,
                 audioUrl: audioUrlForQuestion(q),
@@ -187,6 +213,7 @@ export default function PracticePage() {
                 id: q.id,
                 type: "short_answer" as const,
                 prompt,
+                ...commonQuestionProps,
                 options: [],
                 correctAnswer: q.correct_answer,
                 audioUrl: audioUrlForQuestion(q),
@@ -194,7 +221,7 @@ export default function PracticePage() {
             }
             const optionsAr = (q.options_ar?.length ? q.options_ar : q.options) ?? [];
             const optionsEn = (q.options_en?.length ? q.options_en : q.options) ?? optionsAr;
-            const displayOptions = practiceLanguages.answerLanguage === "ar" ? optionsAr : optionsEn;
+            const displayOptions = presentation.answerLanguage === "ar" ? optionsAr : optionsEn;
             const correctIndex =
               typeof q.correct_option_index === "number"
                 ? q.correct_option_index
@@ -206,6 +233,7 @@ export default function PracticePage() {
               id: q.id,
               type: "multiple_choice" as const,
               prompt,
+              ...commonQuestionProps,
               options: displayOptions,
               correctAnswer: displayOptions[correctIndex] ?? q.correct_answer,
               audioUrl: audioUrlForQuestion(q),

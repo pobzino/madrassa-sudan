@@ -13,6 +13,11 @@ type GeneratedQuestion = {
   question_type: "multiple_choice" | "true_false" | "short_answer";
   question_text_ar: string;
   question_text_en: string;
+  instruction_ar: string;
+  instruction_en: string;
+  question_content: string;
+  question_content_language: "ar" | "en";
+  answer_language: "ar" | "en";
   options_ar: string[];
   options_en: string[];
   correct_option_index: number;
@@ -89,6 +94,11 @@ export function hasCompletePracticeQuestions(
     question_type: question.question_type as GeneratedQuestion["question_type"],
     question_text_ar: question.question_text_ar.trim(),
     question_text_en: question.question_text_en?.trim() ?? "",
+    instruction_ar: question.question_text_ar.trim(),
+    instruction_en: question.question_text_en?.trim() ?? question.question_text_ar.trim(),
+    question_content: "",
+    question_content_language: "ar",
+    answer_language: "ar",
     options_ar: cleanOptions(question.options_ar),
     options_en: cleanOptions(question.options_en),
     correct_option_index: question.correct_option_index ?? -1,
@@ -214,6 +224,19 @@ export function getPracticeQualityIssues(
     ) {
       issues.push(`Question ${number} has an answer choice that is too long.`);
     }
+    if (
+      question.answer_language === "en" &&
+      question.question_type === "multiple_choice" &&
+      JSON.stringify(question.options_ar) !== JSON.stringify(question.options_en)
+    ) {
+      issues.push(`Question ${number} must keep English answer choices identical in both option fields.`);
+    }
+    if (
+      question.question_content_language === "en" &&
+      /[\u0600-\u06ff]/u.test(question.question_content)
+    ) {
+      issues.push(`Question ${number} translates or transliterates English learning material.`);
+    }
   });
 
   if (expectedCount >= 8 && questionTypes.size < 2) {
@@ -271,6 +294,12 @@ export function normalizeGeneratedPractice(
     const optionsEn = cleanOptions(question.options_en);
     const optionIndex = Number(question.correct_option_index);
     const correctAnswer = cleanText(question.correct_answer);
+    const answerLanguage = question.answer_language === "en" ? "en" : "ar";
+    const questionContentLanguage =
+      question.question_content_language === "en" ? "en" : "ar";
+    const instructionAr = cleanText(question.instruction_ar) || questionTextAr;
+    const instructionEn = cleanText(question.instruction_en) || questionTextEn;
+    const questionContent = cleanText(question.question_content);
 
     if (questionType === "short_answer") {
       if (!/^-?\d+(?:[.,]\d+)?$/.test(correctAnswer)) {
@@ -280,6 +309,11 @@ export function normalizeGeneratedPractice(
         question_type: questionType,
         question_text_ar: questionTextAr,
         question_text_en: questionTextEn,
+        instruction_ar: instructionAr,
+        instruction_en: instructionEn,
+        question_content: questionContent,
+        question_content_language: questionContentLanguage,
+        answer_language: answerLanguage,
         options_ar: [],
         options_en: [],
         correct_option_index: -1,
@@ -307,6 +341,11 @@ export function normalizeGeneratedPractice(
       question_type: questionType,
       question_text_ar: questionTextAr,
       question_text_en: questionTextEn,
+      instruction_ar: instructionAr,
+      instruction_en: instructionEn,
+      question_content: questionContent,
+      question_content_language: questionContentLanguage,
+      answer_language: answerLanguage,
       options_ar: optionsAr,
       options_en: optionsEn,
       correct_option_index: optionIndex,
@@ -415,6 +454,11 @@ function generatedPracticeSchema(questionCount: number) {
             },
             question_text_ar: { type: "string" },
             question_text_en: { type: "string" },
+            instruction_ar: { type: "string" },
+            instruction_en: { type: "string" },
+            question_content: { type: "string" },
+            question_content_language: { type: "string", enum: ["ar", "en"] },
+            answer_language: { type: "string", enum: ["ar", "en"] },
             options_ar: { type: "array", items: { type: "string" } },
             options_en: { type: "array", items: { type: "string" } },
             correct_option_index: { type: "integer" },
@@ -424,6 +468,11 @@ function generatedPracticeSchema(questionCount: number) {
             "question_type",
             "question_text_ar",
             "question_text_en",
+            "instruction_ar",
+            "instruction_en",
+            "question_content",
+            "question_content_language",
+            "answer_language",
             "options_ar",
             "options_en",
             "correct_option_index",
@@ -466,11 +515,12 @@ ${args.content}`;
 - A mnemonic gesture or visual property explicitly taught in the source may be tested only when the prompt fully describes the action or property in text.
 - Give every question exactly one unambiguous correct answer. Avoid opinions, personal preferences, trick wording, and teacher-dependent activities.
 - Independently check factual correctness. Reject incorrect source definitions instead of reproducing them. Half means one of two equal parts; quarter means one of four equal parts of the same whole.
-- Do not reveal the answer in a translated prompt. For English vocabulary, retain an Arabic meaning cue inside the English instruction. In English phonics, spelling, vocabulary, and grammar questions, the exact English target words, letter names, and answer choices must stay in Latin script in BOTH choice arrays; do not translate or transliterate them into Arabic. The Arabic prompt may explain the task, but it must preserve the exact English word or sentence being assessed in Latin script.
+- Store each question in the structured language fields. instruction_ar and instruction_en explain the task only; question_content contains the exact word, number, expression, or sentence being assessed; question_content_language says whether that content is Arabic or English; answer_language says whether the learner must choose Arabic or English choices. question_content may be an empty string only when the instruction is fully self-contained.
+- Do not reveal the answer in a translated prompt. For English vocabulary, retain an Arabic meaning cue inside the Arabic instruction. In English phonics, spelling, vocabulary, and grammar questions, set question_content_language and answer_language to "en". The exact English target words, letter names, and answer choices must stay in Latin script. When answer_language is "en", options_ar and options_en must be identical English strings; never translate or transliterate them into Arabic.
 - Distinguish printed letter forms, letter names and sounds. Without a real audio cue, label an item as print recognition or spelling, not listening. Supply a meaning cue for spelling gaps whenever multiple valid words could fit.
 - Keep prompts concise and age-appropriate. Include the specific word, number, object, sentence, or situation being tested; never ask generic prompts such as "What is the correct word?"
 - Use varied, plausible distractors that are clearly wrong for the stated prompt. Do not duplicate choices and do not use "all of the above".
-- Arabic and English prompts and options must be natural, accurate, and meaning-aligned. Every question_text_ar must contain a real Arabic instruction or sentence; do not copy the English prompt into it. In English lessons, keep the specific target English word in Latin script inside that Arabic instruction where translating it would remove the skill being tested.
+- Arabic and English prompts and options must be natural, accurate, and meaning-aligned. Every instruction_ar must contain a real Arabic instruction; do not copy the English instruction into it. Keep question_text_ar and question_text_en as readable complete legacy fallbacks, but never use them to replace question_content.
 - Use at least two suitable question types. Use no more than 3 true/false questions.
 - Use "multiple_choice" with exactly 4 aligned Arabic/English choices. Compare all four choices after trimming and ensure that every choice is distinct in each language. correct_option_index may use any valid position because the application balances positions after generation.
 - Use "true_false" only with options_ar ["صحيح", "خطأ"] and options_en ["True", "False"].
@@ -793,6 +843,11 @@ export async function ensureLessonPractice({
       question_type: question.question_type,
       question_text_ar: question.question_text_ar,
       question_text_en: question.question_text_en,
+      instruction_ar: question.instruction_ar,
+      instruction_en: question.instruction_en,
+      question_content: question.question_content || null,
+      question_content_language: question.question_content_language,
+      answer_language: question.answer_language,
       options: (question.options_ar.length ? question.options_ar : null) as Json | null,
       options_ar: (question.options_ar.length ? question.options_ar : null) as Json | null,
       options_en: (question.options_en.length ? question.options_en : null) as Json | null,

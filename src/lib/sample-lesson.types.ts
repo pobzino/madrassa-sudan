@@ -5,6 +5,11 @@ export interface SamplePracticeQuestion {
   type: "multiple_choice" | "true_false" | "short_answer";
   promptAr: string;
   promptEn: string;
+  instructionAr: string | null;
+  instructionEn: string | null;
+  questionContent: string | null;
+  questionContentLanguage: string | null;
+  answerLanguage: string | null;
   optionsAr: string[];
   optionsEn: string[];
   correctAnswer: string;

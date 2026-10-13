@@ -10,6 +10,11 @@ const choice = {
   question_type: "multiple_choice" as const,
   question_text_ar: "اختر العدد ثلاثة",
   question_text_en: "Choose the number three",
+  instruction_ar: "اختر العدد الصحيح.",
+  instruction_en: "Choose the correct number.",
+  question_content: "3",
+  question_content_language: "en" as const,
+  answer_language: "ar" as const,
   options_ar: ["١", "٢", "٣", "٤"],
   options_en: ["1", "2", "3", "4"],
   correct_option_index: 2,
@@ -97,6 +102,27 @@ describe("normalizeGeneratedPractice", () => {
     );
     expect(getPracticeQualityIssues(result, 1)).toContain(
       "Question 1 contains duplicate answer choices."
+    );
+  });
+
+  it("requires authored English choices to remain English in both option fields", () => {
+    const result = normalizeGeneratedPractice(
+      {
+        title_ar: "تدريب",
+        title_en: "Practice",
+        questions: [{
+          ...choice,
+          question_content: "cat",
+          answer_language: "en",
+          options_ar: ["أ", "ب", "ج", "د"],
+          options_en: ["a", "b", "c", "d"],
+        }],
+      },
+      1,
+    );
+
+    expect(getPracticeQualityIssues(result, 1)).toContain(
+      "Question 1 must keep English answer choices identical in both option fields.",
     );
   });
 

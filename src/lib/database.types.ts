@@ -851,6 +851,7 @@ export type Database = {
           audio_text_hash_en: string | null
           audio_url_ar: string | null
           audio_url_en: string | null
+          answer_language: string | null
           assignment_id: string
           correct_answer: string | null
           correct_option_index: number | null
@@ -863,16 +864,21 @@ export type Database = {
           options_ar: Json | null
           options_en: Json | null
           points: number
+          question_content: string | null
+          question_content_language: string | null
           question_text_ar: string
           question_text_en: string | null
           question_type: Database["public"]["Enums"]["homework_question_type"]
           rubric: Json | null
+          instruction_ar: string | null
+          instruction_en: string | null
         }
         Insert: {
           audio_text_hash_ar?: string | null
           audio_text_hash_en?: string | null
           audio_url_ar?: string | null
           audio_url_en?: string | null
+          answer_language?: string | null
           assignment_id: string
           correct_answer?: string | null
           correct_option_index?: number | null
@@ -885,16 +891,21 @@ export type Database = {
           options_ar?: Json | null
           options_en?: Json | null
           points?: number
+          question_content?: string | null
+          question_content_language?: string | null
           question_text_ar: string
           question_text_en?: string | null
           question_type: Database["public"]["Enums"]["homework_question_type"]
           rubric?: Json | null
+          instruction_ar?: string | null
+          instruction_en?: string | null
         }
         Update: {
           audio_text_hash_ar?: string | null
           audio_text_hash_en?: string | null
           audio_url_ar?: string | null
           audio_url_en?: string | null
+          answer_language?: string | null
           assignment_id?: string
           correct_answer?: string | null
           correct_option_index?: number | null
@@ -907,10 +918,14 @@ export type Database = {
           options_ar?: Json | null
           options_en?: Json | null
           points?: number
+          question_content?: string | null
+          question_content_language?: string | null
           question_text_ar?: string
           question_text_en?: string | null
           question_type?: Database["public"]["Enums"]["homework_question_type"]
           rubric?: Json | null
+          instruction_ar?: string | null
+          instruction_en?: string | null
         }
         Relationships: [
           {

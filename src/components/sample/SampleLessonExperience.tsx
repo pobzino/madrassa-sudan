@@ -21,6 +21,7 @@ import PracticePlayer, {
 } from "@/components/practice/PracticePlayer";
 import type { SampleLessonData } from "@/lib/sample-lesson.types";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import { resolvePracticeQuestionPresentation } from "@/lib/practice-language";
 
 type SampleStage = "lesson" | "practice" | "complete";
 
@@ -105,11 +106,23 @@ export default function SampleLessonExperience({
   const practiceQuestions = useMemo<PracticeQuestionInput[]>(
     () =>
       data.practice.questions.map((question) => {
-        const prompt = language === "ar" ? question.promptAr : question.promptEn;
+        const presentation = resolvePracticeQuestionPresentation({
+          defaultAnswerLanguage: language,
+          instructionLanguage: language,
+          legacyMaterialLanguage: data.contentLanguage,
+          answerLanguage: question.answerLanguage,
+          instructionAr: question.instructionAr,
+          instructionEn: question.instructionEn,
+          questionContent: question.questionContent,
+          questionContentLanguage: question.questionContentLanguage,
+          questionTextAr: question.promptAr,
+          questionTextEn: question.promptEn,
+        });
+        const prompt = presentation.instruction;
         const audioUrl = language === "ar" ? question.audioUrlAr : question.audioUrlEn;
 
         if (question.type === "true_false") {
-          const labels = TRUE_FALSE[language];
+          const labels = TRUE_FALSE[presentation.answerLanguage];
           const correctIndex =
             typeof question.correctOptionIndex === "number"
               ? question.correctOptionIndex
@@ -120,6 +133,9 @@ export default function SampleLessonExperience({
             id: question.id,
             type: question.type,
             prompt,
+            promptContent: presentation.questionContent,
+            promptContentLanguage: presentation.questionContentLanguage,
+            answerLanguage: presentation.answerLanguage,
             options: labels.map((item) => item.label),
             correctAnswer: labels[correctIndex]?.label ?? labels[0].label,
             audioUrl,
@@ -131,13 +147,16 @@ export default function SampleLessonExperience({
             id: question.id,
             type: question.type,
             prompt,
+            promptContent: presentation.questionContent,
+            promptContentLanguage: presentation.questionContentLanguage,
+            answerLanguage: presentation.answerLanguage,
             options: [],
             correctAnswer: question.correctAnswer,
             audioUrl,
           };
         }
 
-        const options = language === "ar" ? question.optionsAr : question.optionsEn;
+        const options = presentation.answerLanguage === "ar" ? question.optionsAr : question.optionsEn;
         const fallbackOptions = options.length ? options : question.optionsAr;
         const correctIndex =
           typeof question.correctOptionIndex === "number"
@@ -147,12 +166,15 @@ export default function SampleLessonExperience({
           id: question.id,
           type: question.type,
           prompt,
+          promptContent: presentation.questionContent,
+          promptContentLanguage: presentation.questionContentLanguage,
+          answerLanguage: presentation.answerLanguage,
           options: fallbackOptions,
           correctAnswer: fallbackOptions[correctIndex] ?? question.correctAnswer,
           audioUrl,
         };
       }),
-    [data.practice.questions, language]
+    [data.contentLanguage, data.practice.questions, language]
   );
 
   const handleProgress = useCallback((progress: number) => {

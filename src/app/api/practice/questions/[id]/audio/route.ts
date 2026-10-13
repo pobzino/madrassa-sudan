@@ -3,7 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
-import { resolvePracticeDisplayLanguages, type LessonLanguageMode } from "@/lib/practice-language";
+import {
+  resolvePracticeDisplayLanguages,
+  resolvePracticeQuestionPresentation,
+  type LessonLanguageMode,
+} from "@/lib/practice-language";
 
 export const maxDuration = 120;
 
@@ -21,9 +25,11 @@ function stringArray(value: unknown): string[] {
 
 function narrationText(
   language: "ar" | "en",
-  prompt: string,
+  instruction: string,
+  questionContent: string | null,
   options: string[]
 ) {
+  const prompt = [instruction, questionContent].filter(Boolean).join(" ");
   if (options.length === 0) return prompt;
   if (language === "ar") {
     const labels = ["الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع"];
@@ -56,7 +62,7 @@ export async function POST(
   const { data: question, error: questionError } = await supabase
     .from("homework_questions")
     .select(
-      "id, assignment_id, question_text_ar, question_text_en, options, options_ar, options_en, audio_url_ar, audio_url_en, audio_text_hash_ar, audio_text_hash_en"
+      "id, assignment_id, question_text_ar, question_text_en, instruction_ar, instruction_en, question_content, question_content_language, answer_language, options, options_ar, options_en, audio_url_ar, audio_url_en, audio_text_hash_ar, audio_text_hash_en"
     )
     .eq("id", questionId)
     .maybeSingle();
@@ -85,16 +91,29 @@ export async function POST(
     slideDeck?.language_mode as LessonLanguageMode,
     language
   );
-  const prompt =
-    language === "ar"
-      ? question.question_text_ar
-      : question.question_text_en || question.question_text_ar;
+  const presentation = resolvePracticeQuestionPresentation({
+    defaultAnswerLanguage: practiceLanguages.answerLanguage,
+    instructionLanguage: language,
+    legacyMaterialLanguage: slideDeck?.language_mode as LessonLanguageMode,
+    answerLanguage: question.answer_language,
+    instructionAr: question.instruction_ar,
+    instructionEn: question.instruction_en,
+    questionContent: question.question_content,
+    questionContentLanguage: question.question_content_language,
+    questionTextAr: question.question_text_ar,
+    questionTextEn: question.question_text_en,
+  });
   const localizedOptions = stringArray(
-    practiceLanguages.answerLanguage === "ar"
+    presentation.answerLanguage === "ar"
       ? question.options_ar ?? question.options
       : question.options_en ?? question.options
   );
-  const text = narrationText(language, prompt, localizedOptions).slice(0, 1800);
+  const text = narrationText(
+    language,
+    presentation.instruction,
+    presentation.questionContent,
+    localizedOptions,
+  ).slice(0, 1800);
   const voiceId =
     (language === "ar"
       ? process.env.ELEVENLABS_VOICE_ID_AR
@@ -161,7 +180,17 @@ export async function POST(
     .update(update)
     .eq("id", questionId)
     .eq("question_text_ar", question.question_text_ar);
-  for (const field of ["question_text_en", "options", "options_ar", "options_en"] as const) {
+  for (const field of [
+    "question_text_en",
+    "instruction_ar",
+    "instruction_en",
+    "question_content",
+    "question_content_language",
+    "answer_language",
+    "options",
+    "options_ar",
+    "options_en",
+  ] as const) {
     cacheUpdate = question[field] === null
       ? cacheUpdate.is(field, null)
       : cacheUpdate.eq(field, typeof question[field] === "object" ? JSON.stringify(question[field]) : question[field]!);

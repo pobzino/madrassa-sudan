@@ -522,7 +522,7 @@ export default function SlideInteractionOverlay({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 p-4">
+    <div translate="no" className="notranslate fixed inset-0 z-50 bg-black/80 p-4">
       <div
         dir={isAr ? 'rtl' : 'ltr'}
         className="mx-auto flex h-full max-w-6xl flex-col justify-center gap-4"
