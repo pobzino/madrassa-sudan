@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import { toast } from "sonner";
+import { whatsappDigits } from "@/lib/whatsapp-login";
 import {
   Users,
   BookOpen,
@@ -22,6 +23,8 @@ import {
   Activity,
   AlertTriangle,
   RotateCcw,
+  Search,
+  X,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -220,6 +223,42 @@ function formatReferralSource(source: string | undefined, other: string | undefi
   return labels[source] || source;
 }
 
+function memberPhoneNumbers(user: AdminUser) {
+  return [
+    user.contact_phone,
+    user.signup_details?.parent?.whatsapp_number,
+    user.signup_details?.teacher_volunteer?.whatsapp_number,
+  ].filter((phone): phone is string => Boolean(phone));
+}
+
+function matchesMemberSearch(user: AdminUser, rawQuery: string) {
+  const query = rawQuery.trim();
+  if (!query) return true;
+
+  const normalizedQuery = query.toLocaleLowerCase();
+  const details = [user.full_name, user.auth_email, ...memberPhoneNumbers(user)]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.toLocaleLowerCase());
+
+  if (details.some((value) => value.includes(normalizedQuery))) return true;
+
+  const queryDigits = whatsappDigits(query);
+  if (queryDigits.length < 5) return false;
+
+  const phoneQueryVariants = new Set([
+    queryDigits,
+    queryDigits.replace(/^00/, ""),
+    queryDigits.replace(/^0+/, ""),
+  ]);
+
+  return memberPhoneNumbers(user).some((phone) => {
+    const phoneDigits = whatsappDigits(phone);
+    return [...phoneQueryVariants].some(
+      (variant) => variant.length >= 5 && (phoneDigits.includes(variant) || phoneDigits.endsWith(variant))
+    );
+  });
+}
+
 function UserSignupDetails({ user }: { user: AdminUser }) {
   const parent = user.signup_details?.parent;
   const volunteer = user.signup_details?.teacher_volunteer;
@@ -309,6 +348,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [userFilter, setUserFilter] = useState<"all" | "pending" | "student" | "teacher" | "parent" | "admin">("all");
+  const [memberSearch, setMemberSearch] = useState("");
 
   // Classes state
   const [cohorts, setCohorts] = useState<AdminCohort[]>([]);
@@ -603,6 +643,7 @@ export default function AdminPage() {
       : userFilter === "student" || userFilter === "teacher" || userFilter === "parent" || userFilter === "admin"
         ? users.filter((u) => u.role === userFilter)
         : users;
+  const visibleUsers = filteredUsers.filter((user) => matchesMemberSearch(user, memberSearch));
 
   const maxDailyViews = Math.max(
     1,
@@ -960,25 +1001,50 @@ export default function AdminPage() {
       {tab === "members" && (
         <div className="space-y-4">
           {/* Filter Bar */}
-          <div className="flex flex-wrap gap-2">
-            {(["all", "pending", "student", "teacher", "parent", "admin"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setUserFilter(f)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  userFilter === f
-                    ? "bg-emerald-600 text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
-                {f === "pending" && counts.pendingApprovals > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 bg-white/20 rounded-full text-[11px]">
-                    {counts.pendingApprovals}
-                  </span>
-                )}
-              </button>
-            ))}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative w-full sm:max-w-md">
+              <Search
+                className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                value={memberSearch}
+                onChange={(event) => setMemberSearch(event.target.value)}
+                placeholder="Search by name, email or WhatsApp number"
+                className="h-10 w-full rounded-lg border border-gray-200 bg-white py-2 ps-9 pe-9 text-sm text-gray-900 outline-none transition-shadow placeholder:text-gray-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              />
+              {memberSearch && (
+                <button
+                  type="button"
+                  onClick={() => setMemberSearch("")}
+                  className="absolute end-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                  aria-label="Clear member search"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(["all", "pending", "student", "teacher", "parent", "admin"] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setUserFilter(f)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    userFilter === f
+                      ? "bg-emerald-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+                  {f === "pending" && counts.pendingApprovals > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.5 bg-white/20 rounded-full text-[11px]">
+                      {counts.pendingApprovals}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Users List */}
@@ -988,13 +1054,15 @@ export default function AdminPage() {
                 <div key={i} className="animate-pulse bg-gray-100 rounded-xl h-16" />
               ))}
             </div>
-          ) : filteredUsers.length === 0 ? (
+          ) : visibleUsers.length === 0 ? (
             <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center">
-              <p className="text-sm text-gray-400">No users found</p>
+              <p className="text-sm text-gray-400">
+                {memberSearch ? "No members match that search" : "No users found"}
+              </p>
             </div>
           ) : (
             <div className="space-y-2">
-              {filteredUsers.map((user) => (
+              {visibleUsers.map((user) => (
                 <div
                   key={user.id}
                   className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-start justify-between gap-4"
