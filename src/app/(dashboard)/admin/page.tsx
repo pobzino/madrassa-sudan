@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   RotateCcw,
   Search,
+  Mail,
   X,
 } from "lucide-react";
 
@@ -229,6 +230,10 @@ function memberPhoneNumbers(user: AdminUser) {
     user.signup_details?.parent?.whatsapp_number,
     user.signup_details?.teacher_volunteer?.whatsapp_number,
   ].filter((phone): phone is string => Boolean(phone));
+}
+
+function isWhatsAppOnlyLogin(user: AdminUser) {
+  return user.auth_email?.endsWith("@parents.amalschool.app") ?? false;
 }
 
 function matchesMemberSearch(user: AdminUser, rawQuery: string) {
@@ -1071,6 +1076,20 @@ export default function AdminPage() {
                     <p className="text-sm font-semibold text-gray-900 truncate">
                       {user.full_name || "Unnamed user"}
                     </p>
+                    {user.auth_email && !isWhatsAppOnlyLogin(user) ? (
+                      <a
+                        href={`mailto:${user.auth_email}`}
+                        className="mt-0.5 inline-flex max-w-full items-center gap-1.5 truncate text-xs font-medium text-emerald-700 underline-offset-2 hover:text-emerald-900 hover:underline"
+                        aria-label={`Email ${user.full_name || "member"}`}
+                      >
+                        <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="truncate">{user.auth_email}</span>
+                      </a>
+                    ) : isWhatsAppOnlyLogin(user) ? (
+                      <p className="mt-0.5 text-xs text-gray-500">WhatsApp-only account — no email address</p>
+                    ) : (
+                      <p className="mt-0.5 text-xs text-gray-500">Email unavailable</p>
+                    )}
                     <div className="flex flex-wrap items-center gap-2 mt-0.5">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium ${roleBadge(user.role)}`}>
                         {user.role}
@@ -1080,7 +1099,7 @@ export default function AdminPage() {
                       }`}>
                         {user.is_approved ? "Approved" : "Not approved"}
                       </span>
-                      {user.auth_email?.endsWith("@parents.amalschool.app") ? (
+                      {isWhatsAppOnlyLogin(user) ? (
                         <span className="inline-flex items-center rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">
                           WhatsApp login
                         </span>
@@ -1100,7 +1119,7 @@ export default function AdminPage() {
                     <UserSignupDetails user={user} />
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    {user.role === "parent" && !user.email_confirmed_at && !user.auth_email?.endsWith("@parents.amalschool.app") && (
+                    {user.role === "parent" && !user.email_confirmed_at && !isWhatsAppOnlyLogin(user) && (
                       <button
                         type="button"
                         onClick={() => handleVerifyParentEmail(user.id)}
