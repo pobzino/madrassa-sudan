@@ -464,6 +464,26 @@ export default function AdminPage() {
     }
   }
 
+  async function handleVerifyParentEmail(userId: string) {
+    setActionInProgress(userId);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/verify-email`, {
+        method: "PATCH",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Failed to verify parent email");
+        return;
+      }
+      toast.success("Parent email verified");
+      void loadUsers();
+    } catch {
+      toast.error("Failed to verify parent email");
+    } finally {
+      setActionInProgress(null);
+    }
+  }
+
   async function handleChangeRole(userId: string, newRole: string) {
     setActionInProgress(userId);
     try {
@@ -1012,6 +1032,17 @@ export default function AdminPage() {
                     <UserSignupDetails user={user} />
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    {user.role === "parent" && !user.email_confirmed_at && !user.auth_email?.endsWith("@parents.amalschool.app") && (
+                      <button
+                        type="button"
+                        onClick={() => handleVerifyParentEmail(user.id)}
+                        disabled={actionInProgress === user.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-50 disabled:opacity-50"
+                      >
+                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                        Verify email
+                      </button>
+                    )}
                     {/* Role Change Dropdown */}
                     <div className="relative">
                       <select

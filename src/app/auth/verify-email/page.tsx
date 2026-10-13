@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardEvent, FormEvent, KeyboardEvent, Suspense, useMemo, useRef, useState } from "react";
+import { ClipboardEvent, FormEvent, KeyboardEvent, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -9,6 +9,7 @@ import { normalizeArabicDigits } from "@/lib/whatsapp-login";
 
 type VerificationType = "signup" | "recovery";
 const OTP_LENGTH = 6;
+const RESEND_COOLDOWN_SECONDS = 60;
 
 const translations = {
   ar: {
@@ -21,7 +22,9 @@ const translations = {
     verifying: "جارٍ التأكيد...",
     resend: "إرسال رمز جديد",
     resending: "جارٍ الإرسال...",
+    resendCooldown: "يمكنك طلب رمز جديد خلال {seconds} ثانية.",
     resent: "تم إرسال رمز جديد. تحقق من بريدك والرسائل غير المرغوب فيها.",
+    resendHint: "قد يستغرق وصول الرمز بضع دقائق. استخدم أحدث رمز فقط.",
     invalidCode: "أدخل رمز التأكيد المكون من 6 أرقام.",
     codeDigit: "رقم",
     missingEmail: "لم نجد البريد الإلكتروني. ابدأ من جديد.",
@@ -37,7 +40,9 @@ const translations = {
     verifying: "Confirming...",
     resend: "Send a new code",
     resending: "Sending...",
+    resendCooldown: "You can request a new code in {seconds}s.",
     resent: "A new code was sent. Check your inbox and spam folder.",
+    resendHint: "Delivery can take a few minutes. Use only the newest code.",
     invalidCode: "Enter the 6-digit confirmation code.",
     codeDigit: "Digit",
     missingEmail: "We could not find your email address. Please start again.",
@@ -63,8 +68,15 @@ function VerifyEmailContent() {
   const [message, setMessage] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   const normalizedCode = code.join("");
+
+  useEffect(() => {
+    if (resendCooldown === 0) return;
+    const timer = window.setTimeout(() => setResendCooldown((seconds) => seconds - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
 
   const focusCodeInput = (index: number) => {
     requestAnimationFrame(() => codeInputs.current[index]?.focus());
@@ -145,6 +157,7 @@ function VerifyEmailContent() {
   };
 
   const handleResend = async () => {
+    if (resendCooldown > 0) return;
     setError(null);
     setMessage(null);
     if (!email) {
@@ -158,8 +171,12 @@ function VerifyEmailContent() {
       : await supabase.auth.resend({ type: "signup", email });
     setResending(false);
 
-    if (resendError) setError(resendError.message);
-    else setMessage(t.resent);
+    if (resendError) {
+      setError(resendError.message);
+    } else {
+      setMessage(t.resent);
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    }
   };
 
   return (
@@ -218,8 +235,13 @@ function VerifyEmailContent() {
         </form>
 
         <div className="mt-5 space-y-3 text-center">
-          <button type="button" onClick={handleResend} disabled={resending} className="text-sm font-semibold text-[var(--primary)] hover:underline disabled:cursor-not-allowed disabled:opacity-50">
-            {resending ? t.resending : t.resend}
+          <p className="text-sm text-gray-500">{t.resendHint}</p>
+          <button type="button" onClick={handleResend} disabled={resending || resendCooldown > 0} className="text-sm font-semibold text-[var(--primary)] hover:underline disabled:cursor-not-allowed disabled:opacity-50">
+            {resending
+              ? t.resending
+              : resendCooldown > 0
+                ? t.resendCooldown.replace("{seconds}", String(resendCooldown))
+                : t.resend}
           </button>
           <Link href="/auth/login" className="block text-sm font-medium text-gray-500 hover:text-[var(--primary)]">{t.backToLogin}</Link>
         </div>
