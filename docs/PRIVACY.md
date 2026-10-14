@@ -38,7 +38,7 @@ Please do not submit home addresses, identity documents, medical records, or oth
 
 We collect limited, cookieless analytics to understand whether the website and learning journey are working. We use PostHog for these product analytics with in-memory storage only. An analytics record may contain the action taken, page path, interface language, a campaign label or referring website domain, lesson or Practice content identifiers, progress milestones, score percentages, broad error categories, and the time of the action. We do not store full referring URLs.
 
-Our anonymous analytics records do not contain names, email addresses, account IDs, IP addresses, advertising IDs, device fingerprints, Practice answers, AI prompts, error details, session recordings, or persistent visitor identifiers. To prevent automated signup abuse, we retain a one-way hashed request fingerprint for no more than 48 hours. Saved account, lesson progress, and Practice attempt records may be aggregated separately to report participation, completion, pass, retry, and return rates without exposing individual learners in the analytics dashboard. These measures are used only by authorised Amal School administrators.
+We also use sampled session recordings and heatmaps on selected public pages of amalschool.org to understand how anonymous visitors navigate the interface. Recordings are limited to 10% of eligible sessions, retained for 30 days, and do not use analytics cookies or persistent visitor identifiers. Client IP addresses are discarded. Input values, page text, and DOM attribute values are masked before recording; hidden and file inputs are blocked. We do not record account, lesson, Practice, or other authenticated pages. To prevent automated signup abuse, we retain a one-way hashed request fingerprint for no more than 48 hours. Saved account, lesson progress, and Practice attempt records may be aggregated separately to report participation, completion, pass, retry, and return rates without exposing individual learners in the analytics dashboard. These measures are used only by authorised Amal School administrators.
 
 ## 3. How We Use Information
 
@@ -102,7 +102,7 @@ We may need to verify the request and may retain limited information where law, 
 
 Amal School uses cookies and similar browser storage for sign-in, language preference, lesson progress, offline features, security, and essential platform operation. We do not use them to sell personal information or deliver behavioural advertising to children.
 
-Our aggregate analytics do not set analytics cookies and do not follow a person across websites. Campaign and referral context is held only for the current browser tab so a signup can be attributed to its source; it contains no visitor identifier. Anonymous analytics events are kept for up to 13 months and then deleted. Account and learning records follow the retention approach described in Section 6.
+Our aggregate analytics do not set analytics cookies and do not follow a person across websites. Campaign and referral context is held only for the current browser tab so a signup can be attributed to its source; it contains no visitor identifier. Anonymous analytics events are kept for up to 13 months and then deleted; sampled session recordings and heatmap data are retained for 30 days. Account and learning records follow the retention approach described in Section 6.
 
 ## 9. Changes to This Policy
 
