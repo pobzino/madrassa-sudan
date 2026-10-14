@@ -329,6 +329,19 @@ export default function LessonPlayerPage() {
     }
   }, [lesson, lessonContentLanguage, lessonId]);
 
+  const trackLessonActivity = useCallback((result: { activityType: string; correct?: boolean }) => {
+    if (!lesson) return;
+
+    trackAnalyticsEvent("lesson_activity_submit", {
+      lesson_id: lessonId,
+      subject_id: lesson.subject_id,
+      grade_level: lesson.grade_level,
+      content_language: lessonContentLanguage,
+      activity_type: result.activityType,
+      ...(typeof result.correct === "boolean" ? { correct: result.correct } : {}),
+    });
+  }, [lesson, lessonContentLanguage, lessonId]);
+
   // Progress gate state
   const [showProgressGate, setShowProgressGate] = useState(false);
   const [quizSettings, setQuizSettings] = useState<QuizSettings>(DEFAULT_QUIZ_SETTINGS);
@@ -873,7 +886,7 @@ export default function LessonPlayerPage() {
           empty state. */}
       {lessonSim && canAccessSims ? (
         <div className="mx-auto max-w-6xl sm:px-3 sm:py-3">
-          <SimPlayer className="max-sm:rounded-none max-sm:border-x-0" payload={lessonSim} language={lessonContentLanguage} lessonId={lessonId} savedResponses={slideInteractionResponses} onProgress={handleSimProgress} />
+          <SimPlayer className="max-sm:rounded-none max-sm:border-x-0" payload={lessonSim} language={lessonContentLanguage} lessonId={lessonId} savedResponses={slideInteractionResponses} onProgress={handleSimProgress} onActivitySubmit={trackLessonActivity} />
         </div>
       ) : legacyVideoUrl ? (
         <div className="relative bg-black aspect-video max-h-[70vh] mx-auto">

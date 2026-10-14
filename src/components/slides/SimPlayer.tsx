@@ -117,6 +117,11 @@ interface SimPlayerProps {
   showTeacherNotes?: boolean;
   /** Fires periodically with playback progress (0–100). */
   onProgress?: (pct: number) => void;
+  /**
+   * Reports an answered interactive activity without exposing the learner's
+   * answer. The lesson page uses this for anonymous aggregate analytics.
+   */
+  onActivitySubmit?: (result: { activityType: string; correct?: boolean }) => void;
 }
 
 /**
@@ -374,6 +379,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     onReady,
     showTeacherNotes = false,
     onProgress,
+    onActivitySubmit,
   },
   ref
 ) {
@@ -1093,10 +1099,15 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     const isTeacherReviewed = interaction.type === 'free_response' || interaction.type === 'draw_answer';
     if (isTeacherReviewed) {
       setAnswerFeedback('submitted');
+      onActivitySubmit?.({ activityType: interaction.type });
     } else {
       const result = gradeInteraction(interaction, studentAnswer);
       const feedback = result.is_correct ? 'correct' : 'incorrect';
       setAnswerFeedback(feedback);
+      onActivitySubmit?.({
+        activityType: interaction.type,
+        correct: result.is_correct,
+      });
       if (feedback === 'correct') {
         setConfettiKey((k) => k + 1);
       }
@@ -1113,7 +1124,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         }),
       }).catch(() => { /* best-effort — don't block UX */ });
     }
-  }, [studentAnswer, currentSlide, lessonId]);
+  }, [studentAnswer, currentSlide, lessonId, onActivitySubmit]);
 
   const handleRetry = useCallback(() => {
     setStudentAnswer(null);

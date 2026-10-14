@@ -6,6 +6,7 @@ export const ANALYTICS_EVENT_NAMES = [
   "landing_view",
   "language_change",
   "lesson_start",
+  "lesson_activity_submit",
   "lesson_video_complete",
   "lesson_video_progress",
   "lesson_video_start",
@@ -32,6 +33,7 @@ export type AnalyticsProperties = Record<string, string | number | boolean>;
 
 export const ANALYTICS_PROPERTY_KEYS = new Set([
   "acquisition_source",
+  "activity_type",
   "assignment_id",
   "attempt_number",
   "content_language",

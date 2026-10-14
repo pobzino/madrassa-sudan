@@ -81,6 +81,28 @@ describe("parseAnalyticsPayload", () => {
     });
   });
 
+  it("accepts anonymous lesson activity metadata without the learner answer", () => {
+    expect(parseAnalyticsPayload({
+      eventName: "lesson_activity_submit",
+      path: "/lessons/lesson-1",
+      properties: {
+        lesson_id: "lesson-1",
+        activity_type: "match_pairs",
+        correct: true,
+        answer: "This must never be stored",
+      },
+    })).toEqual({
+      eventName: "lesson_activity_submit",
+      locale: "en",
+      path: "/lessons/lesson-1",
+      properties: {
+        lesson_id: "lesson-1",
+        activity_type: "match_pairs",
+        correct: true,
+      },
+    });
+  });
+
   it("rejects unknown events and invalid paths", () => {
     expect(parseAnalyticsPayload({ eventName: "student_answer", path: "/" })).toBeNull();
     expect(parseAnalyticsPayload({ eventName: "page_view", path: "https://example.com" })).toBeNull();
