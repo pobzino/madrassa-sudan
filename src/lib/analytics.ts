@@ -8,10 +8,6 @@ const analyticsEnabled =
   process.env.NODE_ENV === "production" ||
   process.env.NEXT_PUBLIC_ANALYTICS_ENABLED === "true";
 
-const postHogEnabled = Boolean(
-  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST,
-);
-
 const ATTRIBUTION_STORAGE_KEY = "amal_analytics_attribution";
 
 function getAttribution(): AnalyticsProperties {
@@ -53,7 +49,7 @@ export function trackAnalyticsEvent(
     ...properties,
   };
 
-  if (postHogEnabled) {
+  if (posthog.__loaded) {
     posthog.capture(eventName, eventProperties);
   }
 

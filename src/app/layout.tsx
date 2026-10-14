@@ -6,6 +6,7 @@ import { getCanonicalSiteUrl } from "@/lib/site-url";
 import { Toaster } from "sonner";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
+import PostHogInitializer from "@/components/PostHogInitializer";
 import { LEGAL_ENTITY } from "@/lib/legal-entity";
 
 const inter = Inter({
@@ -100,6 +101,10 @@ export default function RootLayout({
         <LanguageWrapper>
           {children}
         </LanguageWrapper>
+        <PostHogInitializer
+          projectToken={process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN}
+          host={process.env.NEXT_PUBLIC_POSTHOG_HOST}
+        />
         <AnalyticsTracker />
         <Toaster position="top-center" richColors closeButton />
         <ServiceWorkerRegister />
