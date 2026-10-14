@@ -1,6 +1,6 @@
 # Privacy Policy - Amal School
 
-**Last Updated:** October 11, 2026
+**Last Updated:** October 14, 2026
 
 ## 1. About Amal School
 
@@ -36,9 +36,9 @@ Please do not submit home addresses, identity documents, medical records, or oth
 
 ### Anonymous platform analytics
 
-We collect limited, cookieless analytics to understand whether the website and learning journey are working. An analytics record may contain the action taken, page path, interface language, a campaign label or referring website domain, lesson or Practice content identifiers, progress milestones, score percentages, broad error categories, and the time of the action. We do not store full referring URLs.
+We collect limited, cookieless analytics to understand whether the website and learning journey are working. We use PostHog for these product analytics with in-memory storage only. An analytics record may contain the action taken, page path, interface language, a campaign label or referring website domain, lesson or Practice content identifiers, progress milestones, score percentages, broad error categories, and the time of the action. We do not store full referring URLs.
 
-Our anonymous analytics records do not contain names, account IDs, IP addresses, advertising IDs, device fingerprints, Practice answers, or persistent visitor identifiers. To prevent automated signup abuse, we retain a one-way hashed request fingerprint for no more than 48 hours. Saved account, lesson progress, and Practice attempt records may be aggregated separately to report participation, completion, pass, retry, and return rates without exposing individual learners in the analytics dashboard. These measures are used only by authorised Amal School administrators.
+Our anonymous analytics records do not contain names, email addresses, account IDs, IP addresses, advertising IDs, device fingerprints, Practice answers, AI prompts, error details, session recordings, or persistent visitor identifiers. To prevent automated signup abuse, we retain a one-way hashed request fingerprint for no more than 48 hours. Saved account, lesson progress, and Practice attempt records may be aggregated separately to report participation, completion, pass, retry, and return rates without exposing individual learners in the analytics dashboard. These measures are used only by authorised Amal School administrators.
 
 ## 3. How We Use Information
 
@@ -64,7 +64,7 @@ Information may be shared only when needed with:
 - Authorised Amal School staff, teachers, and volunteers
 - A child's parent or caregiver
 - Partner organisations supporting the relevant programme or refugee community
-- Service providers that host or operate the platform, including Supabase and Netlify
+- Service providers that host or operate the platform, including Supabase, Netlify, and PostHog for privacy-configured anonymous product analytics
 - OpenAI when authorised staff use AI tools to help draft lesson or Practice content; generated content should be reviewed before publication
 - ElevenLabs when Amal School generates Arabic or English narration for published Practice questions; we send the question text, not a learner's identity or answer
 - WhatsApp, Zoom, or email providers when those services are used for communication or lessons

@@ -1,11 +1,16 @@
 "use client";
 
+import posthog from "posthog-js";
 import type { AnalyticsEventName, AnalyticsProperties } from "@/lib/analytics.shared";
 import { extractAnalyticsAttribution } from "@/lib/analytics.metadata";
 
 const analyticsEnabled =
   process.env.NODE_ENV === "production" ||
   process.env.NEXT_PUBLIC_ANALYTICS_ENABLED === "true";
+
+const postHogEnabled = Boolean(
+  process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST,
+);
 
 const ATTRIBUTION_STORAGE_KEY = "amal_analytics_attribution";
 
@@ -43,14 +48,20 @@ export function trackAnalyticsEvent(
 ) {
   if (!analyticsEnabled || typeof window === "undefined") return;
 
+  const eventProperties = {
+    ...getAttribution(),
+    ...properties,
+  };
+
+  if (postHogEnabled) {
+    posthog.capture(eventName, eventProperties);
+  }
+
   const body = JSON.stringify({
     eventName,
     locale: document.documentElement.lang === "ar" ? "ar" : "en",
     path: window.location.pathname,
-    properties: {
-      ...getAttribution(),
-      ...properties,
-    },
+    properties: eventProperties,
   });
 
   void fetch("/api/analytics/track", {
