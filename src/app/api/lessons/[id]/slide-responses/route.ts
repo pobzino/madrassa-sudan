@@ -18,20 +18,83 @@ const SlideResponseSchema = z.object({
     z.null(),
   ]),
   time_spent_seconds: z.number().int().min(0).optional(),
+  // When the student answered, by the phone's clock (the lesson players send
+  // it with every answer, including ones saved offline and sent later), and
+  // an id for the answer. Together they stop a late or repeated send from
+  // replacing a newer answer or counting an attempt twice. Loosely checked:
+  // a bad value is ignored rather than losing the answer.
+  answered_at: z.string().max(64).optional(),
+  client_answer_id: z.string().min(1).max(128).optional(),
 });
+
+// Phones may report an answer at most this far back (as for lesson completion).
+const MAX_ANSWER_BACKDATE_MS = 14 * 24 * 60 * 60 * 1000;
+
+// Postgres errors about the data itself (check constraint, not null, foreign
+// key, bad value). Sending the same answer again can never succeed, so these
+// are 422 and the phone stops resending; anything else stays a 500 (retried).
+const PERMANENT_WRITE_ERRORS = new Set(['23514', '23502', '23503', '22P02']);
+
+function writeErrorStatus(error: { code?: string } | null): number {
+  return error?.code && PERMANENT_WRITE_ERRORS.has(error.code) ? 422 : 500;
+}
+
+/** The phone's answer time, clamped to [now − 14 days, now]; null when absent or unreadable. */
+function clampAnsweredAt(value: string | undefined, now: Date): string | null {
+  const parsed = value ? Date.parse(value) : NaN;
+  if (!Number.isFinite(parsed)) return null;
+  const nowMs = now.getTime();
+  return new Date(Math.min(nowMs, Math.max(nowMs - MAX_ANSWER_BACKDATE_MS, parsed))).toISOString();
+}
+
+function readStoredResponse(data: Json | null | undefined) {
+  const record = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+  const answeredAt = typeof record.answered_at === 'string' ? Date.parse(record.answered_at) : NaN;
+  return {
+    hasAnswer: record.answer !== null && record.answer !== undefined,
+    answeredAt: Number.isFinite(answeredAt) ? answeredAt : null,
+    clientAnswerId: typeof record.client_answer_id === 'string' ? record.client_answer_id : null,
+  };
+}
+
+type LessonLookup =
+  | { lesson: { id: string; is_published: boolean; created_by: string | null }; slides: Slide[] | null; error: string | null; code?: undefined; status: number }
+  | { lesson: null; slides: null; error: string; code?: 'no_access'; status: number };
 
 async function loadLessonAndDeck(
   supabase: Awaited<ReturnType<typeof createClient>>,
   lessonId: string
-) {
+): Promise<LessonLookup> {
   const { data: lesson, error: lessonError } = await supabase
     .from('lessons')
     .select('id, is_published, created_by')
     .eq('id', lessonId)
-    .single();
+    .maybeSingle();
 
-  if (lessonError || !lesson) {
-    return { lesson: null, slides: null, error: 'Lesson not found', status: 404 as const };
+  // A failed lookup isn't "not found": the phone must keep the answer and retry.
+  if (lessonError && lessonError.code !== '22P02') {
+    return { lesson: null, slides: null, error: 'Lesson could not be loaded', status: 503 };
+  }
+
+  if (!lesson) {
+    // Hidden from this account (unpublished, moved to another class, class
+    // membership waiting for approval) or deleted? Only the service role can
+    // tell. A hidden lesson is 403 no_access, so answers saved offline wait
+    // for access to return instead of being thrown away.
+    if (!lessonError && hasServiceRoleConfig()) {
+      const { data: hidden, error: hiddenError } = await createServiceClient()
+        .from('lessons')
+        .select('id')
+        .eq('id', lessonId)
+        .maybeSingle();
+      if (hiddenError) {
+        return { lesson: null, slides: null, error: 'Lesson could not be loaded', status: 503 };
+      }
+      if (hidden) {
+        return { lesson: null, slides: null, error: 'No access', code: 'no_access', status: 403 };
+      }
+    }
+    return { lesson: null, slides: null, error: 'Lesson not found', status: 404 };
   }
 
   const deckClient = hasServiceRoleConfig() ? createServiceClient() : supabase;
@@ -43,12 +106,12 @@ async function loadLessonAndDeck(
     .single();
 
   if (deckError && deckError.code !== 'PGRST116') {
-    return { lesson, slides: null, error: deckError.message, status: 500 as const };
+    return { lesson, slides: null, error: deckError.message, status: 500 };
   }
 
   const slides = Array.isArray(deck?.slides) ? (deck.slides as unknown as Slide[]) : [];
 
-  return { lesson, slides, error: null, status: 200 as const };
+  return { lesson, slides, error: null, status: 200 };
 }
 
 async function updateSlideInteractionProgress(
@@ -108,14 +171,14 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { lesson, error, status } = await loadLessonAndDeck(supabase, lessonId);
+  const { lesson, error, code, status } = await loadLessonAndDeck(supabase, lessonId);
 
   if (!lesson) {
-    return NextResponse.json({ error }, { status });
+    return NextResponse.json({ error, ...(code ? { code } : {}) }, { status });
   }
 
   if (!lesson.is_published && lesson.created_by !== user.id) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    return NextResponse.json({ error: 'Forbidden', code: 'no_access' }, { status: 403 });
   }
 
   const { data: responses, error: responsesError } = await supabase
@@ -158,15 +221,16 @@ export async function POST(
     );
   }
 
-  const { slide_id, answer, time_spent_seconds } = validation.data;
-  const { lesson, slides, error, status } = await loadLessonAndDeck(supabase, lessonId);
+  const { slide_id, answer, time_spent_seconds, client_answer_id } = validation.data;
+  const answeredAt = clampAnsweredAt(validation.data.answered_at, new Date());
+  const { lesson, slides, error, code, status } = await loadLessonAndDeck(supabase, lessonId);
 
   if (!lesson || !slides) {
-    return NextResponse.json({ error }, { status });
+    return NextResponse.json({ error, ...(code ? { code } : {}) }, { status });
   }
 
   if (!lesson.is_published && lesson.created_by !== user.id) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    return NextResponse.json({ error: 'Forbidden', code: 'no_access' }, { status: 403 });
   }
 
   const slide = slides.find((candidate) => candidate.id === slide_id);
@@ -195,19 +259,46 @@ export async function POST(
   const isCorrect = computeSlideInteractionCorrectness(slide, normalizedAnswer);
   const responseData = {
     answer,
+    ...(answeredAt ? { answered_at: answeredAt } : {}),
+    ...(client_answer_id ? { client_answer_id } : {}),
   } as Json;
 
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from('lesson_slide_responses')
-    .select('id, attempts')
+    .select('*')
     .eq('lesson_id', lessonId)
     .eq('slide_id', slide_id)
     .eq('student_id', user.id)
     .maybeSingle();
 
+  if (existingError) {
+    return NextResponse.json({ error: existingError.message }, { status: 500 });
+  }
+
   let responseRow: Database['public']['Tables']['lesson_slide_responses']['Row'] | null = null;
 
   if (existing) {
+    const stored = readStoredResponse(existing.response_data);
+    // The same answer sent again (the reply to the first send was lost):
+    // nothing changes and no attempt is added.
+    if (client_answer_id && stored.clientAnswerId === client_answer_id) {
+      return NextResponse.json({ response: existing, is_correct: existing.is_correct, duplicate: true });
+    }
+    // An answer that arrives after a newer one (sent late from a phone that
+    // was offline or retrying), or a skip after a real answer, is kept out:
+    // the stored answer and its grade stay. Times are both the phones' own,
+    // so a phone whose clock is off still orders its own answers correctly.
+    const incomingHasAnswer = answer !== null;
+    const stale =
+      (stored.hasAnswer && !incomingHasAnswer) ||
+      (stored.hasAnswer === incomingHasAnswer &&
+        stored.answeredAt !== null &&
+        answeredAt !== null &&
+        Date.parse(answeredAt) < stored.answeredAt);
+    if (stale) {
+      return NextResponse.json({ response: existing, is_correct: existing.is_correct, stale: true });
+    }
+
     const { data: updated, error: updateError } = await supabase
       .from('lesson_slide_responses')
       .update({
@@ -224,7 +315,7 @@ export async function POST(
       .single();
 
     if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
+      return NextResponse.json({ error: updateError.message }, { status: writeErrorStatus(updateError) });
     }
 
     responseRow = updated;
@@ -247,7 +338,7 @@ export async function POST(
       .single();
 
     if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
+      return NextResponse.json({ error: insertError.message }, { status: writeErrorStatus(insertError) });
     }
 
     responseRow = inserted;

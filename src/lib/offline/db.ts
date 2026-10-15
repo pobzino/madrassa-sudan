@@ -106,6 +106,22 @@ export interface OfflineLesson {
 export type QueueItemKind = "progress" | "slide_response" | "complete";
 
 /**
+ * Why a queued item is waiting. Kept outside `data` and `timestamp`, which
+ * decide whether an item changed while it was being sent; a new write to the
+ * item replaces it and so starts it fresh.
+ */
+export interface QueueItemRetry {
+  /** Times the server answered with an error (5xx). No connection doesn't count. */
+  serverFailures?: number;
+  lastStatus?: number | null;
+  firstFailedAt?: string;
+  /** Not sent again before this time (ISO). */
+  nextTryAt?: string;
+  /** First time the server refused access to the lesson; the item waits ("parked") until access returns. */
+  rejectedAt?: string;
+}
+
+/**
  * A stored queue item. Items written before schema 2 have `table` instead of
  * `kind` and no `ownerId`; normalizeQueueItem maps them.
  */
@@ -118,6 +134,7 @@ export interface ProgressQueueItem {
   table?: string;
   data: Record<string, unknown>;
   timestamp: string;
+  retry?: QueueItemRetry;
 }
 
 /** A queue item in the current shape. */
@@ -167,6 +184,8 @@ export interface LocalSlideResponse {
   answer: unknown;
   isCorrect: boolean | null;
   answeredAt?: string;
+  /** Matches the queued/sent copy of this answer, so a server grade lands only on the answer it is for. */
+  answerId?: string;
 }
 
 export interface LocalSlideResponses {
@@ -251,10 +270,102 @@ export function normalizeQueueItem(raw: ProgressQueueItem): OfflineQueueItem | n
         completed: raw.data.completed === true,
         ...(typeof raw.data.completed_at === "string" ? { completed_at: raw.data.completed_at } : {}),
       },
+      ...(raw.retry ? { retry: raw.retry } : {}),
     };
   }
 
   return null;
+}
+
+/** When a queued answer was given (ms): its `answeredAt`, else when it was queued (older items). NaN when unknown. */
+export function queuedAnswerTime(item: Pick<ProgressQueueItem, "data" | "timestamp">): number {
+  const at = typeof item.data?.answeredAt === "string" ? item.data.answeredAt : item.timestamp;
+  return typeof at === "string" ? Date.parse(at) : Number.NaN;
+}
+
+export interface AnswerVersion {
+  /** A real answer, not a skipped activity (null). */
+  real: boolean;
+  /** When it was given (ms); NaN when unknown. */
+  time: number;
+}
+
+/**
+ * Whether answer `a` should win over answer `b` for the same slide (the
+ * server keeps one per slide): a real answer beats a skip, otherwise the one
+ * given later. Unknown times never win. Mirrors the slide-responses route.
+ */
+export function answerSupersedes(a: AnswerVersion, b: AnswerVersion): boolean {
+  if (a.real !== b.real) return a.real;
+  return Number.isFinite(a.time) && Number.isFinite(b.time) && a.time > b.time;
+}
+
+function queuedAnswerVersion(item: Pick<ProgressQueueItem, "data" | "timestamp">): AnswerVersion {
+  return { real: item.data?.answer !== null && item.data?.answer !== undefined, time: queuedAnswerTime(item) };
+}
+
+/** Data for a lesson's progress queue item replaced in place: the first `completed_at` is kept. */
+export function nextProgressQueueData(
+  existing: Pick<ProgressQueueItem, "data"> | null | undefined,
+  queueData: Record<string, unknown>
+): Record<string, unknown> {
+  const completedAt = existing?.data?.completed_at;
+  return typeof completedAt === "string" ? { ...queueData, completed_at: completedAt } : queueData;
+}
+
+function isSlideAnswerFor(item: ProgressQueueItem, ownerId: string, slideId: unknown): boolean {
+  return item.kind === "slide_response" && item.ownerId === ownerId && item.data?.slideId === slideId;
+}
+
+export type SlideAnswerQueuePlan = { action: "skip" } | { action: "add" } | { action: "replace"; id: number };
+
+/**
+ * How to queue an activity answer, keeping at most one per owner + lesson +
+ * slide (the server keeps one answer per slide too, so an older queued one
+ * could only be overwritten, or, sent late, overwrite a newer one):
+ *   - skip when another answer given on this phone for the slide (saved, or
+ *     already queued) should win over it (answerSupersedes) — e.g. an old
+ *     send that failed after a newer answer was given;
+ *   - otherwise replace the queued one, or add.
+ * Only the phone's own saved answers (they carry an answerId) are compared:
+ * one copied from the server at download is timed by the server's clock.
+ * `queued` is the lesson's queue items (any kind or owner).
+ */
+export function planSlideAnswerQueue(
+  local: Pick<LocalSlideResponse, "answer" | "answeredAt" | "answerId"> | null | undefined,
+  queued: ProgressQueueItem[],
+  incoming: Pick<OfflineQueueItem, "ownerId" | "data" | "timestamp">
+): SlideAnswerQueuePlan {
+  const version = queuedAnswerVersion(incoming);
+  if (
+    typeof local?.answerId === "string" &&
+    local.answerId !== incoming.data.answerId &&
+    answerSupersedes({ real: local.answer !== null && local.answer !== undefined, time: Date.parse(local.answeredAt ?? "") }, version)
+  ) {
+    return { action: "skip" };
+  }
+  const existing = queued
+    .filter((item) => isSlideAnswerFor(item, incoming.ownerId, incoming.data.slideId))
+    .reduce<ProgressQueueItem | null>(
+      (best, item) => (!best || answerSupersedes(queuedAnswerVersion(item), queuedAnswerVersion(best)) ? item : best),
+      null
+    );
+  if (existing?.id === undefined) return { action: "add" };
+  if (answerSupersedes(queuedAnswerVersion(existing), version)) return { action: "skip" };
+  return { action: "replace", id: existing.id };
+}
+
+/** Ids of a slide's queued answers that `sent` (confirmed by the server) supersedes or equals. */
+export function supersededQueuedAnswerIds(
+  queued: ProgressQueueItem[],
+  ownerId: string,
+  slideId: string,
+  sent: AnswerVersion
+): number[] {
+  return queued
+    .filter((item) => item.id !== undefined && isSlideAnswerFor(item, ownerId, slideId))
+    .filter((item) => !answerSupersedes(queuedAnswerVersion(item), sent))
+    .map((item) => item.id as number);
 }
 
 export function addLessonToAssetRef(
@@ -732,7 +843,9 @@ export async function addQueueItem(item: Omit<ProgressQueueItem, "id">, epoch?: 
 /**
  * Writes the local progress record and keeps a single "progress" queue item
  * per owner + lesson (updated in place), so hours of offline watching don't
- * grow the queue. Both in one transaction.
+ * grow the queue. Both in one transaction. The item's first `completed_at`
+ * survives later saves: it is the day the lesson was finished (streaks count
+ * that day), not the day of the last re-watch.
  */
 export async function saveLocalProgressAndQueue(
   progress: LocalLessonProgress,
@@ -749,7 +862,7 @@ export async function saveLocalProgressAndQueue(
         lessonId: progress.lessonId,
         ownerId: progress.ownerId,
         kind: "progress",
-        data: queueData,
+        data: nextProgressQueueData(existing, queueData),
         timestamp: progress.updatedAt,
       };
       if (existing?.id !== undefined) {
@@ -799,6 +912,92 @@ export async function removeQueueItemsIfUnchanged(items: ProgressQueueItem[]): P
         }
       };
     }
+  });
+}
+
+/** Records why items are waiting (back-off, refused access), unless they changed since they were read. */
+export async function setQueueItemsRetry(updates: { item: ProgressQueueItem; retry: QueueItemRetry }[]): Promise<void> {
+  const withIds = updates.filter((update) => typeof update.item.id === "number");
+  if (withIds.length === 0) return;
+  await writeTransaction(OFFLINE_STORES.queue, (tx) => {
+    const store = tx.objectStore(OFFLINE_STORES.queue);
+    for (const { item, retry } of withIds) {
+      const request = store.get(item.id as number);
+      request.onsuccess = () => {
+        const current = request.result as ProgressQueueItem | undefined;
+        if (!current) return;
+        // A newer write replaced it: that one gets its own chance.
+        if (current.timestamp !== item.timestamp || JSON.stringify(current.data) !== JSON.stringify(item.data)) return;
+        store.put({ ...current, retry });
+      };
+    }
+  });
+}
+
+/**
+ * Queues an activity answer, keeping at most one per owner + lesson + slide
+ * (see planSlideAnswerQueue). Reads the phone's saved answers in the same
+ * transaction, so an answer saved meanwhile can't slip between the check and
+ * the write. Returns whether the item was stored.
+ */
+export async function queueSlideResponseItem(
+  item: Omit<OfflineQueueItem, "id" | "retry">,
+  epoch?: number
+): Promise<boolean> {
+  const slideId = item.data.slideId;
+  let stored = false;
+  await writeTransaction(
+    [OFFLINE_STORES.responses, OFFLINE_STORES.queue],
+    (tx) => {
+      const localRequest = tx.objectStore(OFFLINE_STORES.responses).get(responsesKey(item.ownerId, item.lessonId));
+      localRequest.onsuccess = () => {
+        const local =
+          typeof slideId === "string"
+            ? (localRequest.result as LocalSlideResponses | undefined)?.bySlide?.[slideId]
+            : undefined;
+        const queue = tx.objectStore(OFFLINE_STORES.queue);
+        const request = queue.index("lessonId").getAll(item.lessonId);
+        request.onsuccess = () => {
+          const plan = planSlideAnswerQueue(local, (request.result ?? []) as ProgressQueueItem[], item);
+          if (plan.action === "skip") return;
+          const record: ProgressQueueItem = {
+            lessonId: item.lessonId,
+            ownerId: item.ownerId,
+            kind: "slide_response",
+            data: item.data,
+            timestamp: item.timestamp,
+          };
+          if (plan.action === "replace") {
+            queue.put({ ...record, id: plan.id });
+          } else {
+            queue.add(record);
+          }
+          stored = true;
+        };
+      };
+    },
+    epoch
+  );
+  return stored;
+}
+
+/**
+ * Removes queued answers for one slide that `sent` (just confirmed by the
+ * server) supersedes or equals: replayed later, they would overwrite it.
+ */
+export async function removeQueuedSlideResponses(
+  ownerId: string,
+  lessonId: string,
+  slideId: string,
+  sent: AnswerVersion
+): Promise<void> {
+  await writeTransaction(OFFLINE_STORES.queue, (tx) => {
+    const store = tx.objectStore(OFFLINE_STORES.queue);
+    const request = store.index("lessonId").getAll(lessonId);
+    request.onsuccess = () => {
+      const queued = (request.result ?? []) as ProgressQueueItem[];
+      for (const id of supersededQueuedAnswerIds(queued, ownerId, slideId, sent)) store.delete(id);
+    };
   });
 }
 
@@ -934,6 +1133,34 @@ export async function putLocalSlideResponses(
       store.put(record);
     };
   }, epoch);
+}
+
+/**
+ * Read-modify-write of one slide's saved answer in a single transaction.
+ * `update` gets the current entry and returns the new one, or undefined to
+ * leave it as it is. Returns whether it wrote.
+ */
+export async function updateLocalSlideResponse(
+  ownerId: string,
+  lessonId: string,
+  slideId: string,
+  update: (current: LocalSlideResponse | undefined) => LocalSlideResponse | undefined
+): Promise<boolean> {
+  const key = responsesKey(ownerId, lessonId);
+  let written = false;
+  await writeTransaction(OFFLINE_STORES.responses, (tx) => {
+    const store = tx.objectStore(OFFLINE_STORES.responses);
+    const request = store.get(key);
+    request.onsuccess = () => {
+      const bySlide = (request.result as LocalSlideResponses | undefined)?.bySlide ?? {};
+      const next = update(bySlide[slideId]);
+      if (!next) return;
+      const record: LocalSlideResponses = { key, ownerId, lessonId, bySlide: { ...bySlide, [slideId]: next } };
+      store.put(record);
+      written = true;
+    };
+  });
+  return written;
 }
 
 // ── Cache API Helpers ────────────────────────────────────────────────────────

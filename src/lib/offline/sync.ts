@@ -9,7 +9,11 @@
  *   - completed is never sent as false, and playback never completes a
  *     practice-gated lesson (passing the Practice does that);
  *   - items are sent only for the verified user that queued them, and are
- *     removed only after the server confirmed them.
+ *     removed only after the server confirmed them, refused them for good,
+ *     or failed them on its side about ten times over at least two weeks
+ *     (time without a connection never counts). Server errors back off to
+ *     once a day; items for a lesson the server refuses this account wait a
+ *     day between tries, for up to a month.
  * <OfflineSyncRunner/> in the root layout calls syncOfflineQueue on app open
  * and on every `online` event; logout calls it before clearing.
  */
@@ -19,25 +23,27 @@ import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/client";
 import {
   addQueueItem,
+  answerSupersedes,
   clearQueuedUpdates,
   countQueuedUpdates,
   getLocalProgress,
-  getLocalSlideResponses,
   getOfflineLesson,
   getQueuedUpdates,
   localProgressKey,
   normalizeQueueItem,
-  putLocalSlideResponses,
   putMeta,
+  queuedAnswerTime,
   removeQueueItemsIfUnchanged,
   saveLocalProgressAndQueue,
+  setQueueItemsRetry,
   type LocalLessonProgress,
   type OfflineLesson,
   type OfflineProgressSnapshot,
   type OfflineQueueItem,
   type ProgressQueueItem,
+  type QueueItemRetry,
 } from "./db";
-import { postSlideResponse } from "./slide-responses";
+import { applyServerGrade, postSlideResponse } from "./slide-responses";
 
 export { normalizeQueueItem } from "./db";
 
@@ -247,6 +253,134 @@ export function summarizeProgressItems(items: OfflineQueueItem[]): QueuedProgres
   return totals;
 }
 
+/**
+ * Lessons in the order to send them: those completed on the phone first,
+ * earliest completion first, then the rest in queue order. The server's
+ * streak counts each completion's day, and extending a streak one day at a
+ * time only works when the days arrive in order.
+ */
+export function orderLessonsForSync<T extends { completedAt: string | null }>(lessons: T[]): T[] {
+  const time = (lesson: T) => (lesson.completedAt ? Date.parse(lesson.completedAt) : Number.NaN);
+  return lessons
+    .map((lesson, index) => ({ lesson, index, at: time(lesson) }))
+    .sort((left, right) => {
+      const leftKnown = Number.isFinite(left.at);
+      const rightKnown = Number.isFinite(right.at);
+      if (leftKnown !== rightKnown) return leftKnown ? -1 : 1;
+      if (leftKnown && left.at !== right.at) return left.at - right.at;
+      return left.index - right.index;
+    })
+    .map(({ lesson }) => lesson);
+}
+
+// ── Retry rules (unit-tested) ────────────────────────────────────────────────
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+// Server errors (5xx) are retried at every sync at first, then less and less
+// often: 30 min after the third, doubling up to once a day.
+const FAILURES_BEFORE_BACKOFF = 3;
+const BACKOFF_START_MS = HOUR_MS / 2;
+const BACKOFF_MAX_MS = DAY_MS;
+// An answer is given up only after the server failed it about ten times AND
+// for at least two weeks. Time without a connection never counts.
+const GIVE_UP_AFTER_FAILURES = 10;
+const GIVE_UP_AFTER_MS = 14 * DAY_MS;
+// While the server refuses the lesson (no access), try once a day, for a month.
+const PARKED_RETRY_MS = DAY_MS;
+const PARKED_EXPIRY_MS = 30 * DAY_MS;
+
+function parsedTime(iso: string | undefined): number {
+  return iso ? Date.parse(iso) : Number.NaN;
+}
+
+/** Whether a queued item may be sent now (not waiting out a back-off or a refusal). */
+export function isQueueItemDue(item: Pick<ProgressQueueItem, "retry">, now: Date = new Date()): boolean {
+  const next = parsedTime(item.retry?.nextTryAt);
+  return !Number.isFinite(next) || next <= now.getTime();
+}
+
+/** Waiting because the server refuses the lesson. */
+export function isParked(item: Pick<ProgressQueueItem, "retry">): boolean {
+  return typeof item.retry?.rejectedAt === "string";
+}
+
+/** Retry state after the server answered with an error (5xx). */
+export function afterServerFailure(retry: QueueItemRetry | undefined, status: number, now: Date = new Date()): QueueItemRetry {
+  const serverFailures = (retry?.serverFailures ?? 0) + 1;
+  const next: QueueItemRetry = {
+    serverFailures,
+    lastStatus: status,
+    firstFailedAt: retry?.firstFailedAt ?? now.toISOString(),
+  };
+  if (serverFailures >= FAILURES_BEFORE_BACKOFF) {
+    const waitMs = Math.min(BACKOFF_MAX_MS, BACKOFF_START_MS * 2 ** (serverFailures - FAILURES_BEFORE_BACKOFF));
+    next.nextTryAt = new Date(now.getTime() + waitMs).toISOString();
+  }
+  return next;
+}
+
+/** True once an item has failed on the server often enough, for long enough, that it never will succeed. */
+export function shouldGiveUp(retry: QueueItemRetry | undefined, now: Date = new Date()): boolean {
+  if ((retry?.serverFailures ?? 0) < GIVE_UP_AFTER_FAILURES) return false;
+  const first = parsedTime(retry?.firstFailedAt);
+  return Number.isFinite(first) && now.getTime() - first >= GIVE_UP_AFTER_MS;
+}
+
+/** Retry state while the server refuses access to the lesson: wait a day; the first refusal is kept. */
+export function afterAccessRefused(retry: QueueItemRetry | undefined, now: Date = new Date()): QueueItemRetry {
+  return {
+    ...retry,
+    rejectedAt: retry?.rejectedAt ?? now.toISOString(),
+    nextTryAt: new Date(now.getTime() + PARKED_RETRY_MS).toISOString(),
+  };
+}
+
+/** Parked for a month: access isn't coming back. */
+export function isParkedTooLong(retry: QueueItemRetry | undefined, now: Date = new Date()): boolean {
+  const at = parsedTime(retry?.rejectedAt);
+  return Number.isFinite(at) && now.getTime() - at >= PARKED_EXPIRY_MS;
+}
+
+/**
+ * What a failed lesson_progress write means: 42501 (row-level security) is
+ * the server refusing this account the lesson, 23503 (foreign key) a lesson
+ * that was deleted; anything else may be temporary.
+ */
+export function classifyProgressError(error: unknown): "parked" | "gone" | "retry" {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code === "42501") return "parked";
+  if (code === "23503") return "gone";
+  return "retry";
+}
+
+/**
+ * Per slide, the one queued answer to send (the one the server should end up
+ * with) and the rest, which it supersedes. The queue keeps one per slide, but
+ * items queued by older builds may hold several.
+ */
+export function pickAnswersToSend(items: OfflineQueueItem[]): { send: OfflineQueueItem[]; superseded: OfflineQueueItem[] } {
+  const bySlide = new Map<unknown, OfflineQueueItem[]>();
+  for (const item of items) {
+    const list = bySlide.get(item.data.slideId) ?? [];
+    list.push(item);
+    bySlide.set(item.data.slideId, list);
+  }
+  const version = (item: OfflineQueueItem) => ({
+    real: item.data.answer !== null && item.data.answer !== undefined,
+    time: queuedAnswerTime(item),
+  });
+  const send: OfflineQueueItem[] = [];
+  const superseded: OfflineQueueItem[] = [];
+  for (const list of bySlide.values()) {
+    const winner = list.reduce((best, item) => (answerSupersedes(version(item), version(best)) ? item : best));
+    send.push(winner);
+    superseded.push(...list.filter((item) => item !== winner));
+  }
+  send.sort((left, right) => (queuedAnswerTime(left) || 0) - (queuedAnswerTime(right) || 0));
+  return { send, superseded };
+}
+
 // ── Queueing ─────────────────────────────────────────────────────────────────
 
 export interface QueueLessonProgressInput {
@@ -286,10 +420,14 @@ export async function queueLessonProgress(input: QueueLessonProgressInput): Prom
     ...next,
     updatedAt: now,
   };
+  const completesNow = next.completed && !gated && previous?.completed !== true;
   await saveLocalProgressAndQueue(local, {
     last_position_seconds: next.last_position_seconds,
     total_watch_time_seconds: next.total_watch_time_seconds,
     completed: next.completed && !gated,
+    // When it was finished, kept through later saves (the item's timestamp
+    // moves on with every save; streaks count the day it was finished).
+    ...(completesNow ? { completed_at: now } : {}),
   });
   return next;
 }
@@ -355,12 +493,18 @@ export async function getEffectiveLessonProgress(ownerId: string, lessonId: stri
   return mergeLocalProgress(local, snapshotOf(record, ownerId), { positionSec: 0, watchSec: 0, completedCandidate: false }, true);
 }
 
-/** Items waiting to sync (for `ownerId` only, when given). 0 when storage can't be read. */
+/**
+ * Items waiting to sync (for `ownerId` only, when given). Items parked
+ * because the server refuses the lesson are left out: they can't be sent
+ * until a teacher restores access, so they shouldn't hold up a "waiting"
+ * notice or a logout. 0 when storage can't be read.
+ */
 export async function countUnsyncedItems(ownerId?: string): Promise<number> {
   try {
-    if (!ownerId) return await countQueuedUpdates();
     const items = await getQueuedUpdates();
-    return items.filter((item) => normalizeQueueItem(item)?.ownerId === ownerId).length;
+    return items.filter(
+      (item) => !isParked(item) && (!ownerId || normalizeQueueItem(item)?.ownerId === ownerId)
+    ).length;
   } catch {
     return 0;
   }
@@ -411,7 +555,11 @@ export interface SyncResult {
   failed: number;
   /** Items still queued afterwards. */
   remaining: number;
-  /** Items removed without sending: another account's, unreadable, or rejected for good by the server. */
+  /**
+   * Items removed without being saved by the server: another account's,
+   * unreadable, replaced by a newer answer to the same slide, rejected for
+   * good, or given up on (see the rules at the top).
+   */
   dropped: number;
   /** Why nothing was attempted, when that happened. */
   skipped?: "offline" | "signed_out" | "busy";
@@ -464,14 +612,10 @@ async function syncLessonProgress(
   if (writeError) throw writeError;
 }
 
+/** The server's grade, onto the phone's copy only if that is still the answer that was sent. */
 async function updateLocalGrade(item: OfflineQueueItem, slideId: string, isCorrect: boolean | null) {
   if (isCorrect === null) return;
-  const local = await getLocalSlideResponses(item.ownerId, item.lessonId).catch(() => null);
-  const entry = local?.bySlide[slideId];
-  if (!entry || entry.isCorrect === isCorrect) return;
-  await putLocalSlideResponses(item.ownerId, item.lessonId, { [slideId]: { ...entry, isCorrect } }).catch(
-    () => undefined
-  );
+  await applyServerGrade(item.ownerId, item.lessonId, slideId, item.data, isCorrect).catch(() => undefined);
 }
 
 async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> {
@@ -502,6 +646,7 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
   let synced = 0;
   let failed = 0;
   let networkDown = false;
+  const now = new Date();
 
   const byLesson = new Map<string, OfflineQueueItem[]>();
   for (const item of mine) {
@@ -509,54 +654,117 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
     list.push(item);
     byLesson.set(item.lessonId, list);
   }
+  const lessons = orderLessonsForSync(
+    [...byLesson].map(([lessonId, items]) => ({ lessonId, items, completedAt: summarizeProgressItems(items).completedAt }))
+  );
 
-  for (const [lessonId, items] of byLesson) {
-    const progressItems = items.filter((item) => item.kind === "progress" || item.kind === "complete");
-    const responseItems = items
-      .filter((item) => item.kind === "slide_response")
-      .sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
+  const park = (items: OfflineQueueItem[]) =>
+    setQueueItemsRetry(stored(items).map((item) => ({ item, retry: afterAccessRefused(item.retry, now) }))).catch(
+      () => undefined
+    );
 
+  for (const { lessonId, items: lessonItems } of lessons) {
     if (networkDown) {
-      failed += items.length;
+      failed += lessonItems.length;
       continue;
     }
 
+    // Refused for a month: the family won't get this lesson back.
+    const expired = lessonItems.filter((item) => isParkedTooLong(item.retry, now));
+    if (expired.length > 0) {
+      await removeQueueItemsIfUnchanged(stored(expired)).catch(() => undefined);
+      dropped += expired.length;
+    }
+    const items = lessonItems.filter((item) => !expired.includes(item));
+    const progressItems = items.filter((item) => item.kind === "progress" || item.kind === "complete");
+    const responseItems = items.filter((item) => item.kind === "slide_response");
+
+    // A lesson's progress and answers wait (or go) together: while the server
+    // refuses this account the lesson, its answers would be refused too.
+    let lessonParked = false;
     if (progressItems.length > 0) {
-      try {
-        await syncLessonProgress(supabase, userId, lessonId, progressItems);
-        await removeQueueItemsIfUnchanged(stored(progressItems));
-        synced += progressItems.length;
-      } catch {
-        failed += progressItems.length;
+      if (!progressItems.some((item) => isQueueItemDue(item, now))) {
+        lessonParked = true;
+      } else {
+        try {
+          await syncLessonProgress(supabase, userId, lessonId, progressItems);
+          await removeQueueItemsIfUnchanged(stored(progressItems));
+          synced += progressItems.length;
+        } catch (error) {
+          const outcome = classifyProgressError(error);
+          if (outcome === "gone") {
+            await removeQueueItemsIfUnchanged(stored(progressItems)).catch(() => undefined);
+            dropped += progressItems.length;
+          } else {
+            if (outcome === "parked") {
+              await park(progressItems);
+              lessonParked = true;
+            }
+            failed += progressItems.length;
+          }
+        }
       }
     }
 
-    for (const [index, item] of responseItems.entries()) {
+    if (lessonParked) {
+      await park(responseItems.filter((item) => isQueueItemDue(item, now)));
+      failed += responseItems.length;
+      continue;
+    }
+
+    const { send, superseded } = pickAnswersToSend(responseItems);
+    if (superseded.length > 0) {
+      // Older answers to a slide with a newer one queued: the newer one replaces them on the server anyway.
+      await removeQueueItemsIfUnchanged(stored(superseded)).catch(() => undefined);
+      dropped += superseded.length;
+    }
+
+    for (const [index, item] of send.entries()) {
+      if (!isQueueItemDue(item, now)) continue; // waiting out a back-off or a refusal
       const slideId = typeof item.data.slideId === "string" ? item.data.slideId : null;
       if (!slideId) {
         await removeQueueItemsIfUnchanged(stored([item])).catch(() => undefined);
         dropped += 1;
         continue;
       }
+      const answeredAt = queuedAnswerTime(item);
       const result = await postSlideResponse(lessonId, slideId, item.data.answer, {
         timeSpentSeconds: typeof item.data.timeSpentSeconds === "number" ? item.data.timeSpentSeconds : undefined,
+        answeredAt: Number.isFinite(answeredAt) ? new Date(answeredAt).toISOString() : undefined,
+        answerId: typeof item.data.answerId === "string" ? item.data.answerId : undefined,
       });
       if (result.ok) {
         await removeQueueItemsIfUnchanged(stored([item])).catch(() => undefined);
-        await updateLocalGrade(item, slideId, result.isCorrect);
+        // `stale`: the server already had a newer answer; the phone's grade stays.
+        if (!result.stale) await updateLocalGrade(item, slideId, result.isCorrect);
         synced += 1;
-      } else if (!result.retryable) {
-        // The slide was removed or the lesson unpublished: it can never succeed.
+      } else if (result.outcome === "gone") {
+        // The slide was removed, the lesson deleted, or the answer refused for good.
         await removeQueueItemsIfUnchanged(stored([item])).catch(() => undefined);
         dropped += 1;
-      } else {
+      } else if (result.outcome === "parked") {
+        await park([item]);
         failed += 1;
-        if (result.status === null) {
-          // No connection after all: don't wait out a timeout per item.
-          networkDown = true;
-          failed += responseItems.length - index - 1;
-          break;
+      } else if (result.status === null) {
+        // No connection after all: don't wait out a timeout per item.
+        networkDown = true;
+        failed += send.length - index;
+        break;
+      } else if (result.status >= 500) {
+        // The server answered with an error: count it, back off, and give up
+        // only after many failures over weeks (never for time offline).
+        const [original] = stored([item]);
+        const retry = afterServerFailure(item.retry, result.status, now);
+        if (shouldGiveUp(retry, now)) {
+          await removeQueueItemsIfUnchanged([original]).catch(() => undefined);
+          dropped += 1;
+        } else {
+          await setQueueItemsRetry([{ item: original, retry }]).catch(() => undefined);
+          failed += 1;
         }
+      } else {
+        // Signed out, timed out or rate limited: try again next time, uncounted.
+        failed += 1;
       }
     }
   }
