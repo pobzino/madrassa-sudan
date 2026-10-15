@@ -325,8 +325,15 @@ try {
   await goOffline();
   await page.evaluate(() => {
     localStorage.setItem('amal-school-language', 'ar');
-    document.cookie = 'sb-e2etest-auth-token.0=base64-abc; path=/';
-    document.cookie = 'sb-e2etest-auth-token.1=def; path=/';
+    // A well-formed (expired) session split over two chunks, as @supabase/ssr
+    // stores it: "base64-" + base64url(JSON). A garbled value would make the
+    // auth client throw while decoding it, which real cookies never do.
+    const session = btoa(JSON.stringify({ access_token: 'e2e', refresh_token: 'e2e', expires_at: 1, token_type: 'bearer', user: { id: 'e2e-owner-1' } }))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const value = 'base64-' + session;
+    const half = Math.ceil(value.length / 2);
+    document.cookie = `sb-e2etest-auth-token.0=${value.slice(0, half)}; path=/`;
+    document.cookie = `sb-e2etest-auth-token.1=${value.slice(half)}; path=/`;
   });
   await context.addInitScript(() => localStorage.setItem('amal-school-language', 'ar'));
   await page.goto(`${baseURL}/offline`, { waitUntil: 'load' });
