@@ -39,7 +39,13 @@ describe("resolveAssetUrl", () => {
   it("keeps absolute http(s) URLs and resolves site-relative ones", () => {
     expect(resolveAssetUrl("https://cdn.example/a.png", BASE)).toBe("https://cdn.example/a.png");
     expect(resolveAssetUrl("/images/b.png", BASE)).toBe("https://amal.example/images/b.png");
-    expect(resolveAssetUrl("  http://cdn.example/c.png  ", BASE)).toBe("http://cdn.example/c.png");
+    expect(resolveAssetUrl("  http://cdn.example/c.png  ", "http://localhost:3000/")).toBe("http://cdn.example/c.png");
+  });
+
+  it("upgrades http: images to https: on an https page, as browsers do for <img>", () => {
+    expect(resolveAssetUrl("  http://cdn.example/c.png  ", BASE)).toBe("https://cdn.example/c.png");
+    expect(resolveAssetUrl("http://cdn.example:8080/c.png", BASE)).toBe("https://cdn.example:8080/c.png");
+    expect(resolveAssetUrl("http://cdn.example/c.png")).toBe("http://cdn.example/c.png");
   });
 
   it("skips owl illustrations, data and blob URLs, and empty values", () => {

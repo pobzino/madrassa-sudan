@@ -29,6 +29,11 @@ export interface LessonNavigation {
   source: "learning_path" | "subject_order";
 }
 
+/** Applies an optional abort signal to a PostgREST query. */
+function withSignal<Q extends { abortSignal(signal: AbortSignal): Q }>(query: Q, signal?: AbortSignal): Q {
+  return signal ? query.abortSignal(signal) : query;
+}
+
 export function buildLearningPathLessonOrder(
   weeks: PathWeekRow[],
   steps: PathStepRow[],
@@ -68,29 +73,39 @@ async function loadPathOrderContainingLesson(
   supabase: SupabaseClient<Database>,
   subjectId: string,
   currentLessonId: string,
+  signal?: AbortSignal,
 ): Promise<string[] | null> {
-  const { data: paths, error: pathsError } = await supabase
-    .from("learning_paths")
-    .select("id")
-    .eq("subject_id", subjectId)
-    .eq("is_published", true)
-    .order("created_at", { ascending: true });
+  const { data: paths, error: pathsError } = await withSignal(
+    supabase
+      .from("learning_paths")
+      .select("id")
+      .eq("subject_id", subjectId)
+      .eq("is_published", true)
+      .order("created_at", { ascending: true }),
+    signal,
+  );
 
   if (pathsError || !paths?.length) return null;
 
   const pathRows = paths as PathRow[];
-  const { data: weeks, error: weeksError } = await supabase
-    .from("learning_path_weeks")
-    .select("id, path_id, week_number")
-    .in("path_id", pathRows.map((path) => path.id));
+  const { data: weeks, error: weeksError } = await withSignal(
+    supabase
+      .from("learning_path_weeks")
+      .select("id, path_id, week_number")
+      .in("path_id", pathRows.map((path) => path.id)),
+    signal,
+  );
 
   if (weeksError || !weeks?.length) return null;
 
   const weekRows = weeks as PathWeekRow[];
-  const { data: steps, error: stepsError } = await supabase
-    .from("learning_path_steps")
-    .select("week_id, lesson_id, sequence")
-    .in("week_id", weekRows.map((week) => week.id));
+  const { data: steps, error: stepsError } = await withSignal(
+    supabase
+      .from("learning_path_steps")
+      .select("week_id, lesson_id, sequence")
+      .in("week_id", weekRows.map((week) => week.id)),
+    signal,
+  );
 
   if (stepsError || !steps?.length) return null;
 
@@ -101,11 +116,10 @@ async function loadPathOrderContainingLesson(
     const pathSteps = stepRows.filter((step) => pathWeekIds.has(step.week_id));
     const order = buildLearningPathLessonOrder(pathWeeks, pathSteps);
     if (order.includes(currentLessonId)) {
-      const { data: publishedLessons, error: publishedLessonsError } = await supabase
-        .from("lessons")
-        .select("id")
-        .in("id", order)
-        .eq("is_published", true);
+      const { data: publishedLessons, error: publishedLessonsError } = await withSignal(
+        supabase.from("lessons").select("id").in("id", order).eq("is_published", true),
+        signal,
+      );
       if (publishedLessonsError) return order;
       const publishedIds = new Set((publishedLessons ?? []).map((lesson) => lesson.id));
       const publishedOrder = order.filter((lessonId) => publishedIds.has(lessonId));
@@ -120,15 +134,15 @@ async function loadNavigationLessons(
   supabase: SupabaseClient<Database>,
   previousId: string | null,
   nextId: string | null,
+  signal?: AbortSignal,
 ): Promise<{ previous: NavigationLesson | null; next: NavigationLesson | null }> {
   const ids = [previousId, nextId].filter((id): id is string => Boolean(id));
   if (ids.length === 0) return { previous: null, next: null };
 
-  const { data } = await supabase
-    .from("lessons")
-    .select("id, title_ar, title_en")
-    .in("id", ids)
-    .eq("is_published", true);
+  const { data } = await withSignal(
+    supabase.from("lessons").select("id, title_ar, title_en").in("id", ids).eq("is_published", true),
+    signal,
+  );
   const lessonById = new Map((data ?? []).map((lesson) => [lesson.id, lesson]));
 
   return {
@@ -141,24 +155,28 @@ export async function loadLessonNavigation(
   supabase: SupabaseClient<Database>,
   subjectId: string,
   currentLessonId: string,
+  signal?: AbortSignal,
 ): Promise<LessonNavigation> {
-  const pathOrder = await loadPathOrderContainingLesson(supabase, subjectId, currentLessonId);
+  const pathOrder = await loadPathOrderContainingLesson(supabase, subjectId, currentLessonId, signal);
   if (pathOrder) {
     const adjacent = getAdjacentLessonIds(pathOrder, currentLessonId);
     return {
-      ...(await loadNavigationLessons(supabase, adjacent.previousId, adjacent.nextId)),
+      ...(await loadNavigationLessons(supabase, adjacent.previousId, adjacent.nextId, signal)),
       source: "learning_path",
     };
   }
 
-  const { data: subjectLessons } = await supabase
-    .from("lessons")
-    .select("id, title_ar, title_en, display_order, created_at")
-    .eq("subject_id", subjectId)
-    .eq("is_published", true)
-    .order("display_order", { ascending: true })
-    .order("created_at", { ascending: true })
-    .order("id", { ascending: true });
+  const { data: subjectLessons } = await withSignal(
+    supabase
+      .from("lessons")
+      .select("id, title_ar, title_en, display_order, created_at")
+      .eq("subject_id", subjectId)
+      .eq("is_published", true)
+      .order("display_order", { ascending: true })
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true }),
+    signal,
+  );
 
   const lessons = subjectLessons ?? [];
   const adjacent = getAdjacentLessonIds(lessons.map((lesson) => lesson.id), currentLessonId);

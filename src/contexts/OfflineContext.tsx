@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { useOnlineStatus } from "@/components/offline/useOnlineStatus";
+import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import { createClient } from "@/lib/supabase/client";
 import {
   getAllDownloadStates,
@@ -31,6 +32,7 @@ import {
   getStorageEstimate,
   isDownloadActive,
   isDownloadCancelled,
+  pruneOrphanedStorage,
   reconcileInterruptedDownloads,
 } from "@/lib/offline/download-manager";
 
@@ -83,6 +85,8 @@ export { useOnlineStatus };
 // Give the page the connection first; the update check can wait.
 const UPDATE_CHECK_DELAY_MS = 5_000;
 const UPDATE_CHECK_MIN_INTERVAL_MS = 60_000;
+// Cleaning up what interrupted downloads left can wait for the page to settle.
+const PRUNE_DELAY_MS = 10_000;
 
 /** What this phone holds. Each read is separate: one broken store must not hide the others. */
 async function readOfflineState({ reconcile = false }: { reconcile?: boolean } = {}) {
@@ -116,6 +120,11 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   const [storageUsed, setStorageUsed] = useState(0);
   const [storageQuota, setStorageQuota] = useState(0);
   const updateCheck = useRef<{ promise: Promise<string[]> | null; at: number }>({ promise: null, at: 0 });
+  // Saves the family started by hand and is waiting on. The screen stays on
+  // meanwhile: a locked phone suspends the page and the save starts over.
+  // Wi-Fi background saves don't hold it (nobody may be watching).
+  const [manualSaves, setManualSaves] = useState(0);
+  useScreenWakeLock(manualSaves > 0);
 
   const refreshEstimate = useCallback(async () => {
     const estimate = await getStorageEstimate();
@@ -170,11 +179,16 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   // left "downloading" by a closed page becomes "interrupted" (with Retry).
   useEffect(() => {
     let cancelled = false;
+    let pruneTimer: number | undefined;
     void readOfflineState({ reconcile: true }).then((state) => {
-      if (!cancelled) applyState(state);
+      if (cancelled) return;
+      applyState(state);
+      // Images and audio a download stored before its page died.
+      pruneTimer = window.setTimeout(() => void pruneOrphanedStorage(), PRUNE_DELAY_MS);
     });
     return () => {
       cancelled = true;
+      window.clearTimeout(pruneTimer);
     };
   }, [applyState]);
 
@@ -198,6 +212,8 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
 
   const downloadLesson = useCallback(
     async (lessonId: string, options: { origin?: OfflineOrigin } = {}): Promise<DownloadResult> => {
+      const manual = options.origin !== "auto";
+      if (manual) setManualSaves((count) => count + 1);
       try {
         const lesson = await doDownload(
           lessonId,
@@ -218,6 +234,12 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
           return { status: "cancelled" };
         }
         const code = error instanceof DownloadError ? error.code : "unknown";
+        if (code === "no_audio") {
+          // Nothing to save, so nothing to retry: the caller's message says
+          // why, and no Retry row is left behind (the manager stored none).
+          if (!isDownloadActive(lessonId)) setDownloads((prev) => withoutKey(prev, lessonId));
+          return { status: "failed", code };
+        }
         // The manager stored the error state; mirror it here in case its
         // last progress report was throttled away.
         setDownloads((prev) => {
@@ -233,10 +255,12 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
             error: downloadErrorMessage(code, "en"),
           });
         });
-        // A failed re-download can remove the old copy (see the manager).
+        // A failed re-download keeps the old copy; re-read so the badges match storage.
         const lessons = await getOwnedOfflineLessons().catch(() => null);
         if (lessons) applyLessons(lessons);
         return { status: "failed", code };
+      } finally {
+        if (manual) setManualSaves((count) => count - 1);
       }
     },
     [applyLessons, refreshEstimate]

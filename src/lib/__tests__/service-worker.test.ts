@@ -776,6 +776,14 @@ describe("downloaded-lesson check", () => {
     expect(await internals.isLessonDownloaded("other")).toBe(false);
   });
 
+  it("finds audio saved under a per-save key when the database can't be read", async () => {
+    const broken = { open: vi.fn(() => { throw new Error("SecurityError"); }) };
+    const caches = new FakeCacheStorage();
+    await caches.seed("sim-audio-downloads", `/offline-audio/${LESSON_ID}?v=abc123`, file("a", "audio/mp4"));
+    const { internals } = loadWorker({ version: "v1", caches, indexedDB: broken });
+    expect(await internals.isLessonDownloaded(LESSON_ID)).toBe(true);
+  });
+
   it("redirects an owned lesson to the player using the database", async () => {
     const owned = fakeIndexedDB({ lessons: { [LESSON_ID]: { id: LESSON_ID, ownerId: "user-a" } }, meta: { owner } });
     const caches = new FakeCacheStorage();

@@ -93,6 +93,14 @@ export interface OfflineLesson {
   audioMayNotPlay?: boolean;
   assetUrls?: string[];
   assetBytes?: number;
+  /** Images that couldn't be saved because they are gone online too (a dead link); a re-save tries them again. */
+  missingAssetUrls?: string[];
+  /**
+   * Where the audio is in AUDIO_CACHE: a key unique to the save that wrote
+   * it, so an update never overwrites the copy that plays. Records saved
+   * before it use the bare `/offline-audio/<id>` (see audioKeyFor).
+   */
+  audioKey?: string;
   /** null = no practice gate. Undefined (pre-schema-2 record) = unknown, treated as gated. */
   practice?: OfflinePracticeGate | null;
   /** Server progress when it was saved. */
@@ -275,6 +283,27 @@ export function addLessonToAssetRef(
 export function removeLessonFromAssetRef(ref: AssetRef, lessonId: string): AssetRef | null {
   const lessons = ref.lessons.filter((id) => id !== lessonId);
   return lessons.length > 0 ? { ...ref, lessons } : null;
+}
+
+/** The cache key of a saved lesson's audio. */
+export function audioKeyFor(lesson: Pick<OfflineLesson, "id" | "audioKey">): string {
+  return lesson.audioKey || offlineAudioKey(lesson.id);
+}
+
+/** A fresh audio key for one save of a lesson: `/offline-audio/<id>?v=<nonce>`. */
+export function newOfflineAudioKey(lessonId: string, now: number = Date.now()): string {
+  const nonce = `${now.toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  return `${offlineAudioKey(lessonId)}?v=${nonce}`;
+}
+
+/** The audio key a commit of `next` leaves unused: the stored record's, when it differs. */
+export function replacedAudioKey(
+  stored: Pick<OfflineLesson, "id" | "audioKey"> | null | undefined,
+  next: Pick<OfflineLesson, "id" | "audioKey">
+): string | null {
+  if (!stored) return null;
+  const old = audioKeyFor(stored);
+  return old === audioKeyFor(next) ? null : old;
 }
 
 export function assetUrlFromMetaKey(key: string): string | null {
@@ -604,7 +633,9 @@ export async function updateOfflineLesson(
  * one transaction, so a crash can't leave a lesson whose images look unused
  * (and get pruned) or references for a lesson that was never saved.
  * Returns the asset URLs no downloaded lesson uses any more (from a
- * re-download whose images changed) for the caller to delete from the cache.
+ * re-download whose images changed) for the caller to delete from the cache,
+ * and the audio key of the record it replaced when that differs (read in the
+ * same transaction, so an overlapping save's audio is never the one deleted).
  */
 export async function commitOfflineLesson(
   lesson: OfflineLesson,
@@ -619,15 +650,22 @@ export async function commitOfflineLesson(
     state: DownloadState;
     epoch?: number;
   }
-): Promise<{ unreferencedUrls: string[] }> {
+): Promise<{ unreferencedUrls: string[]; replacedAudioKey: string | null }> {
   const unreferencedUrls: string[] = [];
   const current = new Set(lesson.assetUrls ?? []);
+  let replacedKey: string | null = null;
 
   await writeTransaction(
     [OFFLINE_STORES.lessons, OFFLINE_STORES.meta, OFFLINE_STORES.downloads],
     (tx) => {
       const meta = tx.objectStore(OFFLINE_STORES.meta);
-      tx.objectStore(OFFLINE_STORES.lessons).put(lesson);
+      const lessons = tx.objectStore(OFFLINE_STORES.lessons);
+      // Requests run in order: this reads the record before the put replaces it.
+      const stored = lessons.get(lesson.id);
+      stored.onsuccess = () => {
+        replacedKey = replacedAudioKey(stored.result as OfflineLesson | undefined, lesson);
+      };
+      lessons.put(lesson);
       tx.objectStore(OFFLINE_STORES.downloads).put(state);
 
       for (const url of current) {
@@ -656,7 +694,7 @@ export async function commitOfflineLesson(
     epoch
   );
 
-  return { unreferencedUrls };
+  return { unreferencedUrls, replacedAudioKey: replacedKey };
 }
 
 /**
@@ -944,9 +982,26 @@ function cacheStorageAvailable() {
   return typeof caches !== "undefined";
 }
 
+/**
+ * The saved audio of a lesson: under `key`, else under the key its record
+ * names. When the database can't be read, any copy of it will do.
+ */
+async function matchSimAudio(cache: Cache, lessonId: string, key?: string): Promise<Response | undefined> {
+  if (key) return cache.match(key);
+  let record: OfflineLesson | null;
+  try {
+    record = await getOfflineLesson(lessonId);
+  } catch {
+    return cache.match(offlineAudioKey(lessonId), { ignoreSearch: true });
+  }
+  return cache.match(audioKeyFor(record ?? { id: lessonId }));
+}
+
+/** Stores a lesson's audio under `key` (a fresh newOfflineAudioKey for downloads). */
 export async function cacheSimAudio(
   lessonId: string,
-  audioBlob: Blob
+  audioBlob: Blob,
+  key: string = offlineAudioKey(lessonId)
 ): Promise<void> {
   const cache = await caches.open(SIM_AUDIO_CACHE);
   const response = new Response(audioBlob, {
@@ -955,16 +1010,17 @@ export async function cacheSimAudio(
       "Content-Length": String(audioBlob.size),
     },
   });
-  await cache.put(offlineAudioKey(lessonId), response);
+  await cache.put(key, response);
 }
 
 export async function getCachedSimAudio(
-  lessonId: string
+  lessonId: string,
+  key?: string
 ): Promise<Blob | null> {
   try {
     if (!cacheStorageAvailable()) return null;
     const cache = await caches.open(SIM_AUDIO_CACHE);
-    const response = await cache.match(offlineAudioKey(lessonId));
+    const response = await matchSimAudio(cache, lessonId, key);
     if (!response) return null;
     const blob = await response.blob();
     if (blob.size === 0) return null;
@@ -978,11 +1034,11 @@ export async function getCachedSimAudio(
 }
 
 /** Size of the cached audio in bytes (0 when missing), without reading it into memory where the header is present. */
-export async function getCachedSimAudioSize(lessonId: string): Promise<number> {
+export async function getCachedSimAudioSize(lessonId: string, key?: string): Promise<number> {
   try {
     if (!cacheStorageAvailable()) return 0;
     const cache = await caches.open(SIM_AUDIO_CACHE);
-    const response = await cache.match(offlineAudioKey(lessonId));
+    const response = await matchSimAudio(cache, lessonId, key);
     if (!response) return 0;
     const header = Number(response.headers.get("content-length"));
     if (Number.isFinite(header) && header > 0) return header;
@@ -992,21 +1048,27 @@ export async function getCachedSimAudioSize(lessonId: string): Promise<number> {
   }
 }
 
-export async function hasCachedSimAudio(lessonId: string): Promise<boolean> {
+export async function hasCachedSimAudio(lessonId: string, key?: string): Promise<boolean> {
   try {
     if (!cacheStorageAvailable()) return false;
     const cache = await caches.open(SIM_AUDIO_CACHE);
-    return Boolean(await cache.match(offlineAudioKey(lessonId)));
+    return Boolean(await matchSimAudio(cache, lessonId, key));
   } catch {
     return false;
   }
 }
 
-export async function deleteCachedSimAudio(lessonId: string): Promise<void> {
+/** Deletes the audio under `key`, or without one every copy of the lesson's audio. */
+export async function deleteCachedSimAudio(lessonId: string, key?: string): Promise<void> {
   try {
     if (!cacheStorageAvailable()) return;
     const cache = await caches.open(SIM_AUDIO_CACHE);
-    await cache.delete(offlineAudioKey(lessonId));
+    if (key) {
+      await cache.delete(key);
+      return;
+    }
+    const requests = await cache.keys(offlineAudioKey(lessonId), { ignoreSearch: true });
+    await Promise.all(requests.map((request) => cache.delete(request)));
   } catch {
     // Ignore cache errors
   }

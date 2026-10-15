@@ -446,7 +446,13 @@ export default function LearningPathTree({
                         </Link>
                       )}
                     {/* Save for offline (the MP4 export lives on the lesson page). */}
-                    {node.kind === "lesson" && <DownloadButton lessonId={node.step.lessonId} variant="compact" />}
+                    {node.kind === "lesson" && (
+                      <DownloadButton
+                        lessonId={node.step.lessonId}
+                        variant="compact"
+                        canSave={node.step.hasRecording === true}
+                      />
+                    )}
                   </EdgeSafeRow>
                 )}
               </div>

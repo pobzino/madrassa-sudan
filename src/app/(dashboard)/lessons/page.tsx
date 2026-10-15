@@ -71,6 +71,8 @@ type LessonWithProgress = Lesson & {
   progress?: LessonProgress | null;
   subject?: Subject | null;
   first_slide?: Slide | null;
+  /** The lesson has narrated audio, so it can be saved for offline. */
+  has_recording?: boolean;
 };
 
 function isHttpImageUrl(url: string | null | undefined): url is string {
@@ -127,7 +129,7 @@ export default function LessonsPage() {
 
       const { data: lessonsData } = await supabase
         .from("lessons")
-        .select(`*, subject:subjects(*), progress:lesson_progress(*), lesson_slides(slides)`)
+        .select(`*, subject:subjects(*), progress:lesson_progress(*), lesson_slides(slides), lesson_sims(audio_path)`)
         .eq("is_published", true)
         .order("updated_at", { ascending: false });
 
@@ -138,6 +140,8 @@ export default function LessonsPage() {
           return {
             ...lesson,
             first_slide: slidesArr.length > 0 ? (slidesArr[0] as Slide) : null,
+            // One sim per lesson, so the embed is a row or null.
+            has_recording: Boolean(lesson.lesson_sims?.audio_path),
             progress: Array.isArray(lesson.progress)
               ? lesson.progress.find((p: LessonProgress) => p.student_id === user.id) || null
               : lesson.progress,
@@ -455,7 +459,7 @@ function LessonCard({
             iconOnly
             className="w-8 h-8 rounded-full bg-white/95 text-gray-600 hover:bg-white hover:text-[#007229] shadow-sm flex items-center justify-center transition-colors"
           />
-          <DownloadButton lessonId={lesson.id} size="sm" className="shadow-sm" />
+          <DownloadButton lessonId={lesson.id} size="sm" className="shadow-sm" canSave={lesson.has_recording === true} />
         </div>
 
         {/* Progress bar */}

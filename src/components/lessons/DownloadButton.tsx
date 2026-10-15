@@ -4,7 +4,12 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOffline } from "@/contexts/OfflineContext";
-import { AUDIO_FORMAT_WARNING, downloadErrorMessage } from "@/lib/offline/download-manager";
+import {
+  AUDIO_FORMAT_WARNING,
+  KEEP_OPEN_WHILE_SAVING,
+  MISSING_IMAGES_WARNING,
+  downloadErrorMessage,
+} from "@/lib/offline/download-manager";
 
 /**
  * "Save for offline": downloads a lesson so it plays later without internet.
@@ -53,6 +58,12 @@ interface DownloadButtonProps {
   className?: string;
   /** The page knows the saved copy is older than the server's recording. */
   updateAvailable?: boolean;
+  /**
+   * False when the lesson has no recording to save (or the page doesn't know
+   * yet): then only a saved copy or a save already running is shown, never
+   * a "Save" that can only fail.
+   */
+  canSave?: boolean;
 }
 
 const DownloadIcon = ({ className }: { className: string }) => (
@@ -100,6 +111,7 @@ export default function DownloadButton({
   size = "md",
   className = "",
   updateAvailable = false,
+  canSave = true,
 }: DownloadButtonProps) {
   const { language } = useLanguage();
   const t = COPY[language];
@@ -122,12 +134,17 @@ export default function DownloadButton({
       event.stopPropagation();
       if (isDownloading || !isOnline) return;
 
+      // A locked or closed app stops the save, and it starts over from zero.
+      toast(KEEP_OPEN_WHILE_SAVING[language], { duration: 8000 });
       const result = await downloadLesson(lessonId);
       if (result.status === "saved") setResaved(true);
       if (result.status === "failed") {
         toast.error(downloadErrorMessage(result.code, language));
       } else if (result.status === "saved" && result.lesson.audioMayNotPlay) {
         toast.warning(AUDIO_FORMAT_WARNING[language]);
+      }
+      if (result.status === "saved" && result.lesson.missingAssetUrls?.length) {
+        toast.warning(MISSING_IMAGES_WARNING[language]);
       }
     },
     [downloadLesson, isDownloading, isOnline, language, lessonId]
@@ -137,6 +154,8 @@ export default function DownloadButton({
   const showSaved = isDownloaded && !canUpdate && !isDownloading;
   // Until the phone's downloads were read, "Save" could flash on a saved lesson.
   if (!ready) return null;
+  // No recording: a tap could only fail. A saved copy or running save still shows.
+  if (!canSave && !isDownloaded && !download) return null;
   // Offline, nothing can be saved; keep showing what already is.
   if (!isOnline && !isDownloaded && !isDownloading) {
     return variant === "full" ? (
@@ -165,7 +184,11 @@ export default function DownloadButton({
         : hasError
           ? t.retryShort
           : t.saveShort;
-  const tooltip = errorMessage ? `${label} — ${errorMessage}` : label;
+  const tooltip = errorMessage
+    ? `${label} — ${errorMessage}`
+    : isDownloading
+      ? `${label} — ${KEEP_OPEN_WHILE_SAVING[language]}`
+      : label;
 
   if (variant === "icon") {
     const box = size === "sm" ? "w-8 h-8" : "w-10 h-10";
@@ -197,7 +220,7 @@ export default function DownloadButton({
         <span
           role="status"
           aria-label={label}
-          title={label}
+          title={tooltip}
           className={`relative flex-shrink-0 ${box} rounded-full flex items-center justify-center ${tone} ${className}`}
         >
           {content}
@@ -240,7 +263,7 @@ export default function DownloadButton({
       <span
         role="status"
         aria-label={label}
-        title={label}
+        title={tooltip}
         className={`relative inline-flex items-center overflow-hidden ${shape} ${tone} ${className}`}
       >
         {/* Fills from the start edge as the download progresses. */}
