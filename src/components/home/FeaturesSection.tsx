@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
-import { GamepadIcon, RobotIcon, TrophyIcon, VideoIcon } from "@/components/illustrations";
+import { GamepadIcon, PracticeIcon, RobotIcon, TrophyIcon, VideoIcon } from "@/components/illustrations";
 import { SectionScene } from "@/components/dashboard/DashboardScenes";
 import { LivingOwl, type OwlMood } from "@/components/brand/LivingOwl";
 
@@ -14,6 +14,7 @@ const FeatureIcon = ({ type, className }: { type: string; className?: string }) 
     case "robot": return <RobotIcon className={className} />;
     case "gamepad": return <GamepadIcon className={className} />;
     case "trophy": return <TrophyIcon className={className} />;
+    case "practice": return <PracticeIcon className={className} />;
     default: return null;
   }
 };

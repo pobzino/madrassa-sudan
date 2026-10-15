@@ -66,7 +66,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
         titleHighlight: "ممتعة",
         items: [
           { title: "دروس ممتعة", desc: "فيديوهات تفاعلية مع رسوم متحركة تجعل التعلم مغامرة", color: "from-[#007229] to-[#00913D]", iconType: "video" },
-          { title: "تدريب وتقييم", desc: "تدريب ممتع مع تقييم فوري يساعدك تعرف مستواك وتتحسّن", color: "from-[#D21034] to-[#E8334F]", iconType: "trophy" },
+          { title: "تدريب وتقييم", desc: "تدريب ممتع مع تقييم فوري يساعدك تعرف مستواك وتتحسّن", color: "from-[#D21034] to-[#E8334F]", iconType: "practice" },
           { title: "الألعاب التعليمية", desc: "اختبارات وتحديات ممتعة تجعلك تتعلم وأنت تلعب", color: "from-[#005C22] to-[#007229]", iconType: "gamepad" },
           { title: "متابعة التقدم", desc: "تابع الدروس والتدريبات التي أكملتها وواصل من مكانك", color: "from-amber-500 to-orange-600", iconType: "trophy" },
         ],
@@ -128,7 +128,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
         titleHighlight: "fun way",
         items: [
           { title: "Fun Lessons", desc: "Interactive videos with animations that make learning an adventure", color: "from-[#007229] to-[#00913D]", iconType: "video" },
-          { title: "Practice & Feedback", desc: "Fun practice with instant feedback so you know your level and improve", color: "from-[#D21034] to-[#E8334F]", iconType: "trophy" },
+          { title: "Practice & Feedback", desc: "Fun practice with instant feedback so you know your level and improve", color: "from-[#D21034] to-[#E8334F]", iconType: "practice" },
           { title: "Learning Games", desc: "Fun quizzes and challenges that let you learn while playing", color: "from-[#005C22] to-[#007229]", iconType: "gamepad" },
           { title: "Progress Tracking", desc: "See completed lessons and Practice, then continue where you left off", color: "from-amber-500 to-orange-600", iconType: "trophy" },
         ],

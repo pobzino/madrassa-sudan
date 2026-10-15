@@ -54,6 +54,26 @@ export const FloatingPencil = ({ className = "" }: { className?: string }) => (
   </svg>
 );
 
+// A quiz card with the right answer ticked: Practice with instant feedback.
+export const PracticeIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none">
+    {/* Quiz card */}
+    <rect x="9" y="7" width="38" height="50" rx="6" fill="#FEF2F2" stroke="#D21034" strokeWidth="2.5" />
+    {/* Question */}
+    <rect x="16" y="14" width="24" height="4" rx="2" fill="#FCA5A5" />
+    {/* Answer options, the right one in green */}
+    <rect x="15" y="24" width="26" height="8" rx="4" fill="#FFFFFF" stroke="#FCA5A5" strokeWidth="2" />
+    <rect x="15" y="37" width="26" height="8" rx="4" fill="#DCFCE7" stroke="#00913D" strokeWidth="2" />
+    {/* Instant feedback tick */}
+    <circle cx="47" cy="45" r="10" fill="#00913D" stroke="#FFFFFF" strokeWidth="2" />
+    <path d="M42 45l3.5 3.5L52 42" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    {/* Sparkles */}
+    <circle cx="54" cy="10" r="2" fill="#FBBF24" />
+    <circle cx="58" cy="18" r="1.3" fill="#FBBF24" />
+    <rect x="52" y="24" width="3" height="3" rx="0.5" fill="#8B5CF6" transform="rotate(-15 52 24)" />
+  </svg>
+);
+
 export const FloatingTarget = ({ className = "" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 64 64" fill="none">
     {/* Outer ring */}
