@@ -5,7 +5,7 @@
 -- and handle_new_user stores the number each parent and volunteer gives at
 -- signup in profiles.phone. Any account, including a parent account anyone can
 -- create and that is approved at once (20260922000000), could list every
--- family's and volunteer's number through /rest/v1/profiles.
+-- family's and volunteer's number through the REST API (profiles).
 --
 -- Names stay in profiles (the app shows them everywhere); the number moves to
 -- profile_contacts, which only its owner and approved admins can read. Every
