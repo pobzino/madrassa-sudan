@@ -59,6 +59,8 @@ export interface TreeStep {
   lessonWatched: boolean;
   /** How much of the recording has been watched, 0–100. */
   watchedPercent: number;
+  /** The lesson has narrated audio, so it can be saved for offline. */
+  hasRecording?: boolean;
 }
 
 export interface TreeWeek {
@@ -139,7 +141,7 @@ export async function loadSubjectLearningPath(
     lessonIds.length
       ? supabase
           .from("lessons")
-          .select("id, title_ar, title_en, thumbnail_url, video_duration_seconds, video_url_720p")
+          .select("id, title_ar, title_en, thumbnail_url, video_duration_seconds, video_url_720p, lesson_sims(audio_path)")
           .in("id", lessonIds)
       : Promise.resolve({ data: [] as never[] }),
     lessonIds.length
@@ -179,6 +181,9 @@ export async function loadSubjectLearningPath(
         thumbnail_url: string | null;
         video_duration_seconds: number | null;
         video_url_720p: string | null;
+        // One sim per lesson: PostgREST returns the row (or null), though
+        // this untyped client types it as a list.
+        lesson_sims?: { audio_path: string | null } | { audio_path: string | null }[] | null;
       },
     ])
   );
@@ -281,6 +286,7 @@ export async function loadSubjectLearningPath(
             lesson?.video_duration_seconds,
             stepResult.lessonWatched
           ),
+          hasRecording: [lesson?.lesson_sims].flat().some((sim) => Boolean(sim?.audio_path)),
         };
       }),
     };

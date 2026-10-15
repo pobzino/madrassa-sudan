@@ -10,6 +10,8 @@ import { getOwnedOfflineLessons } from "@/lib/offline/identity";
 import { offlinePlayerUrl } from "@/lib/offline/cache-names";
 import {
   AUDIO_FORMAT_WARNING,
+  KEEP_OPEN_WHILE_SAVING,
+  MISSING_IMAGES_WARNING,
   downloadErrorMessage,
   getPersistenceStatus,
   requestPersistentStorage,
@@ -220,6 +222,7 @@ function DownloadRow({
         </div>
       </div>
       {downloading && <ProgressBar percent={percent} />}
+      {downloading && <p className="mt-2 text-xs text-gray-500">{KEEP_OPEN_WHILE_SAVING[language]}</p>}
     </div>
   );
 }
@@ -300,6 +303,9 @@ export default function DownloadsPage() {
   const reportResult = (result: DownloadResult) => {
     if (result.status === "failed") toast.error(downloadErrorMessage(result.code, language));
     else if (result.status === "saved" && result.lesson.audioMayNotPlay) toast.warning(AUDIO_FORMAT_WARNING[language]);
+    if (result.status === "saved" && result.lesson.missingAssetUrls?.length) {
+      toast.warning(MISSING_IMAGES_WARNING[language]);
+    }
   };
 
   const handleSave = async (lessonId: string) => {
@@ -494,11 +500,15 @@ export default function DownloadsPage() {
                       </div>
                     </dl>
                     {saving && <ProgressBar percent={percent} />}
+                    {saving && <p className="mt-2 text-xs text-gray-500">{KEEP_OPEN_WHILE_SAVING[language]}</p>}
                     {failed && !saving && (
                       <p className="mt-3 text-xs font-medium text-red-600">{downloadErrorMessage(state?.errorCode, language)}</p>
                     )}
                     {lesson.audioMayNotPlay && !noAudio && (
                       <p className="mt-3 text-xs font-medium text-amber-700">{AUDIO_FORMAT_WARNING[language]}</p>
+                    )}
+                    {Boolean(lesson.missingAssetUrls?.length) && !noAudio && (
+                      <p className="mt-3 text-xs font-medium text-amber-700">{MISSING_IMAGES_WARNING[language]}</p>
                     )}
                   </div>
 

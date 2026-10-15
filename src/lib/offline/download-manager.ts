@@ -5,8 +5,9 @@
  * data, the sim (with `audio_url` nulled — signed URLs expire), the narration
  * audio, slide and activity images, the practice gate, a progress snapshot,
  * saved answers and the previous/next lessons. Nothing is marked downloaded
- * until all of it arrived; a failed re-download keeps the old copy where it
- * can. Downloads run one at a time to keep memory low on small phones.
+ * until all of it arrived; a failed re-download keeps the old copy (the new
+ * audio goes under its own key until the record commits). Downloads run one
+ * at a time to keep memory low on small phones.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -20,19 +21,23 @@ import {
   collectSimAssetUrls,
   deleteAssetsFromCache,
   deleteUnreferencedAssets,
+  pruneOrphanedAssets,
   type CachedAssets,
 } from "./assets";
+import { AUDIO_CACHE, offlineAudioKey } from "./cache-names";
 import {
   StorageClearedError,
+  audioKeyFor,
   cacheSimAudio,
   commitOfflineLesson,
   deleteCachedSimAudio,
   deleteDownloadState,
   getAllDownloadStates,
   getAllOfflineLessons,
-  getCachedSimAudio,
+  getCachedSimAudioSize,
   getOfflineLesson,
   getStorageEpoch,
+  newOfflineAudioKey,
   onPrivateDataCleared,
   putLocalSlideResponses,
   removeOfflineLessonRecord,
@@ -86,8 +91,8 @@ export const DOWNLOAD_ERROR_MESSAGES: Record<DownloadErrorCode, { en: string; ar
     ar: "لا توجد مساحة كافية على هذا الهاتف. احذف درسًا محفوظًا وحاول مرة أخرى.",
   },
   interrupted: {
-    en: "The download was interrupted. Try again.",
-    ar: "انقطع التنزيل. حاول مرة أخرى.",
+    en: "Saving stopped because Amal was closed or the screen locked. Keep Amal open and try again.",
+    ar: "توقف الحفظ لأن أمل أُغلق أو أُقفلت الشاشة. أبقِ أمل مفتوحًا وحاول مرة أخرى.",
   },
   unknown: {
     en: "Could not save this lesson. Try again.",
@@ -99,6 +104,18 @@ export const DOWNLOAD_ERROR_MESSAGES: Record<DownloadErrorCode, { en: string; ar
 export const AUDIO_FORMAT_WARNING = {
   en: "This phone may not be able to play this lesson's audio.",
   ar: "قد لا يتمكن هذا الهاتف من تشغيل صوت هذا الدرس.",
+};
+
+/** Shown on a saved lesson with images that are gone online too (`missingAssetUrls`). */
+export const MISSING_IMAGES_WARNING = {
+  en: "Some pictures in this lesson couldn't be saved.",
+  ar: "تعذّر حفظ بعض الصور في هذا الدرس.",
+};
+
+/** Shown while a save runs: a locked or closed app stops it, and it starts again from the beginning. */
+export const KEEP_OPEN_WHILE_SAVING = {
+  en: "Keep Amal open and the screen on until saving finishes.",
+  ar: "أبقِ أمل مفتوحًا والشاشة مضاءة حتى ينتهي الحفظ.",
 };
 
 export function downloadErrorMessage(
@@ -216,8 +233,89 @@ export function cancelDownload(lessonId: string): void {
     controller.abort();
     return;
   }
-  // A state left by a download that died with the page has no controller.
-  void deleteDownloadState(lessonId).catch(() => undefined);
+  // A state left by a download that died with the page has no controller;
+  // what that download stored but never committed can go too.
+  void deleteDownloadState(lessonId)
+    .catch(() => undefined)
+    .then(() => pruneOrphanedStorage());
+}
+
+// Every download holds this lock (shared) while it runs, in every tab of the
+// app; pruning takes it alone. So nothing deletes images or audio a download
+// stored but hasn't committed yet — in this tab or another (the installed
+// app and a browser tab share storage on Android).
+const STORAGE_LOCK = "amal-offline-storage";
+
+function lockManager(): LockManager | null {
+  return typeof navigator !== "undefined" && typeof navigator.locks?.request === "function" ? navigator.locks : null;
+}
+
+function withSharedStorageLock<T>(task: () => Promise<T>): Promise<T> {
+  const locks = lockManager();
+  // No Web Locks (iOS before 15.4): downloads run as before, and nothing prunes.
+  if (!locks) return task();
+  let started = false;
+  const run = () => {
+    started = true;
+    return task();
+  };
+  // request() resolves with what the task resolves with. If the browser
+  // refuses the lock itself, the download still runs.
+  return (locks.request(STORAGE_LOCK, { mode: "shared" }, run) as unknown as Promise<T>).catch((error: unknown) => {
+    if (started) throw error;
+    return task();
+  });
+}
+
+/**
+ * Deletes images and audio no saved lesson uses: what a download left when
+ * the page died between storing them and saving the lesson record. Skipped
+ * while any tab is downloading, and where the browser has no Web Locks
+ * (pruning another tab's uncommitted files would leave a saved lesson with
+ * holes, which is worse than the wasted space). Returns how many it removed.
+ */
+export async function pruneOrphanedStorage(): Promise<number> {
+  const locks = lockManager();
+  if (!locks || typeof caches === "undefined") return 0;
+  try {
+    return await locks.request(STORAGE_LOCK, { mode: "exclusive", ifAvailable: true }, async (lock) => {
+      if (!lock || activeDownloads.size > 0) return 0;
+      const epoch = getStorageEpoch();
+      const isCurrent = () => epoch === getStorageEpoch();
+      const images = await pruneOrphanedAssets(isCurrent);
+      const audio = await pruneOrphanedAudio(isCurrent);
+      return images + audio;
+    });
+  } catch {
+    return 0;
+  }
+}
+
+/** Audio entries no lesson record (of any account on this phone) points at. */
+async function pruneOrphanedAudio(isCurrent: () => boolean): Promise<number> {
+  try {
+    // Logout deleted the cache: opening it would create it again.
+    if (!(await caches.has(AUDIO_CACHE))) return 0;
+    const cache = await caches.open(AUDIO_CACHE);
+    // Keys before records: audio committed in between is then kept.
+    const requests = await cache.keys();
+    // Compared as path + query, both parsed the same way.
+    const keyOf = (href: string) => {
+      const url = new URL(href, "https://amal.invalid");
+      return `${url.pathname}${url.search}`;
+    };
+    const kept = new Set((await getAllOfflineLessons()).map((lesson) => keyOf(audioKeyFor(lesson))));
+    const prefix = offlineAudioKey("");
+    const orphans = requests.filter(
+      (request) => new URL(request.url).pathname.startsWith(prefix) && !kept.has(keyOf(request.url))
+    );
+    if (!isCurrent()) return 0;
+    await Promise.all(orphans.map((request) => cache.delete(request).catch(() => false)));
+    return orphans.length;
+  } catch {
+    // Couldn't read the records: delete nothing.
+    return 0;
+  }
 }
 
 export function abortAllDownloads(): void {
@@ -297,14 +395,13 @@ export async function getStorageEstimate(): Promise<{
   return { used: 0, quota: 0 };
 }
 
-// Images are usually under this; real sizes are only known once fetched.
-const ASSET_SIZE_ESTIMATE = 1.5 * 1024 * 1024;
 const STORAGE_SAFETY_MARGIN = 5 * 1024 * 1024;
 
-async function ensureRoomFor(audioBytes: number, assetCount: number) {
+// The images are already stored when this runs, so `used` counts them.
+async function ensureRoomFor(audioBytes: number) {
   const { used, quota } = await getStorageEstimate();
   if (!quota) return; // Unknown: let the writes find out.
-  const needed = audioBytes + 2 * assetCount * ASSET_SIZE_ESTIMATE + STORAGE_SAFETY_MARGIN;
+  const needed = audioBytes + STORAGE_SAFETY_MARGIN;
   if (quota - used < needed) throw new DownloadError("storage_full");
 }
 
@@ -356,7 +453,13 @@ type Reporter = ReturnType<typeof createReporter>;
 // Lie-fi can leave a request hanging for minutes. Past these limits the
 // download fails as a network error (cancelling stays a separate thing).
 const METADATA_TIMEOUT_MS = 45_000;
+// Previous/next links are a nicety: a slow lookup (3-6 queries in a row on
+// 2G) saves the lesson without them rather than holding the queue.
+const NAVIGATION_TIMEOUT_MS = 15_000;
 const AUDIO_STALL_TIMEOUT_MS = 30_000;
+// How long the "is the connection really up?" check may take before an
+// unreachable image counts as the connection's fault.
+const ONLINE_CHECK_TIMEOUT_MS = 10_000;
 
 /** A signal that aborts with `parent`, or on its own via `abort()`; `dispose()` unhooks it. */
 function childSignal(parent: AbortSignal, timeoutMs?: number) {
@@ -452,9 +555,18 @@ async function fetchLessonBundle(
   supabase: SupabaseClient<Database>,
   lessonId: string,
   ownerId: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  {
+    fallbackNeighbors,
+    onLesson,
+  }: {
+    /** Kept when the previous/next lookup is cut short (a re-save keeps what the old copy had). */
+    fallbackNeighbors: LessonBundle["neighbors"] | null;
+    /** The lesson row arrived (its title can be shown while the rest loads). */
+    onLesson?: (lesson: { title_ar: string; title_en: string }) => void;
+  }
 ): Promise<LessonBundle> {
-  const [lessonResult, simJson, slidesJson, questionsResult, tasksResult, gate, progressResult, responsesJson] =
+  const [lessonResult, sim, slidesJson, questionsResult, tasksResult, gate, progressResult, responsesJson] =
     await Promise.all([
       supabase
         .from("lessons")
@@ -463,8 +575,20 @@ async function fetchLessonBundle(
         )
         .eq("id", lessonId)
         .abortSignal(signal)
-        .maybeSingle(),
-      fetchJson<{ sim?: SimPayload | null }>(`/api/lessons/${encodeURIComponent(lessonId)}/sim`, signal),
+        .maybeSingle()
+        .then((result) => {
+          if (result.data) onLesson?.(result.data);
+          return result;
+        }),
+      fetchJson<{ sim?: SimPayload | null }>(`/api/lessons/${encodeURIComponent(lessonId)}/sim`, signal).then(
+        (json) => {
+          // No recording: fail as soon as this answers, which also cancels
+          // the rest of the batch. (A recording whose audio couldn't be
+          // signed lands here too.)
+          if (!json.sim?.sim || !json.sim.audio_url) throw new DownloadError("no_audio");
+          return json.sim;
+        }
+      ),
       fetchJson<{ slideDeck?: { slides?: unknown; language_mode?: unknown } | null }>(
         `/api/lessons/${encodeURIComponent(lessonId)}/slides`,
         signal
@@ -498,11 +622,19 @@ async function fetchLessonBundle(
   if (tasksResult.error) throw tasksResult.error;
   if (progressResult.error) throw progressResult.error;
 
-  const sim = simJson.sim ?? null;
-  if (!sim?.sim || !sim.audio_url) throw new DownloadError("no_audio");
-
   const lesson = lessonResult.data as unknown as LessonBundle["lesson"];
-  const navigation = await loadLessonNavigation(supabase, lesson.subject_id, lessonId);
+  // Bounded and cancellable (a child of the metadata signal, so cancel and
+  // logout reach it): a stalled lookup must not hold the one-at-a-time queue.
+  const lookup = childSignal(signal, NAVIGATION_TIMEOUT_MS);
+  const navigation = await loadLessonNavigation(supabase, lesson.subject_id, lessonId, lookup.signal)
+    .catch(() => null)
+    .finally(() => lookup.dispose());
+  // An aborted query comes back as an error, so a cut-short lookup reads as
+  // "no neighbours": keep what a previous save of this lesson had instead.
+  const neighbors =
+    navigation && !lookup.signal.aborted
+      ? { prev: pickNeighbor(navigation.previous), next: pickNeighbor(navigation.next) }
+      : fallbackNeighbors ?? { prev: null, next: null };
 
   const deck = slidesJson.slideDeck ?? null;
   const languageMode = deck?.language_mode;
@@ -524,8 +656,38 @@ async function fetchLessonBundle(
         }
       : null,
     responses: serverResponsesToLocal(responsesJson.responses, deckSlides),
-    neighbors: { prev: pickNeighbor(navigation.previous), next: pickNeighbor(navigation.next) },
+    neighbors,
   };
+}
+
+// Progress: metadata to 15 %, images to 30 %, audio to 95 %, writing to 100 %.
+const IMAGES_PROGRESS_START = 15;
+const AUDIO_PROGRESS_START = 30;
+const AUDIO_PROGRESS_END = 95;
+
+/**
+ * Whether Supabase answers right now. Tells "this image's link is dead"
+ * apart from "the connection dropped", which look the same to fetch().
+ */
+async function canReachServer(
+  supabase: SupabaseClient<Database>,
+  lessonId: string,
+  signal: AbortSignal
+): Promise<boolean> {
+  const check = childSignal(signal, ONLINE_CHECK_TIMEOUT_MS);
+  try {
+    const { error } = await supabase
+      .from("lessons")
+      .select("id")
+      .eq("id", lessonId)
+      .abortSignal(check.signal)
+      .maybeSingle();
+    return !error && !check.signal.aborted;
+  } catch {
+    return false;
+  } finally {
+    check.dispose();
+  }
 }
 
 function canPlayAudio(mime: string | null): boolean {
@@ -539,7 +701,6 @@ function canPlayAudio(mime: string | null): boolean {
 
 async function downloadAudio(
   sim: SimPayload,
-  assetCount: number,
   signal: AbortSignal,
   reporter: Reporter
 ): Promise<{ blob: Blob; mime: string | null }> {
@@ -556,7 +717,7 @@ async function downloadAudio(
     responseType = response.headers.get("content-type");
 
     contentLength = Number.parseInt(response.headers.get("content-length") || "0", 10) || 0;
-    await ensureRoomFor(contentLength, assetCount);
+    await ensureRoomFor(contentLength);
 
     const reader = response.body.getReader();
     watchdog.touch();
@@ -568,7 +729,7 @@ async function downloadAudio(
       downloaded += value.length;
       const fraction = contentLength ? downloaded / contentLength : Math.min(downloaded / (20 * 1024 * 1024), 0.95);
       reporter.update({
-        progress: 15 + Math.min(fraction, 1) * 65,
+        progress: AUDIO_PROGRESS_START + Math.min(fraction, 1) * (AUDIO_PROGRESS_END - AUDIO_PROGRESS_START),
         totalBytes: contentLength || downloaded,
         downloadedBytes: downloaded,
       });
@@ -604,6 +765,13 @@ export function downloadLesson(
   onProgress?: ProgressCallback,
   options: DownloadOptions = {}
 ): Promise<OfflineLesson> {
+  // A background download never takes over a save already running or queued
+  // for this lesson: it would restart it from zero and save it as "auto"
+  // (which later gets removed). Nothing is reported, so its progress stays.
+  if (options.origin === "auto" && activeDownloads.has(lessonId)) {
+    return Promise.reject(new DownloadCancelledError());
+  }
+
   // Start the persistence request now, while this may still be the tap's gesture.
   void requestPersistentStorage();
 
@@ -616,9 +784,25 @@ export function downloadLesson(
   const reporter = createReporter(lessonId, epoch, onProgress);
   reporter.update({ status: "downloading", progress: 0 }, true);
 
-  return oneAtATime(() => runDownload(lessonId, supabase, options, controller, epoch, reporter)).finally(() => {
+  return oneAtATime(() =>
+    withSharedStorageLock(() => runDownload(lessonId, supabase, options, controller, epoch, reporter))
+  ).finally(() => {
     if (activeDownloads.get(lessonId) === controller) activeDownloads.delete(lessonId);
   });
+}
+
+/** Notes whether the page was hidden (screen locked, app switched) at any point until `stop()`. */
+function watchVisibility() {
+  if (typeof document === "undefined") return { hidden: () => false, stop: () => undefined };
+  let wasHidden = document.visibilityState === "hidden";
+  const onChange = () => {
+    if (document.visibilityState === "hidden") wasHidden = true;
+  };
+  document.addEventListener("visibilitychange", onChange);
+  return {
+    hidden: () => wasHidden,
+    stop: () => document.removeEventListener("visibilitychange", onChange),
+  };
 }
 
 async function runDownload(
@@ -636,11 +820,13 @@ async function runDownload(
 
   let assets: CachedAssets | null = null;
   let assetUrls: string[] = [];
-  let audioWritten = false;
   let previous: OfflineLesson | null = null;
-  // Re-saving the same recording rewrites identical audio, so a failure then
-  // leaves the old copy consistent.
-  let sameRecording = false;
+  // Each attempt writes its audio under its own key, so the copy that plays
+  // is never overwritten: it is deleted only after the new record commits.
+  const audioKey = newOfflineAudioKey(lessonId);
+  let audioWritten = false;
+  let committed = false;
+  const visibility = watchVisibility();
 
   try {
     checkCancelled();
@@ -655,47 +841,56 @@ async function runDownload(
 
     // 1. Everything except the big files. Any failure fails the download.
     const metadata = childSignal(signal, METADATA_TIMEOUT_MS);
-    const bundle = await fetchLessonBundle(supabase, lessonId, owner.userId, metadata.signal)
+    const bundle = await fetchLessonBundle(supabase, lessonId, owner.userId, metadata.signal, {
+      fallbackNeighbors: previous?.neighbors ?? null,
+      onLesson: ({ title_ar, title_en }) => reporter.update({ title_ar, title_en }),
+    })
       .catch((error: unknown) => {
         metadata.abort(); // Stop the other requests of this batch.
         throw error;
       })
       .finally(() => metadata.dispose());
     checkCancelled();
-    reporter.update({ progress: 15, title_ar: bundle.lesson.title_ar, title_en: bundle.lesson.title_en }, true);
-    sameRecording = Boolean(
-      previous &&
-        (previous.simId ?? previous.sim?.sim.id) === bundle.sim.sim.id &&
-        (previous.simUpdatedAt ?? previous.sim?.sim.updated_at) === bundle.sim.sim.updated_at
+    reporter.update(
+      { progress: IMAGES_PROGRESS_START, title_ar: bundle.lesson.title_ar, title_en: bundle.lesson.title_en },
+      true
     );
 
-    // 2. Narration, held in memory until everything else arrived.
+    // 2. Images first, straight into the asset cache (shared by URL, so
+    // caching a new image can't break the old copy of this lesson). A
+    // failure here then costs only the images, never the audio.
     assetUrls = collectSimAssetUrls(bundle.sim);
-    const audio = await downloadAudio(bundle.sim, assetUrls.length, signal, reporter);
-    checkCancelled();
-    reporter.update({ progress: 80 }, true);
-
-    // 3. Images, straight into the asset cache (shared by URL, so caching a
-    // new image can't break the old copy of this lesson).
     assets = await cacheLessonAssets(assetUrls, {
       signal,
-      onProgress: (done, total) => reporter.update({ progress: 80 + (done / Math.max(total, 1)) * 15 }),
+      confirmOnline: () => canReachServer(supabase, lessonId, signal),
+      onProgress: (done, total) =>
+        reporter.update({
+          progress:
+            IMAGES_PROGRESS_START + (done / Math.max(total, 1)) * (AUDIO_PROGRESS_START - IMAGES_PROGRESS_START),
+        }),
     });
     checkCancelled();
+    reporter.update({ progress: AUDIO_PROGRESS_START }, true);
+
+    // 3. Narration, held in memory until it is written.
+    const audio = await downloadAudio(bundle.sim, signal, reporter);
+    checkCancelled();
+    reporter.update({ progress: AUDIO_PROGRESS_END }, true);
 
     // 4. Write the audio and check it really landed. From here on a cancel
-    // is ignored: stopping between the audio and the record would only
-    // leave a mismatched pair.
-    await cacheSimAudio(lessonId, audio.blob);
+    // is ignored: the record is what makes the new audio the one that plays.
+    await cacheSimAudio(lessonId, audio.blob, audioKey);
     audioWritten = true;
-    const cachedAudio = await getCachedSimAudio(lessonId);
-    if (!cachedAudio || cachedAudio.size !== audio.blob.size) throw new DownloadError("storage_full");
+    if ((await getCachedSimAudioSize(lessonId, audioKey)) !== audio.blob.size) {
+      throw new DownloadError("storage_full");
+    }
 
     // 5. The record last, with its asset references, in one transaction.
     const now = new Date().toISOString();
     const subject = bundle.lesson.subjects as { name_ar?: string; name_en?: string } | null;
     const origin: OfflineOrigin =
       options.origin === "auto" && (!previous || previous.origin === "auto") ? "auto" : "manual";
+    const missing = new Set(assets.missingUrls);
     const record: OfflineLesson = {
       id: lessonId,
       title_ar: bundle.lesson.title_ar,
@@ -724,8 +919,11 @@ async function runDownload(
       slideLanguageMode: bundle.slideLanguageMode,
       audioMime: audio.mime ?? undefined,
       audioMayNotPlay: !canPlayAudio(audio.mime),
-      assetUrls,
+      audioKey,
+      // Only stored images get references; missing ones are listed apart.
+      assetUrls: assetUrls.filter((url) => !missing.has(url)),
       assetBytes: assets.totalBytes,
+      missingAssetUrls: missing.size > 0 ? [...missing] : undefined,
       practice: bundle.practiceAssignmentId
         ? { assignmentId: bundle.practiceAssignmentId, passed: bundle.progress?.completed === true }
         : null,
@@ -748,14 +946,17 @@ async function runDownload(
 
     // Answers given on this phone are newer than the server's; keep them.
     await putLocalSlideResponses(owner.userId, lessonId, bundle.responses, { keepExisting: true, epoch });
-    const { unreferencedUrls } = await commitOfflineLesson(record, {
+    const { unreferencedUrls, replacedAudioKey } = await commitOfflineLesson(record, {
       assetBytes: assets.bytesByUrl,
       previousAssetUrls: previous?.assetUrls ?? [],
       state: completed,
       epoch,
     });
+    committed = true;
     assets.release();
     void deleteAssetsFromCache(unreferencedUrls);
+    // The copy this one replaced: nothing points at it any more.
+    if (replacedAudioKey) void deleteCachedSimAudio(lessonId, replacedAudioKey);
 
     reporter.update(completed, true);
     void warmOfflinePlayerChunks();
@@ -767,19 +968,14 @@ async function runDownload(
     // A newer download of this lesson took over and will replace everything.
     const replaced = activeDownloadsHasOther(lessonId, controller);
 
-    if (!storageCleared && !replaced) {
-      // New audio next to the old record would play the wrong narration over
-      // the old slides, so a half-replaced copy is removed rather than kept.
-      if (audioWritten && !previous) {
-        await deleteCachedSimAudio(lessonId);
-      } else if (audioWritten && previous && !sameRecording) {
-        await removeOfflineLessonRecord(lessonId)
-          .then(({ unreferencedUrls }) => deleteAssetsFromCache(unreferencedUrls))
-          .catch(() => undefined);
-        await deleteCachedSimAudio(lessonId);
-      }
-      // Images this attempt cached that no saved lesson uses.
-      void deleteUnreferencedAssets(assetUrls);
+    if (!storageCleared) {
+      // The saved copy (record and audio) is left as it was. Only this
+      // attempt's audio goes: no record points at it and no other save uses
+      // its key, so this holds even when a newer run took over.
+      if (audioWritten && !committed) await deleteCachedSimAudio(lessonId, audioKey);
+      // Images this attempt cached that no saved lesson uses (a newer run of
+      // this lesson reuses them instead).
+      if (!replaced) void deleteUnreferencedAssets(assetUrls);
     }
 
     const cancelled =
@@ -789,11 +985,21 @@ async function runDownload(
       throw new DownloadCancelledError();
     }
 
-    const failure = toDownloadError(error);
+    let failure = toDownloadError(error);
+    // Cut off while the screen was locked or the app was in the background:
+    // say so, rather than blaming the connection.
+    if (failure.code === "network" && visibility.hidden()) failure = new DownloadError("interrupted");
     if (!storageCleared && !replaced) {
-      reporter.update({ status: "error", errorCode: failure.code, error: failure.message }, true);
+      if (failure.code === "no_audio") {
+        // Nothing to retry: the toast says why, and no broken row is kept.
+        await deleteDownloadState(lessonId).catch(() => undefined);
+      } else {
+        reporter.update({ status: "error", errorCode: failure.code, error: failure.message }, true);
+      }
     }
     throw failure;
+  } finally {
+    visibility.stop();
   }
 }
 

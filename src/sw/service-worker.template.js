@@ -478,8 +478,9 @@ async function isLessonDownloaded(lessonId) {
     state = 'unknown';
   }
   if (state !== 'unknown') return state === 'yes';
-  // Couldn't read the database: the saved audio is the next best sign.
-  return Boolean(await matchInCache(AUDIO_CACHE, OFFLINE_AUDIO_PREFIX + lessonId));
+  // Couldn't read the database: the saved audio is the next best sign (any
+  // version of it: each save stores it as /offline-audio/<id>?v=…).
+  return Boolean(await matchInCache(AUDIO_CACHE, OFFLINE_AUDIO_PREFIX + lessonId, { ignoreSearch: true }));
 }
 
 // ── Offline responses ────────────────────────────────────────────────────────
