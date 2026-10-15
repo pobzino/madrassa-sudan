@@ -2065,6 +2065,9 @@ export type Database = {
           device_type: string | null
           email: string | null
           id: string
+          learner_intake_consumed_at: string | null
+          learner_profile_ids: string[]
+          learner_profile_ages: number[]
           missed_schooling: boolean | null
           out_of_school: boolean | null
           out_of_school_details: string | null
@@ -2092,6 +2095,9 @@ export type Database = {
           device_type?: string | null
           email?: string | null
           id?: string
+          learner_intake_consumed_at?: string | null
+          learner_profile_ids?: string[]
+          learner_profile_ages?: number[]
           missed_schooling?: boolean | null
           out_of_school?: boolean | null
           out_of_school_details?: string | null
@@ -2119,6 +2125,9 @@ export type Database = {
           device_type?: string | null
           email?: string | null
           id?: string
+          learner_intake_consumed_at?: string | null
+          learner_profile_ids?: string[]
+          learner_profile_ages?: number[]
           missed_schooling?: boolean | null
           out_of_school?: boolean | null
           out_of_school_details?: string | null
@@ -2154,6 +2163,10 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          auth_user_id: string | null
+          parent_account_id: string | null
+          learner_name: string | null
+          learner_avatar: string | null
           can_access_sims: boolean
           created_at: string
           date_of_birth: string | null
@@ -2172,6 +2185,10 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          auth_user_id?: string | null
+          parent_account_id?: string | null
+          learner_name?: string | null
+          learner_avatar?: string | null
           can_access_sims?: boolean
           created_at?: string
           date_of_birth?: string | null
@@ -2190,6 +2207,10 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          auth_user_id?: string | null
+          parent_account_id?: string | null
+          learner_name?: string | null
+          learner_avatar?: string | null
           can_access_sims?: boolean
           created_at?: string
           date_of_birth?: string | null
@@ -2206,7 +2227,15 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_parent_account_id_fkey"
+            columns: ["parent_account_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sim_save_attempts: {
         Row: {
@@ -2480,6 +2509,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_learner: { Args: { p_learner_id: string }; Returns: boolean }
+      consume_suggested_children: { Args: Record<PropertyKey, never>; Returns: Json }
+      create_child_profile: {
+        Args: { p_name: string; p_age?: number | null; p_avatar?: string | null }
+        Returns: Database["public"]["Tables"]["profiles"]["Row"]
+      }
+      owns_learner: { Args: { p_learner_id: string }; Returns: boolean }
       can_user_access_published_lesson: {
         Args: { p_lesson_id: string; p_user_id: string }
         Returns: boolean
