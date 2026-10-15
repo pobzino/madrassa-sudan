@@ -201,7 +201,9 @@ export default function SlideCard({
   return (
     <div
       translate="no"
-      className={`notranslate aspect-video overflow-hidden bg-white ${chromeless ? '' : 'rounded-2xl shadow-lg'} ${entranceClass} ${className}`}
+      // A size container: templates stack picture-and-text layouts when the
+      // slide itself is narrow (the upright phone player), not the window.
+      className={`notranslate @container aspect-video overflow-hidden bg-white ${chromeless ? '' : 'rounded-2xl shadow-lg'} ${entranceClass} ${className}`}
     >
       {renderedContent}
     </div>

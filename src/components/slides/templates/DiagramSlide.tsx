@@ -95,8 +95,9 @@ export default function DiagramSlide({ slide, language }: Props) {
           </div>
         </div>
       ) : (
-        <div className={`flex-1 flex ${isReversed ? 'flex-row-reverse' : 'flex-row'} p-6 sm:p-10 md:p-12 gap-4 sm:gap-6`}>
-          <div className="flex-1 flex flex-col justify-center">
+        // A narrow slide (upright phone) stacks the picture above the text.
+        <div className={`flex-1 min-h-0 flex ${isReversed ? 'flex-row-reverse' : 'flex-row'} @max-xl:flex-col-reverse p-6 sm:p-10 md:p-12 @max-xl:p-5 gap-4 sm:gap-6`}>
+          <div className="flex-1 flex flex-col justify-center @max-xl:flex-none">
             <h2
               dir={primary.dir}
               className={`mb-1 font-fredoka font-bold text-gray-900 ${getSlideTitleClasses(slide.title_size)} ${
@@ -113,7 +114,7 @@ export default function DiagramSlide({ slide, language }: Props) {
             </div>
           </div>
 
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center @max-xl:flex-none @max-xl:h-[40%]">
             {hasImage ? (
               <SlideImage
                 src={slide.image_url!}
