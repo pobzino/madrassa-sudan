@@ -118,6 +118,8 @@ export type WeeklySummary = {
   activeDays: boolean[];
 };
 
+export type ChildWeeklySummary = { name: string; summary: WeeklySummary };
+
 export function hadActivity(summary: WeeklySummary) {
   return summary.lessonsStarted + summary.lessonsCompleted + summary.practiceTried > 0 || summary.activeDays.some(Boolean);
 }
@@ -128,15 +130,21 @@ const DAY_LABELS = {
 };
 
 export function weeklyProgressEmail(
-  args: Base & { unsubscribeUrl: string; summary: WeeklySummary; /** e.g. "12–18 October" */ weekLabel: string },
+  args: Base & { unsubscribeUrl: string; summary: WeeklySummary; childSummaries?: ChildWeeklySummary[]; /** e.g. "12–18 October" */ weekLabel: string },
 ): RenderedEmail {
-  const { language, name, siteUrl, unsubscribeUrl, summary, weekLabel } = args;
+  const { language, name, siteUrl, unsubscribeUrl, summary, childSummaries = [], weekLabel } = args;
   const first = firstName(name);
   const n = (value: number) => formatNumber(language, value);
   const daysLearned = summary.activeDays.filter(Boolean).length;
   const week = (title: string) => ({
     title,
     days: DAY_LABELS[language].map((label, i) => ({ label, active: Boolean(summary.activeDays[i]) })),
+  });
+  const childLines = childSummaries.filter((child) => hadActivity(child.summary)).map(({ name: childName, summary: child }) => {
+    const activity = language === "ar"
+      ? `${n(child.lessonsStarted)} دروس بدأت، ${n(child.lessonsCompleted)} دروس مكتملة، ${n(child.practicePassed)} تدريبات ناجحة`
+      : `${n(child.lessonsStarted)} ${child.lessonsStarted === 1 ? "lesson" : "lessons"} started, ${n(child.lessonsCompleted)} completed, ${n(child.practicePassed)} Practice ${child.practicePassed === 1 ? "set" : "sets"} passed`;
+    return `${childName}: ${activity}`;
   });
 
   if (language === "ar") {
@@ -166,7 +174,7 @@ export function weeklyProgressEmail(
         preheader: `تقرير عائلتكم لأسبوع ${weekLabel}.`,
         hero: { art: "celebrate", alt: "بومة آمال ترقص فرحاً" },
         heading: first ? `يا له من أسبوع يا ${first}!` : "يا له من أسبوع!",
-        paragraphs: [`هذا تقرير عائلتكم لأسبوع ${weekLabel}.`],
+        paragraphs: [`هذا تقرير عائلتكم لأسبوع ${weekLabel}.`, ...childLines],
         board: {
           title: "هذا الأسبوع",
           stats: [
@@ -216,7 +224,7 @@ export function weeklyProgressEmail(
       preheader: `Your family's report card for ${weekLabel}.`,
       hero: { art: "celebrate", alt: "The Amal owl dancing" },
       heading: first ? `What a week, ${first}!` : "What a week!",
-      paragraphs: [`Here's your family's report card for ${weekLabel}.`],
+      paragraphs: [`Here's your family's report card for ${weekLabel}.`, ...childLines],
       board: {
         title: "This week",
         stats: [

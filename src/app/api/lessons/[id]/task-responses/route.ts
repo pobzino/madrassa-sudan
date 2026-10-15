@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { createServiceClient, hasServiceRoleConfig } from '@/lib/supabase/service'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
@@ -11,6 +10,8 @@ import {
 } from '@/lib/lesson-activities'
 import type { Database } from '@/lib/database.types'
 import { recalculateLessonTaskProgress } from '@/lib/server/lesson-task-progress'
+import { getLearnerContextResult } from '@/lib/server/learner-context'
+import { createOwnedLearnerAdminClient } from '@/lib/server/learner-admin'
 
 const TaskResponseSchema = z.object({
   task_id: z.string().uuid(),
@@ -55,6 +56,12 @@ export async function POST(
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const resolved = await getLearnerContextResult(request, supabase)
+  if (resolved.response) return resolved.response
+  const learnerId = resolved.context.learnerId
+  const service = await createOwnedLearnerAdminClient(resolved.context)
+  if (service.error === 'service_role_unavailable') return NextResponse.json({ error: 'Saving answers is temporarily unavailable' }, { status: 503 })
+  if (service.error || !service.admin) return NextResponse.json({ error: 'Learner is no longer available' }, { status: service.error === 'ownership_check_failed' ? 500 : 403 })
 
   const body = await request.json()
   const validation = TaskResponseSchema.safeParse(body)
@@ -72,17 +79,13 @@ export async function POST(
   // write a teacher review or a score themselves). That skips RLS, so check
   // the lesson access the old student policy enforced.
   const { data: canAccessLesson } = await supabase.rpc('can_user_access_published_lesson', {
-    p_user_id: user.id,
+    p_user_id: resolved.context.accountId,
     p_lesson_id: lessonId,
   })
   if (canAccessLesson !== true) {
     return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
   }
-  if (!hasServiceRoleConfig()) {
-    console.error('Task responses: service role is not configured; answers are saved server-side.')
-    return NextResponse.json({ error: 'Saving answers is temporarily unavailable' }, { status: 503 })
-  }
-  const admin = createServiceClient()
+  const admin = service.admin
 
   const { data: taskRow, error: taskError } = await supabase
     .from('lesson_tasks')
@@ -119,7 +122,7 @@ export async function POST(
     .from('lesson_task_responses')
     .select('id, attempts')
     .eq('task_id', task_id)
-    .eq('student_id', user.id)
+    .eq('student_id', learnerId)
     .maybeSingle()
 
   let responseRow: Database['public']['Tables']['lesson_task_responses']['Row'] | null = null
@@ -136,7 +139,7 @@ export async function POST(
         attempts: existing.attempts + 1,
       })
       .eq('id', existing.id)
-      .eq('student_id', user.id)
+      .eq('student_id', learnerId)
       .select()
       .single()
 
@@ -149,7 +152,7 @@ export async function POST(
       .from('lesson_task_responses')
       .insert({
         task_id,
-        student_id: user.id,
+        student_id: learnerId,
         response_data: responseData,
         completion_score: completionScore,
         is_completed: status === 'completed',
@@ -168,7 +171,7 @@ export async function POST(
 
   // Recalculate progress in the background — don't fail the response if this errors
   try {
-    await recalculateLessonTaskProgress(admin, lessonId, user.id)
+    await recalculateLessonTaskProgress(admin, lessonId, learnerId)
   } catch (progressError) {
     console.error('Update task progress error:', progressError)
   }

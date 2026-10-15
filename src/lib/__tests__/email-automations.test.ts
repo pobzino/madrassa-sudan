@@ -138,6 +138,16 @@ describe("templates", () => {
     expect(impact.text).toContain("1 lesson start");
   });
 
+  it("attributes weekly family activity to named child profiles", () => {
+    const summary = { lessonsStarted: 1, lessonsCompleted: 1, practiceTried: 0, practicePassed: 0, streakDays: 0, activeDays: [true, false, false, false, false, false, false] };
+    const childSummary = { ...summary, lessonsCompleted: 2, practiceTried: 1, practicePassed: 1 };
+    const weekly = weeklyProgressEmail({
+      language: "en", name: "Amina", siteUrl, unsubscribeUrl: `${siteUrl}/u`, summary,
+      childSummaries: [{ name: "Samira", summary: childSummary }], weekLabel: "11–17 October",
+    });
+    expect(weekly.text).toContain("Samira: 1 lesson started, 2 completed, 1 Practice set passed");
+  });
+
   it("sends the nudge version when a family had a quiet week", () => {
     const quiet = { lessonsStarted: 0, lessonsCompleted: 0, practiceTried: 0, practicePassed: 0, streakDays: 0, activeDays: Array(7).fill(false) };
     const email = weeklyProgressEmail({ language: "en", name: "Amina", siteUrl, unsubscribeUrl: `${siteUrl}/u`, summary: quiet, weekLabel: "" });

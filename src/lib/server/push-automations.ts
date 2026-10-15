@@ -85,11 +85,17 @@ export async function runStreakReminders({ now = new Date(), dryRun = false } = 
   const messages = new Map<string, PushMessage>();
   for (let i = 0; i < subscribers.length; i += 100) {
     const ids = subscribers.slice(i, i + 100);
+    const { data: childRows, error: childError } = await db.from("profiles")
+      .select("id, parent_account_id, role")
+      .in("parent_account_id", ids);
+    if (childError) throw new Error(childError.message);
+    const children = (childRows ?? []) as { id: string; parent_account_id: string | null; role: string }[];
+    const learnerIds = [...ids, ...children.filter((row) => row.role === "student").map((row) => row.id)];
     const [{ data: streaks, error: streakError }, { data: profiles, error: profileError }] = await Promise.all([
       client
         .from("student_streaks")
         .select("student_id, current_streak_days")
-        .in("student_id", ids)
+        .in("student_id", learnerIds)
         .eq("last_activity_date", yesterday)
         .gte("current_streak_days", 1),
       client.from("profiles").select("id, role, preferred_language").in("id", ids),
@@ -97,10 +103,26 @@ export async function runStreakReminders({ now = new Date(), dryRun = false } = 
     if (streakError) throw new Error(streakError.message);
     if (profileError) throw new Error(profileError.message);
     const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
+    const parentByLearnerId = new Map<string, string>();
+    for (const id of ids) parentByLearnerId.set(id, id);
+    for (const child of children) {
+      if (child.role === "student" && child.parent_account_id && subscribers.includes(child.parent_account_id)) {
+        parentByLearnerId.set(child.id, child.parent_account_id);
+      }
+    }
+    const streakDaysByParent = new Map<string, number>();
     for (const streak of streaks ?? []) {
-      const profile = profileById.get(streak.student_id);
+      const parentId = parentByLearnerId.get(streak.student_id);
+      if (!parentId) continue;
+      const profile = profileById.get(parentId);
       if (profile?.role !== "parent") continue;
-      messages.set(streak.student_id, streakReminderMessage(languageOf(profile.preferred_language), streak.current_streak_days));
+      // One family-level reminder and one idempotency claim per scheduled day,
+      // even when several children had activity yesterday.
+      const existingDays = streakDaysByParent.get(parentId) ?? 0;
+      if (streak.current_streak_days > existingDays) {
+        streakDaysByParent.set(parentId, streak.current_streak_days);
+        messages.set(parentId, streakReminderMessage(languageOf(profile.preferred_language), streak.current_streak_days));
+      }
     }
   }
   return deliver(db, report, messages, dryRun);

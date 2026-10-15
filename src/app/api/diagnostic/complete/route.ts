@@ -5,6 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getLearnerContextResult } from '@/lib/server/learner-context';
+import { createOwnedLearnerAdminClient } from '@/lib/server/learner-admin';
 
 type DiagnosticResponseRow = {
   is_correct: boolean;
@@ -21,6 +23,12 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
+    const service = await createOwnedLearnerAdminClient(resolved.context);
+    if (service.error === 'service_role_unavailable') return NextResponse.json({ error: 'Saving assessment results is temporarily unavailable' }, { status: 503 });
+    if (service.error || !service.admin) return NextResponse.json({ error: 'Learner is no longer available' }, { status: service.error === 'ownership_check_failed' ? 500 : 403 });
 
     const body = await request.json();
     const { attemptId } = body;
@@ -34,7 +42,7 @@ export async function POST(request: NextRequest) {
       .from('diagnostic_attempts')
       .select('*')
       .eq('id', attemptId)
-      .eq('student_id', user.id)
+      .eq('student_id', learnerId)
       .single();
 
     if (!attempt) {
@@ -98,20 +106,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Mark attempt as complete
-    await supabase
+    const { error: completeError } = await service.admin
       .from('diagnostic_attempts')
       .update({
         is_complete: true,
         completed_at: new Date().toISOString(),
         recommended_grade: recommendedGrade,
       })
-      .eq('id', attemptId);
+      .eq('id', attemptId)
+      .eq('student_id', learnerId);
+    if (completeError) {
+      console.error('Error completing diagnostic attempt:', completeError);
+      return NextResponse.json({ error: 'Failed to save assessment results' }, { status: 500 });
+    }
 
     // Save placement result
-    const { data: placement, error: placementError } = await supabase
+    const { error: placementError } = await service.admin
       .from('student_placements')
       .upsert({
-        student_id: user.id,
+        student_id: learnerId,
         subject_id: attempt.subject_id,
         placed_grade: recommendedGrade,
         confidence,
@@ -125,6 +138,7 @@ export async function POST(request: NextRequest) {
 
     if (placementError) {
       console.error('Error saving placement:', placementError);
+      return NextResponse.json({ error: 'Failed to save placement' }, { status: 500 });
     }
 
     // Get recommended lessons for the placed grade

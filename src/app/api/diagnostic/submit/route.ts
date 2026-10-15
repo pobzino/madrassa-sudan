@@ -5,6 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getLearnerContextResult } from '@/lib/server/learner-context';
+import { createOwnedLearnerAdminClient } from '@/lib/server/learner-admin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,6 +16,12 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
+    const service = await createOwnedLearnerAdminClient(resolved.context);
+    if (service.error === 'service_role_unavailable') return NextResponse.json({ error: 'Saving assessment answers is temporarily unavailable' }, { status: 503 });
+    if (service.error || !service.admin) return NextResponse.json({ error: 'Learner is no longer available' }, { status: service.error === 'ownership_check_failed' ? 500 : 403 });
 
     const body = await request.json();
     const { attemptId, questionId, selectedAnswer } = body;
@@ -27,7 +35,7 @@ export async function POST(request: NextRequest) {
       .from('diagnostic_attempts')
       .select('*')
       .eq('id', attemptId)
-      .eq('student_id', user.id)
+      .eq('student_id', learnerId)
       .single();
 
     if (!attempt) {
@@ -48,24 +56,33 @@ export async function POST(request: NextRequest) {
     const isCorrect = selectedAnswer === question.correct_answer;
 
     // Save the response
-    await supabase.from('diagnostic_responses').insert({
+    const { error: responseError } = await service.admin.from('diagnostic_responses').insert({
       attempt_id: attemptId,
       question_id: questionId,
       selected_answer: selectedAnswer,
       is_correct: isCorrect,
       answered_at: new Date().toISOString(),
     });
+    if (responseError) {
+      console.error('Error saving diagnostic answer:', responseError);
+      return NextResponse.json({ error: 'Failed to save answer' }, { status: 500 });
+    }
 
     // Update attempt stats
-    const { data: updatedAttempt } = await supabase
+    const { data: updatedAttempt, error: updateError } = await service.admin
       .from('diagnostic_attempts')
       .update({
         questions_answered: (attempt.questions_answered ?? 0) + 1,
         questions_correct: (attempt.questions_correct ?? 0) + (isCorrect ? 1 : 0),
       })
       .eq('id', attemptId)
+      .eq('student_id', learnerId)
       .select()
       .single();
+    if (updateError || !updatedAttempt) {
+      console.error('Error updating diagnostic attempt:', updateError);
+      return NextResponse.json({ error: 'Failed to save answer' }, { status: 500 });
+    }
 
     // Get already answered question IDs
     const { data: responses } = await supabase

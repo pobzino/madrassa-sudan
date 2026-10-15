@@ -14,6 +14,7 @@ import {
   type ProgressActivity,
   type StreakState,
 } from "@/lib/email/digest";
+import type { ChildWeeklySummary } from "@/lib/email/templates";
 import type { EmailLanguage } from "@/lib/email/render";
 import { emailAutomationConfig, RESEND_BATCH_LIMIT, sendEmails, type OutgoingEmail } from "@/lib/email/send";
 import {
@@ -256,6 +257,7 @@ export type WeeklyFamily = {
   preferred_language: string | null;
   email_updates_opt_in: boolean;
   summary: WeeklySummary;
+  childSummaries: ChildWeeklySummary[];
   /** Learned in the four weeks before this one, so a quiet week counts as lapsing. */
   learnedBefore: boolean;
 };
@@ -266,6 +268,9 @@ export async function loadWeeklyFamilies(window: PeriodWindow): Promise<WeeklyFa
   const db = client as unknown as UntypedClient;
   const parents = await fetchAll((from, to) =>
     client.from("profiles").select("id, full_name, preferred_language, email_updates_opt_in").eq("role", "parent").order("id").range(from, to),
+  );
+  const learnerProfiles = await fetchAll<{ id: string; parent_account_id: string | null; role: string; full_name: string | null; learner_name: string | null }>((from, to) =>
+    db.from("profiles").select("id, parent_account_id, role, full_name, learner_name").order("id").range(from, to),
   );
 
   const nudgeFrom = new Date(window.start.getTime() - NUDGE_FOR_DAYS * DAY);
@@ -320,12 +325,49 @@ export async function loadWeeklyFamilies(window: PeriodWindow): Promise<WeeklyFa
   );
   const streakBy = new Map<string, StreakState>(streaks.map((row) => [row.student_id, row]));
 
+  const ownerByLearner = new Map<string, string>();
+  const learnerById = new Map(learnerProfiles.map((profile) => [profile.id, profile]));
+  for (const profile of learnerProfiles) {
+    if (profile.role === "parent") ownerByLearner.set(profile.id, profile.id);
+    else if (profile.parent_account_id) ownerByLearner.set(profile.id, profile.parent_account_id);
+  }
+
+  const emptySummary = (): WeeklySummary => ({ lessonsStarted: 0, lessonsCompleted: 0, practiceTried: 0, practicePassed: 0, streakDays: 0, activeDays: Array(7).fill(false) });
+  const addSummary = (target: WeeklySummary, value: WeeklySummary) => {
+    target.lessonsStarted += value.lessonsStarted;
+    target.lessonsCompleted += value.lessonsCompleted;
+    target.practiceTried += value.practiceTried;
+    target.practicePassed += value.practicePassed;
+    target.streakDays = Math.max(target.streakDays, value.streakDays);
+    target.activeDays = target.activeDays.map((active, index) => active || value.activeDays[index]);
+  };
+  const summaryForLearner = (id: string) => summariseWeek(
+    window,
+    progressBy.get(id) ?? [],
+    attemptsBy.get(id) ?? [],
+    streakBy.get(id) ?? null,
+  );
+
   return parents.map((parent) => {
-    const rows = progressBy.get(parent.id) ?? [];
+    const learnerIds = [...ownerByLearner.entries()].filter(([, ownerId]) => ownerId === parent.id).map(([learnerId]) => learnerId);
+    const memberIds = learnerIds.includes(parent.id) ? learnerIds : [parent.id, ...learnerIds];
+    const summary = emptySummary();
+    const childSummaries: ChildWeeklySummary[] = [];
+    let learnedBefore = false;
+    for (const learnerId of memberIds) {
+      addSummary(summary, summaryForLearner(learnerId));
+      const rows = progressBy.get(learnerId) ?? [];
+      learnedBefore ||= rows.some((row) => Date.parse(row.updated_at) < window.start.getTime());
+      if (learnerId !== parent.id) {
+        const profile = learnerById.get(learnerId);
+        childSummaries.push({ name: profile?.learner_name?.trim() || profile?.full_name?.trim() || "Learner", summary: summaryForLearner(learnerId) });
+      }
+    }
     return {
       ...parent,
-      summary: summariseWeek(window, rows, attemptsBy.get(parent.id) ?? [], streakBy.get(parent.id) ?? null),
-      learnedBefore: rows.some((row) => Date.parse(row.updated_at) < window.start.getTime()),
+      summary,
+      childSummaries,
+      learnedBefore,
     };
   });
 }
@@ -388,6 +430,7 @@ export async function runWeeklyProgressEmails({
       siteUrl,
       unsubscribeUrl: unsubscribe,
       summary,
+      childSummaries: parent.childSummaries,
       weekLabel: weekLabel(window, language),
     });
     prepared.push({ userId: parent.id, email: { to: address, ...rendered, tag: "weekly_progress", unsubscribeUrl: unsubscribe } });

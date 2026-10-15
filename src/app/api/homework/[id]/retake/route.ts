@@ -16,14 +16,15 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
 import { decideRetake } from "@/lib/homework-grading";
+import { getLearnerContextResult } from "@/lib/server/learner-context";
+import { createOwnedLearnerAdminClient } from "@/lib/server/learner-admin";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function POST(_request: NextRequest, { params }: RouteParams) {
+export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const supabase = await createClient();
     const { id: assignmentId } = await params;
@@ -35,6 +36,12 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
+    const learnerService = await createOwnedLearnerAdminClient(resolved.context);
+    if (learnerService.error === "service_role_unavailable") return NextResponse.json({ error: "Retake is temporarily unavailable" }, { status: 503 });
+    if (learnerService.error || !learnerService.admin) return NextResponse.json({ error: "Learner is no longer available" }, { status: learnerService.error === "ownership_check_failed" ? 500 : 403 });
 
     const { data: assignment } = await supabase
       .from("homework_assignments")
@@ -50,7 +57,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       .from("homework_submissions")
       .select("id, status, score, attempt_count")
       .eq("assignment_id", assignmentId)
-      .eq("student_id", user.id)
+      .eq("student_id", learnerId)
       .single();
 
     if (!submission) {
@@ -75,11 +82,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: decision.error }, { status: decision.status });
     }
 
-    if (!hasServiceRoleConfig()) {
-      console.error("Homework retake: service role is not configured; resets are server-only.");
-      return NextResponse.json({ error: "Retake is temporarily unavailable" }, { status: 503 });
-    }
-    const admin = createServiceClient();
+    const admin = learnerService.admin;
 
     // Reset the submission to a fresh attempt, then clear the prior answers.
     // The attempt itself is preserved in homework_attempts; attempt_count is
@@ -97,7 +100,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", submission.id)
-      .eq("student_id", user.id)
+      .eq("student_id", learnerId)
       .eq("status", submission.status)
       .select("id");
 

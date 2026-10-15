@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { getLearnerContextResult } from '@/lib/server/learner-context';
+import { createOwnedLearnerAdminClient, type LearnerAdminClient } from '@/lib/server/learner-admin';
 import { createServiceClient, hasServiceRoleConfig } from '@/lib/supabase/service';
 import type { Database, Json } from '@/lib/database.types';
 import type { Slide } from '@/lib/slides.types';
@@ -116,6 +118,7 @@ async function loadLessonAndDeck(
 
 async function updateSlideInteractionProgress(
   supabase: Awaited<ReturnType<typeof createClient>>,
+  admin: LearnerAdminClient,
   studentId: string,
   lessonId: string
 ) {
@@ -136,15 +139,17 @@ async function updateSlideInteractionProgress(
     .maybeSingle();
 
   if (existingProgress) {
-    await supabase
+    await admin
       .from('lesson_progress')
       .update({
         interactive_slides_completed: completedCount,
         interactive_slides_correct: correctCount,
       })
-      .eq('id', existingProgress.id);
+      .eq('id', existingProgress.id)
+      .eq('student_id', studentId)
+      .eq('lesson_id', lessonId);
   } else {
-    await supabase
+    await admin
       .from('lesson_progress')
       .insert({
         student_id: studentId,
@@ -156,7 +161,7 @@ async function updateSlideInteractionProgress(
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: lessonId } = await params;
@@ -170,6 +175,9 @@ export async function GET(
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const resolved = await getLearnerContextResult(request, supabase);
+  if (resolved.response) return resolved.response;
+  const learnerId = resolved.context.learnerId;
 
   const { lesson, error, code, status } = await loadLessonAndDeck(supabase, lessonId);
 
@@ -185,7 +193,7 @@ export async function GET(
     .from('lesson_slide_responses')
     .select('*')
     .eq('lesson_id', lessonId)
-    .eq('student_id', user.id)
+    .eq('student_id', learnerId)
     .order('updated_at', { ascending: false });
 
   if (responsesError) {
@@ -210,6 +218,17 @@ export async function POST(
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const resolved = await getLearnerContextResult(request, supabase);
+  if (resolved.response) return resolved.response;
+  const learnerId = resolved.context.learnerId;
+  const service = await createOwnedLearnerAdminClient(resolved.context);
+  if (service.error === 'service_role_unavailable') {
+    return NextResponse.json({ error: 'Saving answers is temporarily unavailable' }, { status: 503 });
+  }
+  if (service.error || !service.admin) {
+    return NextResponse.json({ error: 'Learner is no longer available' }, { status: service.error === 'ownership_check_failed' ? 500 : 403 });
+  }
+  const admin = service.admin;
 
   const body = await request.json().catch(() => null);
   const validation = SlideResponseSchema.safeParse(body);
@@ -268,7 +287,7 @@ export async function POST(
     .select('*')
     .eq('lesson_id', lessonId)
     .eq('slide_id', slide_id)
-    .eq('student_id', user.id)
+    .eq('student_id', learnerId)
     .maybeSingle();
 
   if (existingError) {
@@ -299,7 +318,7 @@ export async function POST(
       return NextResponse.json({ response: existing, is_correct: existing.is_correct, stale: true });
     }
 
-    const { data: updated, error: updateError } = await supabase
+    const { data: updated, error: updateError } = await admin
       .from('lesson_slide_responses')
       .update({
         interaction_type: interactionType,
@@ -311,6 +330,9 @@ export async function POST(
         completed_at: new Date().toISOString(),
       })
       .eq('id', existing.id)
+      .eq('student_id', learnerId)
+      .eq('lesson_id', lessonId)
+      .eq('slide_id', slide_id)
       .select()
       .single();
 
@@ -320,12 +342,12 @@ export async function POST(
 
     responseRow = updated;
   } else {
-    const { data: inserted, error: insertError } = await supabase
+    const { data: inserted, error: insertError } = await admin
       .from('lesson_slide_responses')
       .insert({
         lesson_id: lessonId,
         slide_id,
-        student_id: user.id,
+        student_id: learnerId,
         interaction_type: interactionType,
         response_data: responseData,
         completion_score: isCorrect ? 1 : 0,
@@ -344,7 +366,7 @@ export async function POST(
     responseRow = inserted;
   }
 
-  await updateSlideInteractionProgress(supabase, user.id, lessonId);
+  await updateSlideInteractionProgress(supabase, admin, learnerId, lessonId);
 
   return NextResponse.json({
     response: responseRow,
