@@ -75,7 +75,12 @@ beforeEach(() => {
   vi.stubGlobal("navigator", { onLine: true });
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => new Response(JSON.stringify({ is_correct: true }), { status: 200 }))
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/learners")) {
+        return new Response(JSON.stringify({ accountId: B, learners: [{ id: B, isSelf: true }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ is_correct: true }), { status: 200 });
+    })
   );
 });
 
@@ -103,7 +108,10 @@ describe("sync on a phone with another account's items", () => {
     const result = await syncOfflineQueue();
     expect(result).toMatchObject({ synced: 1, dropped: 2, otherAccounts: 1, remaining: 1 });
     expect(queue.map((entry) => entry.id)).toEqual([2]);
-    const sent = vi.mocked(fetch).mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)).slide_id);
+    const sent = vi.mocked(fetch).mock.calls
+      .map(([, init]) => (init as RequestInit | undefined)?.body)
+      .filter((body): body is BodyInit => typeof body === "string")
+      .map((body) => JSON.parse(body as string).slide_id);
     expect(sent).toEqual(["slide-1"]);
   });
 });

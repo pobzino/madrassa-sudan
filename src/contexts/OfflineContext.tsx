@@ -307,7 +307,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
           (state) => setDownloads((prev) => new Map(prev).set(lessonId, state)),
           // The saved lesson/media remains family-owned; the learner ID only
           // scopes the progress and answer snapshot seeded by the downloader.
-          { origin: options.origin, learnerId: options.learnerId } as { origin?: OfflineOrigin; learnerId?: string }
+          { origin: options.origin, learnerId: options.learnerId }
         );
         setDownloadedIds((prev) => new Set(prev).add(lessonId));
         setUpdateIds((prev) => withoutItem(prev, lessonId));

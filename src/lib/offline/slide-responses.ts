@@ -18,6 +18,7 @@
 import { answerFromLegacy, slideToInteraction, toServerSlideAnswer } from "@/lib/interactions/adapters";
 import type { InteractionAnswer } from "@/lib/interactions/types";
 import type { Slide } from "@/lib/slides.types";
+import { LEARNER_HEADER } from "@/lib/learners/types";
 import {
   getLocalSlideResponses,
   getStorageEpoch,
@@ -48,6 +49,7 @@ export type SlideResponsePostResult =
 
 export interface SlideResponseInput {
   ownerId: string;
+  learnerId?: string;
   lessonId: string;
   slideId: string;
   /** What SimPlayer produced: a typed InteractionAnswer, or null for a skipped activity. */
@@ -123,14 +125,16 @@ export async function applyServerGrade(
   slideId: string,
   sent: { answer?: unknown; answeredAt?: unknown; answerId?: unknown },
   isCorrect: boolean,
-  epoch?: number
+  epoch?: number,
+  learnerId = ownerId
 ): Promise<void> {
   await updateLocalSlideResponse(
     ownerId,
     lessonId,
     slideId,
     (entry) => (entry && entry.isCorrect !== isCorrect && isSameAnswer(entry, sent) ? { ...entry, isCorrect } : undefined),
-    epoch
+    epoch,
+    learnerId
   );
 }
 
@@ -148,12 +152,14 @@ export async function postSlideResponse(
     timeSpentSeconds,
     answeredAt,
     answerId,
+    learnerId,
     signal,
     timeoutMs = POST_TIMEOUT_MS,
   }: {
-    timeSpentSeconds?: number;
-    answeredAt?: string;
-    answerId?: string;
+      timeSpentSeconds?: number;
+      answeredAt?: string;
+      answerId?: string;
+      learnerId?: string;
     signal?: AbortSignal;
     timeoutMs?: number;
   } = {}
@@ -170,7 +176,7 @@ export async function postSlideResponse(
   try {
     const response = await fetch(`/api/lessons/${encodeURIComponent(lessonId)}/slide-responses`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(learnerId ? { [LEARNER_HEADER]: learnerId } : {}) },
       credentials: "same-origin",
       signal: controller.signal,
       body: JSON.stringify({
@@ -213,10 +219,11 @@ export async function queueSlideResponse(
   input: Omit<SlideResponseInput, "isCorrect">,
   epoch = getStorageEpoch()
 ): Promise<void> {
-  const { ownerId, lessonId, slideId, answer, timeSpentSeconds, answeredAt, answerId } = stamp(input);
+  const { ownerId, learnerId = input.ownerId, lessonId, slideId, answer, timeSpentSeconds, answeredAt, answerId } = stamp(input);
   await queueSlideResponseItem({
     lessonId,
     ownerId,
+    learnerId,
     kind: "slide_response",
     timestamp: answeredAt,
     data: {
@@ -230,7 +237,7 @@ export async function queueSlideResponse(
 }
 
 async function saveLocally(
-  { ownerId, lessonId, slideId, answer, isCorrect, answeredAt, answerId }: StampedInput<SlideResponseInput>,
+  { ownerId, learnerId = ownerId, lessonId, slideId, answer, isCorrect, answeredAt, answerId }: StampedInput<SlideResponseInput>,
   epoch: number
 ) {
   await updateLocalSlideResponse(
@@ -242,7 +249,8 @@ async function saveLocally(
       !isRealAnswer(answer) && current && isRealAnswer(current.answer)
         ? undefined
         : { answer: answer ?? null, isCorrect, answeredAt, answerId },
-    epoch
+    epoch,
+    learnerId
   );
 }
 
@@ -263,12 +271,13 @@ export async function submitSlideResponse(input: SlideResponseInput): Promise<Sl
   // account's answer written back into the wiped storage.
   const epoch = getStorageEpoch();
   const answer = stamp(input);
-  const { ownerId, lessonId, slideId, answeredAt, answerId } = answer;
+  const { ownerId, learnerId = ownerId, lessonId, slideId, answeredAt, answerId } = answer;
   await saveLocally(answer, epoch).catch(() => undefined);
   const result = await postSlideResponse(lessonId, slideId, answer.answer, {
     timeSpentSeconds: answer.timeSpentSeconds,
     answeredAt,
     answerId,
+    learnerId,
   });
   if (result.ok) {
     // Older answers to this slide still queued from a failed send must not
@@ -276,9 +285,9 @@ export async function submitSlideResponse(input: SlideResponseInput): Promise<Sl
     await removeQueuedSlideResponses(ownerId, lessonId, slideId, {
       real: isRealAnswer(answer.answer),
       time: Date.parse(answeredAt),
-    }).catch(() => undefined);
+    }, learnerId).catch(() => undefined);
     if (result.isCorrect !== null && result.isCorrect !== input.isCorrect) {
-      await applyServerGrade(ownerId, lessonId, slideId, answer, result.isCorrect, epoch).catch(() => undefined);
+      await applyServerGrade(ownerId, lessonId, slideId, answer, result.isCorrect, epoch, learnerId).catch(() => undefined);
     }
   } else if (result.outcome === "retry") {
     // Not queued when a newer answer to the slide was given meanwhile (it is
@@ -299,9 +308,9 @@ export function toSavedSlideResponses(local: Pick<LocalSlideResponses, "bySlide"
 }
 
 /** Answers saved on this phone for one owner + lesson, ready for SimPlayer. Never throws. */
-export async function getSavedSlideResponses(ownerId: string, lessonId: string): Promise<SavedSlideResponses> {
+export async function getSavedSlideResponses(ownerId: string, lessonId: string, learnerId = ownerId): Promise<SavedSlideResponses> {
   try {
-    return toSavedSlideResponses(await getLocalSlideResponses(ownerId, lessonId));
+    return toSavedSlideResponses(await getLocalSlideResponses(ownerId, lessonId, learnerId));
   } catch {
     return {};
   }
