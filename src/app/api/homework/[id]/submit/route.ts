@@ -303,7 +303,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // bump) for a lesson that is unpublished or limited to another class.
       const { data: canAccessLesson, error: lessonAccessError } = await admin.rpc(
         "can_user_access_published_lesson",
-        { p_user_id: user.id, p_lesson_id: assignment.lesson_id }
+        { p_user_id: learnerId, p_lesson_id: assignment.lesson_id }
       );
       if (lessonAccessError) {
         console.error("Error checking lesson access for Practice completion:", lessonAccessError);

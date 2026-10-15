@@ -20,8 +20,8 @@ import {
 import { getCachedProfile, getCachedUser } from "@/lib/supabase/auth-cache";
 import { createClient } from "@/lib/supabase/client";
 import LearnerPicker from "@/components/learners/LearnerPicker";
+import { cacheValidatedLearnerSelection } from "@/lib/offline/learner";
 
-const ACTIVE_LEARNER_PREFIX = "amal-active-learner:";
 export const LEARNER_CHANGED_EVENT = "amal:learner-changed";
 
 interface LearnerContextValue {
@@ -43,23 +43,20 @@ interface LearnerContextValue {
 
 const LearnerContext = createContext<LearnerContextValue | null>(null);
 
-function activeLearnerKey(accountId: string) {
-  return `${ACTIVE_LEARNER_PREFIX}${accountId}`;
-}
-
 function readSavedLearner(accountId: string): string | null {
   try {
-    return localStorage.getItem(activeLearnerKey(accountId));
+    const raw = localStorage.getItem(`amal-active-learner:${accountId}`);
+    if (!raw) return null;
+    // Read the earlier raw-ID format so an online refresh can migrate it after
+    // the server has freshly validated the account's learner list.
+    try {
+      const parsed = JSON.parse(raw) as { activeLearnerId?: unknown };
+      return typeof parsed.activeLearnerId === "string" ? parsed.activeLearnerId : raw;
+    } catch {
+      return raw;
+    }
   } catch {
     return null;
-  }
-}
-
-function saveLearner(accountId: string, learnerId: string) {
-  try {
-    localStorage.setItem(activeLearnerKey(accountId), learnerId);
-  } catch {
-    // Private browsing can disable storage; the in-memory choice still works.
   }
 }
 
@@ -108,9 +105,10 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
 
       const savedId = readSavedLearner(payload.accountId);
       const saved = savedId ? nextLearners.find((learner) => learner.id === savedId) : null;
+      const selectedId = saved && !saved.needsSetup && !payload.needsSelfName ? saved.id : self.id;
+      cacheValidatedLearnerSelection(payload.accountId, selectedId, nextLearners.map((learner) => learner.id));
       const pending = (learner: Learner | undefined) => Boolean(learner?.needsSetup);
       if (parent) {
-        if (savedId && !saved) saveLearner(payload.accountId, self.id);
         if (saved && !pending(saved) && !payload.needsSelfName) {
           setActiveLearnerState(saved);
           setInitialSelectionRequired(false);
@@ -201,7 +199,7 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
     // Unmount learner-scoped pages while they drop their old state, then mount
     // again under a key tied to the new learner.
     window.dispatchEvent(new CustomEvent(LEARNER_CHANGED_EVENT, { detail: { accountId, learnerId: id } }));
-    saveLearner(accountId, id);
+    cacheValidatedLearnerSelection(accountId, id, learnersRef.current.map((learner) => learner.id));
     setActiveLearnerState(learner);
     setInitialSelectionRequired(false);
     setPickerOpen(false);

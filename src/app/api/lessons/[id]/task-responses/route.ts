@@ -79,7 +79,7 @@ export async function POST(
   // write a teacher review or a score themselves). That skips RLS, so check
   // the lesson access the old student policy enforced.
   const { data: canAccessLesson } = await supabase.rpc('can_user_access_published_lesson', {
-    p_user_id: resolved.context.accountId,
+    p_user_id: learnerId,
     p_lesson_id: lessonId,
   })
   if (canAccessLesson !== true) {
