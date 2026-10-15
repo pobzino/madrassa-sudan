@@ -16,7 +16,6 @@ import { SudanFlagToAmalOwl } from "@/components/brand/SudanFlagToAmalOwl";
 import { OwlLessonPortal } from "@/components/brand/OwlLessonPortal";
 import { LEGAL_ENTITY } from "@/lib/legal-entity";
 import { roundDownStat, statNumberFormat, type HomeStats } from "@/lib/home-stats";
-import { PARTNERS } from "@/lib/partners";
 import { FeaturesSection } from "./FeaturesSection";
 import { HeroOwls } from "./HeroOwls";
 import { HowItWorks } from "./HowItWorks";
@@ -99,7 +98,6 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
       footer: {
         tagline: "نبني مستقبل السودان، طفل بطفل",
         links: { parents: "للأهل", privacy: "الخصوصية", terms: "الشروط", contact: "تواصل معنا", donate: "ادعم آمال" },
-        partners: "بالشراكة مع",
         builtBy: "طُوّر بواسطة",
         copyright: "© ٢٠٢٦ مدرسة آمال",
       },
@@ -162,7 +160,6 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
       footer: {
         tagline: "Building Sudan's future, one child at a time",
         links: { parents: "For Parents", privacy: "Privacy", terms: "Terms", contact: "Contact", donate: "Support Amal" },
-        partners: "In partnership with",
         builtBy: "Built by",
         copyright: "© 2026 Amal School",
       },
@@ -487,23 +484,6 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
             <p className="text-xs sm:text-sm text-gray-500">{txt.footer.copyright}</p>
           </div>
 
-          <p className="mt-6 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs sm:text-sm text-gray-500">
-            <span>{txt.footer.partners}</span>
-            {PARTNERS.map((partner, i) => (
-              <span key={partner.id} className="inline-flex items-center gap-2">
-                {i > 0 && <span aria-hidden className="text-gray-300">·</span>}
-                <a
-                  href={partner.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={language === "ar" ? partner.nameAr : partner.name}
-                  className="font-semibold text-gray-700 hover:text-[#007229] transition-colors"
-                >
-                  {partner.shortName}
-                </a>
-              </span>
-            ))}
-          </p>
 
           <p
             dir="ltr"

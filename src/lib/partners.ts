@@ -2,7 +2,7 @@ export type Partner = {
   id: string;
   name: string;
   nameAr: string;
-  // Used where space is tight, such as the footer.
+  // Short handwritten caption under the partner's pinned card.
   shortName: string;
   url: string;
   logo: { src: string; width: number; height: number; className: string };
