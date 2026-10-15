@@ -6,7 +6,7 @@ import { GamepadIcon, RobotIcon, TrophyIcon, VideoIcon } from "@/components/illu
 import { SectionScene } from "@/components/dashboard/DashboardScenes";
 import { LivingOwl, type OwlMood } from "@/components/brand/LivingOwl";
 
-type Feature = { title: string; desc: string; iconType: string };
+type Feature = { title: string; desc: string; iconType: string; color: string };
 
 const FeatureIcon = ({ type, className }: { type: string; className?: string }) => {
   switch (type) {
@@ -17,13 +17,6 @@ const FeatureIcon = ({ type, className }: { type: string; className?: string }) 
     default: return null;
   }
 };
-
-const TONES = [
-  { chip: "bg-emerald-50 text-[#007229] ring-emerald-100", bar: "bg-[#007229]" },
-  { chip: "bg-red-50 text-[#D21034] ring-red-100", bar: "bg-[#D21034]" },
-  { chip: "bg-emerald-50 text-[#005C22] ring-emerald-100", bar: "bg-[#00913D]" },
-  { chip: "bg-amber-50 text-amber-600 ring-amber-100", bar: "bg-amber-400" },
-];
 
 // What the owl does on each card it visits, and for how long (seconds).
 const PERCH_ACTS: { mood: OwlMood; hold: number }[] = [
@@ -153,8 +146,8 @@ export function FeaturesSection({
       perches.forEach(({ box, card }, k) => {
         const act = PERCH_ACTS[k % PERCH_ACTS.length];
         const fx = box.left + box.width * (rtlRef.current ? 0.28 : 0.72);
-        // Cards lift 6px when visited, so land a touch higher to stay on the edge.
-        const perchY = box.top - 6;
+        // Cards lift 8px when visited, so land a touch higher to stay on the edge.
+        const perchY = box.top - 8;
         const trick = k % 2 === 0 ? "roll" : "flip";
         tl.to(owl, {
           ...at(fx, skim),
@@ -197,8 +190,9 @@ export function FeaturesSection({
       const ow = owl.offsetWidth;
       const oh = owl.offsetHeight;
       const chip = cards[0]?.querySelector<HTMLElement>("[data-feature-chip]");
-      const chipTop = chip?.offsetTop ?? 16;
-      const chipH = chip?.offsetHeight ?? 44;
+      const chipBox = chip?.getBoundingClientRect();
+      const chipTop = chipBox && cards[0] ? chipBox.top - cards[0].getBoundingClientRect().top : 16;
+      const chipH = chipBox?.height ?? 40;
       const s = Math.max(0.5, Math.min(1, (chipH + 10) / oh));
       const at = (fx: number, fy: number) => ({ x: fx - ow / 2, y: fy - (oh * s) / 2 - oh / 2 });
 
@@ -219,8 +213,8 @@ export function FeaturesSection({
       const inset = 14;
       const perch = (box: Box) => ({
         x: rtl ? box.left + inset + (ow * s) / 2 : box.right - inset - (ow * s) / 2,
-        // Feet on the line of the icon; cards lift 6px when visited.
-        y: box.top + chipTop + chipH - 6,
+        // Feet on the line of the icon; cards lift 8px when visited.
+        y: box.top + chipTop + chipH - 8,
       });
       const skim = rowTop - 14;
       const first = perch(ordered[0].box);
@@ -297,32 +291,37 @@ export function FeaturesSection({
           </h2>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
-          {items.map((feature, i) => {
-            const tone = TONES[i % TONES.length];
-            return (
+        <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">
+          {items.map((feature, i) => (
+            // The original card: lifts and fills with colour on hover, or when the owl lands on it.
+            <div
+              key={i}
+              ref={(node) => {
+                cardRefs.current[i] = node;
+              }}
+              data-owl-visit="false"
+              className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-lg transition-all duration-300 hover:-translate-y-2 hover:shadow-xl data-[owl-visit=true]:-translate-y-2 data-[owl-visit=true]:shadow-xl sm:rounded-3xl sm:p-8"
+            >
               <div
-                key={i}
-                ref={(node) => {
-                  cardRefs.current[i] = node;
-                }}
-                data-owl-visit="false"
-                className="group relative overflow-hidden rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200/70 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl data-[owl-visit=true]:-translate-y-1.5 data-[owl-visit=true]:shadow-xl data-[owl-visit=true]:ring-2 data-[owl-visit=true]:ring-amber-300 sm:rounded-3xl sm:p-7"
-              >
-                <div
-                  className={`absolute inset-x-0 top-0 h-1 ${tone.bar} origin-left scale-x-0 transition-transform duration-300 group-hover:scale-x-100 group-data-[owl-visit=true]:scale-x-100 rtl:origin-right`}
-                />
+                className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-data-[owl-visit=true]:opacity-100`}
+              />
+              <div className="relative z-10">
                 <div
                   data-feature-chip
-                  className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl ring-1 transition-transform duration-300 group-data-[owl-visit=true]:-rotate-6 group-data-[owl-visit=true]:scale-110 sm:mb-6 sm:h-14 sm:w-14 sm:rounded-2xl ${tone.chip}`}
+                  className="mb-3 h-10 w-10 text-[#007229] transition-colors group-hover:text-white group-data-[owl-visit=true]:text-white sm:mb-4 sm:h-14 sm:w-14"
                 >
-                  <FeatureIcon type={feature.iconType} className="h-6 w-6 sm:h-8 sm:w-8" />
+                  <FeatureIcon type={feature.iconType} className="h-full w-full" />
                 </div>
-                <h3 className="mb-1 font-fredoka text-base font-semibold text-gray-900 sm:mb-2 sm:text-xl">{feature.title}</h3>
-                <p className="line-clamp-4 text-xs leading-relaxed text-gray-600 sm:line-clamp-none sm:text-base">{feature.desc}</p>
+                <h3 className="mb-1 text-sm font-bold text-gray-900 transition-colors group-hover:text-white group-data-[owl-visit=true]:text-white sm:mb-3 sm:text-xl">
+                  {feature.title}
+                </h3>
+                <p className="line-clamp-3 text-xs text-gray-600 transition-colors group-hover:text-white/90 group-data-[owl-visit=true]:text-white/90 sm:line-clamp-none sm:text-base">
+                  {feature.desc}
+                </p>
               </div>
-            );
-          })}
+              <div className="absolute -bottom-8 -right-8 h-16 w-16 rounded-full bg-gray-100 transition-colors group-hover:bg-white/20 group-data-[owl-visit=true]:bg-white/20 sm:h-24 sm:w-24" />
+            </div>
+          ))}
         </div>
 
         <div ref={owlRef} aria-hidden className="pointer-events-none absolute left-0 top-0 z-20 w-14 opacity-0 sm:w-20">
