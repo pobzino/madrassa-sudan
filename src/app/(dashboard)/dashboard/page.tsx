@@ -17,6 +17,7 @@ import {
   OwlEnglish,
 } from "@/components/illustrations";
 import { HeroScene, SubjectScene } from "@/components/dashboard/DashboardScenes";
+import { DashboardInstallNudge } from "@/components/pwa/InstallNudges";
 
 const translations = {
   ar: {
@@ -205,6 +206,8 @@ export default function DashboardPage() {
               </Link>
             </div>
           </div>
+
+          <DashboardInstallNudge />
 
           {/* Stats Grid */}
           <div className="mb-8">

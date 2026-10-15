@@ -36,6 +36,7 @@ export function welcomeParentEmail(args: Base & { whatsappGroupUrl: string }): R
           text: "عندك سؤال، أو تحب تتعرّف على عائلات أخرى؟ انضم إلى مجموعة الأهالي على واتساب.",
           link: { label: "انضم إلى المجموعة", url: whatsappGroupUrl },
         },
+        secondaryLink: { label: "أضف آمال إلى الشاشة الرئيسية لهاتفك", url: `${siteUrl}/app?lang=ar` },
       },
       args,
     );
@@ -58,6 +59,7 @@ export function welcomeParentEmail(args: Base & { whatsappGroupUrl: string }): R
         text: "Got a question, or want to meet other families? Join our parents' WhatsApp group.",
         link: { label: "Join the group", url: whatsappGroupUrl },
       },
+      secondaryLink: { label: "Add Amal to your phone's home screen", url: `${siteUrl}/app?lang=en` },
     },
     args,
   );

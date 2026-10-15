@@ -15,6 +15,7 @@ import PracticePlayer, {
 } from "@/components/practice/PracticePlayer";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import { requestInstallNudge } from "@/lib/pwa-install";
 import { loadLessonNavigation } from "@/lib/lessons/path-navigation";
 import {
   resolvePracticeDisplayLanguages,
@@ -375,6 +376,7 @@ export default function PracticePage() {
           context,
         );
         if (payload?.data?.lesson_completed) {
+          requestInstallNudge("lesson");
           trackAnalyticsEvent("lesson_complete", {
             lesson_id: practice?.lessonId || "",
             subject_id: practice?.subjectId || "",

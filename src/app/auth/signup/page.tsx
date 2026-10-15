@@ -18,6 +18,8 @@ import CountryCodeSelect from "@/components/CountryCodeSelect";
 import { PARENT_CALLING_CODE_OPTIONS } from "@/lib/calling-codes";
 import { Minus, Plus } from "lucide-react";
 import { PARENT_WHATSAPP_GROUP_URL } from "@/lib/parent-community";
+import { AddToPhone, useInstallPlatform } from "@/components/pwa/AddToPhone";
+import { markInstallNudgeShown, requestInstallNudge } from "@/lib/pwa-install";
 import { defaultEmailUpdatesOptIn, isProtectedTimeZone } from "@/lib/email-consent-region";
 
 const noSubscription = () => () => {};
@@ -143,6 +145,7 @@ const translations = {
     parentAccountReadyHint: "انضم إلى مجموعة واتساب الخاصة بأولياء الأمور للحصول على التحديثات والدعم.",
     parentEmailConfirmationHint: "أكد الرابط الذي أرسلناه إلى بريدك الإلكتروني، ثم سجّل الدخول. يمكنك الانضمام إلى مجموعة أولياء الأمور الآن.",
     joinParentWhatsAppGroup: "انضم إلى مجموعة أولياء الأمور على واتساب",
+    addToPhoneTitle: "أولاً، ضع آمال على هاتفك لتكون الدروس على بُعد لمسة.",
     continueToDashboard: "الانتقال إلى المنصة",
     backToLogin: "العودة لتسجيل الدخول",
     parentAccountExists: "يوجد حساب مسجل بالفعل بهذا الرقم. سجّل الدخول برقم واتساب وكلمة المرور بدلاً من التسجيل مرة أخرى.",
@@ -242,6 +245,7 @@ const translations = {
     parentAccountReadyHint: "Join the parent WhatsApp group for updates and support.",
     parentEmailConfirmationHint: "Confirm the link we sent to your email, then sign in. You can join the parent group now.",
     joinParentWhatsAppGroup: "Join the parent WhatsApp group",
+    addToPhoneTitle: "First, put Amal on your phone so lessons are one tap away.",
     continueToDashboard: "Go to the platform",
     backToLogin: "Back to Login",
     parentAccountExists: "An account already exists for this number. Sign in with your WhatsApp number and password instead of registering again.",
@@ -292,6 +296,7 @@ function SignupForm() {
   const [teacherWhatsapp, setTeacherWhatsapp] = useState("");
   const [teacherLocation, setTeacherLocation] = useState("");
   // Unticked by default in the UK, EU and EEA (by time zone or the country typed in), ticked elsewhere.
+  const installPlatform = useInstallPlatform();
   const inProtectedTimeZone = useSyncExternalStore(noSubscription, browserInProtectedTimeZone, () => false);
   const emailUpdatesDefault = defaultEmailUpdatesOptIn({
     timeZone: inProtectedTimeZone ? "Europe/London" : null,
@@ -567,10 +572,14 @@ function SignupForm() {
 
     if (role === "parent") {
       if (!data.session) {
+        // They'll land on the dashboard after confirming, which then offers the install.
+        requestInstallNudge("signup");
         router.push(`/auth/verify-email?email=${encodeURIComponent(loginEmail)}&type=signup`);
         setLoading(false);
         return;
       }
+      // The success screen offers the install, so the dashboard doesn't ask again.
+      markInstallNudgeShown("signup");
       setParentSignupComplete(true);
       setParentEmailConfirmationRequired(false);
       setParentHasSession(Boolean(data.session));
@@ -621,6 +630,12 @@ function SignupForm() {
           </h2>
           {parentSignupComplete ? (
             <>
+              {installPlatform && installPlatform !== "installed" && (
+                <div className="mb-6 rounded-2xl bg-[#ecf7ef] p-4 text-start ring-1 ring-[#cfe9d6]">
+                  <p className="mb-3 font-bold text-gray-900">{t.addToPhoneTitle}</p>
+                  <AddToPhone source="signup" />
+                </div>
+              )}
               <p className="text-gray-600 mb-6">
                 {parentEmailConfirmationRequired ? t.parentEmailConfirmationHint : t.parentAccountReadyHint}
               </p>

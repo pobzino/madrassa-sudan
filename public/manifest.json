@@ -1,25 +1,49 @@
 {
+  "id": "/",
   "name": "Amal School — مدرسة آمال",
   "short_name": "آمال",
   "description": "Quality education for every Sudanese child, anywhere in the world.",
+  "lang": "ar",
+  "dir": "auto",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "theme_color": "#007229",
   "background_color": "#FCFCFC",
+  "categories": ["education", "kids"],
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "واصل التعلّم · Continue learning",
+      "short_name": "الدروس · Lessons",
+      "url": "/lessons",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "تقدّمي · My progress",
+      "short_name": "التقدّم · Progress",
+      "url": "/progress",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

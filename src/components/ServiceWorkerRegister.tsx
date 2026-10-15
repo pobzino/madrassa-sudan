@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
+// Imported here, in the root layout, so it catches the browser's one-tap
+// install offer even if that arrives before any install button renders.
+import { trackAppLaunch } from "@/lib/pwa-install";
 
 function canUseServiceWorker() {
   if (!("serviceWorker" in navigator)) return false;
@@ -10,6 +13,7 @@ function canUseServiceWorker() {
 
 export default function ServiceWorkerRegister() {
   useEffect(() => {
+    trackAppLaunch();
     if (!canUseServiceWorker()) return;
 
     // Development chunks are not content-hashed like production bundles. A

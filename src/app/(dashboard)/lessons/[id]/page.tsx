@@ -35,6 +35,7 @@ import {
 } from "@/lib/slide-interactions";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import { requestInstallNudge } from "@/lib/pwa-install";
 import { loadLessonNavigation } from "@/lib/lessons/path-navigation";
 
 const VIDEO_ANALYTICS_MILESTONES = [25, 50, 75, 100] as const;
@@ -721,6 +722,7 @@ export default function LessonPlayerPage() {
       source,
     };
     trackAnalyticsEvent("lesson_complete", context);
+    requestInstallNudge("lesson");
 
     const { count } = await supabase
       .from("lesson_progress")
