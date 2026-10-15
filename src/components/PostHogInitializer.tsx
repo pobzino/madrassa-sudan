@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import posthog from "posthog-js";
+import { getOpaqueLearnerAnalyticsId } from "@/lib/analytics-identity";
+import { createClient } from "@/lib/supabase/client";
 
 type PostHogInitializerProps = {
   host?: string;
@@ -10,6 +12,7 @@ type PostHogInitializerProps = {
 };
 
 let initializedFor: string | undefined;
+let identifiedAccountId: string | undefined;
 
 function canRecordSession(pathname: string) {
   return ["/", "/parents", "/sample-lesson", "/privacy", "/terms", "/tutor"].includes(pathname);
@@ -52,9 +55,47 @@ export default function PostHogInitializer({ host, projectToken }: PostHogInitia
       initializedFor = configurationKey;
     }
 
-    if (canRecordSession(pathname) || !posthog.__loaded) return;
+    const supabase = createClient();
+    let cancelled = false;
 
-    posthog.stopSessionRecording();
+    const clearIdentity = () => {
+      if (!identifiedAccountId) return;
+      posthog.reset();
+      identifiedAccountId = undefined;
+    };
+
+    const identifyAuthenticatedAccount = async (accountId: string) => {
+      if (identifiedAccountId === accountId) return;
+      const distinctId = await getOpaqueLearnerAnalyticsId(accountId);
+      if (cancelled || !posthog.__loaded) return;
+      posthog.identify(distinctId);
+      identifiedAccountId = accountId;
+    };
+
+    void supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) {
+        clearIdentity();
+        return;
+      }
+      return identifyAuthenticatedAccount(data.user.id);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) {
+        clearIdentity();
+        return;
+      }
+      void identifyAuthenticatedAccount(session.user.id);
+    });
+
+    if (!canRecordSession(pathname) && posthog.__loaded) {
+      posthog.stopSessionRecording();
+    }
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, [configurationKey, host, pathname, projectToken, shouldRecordSession]);
 
   return null;

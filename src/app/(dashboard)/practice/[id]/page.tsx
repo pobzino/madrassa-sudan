@@ -374,6 +374,22 @@ export default function PracticePage() {
             : "practice_fail",
           context,
         );
+        if (payload?.data?.lesson_completed) {
+          trackAnalyticsEvent("lesson_complete", {
+            lesson_id: practice?.lessonId || "",
+            subject_id: practice?.subjectId || "",
+            grade_level: practice?.gradeLevel ?? 0,
+            source: "practice_pass",
+          });
+        }
+        if (payload?.data?.first_lesson_completion) {
+          trackAnalyticsEvent("learner_activated", {
+            lesson_id: practice?.lessonId || "",
+            subject_id: practice?.subjectId || "",
+            grade_level: practice?.gradeLevel ?? 0,
+            source: "first_lesson_completion",
+          });
+        }
         return true;
       } catch (err) {
         console.error("Failed to submit practice:", err);

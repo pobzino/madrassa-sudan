@@ -4,12 +4,15 @@ export const ANALYTICS_EVENT_NAMES = [
   "application_submit",
   "app_error",
   "landing_view",
+  "learner_activated",
+  "lesson_complete",
   "language_change",
   "lesson_start",
   "lesson_activity_submit",
   "lesson_video_complete",
   "lesson_video_progress",
   "lesson_video_start",
+  "lesson_watch_session_end",
   "media_error",
   "next_lesson_open",
   "page_view",
@@ -32,6 +35,7 @@ export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];
 export type AnalyticsProperties = Record<string, string | number | boolean>;
 
 export const ANALYTICS_PROPERTY_KEYS = new Set([
+  "active_play_seconds",
   "acquisition_source",
   "activity_type",
   "assignment_id",
@@ -54,4 +58,5 @@ export const ANALYTICS_PROPERTY_KEYS = new Set([
   "utm_campaign",
   "utm_medium",
   "utm_source",
+  "video_duration_seconds",
 ]);

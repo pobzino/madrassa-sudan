@@ -103,6 +103,30 @@ describe("parseAnalyticsPayload", () => {
     });
   });
 
+  it("accepts aggregate completion and watch-time metrics without learner identifiers", () => {
+    expect(parseAnalyticsPayload({
+      eventName: "lesson_watch_session_end",
+      path: "/lessons/lesson-1",
+      properties: {
+        lesson_id: "lesson-1",
+        active_play_seconds: 143,
+        video_duration_seconds: 240,
+        progress_percent: 75,
+        student_id: "must-not-be-stored",
+      },
+    })).toEqual({
+      eventName: "lesson_watch_session_end",
+      locale: "en",
+      path: "/lessons/lesson-1",
+      properties: {
+        lesson_id: "lesson-1",
+        active_play_seconds: 143,
+        video_duration_seconds: 240,
+        progress_percent: 75,
+      },
+    });
+  });
+
   it("rejects unknown events and invalid paths", () => {
     expect(parseAnalyticsPayload({ eventName: "student_answer", path: "/" })).toBeNull();
     expect(parseAnalyticsPayload({ eventName: "page_view", path: "https://example.com" })).toBeNull();

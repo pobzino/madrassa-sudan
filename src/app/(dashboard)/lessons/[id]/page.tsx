@@ -215,6 +215,12 @@ export default function LessonPlayerPage() {
   const lessonStartTrackedRef = useRef<string | null>(null);
   const videoStartedTrackedRef = useRef(false);
   const videoMilestonesTrackedRef = useRef<Set<number>>(new Set());
+  const lessonCompletionTrackedRef = useRef(false);
+  const activePlaybackStartedAtRef = useRef<number | null>(null);
+  const activePlaybackSecondsRef = useRef(0);
+  const furthestPlaybackPercentRef = useRef(0);
+  const watchSessionReportedRef = useRef(false);
+  const playbackSourceRef = useRef<"sim_player" | "legacy_video" | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -288,6 +294,12 @@ export default function LessonPlayerPage() {
   useEffect(() => {
     videoStartedTrackedRef.current = false;
     videoMilestonesTrackedRef.current = new Set();
+    lessonCompletionTrackedRef.current = false;
+    activePlaybackStartedAtRef.current = null;
+    activePlaybackSecondsRef.current = 0;
+    furthestPlaybackPercentRef.current = 0;
+    watchSessionReportedRef.current = false;
+    playbackSourceRef.current = null;
   }, [lessonId]);
 
   useEffect(() => {
@@ -303,6 +315,7 @@ export default function LessonPlayerPage() {
 
   const trackVideoPlayback = useCallback((percent: number) => {
     if (!lesson) return;
+    furthestPlaybackPercentRef.current = Math.max(furthestPlaybackPercentRef.current, percent);
 
     const context = {
       lesson_id: lessonId,
@@ -567,6 +580,7 @@ export default function LessonPlayerPage() {
         setProgress(progressData);
         furthestSecRef.current = progressData.last_position_seconds ?? 0;
         watchTimeSecRef.current = progressData.total_watch_time_seconds ?? 0;
+        lessonCompletionTrackedRef.current = progressData.completed === true;
       }
 
       // Follow the published learning path's week/step sequence. Subjects that
@@ -652,6 +666,83 @@ export default function LessonPlayerPage() {
   // would give the callback a new identity after every write and defeat
   // SimPlayer's memo mid-playback.
   const simDurationSec = lessonSim?.sim?.duration_ms ? Math.ceil(lessonSim.sim.duration_ms / 1000) : lesson?.video_duration_seconds || 0;
+
+  const startActivePlayback = useCallback((source: "sim_player" | "legacy_video") => {
+    playbackSourceRef.current = source;
+    if (activePlaybackStartedAtRef.current === null) {
+      activePlaybackStartedAtRef.current = Date.now();
+    }
+  }, []);
+
+  const pauseActivePlayback = useCallback(() => {
+    if (activePlaybackStartedAtRef.current === null) return;
+    activePlaybackSecondsRef.current += (Date.now() - activePlaybackStartedAtRef.current) / 1000;
+    activePlaybackStartedAtRef.current = null;
+  }, []);
+
+  const reportWatchSession = useCallback(() => {
+    pauseActivePlayback();
+    if (
+      watchSessionReportedRef.current ||
+      !lesson ||
+      activePlaybackSecondsRef.current < 1
+    ) {
+      return;
+    }
+
+    watchSessionReportedRef.current = true;
+    trackAnalyticsEvent("lesson_watch_session_end", {
+      lesson_id: lessonId,
+      subject_id: lesson.subject_id,
+      grade_level: lesson.grade_level,
+      content_language: lessonContentLanguage,
+      active_play_seconds: Math.round(activePlaybackSecondsRef.current),
+      video_duration_seconds: Math.round(simDurationSec),
+      progress_percent: Math.round(furthestPlaybackPercentRef.current),
+      source: playbackSourceRef.current || "lesson_player",
+    });
+  }, [lesson, lessonContentLanguage, lessonId, pauseActivePlayback, simDurationSec]);
+
+  useEffect(() => {
+    return () => {
+      reportWatchSession();
+    };
+  }, [reportWatchSession]);
+
+  const trackCanonicalLessonCompletion = useCallback(async (source: string) => {
+    if (lessonCompletionTrackedRef.current || !lesson || !userId) return;
+    lessonCompletionTrackedRef.current = true;
+
+    const context = {
+      lesson_id: lessonId,
+      subject_id: lesson.subject_id,
+      grade_level: lesson.grade_level,
+      content_language: lessonContentLanguage,
+      source,
+    };
+    trackAnalyticsEvent("lesson_complete", context);
+
+    const { count } = await supabase
+      .from("lesson_progress")
+      .select("id", { count: "exact", head: true })
+      .eq("student_id", userId)
+      .eq("completed", true);
+    if (count === 1) {
+      trackAnalyticsEvent("learner_activated", {
+        ...context,
+        source: "first_lesson_completion",
+      });
+    }
+  }, [lesson, lessonContentLanguage, lessonId, supabase, userId]);
+
+  const handleSimPlaybackState = useCallback((isPlaying: boolean) => {
+    if (isPlaying) {
+      startActivePlayback("sim_player");
+      return;
+    }
+    pauseActivePlayback();
+  }, [pauseActivePlayback, startActivePlayback]);
+
   const handleSimProgress = useCallback(async (pct: number) => {
     trackVideoPlayback(pct);
     if (!userId || !lessonId) return;
@@ -699,14 +790,19 @@ export default function LessonPlayerPage() {
     }
 
     const { data: updatedProgress } = await supabase.from("lesson_progress").upsert(progressData, { onConflict: "student_id,lesson_id" }).select().single();
-    if (updatedProgress) setProgress(updatedProgress);
+    if (updatedProgress) {
+      setProgress(updatedProgress);
+      if (updatedProgress.completed) {
+        void trackCanonicalLessonCompletion("video_completion");
+      }
+    }
 
     // Independent track: finishing the recording flows straight into the
     // lesson's Practice (passing it is what completes the step).
     if (pct >= 99 && practiceAssignmentId && !practicePassed) {
       router.push(`/practice/${practiceAssignmentId}?from=lesson`);
     }
-  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practicePassed, router, trackVideoPlayback]);
+  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practicePassed, router, trackCanonicalLessonCompletion, trackVideoPlayback]);
 
   // Close progress gate and let sim handle replay
   const handleRewatchQuiz = useCallback(() => {
@@ -715,7 +811,7 @@ export default function LessonPlayerPage() {
 
   // Mark lesson as complete
   const handleMarkComplete = async () => {
-    if (!userId || !lessonId) return;
+    if (!userId || !lessonId || !lesson) return;
 
     if (quizSettings.require_pass_to_continue && correctQuestions.size < quizSettings.min_pass_questions) {
       setShowProgressGate(true);
@@ -738,6 +834,7 @@ export default function LessonPlayerPage() {
 
     if (updatedProgress) {
       setProgress(updatedProgress);
+      void trackCanonicalLessonCompletion("manual_lesson_completion");
     }
 
     // Celebrate lesson completion!
@@ -886,7 +983,7 @@ export default function LessonPlayerPage() {
           empty state. */}
       {lessonSim && canAccessSims ? (
         <div className="mx-auto max-w-6xl sm:px-3 sm:py-3">
-          <SimPlayer className="max-sm:rounded-none max-sm:border-x-0" payload={lessonSim} language={lessonContentLanguage} lessonId={lessonId} savedResponses={slideInteractionResponses} onProgress={handleSimProgress} onActivitySubmit={trackLessonActivity} />
+          <SimPlayer className="max-sm:rounded-none max-sm:border-x-0" payload={lessonSim} language={lessonContentLanguage} lessonId={lessonId} savedResponses={slideInteractionResponses} onProgress={handleSimProgress} onPlayStateChange={handleSimPlaybackState} onActivitySubmit={trackLessonActivity} />
         </div>
       ) : legacyVideoUrl ? (
         <div className="relative bg-black aspect-video max-h-[70vh] mx-auto">
@@ -896,7 +993,11 @@ export default function LessonPlayerPage() {
             controls
             playsInline
             className="w-full h-full"
-            onPlay={() => trackVideoPlayback(0.1)}
+            onPlay={() => {
+              trackVideoPlayback(0.1);
+              startActivePlayback("legacy_video");
+            }}
+            onPause={pauseActivePlayback}
             onTimeUpdate={(event) => {
               const video = event.currentTarget;
               if (Number.isFinite(video.duration) && video.duration > 0) {
@@ -912,6 +1013,7 @@ export default function LessonPlayerPage() {
               });
             }}
             onEnded={() => {
+              pauseActivePlayback();
               trackVideoPlayback(100);
               if (practiceAssignmentId) {
                 if (!practicePassed) {

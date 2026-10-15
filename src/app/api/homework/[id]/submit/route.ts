@@ -250,18 +250,39 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // the recording alone never marks the lesson complete, so record it here so
     // dashboards, counters and the streak trigger stay in step with the path
     // tree. Below the threshold nothing is written — the student just retries.
+    let lessonCompleted = false;
+    let firstLessonCompletion = false;
     if (isPractice && assignment.lesson_id && assignment.total_points > 0) {
       const passMark = ((assignment.passing_score ?? PRACTICE_PASSING_SCORE) / 100) * assignment.total_points;
       if (autoGradedScore >= passMark) {
-        await supabase.from("lesson_progress").upsert(
-          {
-            student_id: user.id,
-            lesson_id: assignment.lesson_id,
-            completed: true,
-            completed_at: now.toISOString(),
-          },
-          { onConflict: "student_id,lesson_id" }
-        );
+        const { data: existingLessonProgress } = await supabase
+          .from("lesson_progress")
+          .select("completed")
+          .eq("student_id", user.id)
+          .eq("lesson_id", assignment.lesson_id)
+          .maybeSingle();
+
+        if (!existingLessonProgress?.completed) {
+          const { error: lessonProgressError } = await supabase.from("lesson_progress").upsert(
+            {
+              student_id: user.id,
+              lesson_id: assignment.lesson_id,
+              completed: true,
+              completed_at: now.toISOString(),
+            },
+            { onConflict: "student_id,lesson_id" }
+          );
+
+          if (!lessonProgressError) {
+            lessonCompleted = true;
+            const { count } = await supabase
+              .from("lesson_progress")
+              .select("id", { count: "exact", head: true })
+              .eq("student_id", user.id)
+              .eq("completed", true);
+            firstLessonCompletion = count === 1;
+          }
+        }
       }
     }
 
@@ -334,6 +355,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         total_questions: questions.length,
         attempt_number: attemptNumber,
         submitted_at: now.toISOString(),
+        lesson_completed: lessonCompleted,
+        first_lesson_completion: firstLessonCompletion,
       },
       message: "Homework submitted successfully",
     });
