@@ -24,7 +24,7 @@ const COPY = {
     oneTapHint: "Then tap Install. It's free and only takes a moment.",
     done: "Done! You'll find the Amal owl on your home screen.",
     dismissed: "No problem. You can add it any time from your account.",
-    installed: "Amal is already on this phone.",
+    installed: "Amal is already on this phone. Open it from your home screen.",
     iosSafari: ["Tap the Share button at the bottom of Safari.", "Scroll down and tap Add to Home Screen.", "Tap Add."],
     iosSafariNote: "On newer iPhones, tap ⋯ first, then Share.",
     iosBrowser: ["Tap the Share button next to the address bar.", "Tap Add to Home Screen.", "Tap Add."],
@@ -44,7 +44,7 @@ const COPY = {
     oneTapHint: "ثم اضغط «تثبيت». مجاني ويستغرق لحظات.",
     done: "تم! ستجد بومة آمال على الشاشة الرئيسية لهاتفك.",
     dismissed: "لا مشكلة. يمكنك إضافته في أي وقت من حسابك.",
-    installed: "آمال موجود على هذا الهاتف بالفعل.",
+    installed: "آمال موجود على هذا الهاتف بالفعل. افتحه من الشاشة الرئيسية.",
     iosSafari: ["اضغط زر المشاركة أسفل Safari.", "مرّر للأسفل واضغط «إضافة إلى الشاشة الرئيسية».", "اضغط «إضافة»."],
     iosSafariNote: "في أجهزة iPhone الأحدث، اضغط ⋯ أولاً ثم «مشاركة».",
     iosBrowser: ["اضغط زر المشاركة بجانب شريط العنوان.", "اضغط «إضافة إلى الشاشة الرئيسية».", "اضغط «إضافة»."],
@@ -214,7 +214,8 @@ export function AddToPhone({ source, onInstalled }: { source: InstallSource; onI
     );
   }
 
-  if (platform === "android-menu") {
+  // Chrome before it offers one-tap install: its menu works straight away.
+  if (platform === "android-menu" || platform === "android-chrome-waiting") {
     return (
       <Steps
         steps={t.android}

@@ -19,6 +19,12 @@ export type InstallPlatform =
   | "one-tap"
   /** An Android browser without one-tap install: use its ⋮ menu. */
   | "android-menu"
+  /**
+   * Chrome or Edge on Android before they offer one-tap install. Chrome only
+   * fires `beforeinstallprompt` once someone has spent ~30 seconds on the site
+   * and tapped something, so offers wait for it rather than showing menu steps.
+   */
+  | "android-chrome-waiting"
   | "ios-safari"
   /** Chrome, Edge or Firefox on iPhone: the share button is in the address bar. */
   | "ios-browser"
@@ -33,6 +39,10 @@ export type InstallPlatform =
   | "ios-in-app"
   | "desktop";
 
+// Chromium browsers on Android that offer one-tap install (Chrome, Edge), but not
+// the many that share Chrome's user agent without supporting it.
+const OTHER_ANDROID_BROWSER = /OPR\/|MiuiBrowser|UCBrowser|YaBrowser|HuaweiBrowser|HeyTapBrowser|VivoBrowser|Firefox/i;
+
 const IN_APP_BROWSER = /FBAN|FBAV|FB_IAB|Instagram|Line\/|Snapchat|TikTok|musical_ly|Twitter|LinkedInApp|GSA\/|WhatsApp|; wv\)/i;
 
 export function classifyBrowser(
@@ -46,6 +56,7 @@ export function classifyBrowser(
   if (IN_APP_BROWSER.test(userAgent) && (ios || android)) return ios ? "ios-in-app" : "android-in-app";
   if (android && /SamsungBrowser/i.test(userAgent)) return "android-samsung";
   if (canPrompt) return "one-tap";
+  if (android && /Chrome\//.test(userAgent) && !OTHER_ANDROID_BROWSER.test(userAgent)) return "android-chrome-waiting";
   if (ios) return /CriOS|FxiOS|EdgiOS|OPiOS/i.test(userAgent) ? "ios-browser" : "ios-safari";
   if (android) return "android-menu";
   return "desktop";
@@ -53,6 +64,8 @@ export function classifyBrowser(
 
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let installedThisVisit = false;
+// Set when Chrome reports Amal is already installed on this phone, while it's open in a browser tab.
+let installedElsewhere = false;
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((listener) => listener());
 
@@ -66,7 +79,7 @@ function isStandalone() {
 
 export function currentInstallPlatform(): InstallPlatform {
   return classifyBrowser(navigator.userAgent, {
-    standalone: installedThisVisit || isStandalone(),
+    standalone: installedThisVisit || installedElsewhere || isStandalone(),
     canPrompt: Boolean(deferredPrompt),
     touchPoints: navigator.maxTouchPoints,
   });
@@ -84,6 +97,18 @@ if (typeof window !== "undefined") {
     deferredPrompt = event as BeforeInstallPromptEvent;
     notify();
   });
+  // Chrome on Android can say whether this site is already installed (the
+  // manifest lists itself under related_applications), so we don't offer again.
+  const related = (navigator as Navigator & { getInstalledRelatedApps?: () => Promise<unknown[]> }).getInstalledRelatedApps;
+  related
+    ?.call(navigator)
+    .then((apps) => {
+      if (apps.length) {
+        installedElsewhere = true;
+        notify();
+      }
+    })
+    .catch(() => undefined);
   window.addEventListener("appinstalled", () => {
     installedThisVisit = true;
     deferredPrompt = null;

@@ -209,7 +209,9 @@ export function DashboardInstallNudge({ allowReminders = false }: { allowReminde
     if (permission === "granted") void refreshReminders();
   }, [permission]);
 
-  if (!platform) return null;
+  // Chrome is about to offer one-tap install; show nothing until it does, so
+  // the card opens Chrome's own install box rather than menu steps.
+  if (!platform || platform === "android-chrome-waiting") return null;
   const installed = platform === "installed";
   const showInstallCard = !installed && !cardHidden;
   // "on" stays for a moment so the parent sees it worked from the card itself.
@@ -295,7 +297,11 @@ type AutoSheet = { kind: "install"; source: InstallSource } | { kind: "reminders
 function chooseAutoSheet(platform: InstallPlatform, allowReminders: boolean): AutoSheet | null {
   const pending = pendingInstallNudge();
   // First: put Amal on the phone, once after sign-up and once after the first lesson.
-  if (pending && platform !== "installed" && platform !== "desktop") return { kind: "install", source: pending };
+  if (pending && platform !== "installed" && platform !== "desktop") {
+    // Wait for Chrome's one-tap install; this runs again when it arrives.
+    if (platform === "android-chrome-waiting") return null;
+    return { kind: "install", source: pending };
+  }
   // Then: reminders, on any phone that can have them, every few days until they're on.
   if (!remindersAskable(allowReminders) || !shouldAskForReminders()) return null;
   return { kind: "reminders", source: pending === "lesson" ? "lesson" : remindersAskCount() === 0 ? "first_open" : "repeat" };

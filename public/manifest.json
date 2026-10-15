@@ -11,7 +11,10 @@
   "orientation": "any",
   "theme_color": "#007229",
   "background_color": "#FCFCFC",
-  "categories": ["education", "kids"],
+  "categories": [
+    "education",
+    "kids"
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -37,13 +40,32 @@
       "name": "واصل التعلّم · Continue learning",
       "short_name": "الدروس · Lessons",
       "url": "/lessons",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
       "name": "تقدّمي · My progress",
       "short_name": "التقدّم · Progress",
       "url": "/progress",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
-  ]
+  ],
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://amalschool.org/manifest.json"
+    }
+  ],
+  "prefer_related_applications": false
 }
