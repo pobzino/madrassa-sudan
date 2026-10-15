@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { syncAmalContact } from "@/lib/resend-contacts";
+import { sendWelcomeEmail } from "@/lib/server/email-automations";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -31,6 +32,11 @@ export async function GET(request: Request) {
             );
           } catch (syncError) {
             console.error("Resend parent contact sync failed:", syncError);
+          }
+          try {
+            await sendWelcomeEmail(user.id);
+          } catch (welcomeError) {
+            console.error("Parent welcome email failed:", welcomeError);
           }
         }
       }

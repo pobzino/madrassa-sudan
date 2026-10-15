@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useRef, useState } from "react";
+import { Suspense, useRef, useState, useSyncExternalStore } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -17,8 +17,11 @@ import { trackAnalyticsEvent } from "@/lib/analytics";
 import CountryCodeSelect from "@/components/CountryCodeSelect";
 import { PARENT_CALLING_CODE_OPTIONS } from "@/lib/calling-codes";
 import { Minus, Plus } from "lucide-react";
+import { PARENT_WHATSAPP_GROUP_URL } from "@/lib/parent-community";
+import { defaultEmailUpdatesOptIn, isProtectedTimeZone } from "@/lib/email-consent-region";
 
-const PARENT_WHATSAPP_GROUP_URL = "https://chat.whatsapp.com/ENlNNVC61xT53dQgtQTFrQ?mode=gi_t";
+const noSubscription = () => () => {};
+const browserInProtectedTimeZone = () => isProtectedTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
 
 // Icons for role selection
 const RoleIcons = {
@@ -268,7 +271,8 @@ function SignupForm() {
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
   const [consentGiven, setConsentGiven] = useState(false);
-  const [emailUpdatesOptIn, setEmailUpdatesOptIn] = useState(true);
+  // null until the person touches the box; until then it follows the regional default.
+  const [emailUpdatesChoice, setEmailUpdatesChoice] = useState<boolean | null>(null);
   const [parentCallingCode, setParentCallingCode] = useState("+249");
   const [parentWhatsapp, setParentWhatsapp] = useState("");
   const [sudaneseDescent, setSudaneseDescent] = useState<YesNoAnswer>("");
@@ -287,6 +291,13 @@ function SignupForm() {
   const [teacherCallingCode, setTeacherCallingCode] = useState("+249");
   const [teacherWhatsapp, setTeacherWhatsapp] = useState("");
   const [teacherLocation, setTeacherLocation] = useState("");
+  // Unticked by default in the UK, EU and EEA (by time zone or the country typed in), ticked elsewhere.
+  const inProtectedTimeZone = useSyncExternalStore(noSubscription, browserInProtectedTimeZone, () => false);
+  const emailUpdatesDefault = defaultEmailUpdatesOptIn({
+    timeZone: inProtectedTimeZone ? "Europe/London" : null,
+    countryText: role === "parent" ? parentCountry : role === "teacher" ? teacherLocation : "",
+  });
+  const emailUpdatesOptIn = emailUpdatesChoice ?? emailUpdatesDefault;
   const [educationalBackground, setEducationalBackground] = useState("");
   const [involvementAreas, setInvolvementAreas] = useState<InvolvementArea[]>([]);
   const [weeklyHours, setWeeklyHours] = useState("");
@@ -535,6 +546,9 @@ function SignupForm() {
           consent_given_at: new Date().toISOString(),
           email_updates_opt_in: emailUpdatesOptIn,
           email_updates_opt_in_at: emailUpdatesOptIn ? new Date().toISOString() : null,
+          // A record of how the choice was made: left at the regional default, or set by the person.
+          email_updates_opt_in_source: emailUpdatesChoice === null ? "default" : "chosen",
+          email_updates_default: emailUpdatesDefault,
         },
       },
     });
@@ -1175,7 +1189,7 @@ function SignupForm() {
               <input
                 type="checkbox"
                 checked={emailUpdatesOptIn}
-                onChange={(e) => setEmailUpdatesOptIn(e.target.checked)}
+                onChange={(e) => setEmailUpdatesChoice(e.target.checked)}
                 className="mt-0.5 w-5 h-5 rounded border-gray-300 text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer accent-[var(--primary)]"
               />
               <span className="text-sm text-gray-600 leading-snug">

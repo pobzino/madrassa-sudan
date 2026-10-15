@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { syncAmalContact } from "@/lib/resend-contacts";
+import { sendWelcomeEmail } from "@/lib/server/email-automations";
 
 /** Sync an email-signup parent after a browser-side OTP confirmation. */
 export async function POST() {
@@ -26,6 +27,11 @@ export async function POST() {
       );
     } catch (error) {
       console.error("Resend parent contact sync failed:", error);
+    }
+    try {
+      await sendWelcomeEmail(user.id);
+    } catch (error) {
+      console.error("Parent welcome email failed:", error);
     }
   }
 

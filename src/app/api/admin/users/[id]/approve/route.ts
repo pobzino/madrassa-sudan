@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncAmalContact } from "@/lib/resend-contacts";
+import { sendWelcomeEmail } from "@/lib/server/email-automations";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
 
@@ -102,6 +103,11 @@ export async function PATCH(
         );
       } catch (syncError) {
         console.error("Resend volunteer contact sync failed:", syncError);
+      }
+      try {
+        await sendWelcomeEmail(targetUserId);
+      } catch (welcomeError) {
+        console.error("Teacher welcome email failed:", welcomeError);
       }
     }
 
