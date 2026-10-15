@@ -171,6 +171,15 @@ const LOAD_TIMEOUT_MS = 30_000;
 const LOAD_TIMEOUT_WITH_SAVED_COPY_MS = 12_000;
 // Progress writes that hang (lie-fi) are saved on the phone instead.
 const PROGRESS_WRITE_TIMEOUT_MS = 10_000;
+// Reads from the phone's own storage are normally instant, but IndexedDB can
+// stall indefinitely while another Amal tab or window from an older version
+// still holds the database. Playing online doesn't need them, so past this
+// the page carries on as if nothing were saved on the phone.
+const LOCAL_READ_TIMEOUT_MS = 3_000;
+// After one read stalled the database is most likely still held, so the next
+// ones get only a moment (until a read answers again).
+const STALLED_LOCAL_READ_TIMEOUT_MS = 500;
+let localReadsStalled = false;
 
 function timeoutSignal(ms: number): AbortSignal {
   const controller = new AbortController();
@@ -178,12 +187,37 @@ function timeoutSignal(ms: number): AbortSignal {
   return controller.signal;
 }
 
+/** The result of a read from the phone's storage, or `fallback` if it fails or stalls. */
+function readLocal<T>(read: Promise<T>, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const timer = window.setTimeout(
+      () => {
+        localReadsStalled = true;
+        resolve(fallback);
+      },
+      localReadsStalled ? STALLED_LOCAL_READ_TIMEOUT_MS : LOCAL_READ_TIMEOUT_MS
+    );
+    read.then(
+      (value) => {
+        window.clearTimeout(timer);
+        localReadsStalled = false;
+        resolve(value);
+      },
+      () => {
+        window.clearTimeout(timer);
+        resolve(fallback);
+      }
+    );
+  });
+}
+
 /**
  * Opens this account's saved copy of the lesson in the offline player, which
- * needs no connection or sign-in check. Resolves false when there's no copy.
+ * needs no connection or sign-in check. Resolves false when there's no copy
+ * (or the phone's storage doesn't answer).
  */
 async function openSavedCopy(lessonId: string): Promise<boolean> {
-  const saved = await getOwnedOfflineLesson(lessonId).catch(() => null);
+  const saved = await readLocal(getOwnedOfflineLesson(lessonId), null);
   if (!saved) return false;
   window.location.replace(offlinePlayerUrl(lessonId));
   return true;
@@ -446,10 +480,11 @@ export default function LessonPlayerPage() {
       }
 
       // Local, so quick: with a saved copy to fall back on, don't wait long.
-      const savedCopy = await getOwnedOfflineLesson(lessonId).catch(() => null);
+      const savedCopy = await readLocal(getOwnedOfflineLesson(lessonId), null);
       if (signal.aborted) return;
       if (savedCopy) armTimeout(LOAD_TIMEOUT_WITH_SAVED_COPY_MS);
 
+      // A slow answer is waited for (the timeout above still applies).
       const auth = await getAuthState(supabase);
       if (signal.aborted) return;
       if (auth.status === "signed_out") {
@@ -481,6 +516,8 @@ export default function LessonPlayerPage() {
       setLesson(lessonData);
       setQuizSettings(resolveQuizSettings(lessonData.quiz_settings));
 
+      // Started now so a stalled read overlaps the requests below.
+      const fromPhoneRead = readLocal(getSavedSlideResponses(user.id, lessonId), {});
       const [slidesRes, slideResponsesRes, simRes] = await Promise.all([
         fetch(`/api/lessons/${lessonId}/slides`, { signal })
           .then((response) => (response.ok ? response.json() : null))
@@ -519,7 +556,7 @@ export default function LessonPlayerPage() {
           ...(sim?.sim.deck_snapshot ?? []),
         ]),
       });
-      const fromPhone = await getSavedSlideResponses(user.id, lessonId);
+      const fromPhone = await fromPhoneRead;
       if (signal.aborted) return;
       setSlideInteractionResponses({ ...fromServer, ...fromPhone });
 
@@ -531,7 +568,7 @@ export default function LessonPlayerPage() {
           (savedCopy.simId ?? savedCopy.sim?.sim.id) === sim.sim.id &&
           (savedCopy.simUpdatedAt ?? savedCopy.sim?.sim.updated_at) === sim.sim.updated_at;
         if (sameRecording) {
-          const audioBlob = await getCachedSimAudio(lessonId).catch(() => null);
+          const audioBlob = await readLocal(getCachedSimAudio(lessonId), null);
           if (audioBlob && !disposed) {
             audioObjectUrl = URL.createObjectURL(audioBlob);
             sim.audio_url = audioObjectUrl;
@@ -1005,7 +1042,10 @@ export default function LessonPlayerPage() {
             </div>
           </div>
 
-          <div className="ms-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {/* max-w-full caps the row at the screen's width so its own buttons
+              wrap; without it the row is as wide as all of them together and
+              pushes "Mark complete" off a 360 px phone in Arabic. */}
+          <div className="ms-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
             {/* Save for offline: the lesson then plays on this phone with no
                 internet (from the saved-lessons hub, or this page offline).
                 Only lessons with narration can be saved. */}
@@ -1033,7 +1073,7 @@ export default function LessonPlayerPage() {
                 language={lessonContentLanguage}
                 label={t.downloadVideo}
                 filename={pickLocalizedText(lessonContentLanguage, lesson.title_ar, lesson.title_en) || "lesson"}
-                className="flex min-h-11 min-w-11 justify-center items-center gap-2 px-3 py-1.5 text-gray-600 rounded-lg hover:text-[#007229] hover:bg-gray-100 transition-colors text-sm font-medium max-sm:[&>span]:hidden"
+                className="flex min-h-11 min-w-11 justify-center items-center gap-2 px-3 py-1.5 text-gray-600 rounded-lg hover:text-[#007229] hover:bg-gray-100 transition-colors text-sm font-medium max-sm:[&>[data-export-label]]:hidden"
               />
             ) : null}
 

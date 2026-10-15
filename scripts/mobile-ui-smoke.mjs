@@ -130,6 +130,50 @@ try {
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   console.log(`PASS ${engine}: deferred audio preload starts from the selected position`);
   await context.close();
+
+  // The lesson page's top bar must fit narrow phones in both languages. It
+  // needs a signed-in account: AMAL_SMOKE_STORAGE_STATE is a Playwright
+  // storage-state file for one, and AMAL_SMOKE_LESSON_IDS lists (comma
+  // separated) lessons it hasn't completed that have a recording with
+  // narration and no Practice gate: one with a 720p MP4 and one without.
+  const lessonIds = (process.env.AMAL_SMOKE_LESSON_IDS || '').split(',').map((id) => id.trim()).filter(Boolean);
+  if (process.env.AMAL_SMOKE_STORAGE_STATE && lessonIds.length) {
+    for (const width of [320, 360]) {
+      for (const language of ['ar', 'en']) {
+        for (const lessonId of lessonIds) {
+          const lessonContext = await browser.newContext({
+            viewport: { width, height: 780 },
+            isMobile: true,
+            hasTouch: true,
+            storageState: process.env.AMAL_SMOKE_STORAGE_STATE,
+          });
+          const lessonPage = await lessonContext.newPage();
+          await lessonPage.addInitScript((lang) => {
+            localStorage.setItem('amal-school-has-selected-language', 'true');
+            localStorage.setItem('amal-school-language', lang);
+          }, language);
+          await lessonPage.goto(`${baseURL}/lessons/${lessonId}`, { waitUntil: 'domcontentloaded' });
+          const markComplete = lessonPage.getByRole('button', { name: language === 'ar' ? 'تحديد كمكتمل' : 'Mark Complete', exact: true });
+          await markComplete.waitFor({ timeout: 30_000 });
+          const where = `${language} ${width}px lesson ${lessonId}`;
+          // Against clientWidth, not innerWidth: under mobile emulation
+          // innerWidth grows to fit the content, which hides the overflow.
+          const clientWidth = await lessonPage.evaluate(() => document.documentElement.clientWidth);
+          assert(
+            await lessonPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
+            `No horizontal overflow on the lesson page (${where})`
+          );
+          const box = await markComplete.boundingBox();
+          assert(box && box.x >= -1 && box.x + box.width <= clientWidth + 1, `Mark complete must be on screen (${where})`);
+          await lessonPage.screenshot({ path: path.join(screenshots, `lesson-${language}-${width}-${lessonId}.png`) });
+          console.log(`PASS ${engine}: lesson top bar fits (${where})`);
+          await lessonContext.close();
+        }
+      }
+    }
+  } else {
+    console.log('SKIP lesson top bar: set AMAL_SMOKE_STORAGE_STATE and AMAL_SMOKE_LESSON_IDS to check it');
+  }
   console.log(`Screenshots: ${screenshots}`);
 } finally {
   await browser.close();

@@ -10,52 +10,58 @@ import type { Database, Profile } from "@/lib/database.types";
 /**
  * - verified: the network confirmed this user.
  * - signed_out: the network (or the absence of any session) says nobody is signed in.
- * - offline: no answer — offline, a network error or a timeout. `user` is the
- *   last user verified in this page session, if any. This is NOT signed out:
- *   never send the family to the login page for it.
+ * - offline: no answer — offline, a network error, or still nothing after
+ *   AUTH_GIVE_UP_MS. `user` is the last user verified in this page session,
+ *   if any. This is NOT signed out: never send the family to the login page for it.
+ * - pending (getAuthStateOrPending only): online, but the server hasn't
+ *   answered yet. A slow connection, not a missing one; `verification`
+ *   resolves with one of the answers above.
  */
-export type AuthStatus = "verified" | "signed_out" | "offline";
+export type AuthStatus = "verified" | "signed_out" | "offline" | "pending";
 
 export type AuthState =
   | { status: "verified"; user: User }
   | { status: "signed_out"; user: null }
   | { status: "offline"; user: User | null };
 
-// Lie-fi (connected but no internet) can leave auth calls hanging; past this
-// we treat the network as unavailable.
+export type PendingAuthState = {
+  status: "pending";
+  user: User | null;
+  verification: Promise<AuthState>;
+};
+
+// The page itself just loaded, so a check still running after this is a slow
+// connection (a cold connection to Supabase on 2G/3G), not a missing one.
 const AUTH_TIMEOUT_MS = 5_000;
-const PROFILE_TIMEOUT_MS = 8_000;
+// Lie-fi (connected but no internet) can leave auth calls hanging for
+// minutes; past this we treat the network as unavailable. Matches the lesson
+// page's own load limit.
+const AUTH_GIVE_UP_MS = 30_000;
+// While the browser says it's online, a slow profile query is far more often
+// a slow connection than a dead one; give it about as long as the auth check.
+const PROFILE_TIMEOUT_MS = 25_000;
+
+/** Fired on window when a check that outlasted AUTH_TIMEOUT_MS finally answers. `detail` is its AuthStatus. */
+export const AUTH_RESOLVED_EVENT = "amal:auth-resolved";
+
+/** A check's answer before it is remembered (offline's user is filled in then). */
+type Answer = { status: "verified"; user: User } | { status: "signed_out" } | { status: "offline" };
 
 let cachedUser: User | null | undefined;
 let cachedUserId: string | null | undefined;
 let lastVerifiedUser: User | null = null;
 let lastStatus: AuthStatus | undefined;
-let authPromise: Promise<AuthState> | null = null;
+// The check talking to the server. A hung request can't be cancelled and
+// auth-js runs them one at a time anyway, so every caller (a retry too) waits
+// on this one until it answers, however late, instead of queueing another.
+let runningCheck: Promise<AuthState> | null = null;
+// The running check some caller was told is "pending"; its answer is announced.
+let lateCheck: Promise<AuthState> | null = null;
+// Bumped by clearAuthCache (log-out): an answer to a check started before
+// that is about the old session.
+let cacheGeneration = 0;
 const profileCache = new Map<string, Profile | null>();
 const profilePromises = new Map<string, Promise<Profile | null>>();
-
-class AuthTimeoutError extends Error {
-  constructor() {
-    super("Auth check timed out");
-    this.name = "AuthTimeoutError";
-  }
-}
-
-function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new AuthTimeoutError()), ms);
-    Promise.resolve(promise).then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
-      }
-    );
-  });
-}
 
 export function browserIsOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
@@ -108,59 +114,124 @@ function offlineState(): AuthState {
   return remember({ status: "offline", user: lastVerifiedUser });
 }
 
-async function resolveAuthState(supabase: SupabaseClient<Database>): Promise<AuthState> {
-  // Offline, getSession may try to refresh an expired token for ~25 s.
-  if (browserIsOffline()) return offlineState();
+function rememberAnswer(answer: Answer): AuthState {
+  if (answer.status === "offline") return offlineState();
+  if (answer.status === "signed_out") return remember({ status: "signed_out", user: null });
+  return remember(answer);
+}
 
+/** Asks the server, with no time limit of its own (callers decide how long to wait). */
+async function askServer(supabase: SupabaseClient<Database>): Promise<Answer> {
   let sessionUserId: string;
   try {
-    const { data, error } = await withTimeout(supabase.auth.getSession(), AUTH_TIMEOUT_MS);
+    const { data, error } = await supabase.auth.getSession();
     if (!data.session) {
-      if (error && isOfflineLike(error)) return offlineState();
-      return remember({ status: "signed_out", user: null });
+      if (error && isOfflineLike(error)) return { status: "offline" };
+      return { status: "signed_out" };
     }
     sessionUserId = data.session.user.id;
   } catch (error) {
-    if (isOfflineLike(error)) return offlineState();
+    if (isOfflineLike(error)) return { status: "offline" };
     throw error;
   }
 
   if (cachedUser && cachedUserId === sessionUserId) {
-    return remember({ status: "verified", user: cachedUser });
+    return { status: "verified", user: cachedUser };
   }
 
   try {
-    const { data, error } = await withTimeout(supabase.auth.getUser(), AUTH_TIMEOUT_MS);
-    if (data.user) return remember({ status: "verified", user: data.user });
+    const { data, error } = await supabase.auth.getUser();
+    if (data.user) return { status: "verified", user: data.user };
     // Only a definite "no valid session" answer means signed out; network
     // failures and unexpected errors must not send the family to login.
-    if (error && !isSignedOutError(error)) return offlineState();
-    return remember({ status: "signed_out", user: null });
+    if (error && !isSignedOutError(error)) return { status: "offline" };
+    return { status: "signed_out" };
   } catch (error) {
-    if (isOfflineLike(error)) return offlineState();
+    if (isOfflineLike(error)) return { status: "offline" };
     throw error;
   }
 }
 
+function startCheck(supabase: SupabaseClient<Database>): Promise<AuthState> {
+  if (runningCheck) return runningCheck;
+  const startedIn = cacheGeneration;
+  const check: Promise<AuthState> = askServer(supabase)
+    .catch((): Answer => ({ status: "offline" }))
+    .then((answer) => {
+      const late = lateCheck === check;
+      if (runningCheck === check) runningCheck = null;
+      if (late) lateCheck = null;
+      // Logged out while this ran: the answer is about the old session, so ask again.
+      if (startedIn !== cacheGeneration) return startCheck(supabase);
+      const state = rememberAnswer(answer);
+      // Pages that gave up waiting (or were told "pending") can load now.
+      if (late && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(AUTH_RESOLVED_EVENT, { detail: state.status }));
+      }
+      return state;
+    });
+  runningCheck = check;
+  return check;
+}
+
+/** The check's answer, or null when it hasn't come within `ms` or the browser goes offline first. */
+function answerWithin(check: Promise<AuthState>, ms: number): Promise<AuthState | null> {
+  return new Promise<AuthState | null>((resolve) => {
+    const hasWindow = typeof window !== "undefined";
+    const finish = (state: AuthState | null) => {
+      clearTimeout(timer);
+      if (hasWindow) window.removeEventListener("offline", wentOffline);
+      resolve(state);
+    };
+    const wentOffline = () => finish(null);
+    const timer = setTimeout(() => finish(null), ms);
+    if (hasWindow) window.addEventListener("offline", wentOffline);
+    void check.then(finish);
+  });
+}
+
+/**
+ * Like getAuthState, but on a slow connection it doesn't make the caller
+ * wait: after AUTH_TIMEOUT_MS (while the browser says it's online) it returns
+ * "pending", so the page can say "still trying" and offer the saved lessons.
+ */
+export async function getAuthStateOrPending(
+  supabase: SupabaseClient<Database>
+): Promise<AuthState | PendingAuthState> {
+  // Offline, getSession may try to refresh an expired token for ~25 s.
+  if (browserIsOffline()) return offlineState();
+
+  const check = startCheck(supabase);
+  const answer = await answerWithin(check, AUTH_TIMEOUT_MS);
+  if (answer) return answer;
+  if (browserIsOffline()) return offlineState();
+
+  lateCheck = check;
+  return {
+    status: "pending",
+    user: lastVerifiedUser,
+    verification: answerWithin(check, AUTH_GIVE_UP_MS - AUTH_TIMEOUT_MS).then(
+      (lateAnswer) => lateAnswer ?? offlineState()
+    ),
+  };
+}
+
 /**
  * The signed-in user and how sure we are. Use this (not getCachedUser) when
- * the caller must tell "signed out" from "no connection".
+ * the caller must tell "signed out" from "no connection". On a slow
+ * connection it waits for the server (up to AUTH_GIVE_UP_MS) rather than
+ * calling it offline.
  */
 export async function getAuthState(supabase: SupabaseClient<Database>): Promise<AuthState> {
-  if (authPromise) return authPromise;
-  authPromise = resolveAuthState(supabase)
-    .catch(() => offlineState())
-    .finally(() => {
-      authPromise = null;
-    });
-  return authPromise;
+  const state = await getAuthStateOrPending(supabase);
+  return state.status === "pending" ? state.verification : state;
 }
 
 /**
  * The verified user, or while offline the last user verified in this page
  * session. Returns null both when signed out and when offline with nobody
  * verified yet — check getLastAuthStatus() (or use getAuthState) before
- * treating null as signed out.
+ * treating null as signed out. Waits out a slow connection like getAuthState.
  */
 export async function getCachedUser(
   supabase: SupabaseClient<Database>
@@ -235,7 +306,9 @@ export function clearAuthCache() {
   cachedUserId = undefined;
   lastVerifiedUser = null;
   lastStatus = undefined;
-  authPromise = null;
+  runningCheck = null;
+  lateCheck = null;
+  cacheGeneration += 1;
   profileCache.clear();
   profilePromises.clear();
 }

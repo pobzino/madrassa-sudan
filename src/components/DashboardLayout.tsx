@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOffline } from "@/contexts/OfflineContext";
 import type { Profile } from "@/lib/database.types";
-import { getAuthState, getCachedProfile, type AuthStatus } from "@/lib/supabase/auth-cache";
+import { AUTH_RESOLVED_EVENT, getAuthStateOrPending, getCachedProfile, type AuthStatus } from "@/lib/supabase/auth-cache";
 import { logOut } from "@/lib/auth/logout";
 import { getOwner, saveOwner } from "@/lib/offline/identity";
 import { OFFLINE_HUB_PATH } from "@/lib/offline/cache-names";
@@ -58,6 +58,8 @@ const translations = {
     logout: "تسجيل الخروج",
     loggingOut: "جارٍ تسجيل الخروج…",
     loading: "جاري التحميل...",
+    slowConnection: "الاتصال بطيء — ما زلنا نحاول…",
+    openSavedLessons: "افتح دروسي المحفوظة",
   },
   en: {
     // Student nav
@@ -87,6 +89,8 @@ const translations = {
     logout: "Log out",
     loggingOut: "Logging out…",
     loading: "Loading...",
+    slowConnection: "Slow connection — still trying…",
+    openSavedLessons: "Open my saved lessons",
   },
 };
 
@@ -167,6 +171,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   // Offline there's no profile query; the phone's owner record gives the name.
   const [savedOwner, setSavedOwner] = useState<{ fullName: string; role: string | null } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  // Online, but the sign-in check is taking a while (a slow connection).
+  const [slowConnection, setSlowConnection] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
@@ -195,7 +201,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     // verified in this visit, the saved-lessons hub is the useful place.
     async function loadProfile() {
       const supabase = createClient();
-      const auth = await getAuthState(supabase);
+      let auth = await getAuthStateOrPending(supabase);
+      if (auth.status === "pending") {
+        // A slow answer isn't "offline": this page just loaded, so the network
+        // works. Stay here and keep waiting, with the saved lessons one tap away.
+        authStatusRef.current = "pending";
+        setSlowConnection(true);
+        auth = await auth.verification;
+        setSlowConnection(false);
+      }
       authStatusRef.current = auth.status;
       if (auth.status === "signed_out") {
         router.push("/auth/login");
@@ -231,15 +245,21 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     void loadProfile().catch(() => undefined);
   }, [router, refreshDownloads]);
 
-  // Back online after an offline start: verify now, so the profile loads and
-  // the owner record is refreshed without a reload.
+  // Back online after an offline start, or a sign-in check we gave up on
+  // answered after all (the browser was online throughout, so "online" never
+  // fires): verify now, so the profile loads and the owner record is
+  // refreshed without a reload.
   useEffect(() => {
     const recheck = () => {
       if (authStatusRef.current !== "offline") return;
       void loadProfileRef.current?.().catch(() => undefined);
     };
     window.addEventListener("online", recheck);
-    return () => window.removeEventListener("online", recheck);
+    window.addEventListener(AUTH_RESOLVED_EVENT, recheck);
+    return () => {
+      window.removeEventListener("online", recheck);
+      window.removeEventListener(AUTH_RESOLVED_EVENT, recheck);
+    };
   }, []);
 
   // The shared log-out (sync first, end the session even offline, clear this
@@ -512,6 +532,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#007229]/5 via-white to-[#D21034]/5" dir={isRtl ? "rtl" : "ltr"}>
       <OfflineBanner />
+      {slowConnection && (
+        <div role="status" className="fixed top-0 left-0 right-0 z-[60] bg-amber-500 px-4 py-2 text-center text-sm font-medium text-white">
+          <span className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+            <span>{t.slowConnection}</span>
+            {/* A full page load: the saved-lessons hub works with no connection. */}
+            <a href={OFFLINE_HUB_PATH} className="rounded-full bg-white/20 px-3 py-0.5 font-bold underline-offset-2 hover:bg-white/30 hover:underline">
+              {t.openSavedLessons}
+            </a>
+          </span>
+        </div>
+      )}
       <NavigationProgress />
 
       {/* Mobile Header. In the installed app, learner pages use the bottom tab bar
