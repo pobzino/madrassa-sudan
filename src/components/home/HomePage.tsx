@@ -77,15 +77,15 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
         steps: [
           { num: "1", title: "المعلم يشرح", desc: "تسمع صوت المعلم وتشوف الشرائح تتحرك قدامك — زي ما بشرح في الفصل بالظبط" },
           { num: "2", title: "وقفة للنشاط", desc: "الدرس بيوقف تلقائياً عشان تحل سؤال أو نشاط قبل ما تكمّل — اختبار، سحب وإفلات، أو توصيل" },
-          { num: "3", title: "نتيجة فورية", desc: "تعرف إجابتك صح أو غلط فوراً. والمعلم يشوف أداءك ويتابع تقدمك" },
+          { num: "3", title: "نتيجة فورية", desc: "تعرف إجابتك صح أو غلط فوراً، وتقدّمك يُحفظ لتكمل من حيث توقفت" },
         ],
         cta: "افتح الدرس النموذجي",
         noSignup: "بدون تسجيل حساب",
       },
       teachers: {
-        title: "انضم لفريق الأبطال",
-        subtitle: "ساعد أطفال السودان على التعلم من أي مكان في العالم",
-        benefits: ["إدارة فصول متعددة بسهولة", "أدوات تصحيح ومتابعة متقدمة", "اصنع فرقاً حقيقياً في حياة الأطفال"],
+        title: "سجّل دروساً لأطفال السودان",
+        subtitle: "المعلمون المتطوعون يسجّلون الدروس بأصواتهم، والأطفال يتعلمون منها ويتدرّبون بالسرعة التي تناسبهم.",
+        benefits: ["سجّل الدروس بصوتك، من أي مكان", "لا فصول تديرها ولا واجبات تصحّحها", "صوتك يصل إلى أطفال السودان أينما كانوا"],
         cta: "قدّم طلب للتدريس",
       },
       faq: {
@@ -139,15 +139,15 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
         steps: [
           { num: "1", title: "Teacher explains", desc: "Hear your teacher's voice while slides move in sync — just like a real classroom lesson" },
           { num: "2", title: "Pause for activity", desc: "The lesson pauses automatically so you can solve a quiz, drag-and-drop, or matching activity before continuing" },
-          { num: "3", title: "Instant feedback", desc: "Know right away if your answer is correct. Your teacher can track your progress and see how you're doing" },
+          { num: "3", title: "Instant feedback", desc: "Know right away if your answer is correct, and your progress is saved so you can pick up where you left off" },
         ],
         cta: "Open the sample lesson",
         noSignup: "No signup required",
       },
       teachers: {
-        title: "Join the hero team",
-        subtitle: "Help Sudanese children learn from anywhere in the world",
-        benefits: ["Manage multiple classes easily", "Advanced grading and tracking tools", "Make a real difference in children's lives"],
+        title: "Record lessons for Sudan's children",
+        subtitle: "Volunteer teachers record lessons in their own voice. Children learn from them and practise at their own pace.",
+        benefits: ["Record lessons in your own voice, from anywhere", "No classes to run and no marking to do", "Your voice reaches Sudanese children wherever they are"],
         cta: "Apply to Teach",
       },
       faq: {
