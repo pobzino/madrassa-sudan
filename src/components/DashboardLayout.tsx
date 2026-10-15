@@ -443,12 +443,22 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <Link href={inInstalledApp && !isInTeacherView ? "/dashboard" : "/"}>
           <MadrassaLogo size="sm" />
         </Link>
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className={`p-2 rounded-xl hover:bg-gray-100 transition-colors ${isInTeacherView ? "" : "standalone:hidden"}`}
-        >
-          {Icons.menu}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {/* Language switch, always one tap away (the installed app has no menu). */}
+          <button
+            onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
+            className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-bold text-gray-600 transition-colors hover:border-[#007229]/30 hover:text-[#007229]"
+            aria-label={language === "ar" ? "Switch to English" : "التبديل إلى العربية"}
+          >
+            {language === "ar" ? "EN" : "عربي"}
+          </button>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className={`p-2 rounded-xl hover:bg-gray-100 transition-colors ${isInTeacherView ? "" : "standalone:hidden"}`}
+          >
+            {Icons.menu}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Sidebar Overlay */}
@@ -510,7 +520,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       )}
 
       {/* Offers to add Amal to the phone and turn on reminders, at calm moments. */}
-      {!isInTeacherView && profile && <AutoNudges allowReminders={profile.role === "parent"} pathname={pathname} />}
+      {!isInTeacherView && profile && (
+        <AutoNudges allowReminders={profile.role === "parent" || profile.role === "admin"} pathname={pathname} />
+      )}
 
       {/* Feedback Modal */}
       <FeedbackModal open={showFeedback} onClose={() => setShowFeedback(false)} />

@@ -3,6 +3,16 @@
 /* When Amal is opened from the home screen as an installed app. */
 @custom-variant standalone (@media (display-mode: standalone));
 
+/* In the installed app the page shouldn't bounce past its ends or drift
+   sideways while scrolling, as it can in a browser tab. */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior: none;
+    overflow-x: clip;
+  }
+}
+
 .sim-seek::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 3px;
