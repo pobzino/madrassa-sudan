@@ -346,6 +346,7 @@ export type Database = {
       cohorts: {
         Row: {
           created_at: string
+          created_by: string | null
           description: string | null
           grade_level: number
           id: string
@@ -357,6 +358,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          created_by?: string | null
           description?: string | null
           grade_level: number
           id?: string
@@ -368,6 +370,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          created_by?: string | null
           description?: string | null
           grade_level?: number
           id?: string
@@ -378,6 +381,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "cohorts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "cohorts_organization_id_fkey"
             columns: ["organization_id"]
@@ -686,7 +696,7 @@ export type Database = {
           assigned_at: string
           cohort_id: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           due_at: string | null
           id: string
           instructions_ar: string | null
@@ -708,7 +718,7 @@ export type Database = {
           assigned_at?: string
           cohort_id?: string | null
           created_at?: string
-          created_by: string
+          created_by?: string | null
           due_at?: string | null
           id?: string
           instructions_ar?: string | null
@@ -730,7 +740,7 @@ export type Database = {
           assigned_at?: string
           cohort_id?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           due_at?: string | null
           id?: string
           instructions_ar?: string | null
@@ -2120,6 +2130,24 @@ export type Database = {
           sudanese_descent?: boolean | null
           terms_accepted_at?: string | null
           whatsapp?: string
+        }
+        Relationships: []
+      }
+      profile_contacts: {
+        Row: {
+          phone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          phone: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          phone?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

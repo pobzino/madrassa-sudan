@@ -204,9 +204,17 @@ export default function SettingsPage() {
       const profileData = await getCachedProfile(supabase, user.id);
 
       if (profileData) {
+        // The number lives in profile_contacts (only you and admins can read
+        // it); profiles.phone is always empty once 20261016140000 is applied.
+        // Showing it empty here would also wipe it on the next save.
+        const { data: contact } = await supabase
+          .from("profile_contacts")
+          .select("phone")
+          .eq("user_id", user.id)
+          .maybeSingle();
         setProfile(profileData);
         setFullName(profileData.full_name);
-        setPhone(profileData.phone || "");
+        setPhone(contact?.phone || profileData.phone || "");
         setGradeLevel(profileData.grade_level);
 
         // Load feature flag data for admins

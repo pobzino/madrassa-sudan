@@ -449,12 +449,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    // Hard delete (cascades to questions via FK)
-    await supabase
-      .from("homework_submissions")
-      .delete()
-      .eq("assignment_id", id);
-
+    // Hard delete. Deleting the assignment cascades to its questions and its
+    // students' submission rows via FK (a teacher's session has no DELETE on
+    // homework_submissions itself).
     await supabase
       .from("homework_questions")
       .delete()

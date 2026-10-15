@@ -90,6 +90,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Contact numbers moved out of the world-readable profiles table into
+    // profile_contacts (20261016140000), which approved admins can read. Until
+    // that migration is applied the table is missing; fall back to profiles.
+    const phoneByUserId = new Map<string, string>();
+    const { data: contacts } = await supabase.from("profile_contacts").select("user_id, phone");
+    for (const contact of contacts || []) {
+      phoneByUserId.set(contact.user_id, contact.phone);
+    }
+
     const metadataByUserId = await loadAuthMetadataByUserId();
     const enrichedUsers = (users || []).map((profile) => {
       const authSummary = metadataByUserId.get(profile.id);
@@ -97,7 +106,7 @@ export async function GET(request: NextRequest) {
       return {
         ...profile,
         signup_details: metadata.signup_details ?? null,
-        contact_phone: profile.phone ?? metadata.phone ?? null,
+        contact_phone: phoneByUserId.get(profile.id) ?? profile.phone ?? metadata.phone ?? null,
         auth_email: authSummary?.email ?? null,
         email_confirmed_at: authSummary?.emailConfirmedAt ?? null,
       };

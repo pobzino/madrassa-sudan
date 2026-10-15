@@ -449,7 +449,9 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
     const supabase = createClient();
     const { error } = await supabase
       .from("cohort_students")
-      .update({ status: "rejected" })
+      // Not active either, so counts and checks that only look at is_active
+      // never include a refused student. They can still ask again.
+      .update({ status: "rejected", is_active: false })
       .eq("id", enrollmentId);
     if (error) {
       console.error("Failed to reject student:", error);
