@@ -15,6 +15,7 @@ import type { Slide } from "@/lib/slides.types";
 import {
   addQueueItem,
   getLocalSlideResponses,
+  getStorageEpoch,
   putLocalSlideResponses,
   type LocalSlideResponse,
   type LocalSlideResponses,
@@ -95,14 +96,17 @@ export async function postSlideResponse(
   }
 }
 
-/** Queues one answer for syncOfflineQueue to send. */
+/**
+ * Queues one answer for syncOfflineQueue to send. `epoch` (read when the
+ * answer was given) refuses the write if a logout cleared storage since.
+ */
 export async function queueSlideResponse({
   ownerId,
   lessonId,
   slideId,
   answer,
   timeSpentSeconds,
-}: Omit<SlideResponseInput, "isCorrect">): Promise<void> {
+}: Omit<SlideResponseInput, "isCorrect">, epoch = getStorageEpoch()): Promise<void> {
   const answeredAt = new Date().toISOString();
   await addQueueItem({
     lessonId,
@@ -115,18 +119,19 @@ export async function queueSlideResponse({
       answeredAt,
       ...(typeof timeSpentSeconds === "number" ? { timeSpentSeconds } : {}),
     },
-  });
+  }, epoch);
 }
 
-async function saveLocally({ ownerId, lessonId, slideId, answer, isCorrect }: SlideResponseInput) {
+async function saveLocally({ ownerId, lessonId, slideId, answer, isCorrect }: SlideResponseInput, epoch: number) {
   await putLocalSlideResponses(ownerId, lessonId, {
     [slideId]: { answer: answer ?? null, isCorrect, answeredAt: new Date().toISOString() },
-  });
+  }, { epoch });
 }
 
 /** Offline player: keep the answer on the phone and queue it. */
 export async function saveSlideResponseOffline(input: SlideResponseInput): Promise<void> {
-  await Promise.all([saveLocally(input), queueSlideResponse(input)]);
+  const epoch = getStorageEpoch();
+  await Promise.all([saveLocally(input, epoch), queueSlideResponse(input, epoch)]);
 }
 
 /**
@@ -135,16 +140,19 @@ export async function saveSlideResponseOffline(input: SlideResponseInput): Promi
  * the local one when it answers.
  */
 export async function submitSlideResponse(input: SlideResponseInput): Promise<SlideResponsePostResult> {
-  await saveLocally(input).catch(() => undefined);
+  // A logout during the POST (e.g. in another tab) must not get this
+  // account's answer written back into the wiped storage.
+  const epoch = getStorageEpoch();
+  await saveLocally(input, epoch).catch(() => undefined);
   const result = await postSlideResponse(input.lessonId, input.slideId, input.answer, {
     timeSpentSeconds: input.timeSpentSeconds,
   });
   if (result.ok) {
     if (result.isCorrect !== null && result.isCorrect !== input.isCorrect) {
-      await saveLocally({ ...input, isCorrect: result.isCorrect }).catch(() => undefined);
+      await saveLocally({ ...input, isCorrect: result.isCorrect }, epoch).catch(() => undefined);
     }
   } else if (result.retryable) {
-    await queueSlideResponse(input).catch(() => undefined);
+    await queueSlideResponse(input, epoch).catch(() => undefined);
   }
   return result;
 }

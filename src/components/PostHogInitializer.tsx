@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useOnlineStatus } from "@/components/offline/useOnlineStatus";
 import posthog from "posthog-js";
 import { getOpaqueLearnerAnalyticsId } from "@/lib/analytics-identity";
+import { stripUrlQueries } from "@/lib/analytics-privacy";
 import { createClient } from "@/lib/supabase/client";
 
 type PostHogInitializerProps = {
@@ -51,6 +52,9 @@ export default function PostHogInitializer({ host, projectToken }: PostHogInitia
         person_profiles: "never",
         save_campaign_params: false,
         save_referrer: false,
+        // Page URLs can carry personal data (the email-confirmation page has
+        // ?email=…); send only the page, never its query string or hash.
+        before_send: stripUrlQueries,
         disableDeviceModel: true,
         debug: process.env.NODE_ENV === "development",
       });

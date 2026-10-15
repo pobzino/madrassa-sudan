@@ -8,10 +8,22 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useOffline } from "@/contexts/OfflineContext";
 import type { Profile } from "@/lib/database.types";
 import { getAuthState, getCachedProfile, type AuthStatus } from "@/lib/supabase/auth-cache";
-import { logOut } from "@/lib/auth/logout";
-import { getOwner, saveOwner } from "@/lib/offline/identity";
+import {
+  LOG_OUT_BUSY_LABELS,
+  authCookieNamesToClear,
+  isLoggingOut,
+  logOutWithUnsentCheck,
+  type LogOutPhase,
+} from "@/lib/auth/logout";
+import {
+  countOtherAccountsItems,
+  deleteOtherAccountsItems,
+  ensureOfflineOwner,
+  getOwner,
+  saveOwner,
+} from "@/lib/offline/identity";
+import { listenForClearsFromOtherTabs, onPrivateDataCleared } from "@/lib/offline/db";
 import { OFFLINE_HUB_PATH } from "@/lib/offline/cache-names";
-import { confirmLogOutIfUnsynced } from "@/components/settings/AccountActions";
 import FeedbackModal from "@/components/FeedbackModal";
 import NavigationProgress from "@/components/NavigationProgress";
 import OfflineBanner from "@/components/OfflineBanner";
@@ -56,8 +68,12 @@ const translations = {
     privacy: "الخصوصية",
     terms: "الشروط",
     logout: "تسجيل الخروج",
-    loggingOut: "جارٍ تسجيل الخروج…",
     loading: "جاري التحميل...",
+    otherAccountItems: (count: number) =>
+      `على هذا الهاتف تقدّم وإجابات من حساب آخر لم تُرسَل بعد (${count}). اطلب من صاحب الحساب تسجيل الدخول هنا لإرسالها، أو احذفها.`,
+    keepThem: "احتفظ بها",
+    deleteThem: "احذفها",
+    confirmDeleteOther: "حذفها من هذا الهاتف؟ لن يمكن إرسالها بعد ذلك.",
   },
   en: {
     // Student nav
@@ -85,8 +101,12 @@ const translations = {
     privacy: "Privacy",
     terms: "Terms",
     logout: "Log out",
-    loggingOut: "Logging out…",
     loading: "Loading...",
+    otherAccountItems: (count: number) =>
+      `Progress and answers from another account on this phone haven't been sent yet (${count}). Ask that person to sign in here to send them, or delete them.`,
+    keepThem: "Keep",
+    deleteThem: "Delete",
+    confirmDeleteOther: "Delete them from this phone? They can't be sent afterwards.",
   },
 };
 
@@ -107,6 +127,19 @@ const OFFLINE_CAPABLE_PATHS = ["/downloads"];
 // saved copy in the offline player, or says it isn't saved); sending it to
 // the hub from here as well would race that.
 const HANDLES_OFFLINE_ITSELF = /^\/lessons\/[^/]+\/?$/;
+// "Keep" on the other-account notice hides it for this visit.
+const OTHER_ACCOUNT_NOTICE_HIDDEN_KEY = "amal-other-account-items-hidden";
+// Where a tab goes when another tab's logout or sign-in replaced its account.
+const LOGIN_PATH = "/auth/login";
+const DASHBOARD_PATH = "/dashboard";
+
+function otherAccountNoticeHidden(): boolean {
+  try {
+    return sessionStorage.getItem(OTHER_ACCOUNT_NOTICE_HIDDEN_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
 
 // Icons - Clean, friendly navigation icons
 const Icons = {
@@ -166,7 +199,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [profile, setProfile] = useState<Profile | null>(null);
   // Offline there's no profile query; the phone's owner record gives the name.
   const [savedOwner, setSavedOwner] = useState<{ fullName: string; role: string | null } | null>(null);
-  const [loggingOut, setLoggingOut] = useState(false);
+  const [logOutPhase, setLogOutPhase] = useState<LogOutPhase | null>(null);
+  // Unsent items another account left on this phone (kept for it across an account switch).
+  const [otherAccountItems, setOtherAccountItems] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
@@ -179,15 +214,21 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const authCheckRef = useRef(false);
   const authStatusRef = useRef<AuthStatus | null>(null);
   const loadProfileRef = useRef<(() => Promise<void>) | null>(null);
+  // The account this layout shows (the last one verified here).
+  const accountIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Prevent duplicate auth checks
     if (authCheckRef.current) return;
     authCheckRef.current = true;
 
-    const showSavedOwner = async () => {
+    // The phone's owner record, for the name while the profile can't load —
+    // never another account's when `expectedUserId` is the one signed in.
+    const showSavedOwner = async (expectedUserId?: string) => {
       const owner = await getOwner();
-      if (owner) setSavedOwner({ fullName: owner.fullName, role: owner.role });
+      setSavedOwner(
+        owner && (!expectedUserId || owner.userId === expectedUserId) ? { fullName: owner.fullName, role: owner.role } : null
+      );
     };
 
     // "Signed out" and "no connection" are different answers: only the first
@@ -212,6 +253,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         await showSavedOwner();
         return;
       }
+      accountIdRef.current = auth.user.id;
 
       const profileData = await getCachedProfile(supabase, auth.user.id);
       if (profileData) {
@@ -222,32 +264,124 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           const saved = await saveOwner(profileData).catch(() => null);
           // Downloads saved before this phone had an owner record show up now.
           if (saved) await refreshDownloads();
+          if (saved && !otherAccountNoticeHidden()) {
+            setOtherAccountItems(await countOtherAccountsItems(profileData.id));
+          }
         }
       } else {
-        await showSavedOwner();
+        if (auth.status === "verified") {
+          // No profile (a timeout on a bad connection), but the account is
+          // verified: the phone's downloads still mustn't stay another
+          // account's. Try the profile again when the app is next back.
+          await ensureOfflineOwner(auth.user.id).catch(() => undefined);
+          await refreshDownloads();
+          authStatusRef.current = "offline";
+        }
+        await showSavedOwner(auth.user.id);
       }
     }
     loadProfileRef.current = loadProfile;
     void loadProfile().catch(() => undefined);
   }, [router, refreshDownloads]);
 
-  // Back online after an offline start: verify now, so the profile loads and
-  // the owner record is refreshed without a reload.
+  // Back online after an offline start (or back in the app after the profile
+  // didn't load): verify now, so the profile loads and the owner record is
+  // refreshed without a reload.
   useEffect(() => {
     const recheck = () => {
       if (authStatusRef.current !== "offline") return;
       void loadProfileRef.current?.().catch(() => undefined);
     };
+    const recheckWhenVisible = () => {
+      if (document.visibilityState === "visible") recheck();
+    };
     window.addEventListener("online", recheck);
-    return () => window.removeEventListener("online", recheck);
+    document.addEventListener("visibilitychange", recheckWhenVisible);
+    return () => {
+      window.removeEventListener("online", recheck);
+      document.removeEventListener("visibilitychange", recheckWhenVisible);
+    };
   }, []);
 
-  // The shared log-out (sync first, end the session even offline, clear this
-  // phone, full page load). It navigates itself, so the busy state stays.
+  // Another tab logged out, or signed in as someone else: this page would
+  // keep showing (and a lesson here keep saving) the previous account. Check,
+  // and leave with a full page load if the account shown here is gone. This
+  // tab's own logout and account-switch clear aren't news, so they're skipped.
+  useEffect(() => {
+    listenForClearsFromOtherTabs();
+    const supabase = createClient();
+    let checking = false;
+    let checkAgain = false;
+    const check = async () => {
+      if (isLoggingOut()) return;
+      if (checking) {
+        checkAgain = true;
+        return;
+      }
+      checking = true;
+      try {
+        // No session cookie left means signed out, even offline (where the
+        // auth check can only answer "no connection").
+        const sessionGone = authCookieNamesToClear(document.cookie).length === 0;
+        const auth = sessionGone ? null : await getAuthState(supabase);
+        const shown = accountIdRef.current;
+        const leaveFor =
+          !auth || auth.status === "signed_out"
+            ? LOGIN_PATH
+            : auth.status === "verified" && shown && auth.user.id !== shown
+              ? DASHBOARD_PATH
+              : null;
+        if (leaveFor) {
+          // A full load (not router.push) is the point: it drops the previous
+          // account's in-memory state and unloads a lesson that would keep saving.
+          window.location.assign(leaveFor);
+          return;
+        }
+        await refreshDownloads();
+      } finally {
+        checking = false;
+      }
+      if (checkAgain) {
+        checkAgain = false;
+        void check();
+      }
+    };
+    const stopListening = onPrivateDataCleared(({ fromOtherTab }) => {
+      if (fromOtherTab) void check();
+    });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT" && !isLoggingOut()) void check();
+    });
+    return () => {
+      stopListening();
+      subscription.unsubscribe();
+    };
+  }, [refreshDownloads]);
+
+  // The shared log-out (sync first, ask before deleting anything unsent, end
+  // the session even offline, clear this phone, full page load). It
+  // navigates itself, so the busy state stays.
   const handleLogout = async () => {
-    if (loggingOut || !(await confirmLogOutIfUnsynced(language))) return;
-    setLoggingOut(true);
-    await logOut();
+    if (logOutPhase) return;
+    await logOutWithUnsentCheck({ language, onPhase: setLogOutPhase });
+  };
+
+  const keepOtherAccountItems = () => {
+    try {
+      sessionStorage.setItem(OTHER_ACCOUNT_NOTICE_HIDDEN_KEY, "1");
+    } catch {
+      // Storage unavailable: hidden until the next page load only.
+    }
+    setOtherAccountItems(0);
+  };
+
+  const deleteOtherAccountItems = async () => {
+    const accountId = accountIdRef.current;
+    if (!accountId || !window.confirm(t.confirmDeleteOther)) return;
+    await deleteOtherAccountsItems(accountId).catch(() => undefined);
+    setOtherAccountItems(await countOtherAccountsItems(accountId));
   };
 
   // Get first name or default - don't block render for this
@@ -491,11 +625,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </p>
             <button
               onClick={() => void handleLogout()}
-              disabled={loggingOut}
+              disabled={logOutPhase !== null}
               className="flex items-center gap-1 text-sm text-gray-500 hover:text-[#D21034] transition-colors disabled:opacity-60"
             >
               {Icons.logout}
-              {loggingOut ? t.loggingOut : t.logout}
+              {logOutPhase ? LOG_OUT_BUSY_LABELS[language][logOutPhase] : t.logout}
             </button>
           </div>
           <button
@@ -565,6 +699,30 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           isInTeacherView ? "" : "standalone:pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:standalone:pb-0"
         }`}
       >
+        {otherAccountItems > 0 && (
+          <div
+            role="status"
+            className="mx-4 mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:mx-6 lg:mx-8"
+          >
+            <p className="min-w-0 flex-1 basis-60">{t.otherAccountItems(otherAccountItems)}</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={keepOtherAccountItems}
+                className="rounded-xl px-3 py-1.5 font-semibold text-amber-900 hover:bg-amber-100"
+              >
+                {t.keepThem}
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteOtherAccountItems()}
+                className="rounded-xl bg-white px-3 py-1.5 font-semibold text-red-700 shadow-sm ring-1 ring-red-200 hover:bg-red-50"
+              >
+                {t.deleteThem}
+              </button>
+            </div>
+          </div>
+        )}
         {children}
       </div>
 

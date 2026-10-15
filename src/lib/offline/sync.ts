@@ -25,6 +25,7 @@ import {
   getLocalSlideResponses,
   getOfflineLesson,
   getQueuedUpdates,
+  getStorageEpoch,
   localProgressKey,
   normalizeQueueItem,
   putLocalSlideResponses,
@@ -45,6 +46,8 @@ const AUTH_TIMEOUT_MS = 5_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 // Completion times from the device are trusted only this far back.
 const MAX_BACKDATE_MS = 14 * 24 * 60 * 60 * 1000;
+// Another account's unsent items wait this long for it to sign in here again.
+const KEEP_OTHER_ACCOUNTS_MS = 30 * 24 * 60 * 60 * 1000;
 
 // ── Small helpers ────────────────────────────────────────────────────────────
 
@@ -221,6 +224,11 @@ export function partitionQueueByOwner(
   return { mine, foreign, invalid };
 }
 
+/** Whether another account's queued item has waited too long (30 days) to keep; an unreadable time counts as too long. */
+export function otherAccountItemExpired(timestamp: string, now: Date = new Date()): boolean {
+  return !(now.getTime() - Date.parse(timestamp) < KEEP_OTHER_ACCOUNTS_MS);
+}
+
 /** Combines a lesson's progress and complete items into one set of totals. */
 export function summarizeProgressItems(items: OfflineQueueItem[]): QueuedProgressTotals {
   const totals: QueuedProgressTotals = {
@@ -270,6 +278,8 @@ function snapshotOf(record: OfflineLesson | null, ownerId: string): OfflineProgr
  * wasn't ahead of it).
  */
 export async function queueLessonProgress(input: QueueLessonProgressInput): Promise<ProgressValues> {
+  // A logout while this runs must not get the previous account's progress written back.
+  const epoch = getStorageEpoch();
   const [record, previous] = await Promise.all([
     getOfflineLesson(input.lessonId).catch(() => null),
     getLocalProgress(input.ownerId, input.lessonId),
@@ -290,7 +300,7 @@ export async function queueLessonProgress(input: QueueLessonProgressInput): Prom
     last_position_seconds: next.last_position_seconds,
     total_watch_time_seconds: next.total_watch_time_seconds,
     completed: next.completed && !gated,
-  });
+  }, epoch);
   return next;
 }
 
@@ -309,6 +319,7 @@ export async function queueLessonComplete({
   positionSec?: number;
   practiceGated?: boolean;
 }): Promise<boolean> {
+  const epoch = getStorageEpoch();
   const [record, previous] = await Promise.all([
     getOfflineLesson(lessonId).catch(() => null),
     getLocalProgress(ownerId, lessonId),
@@ -328,7 +339,7 @@ export async function queueLessonComplete({
     lessonId,
     ...next,
     updatedAt: now,
-  } satisfies LocalLessonProgress);
+  } satisfies LocalLessonProgress, epoch);
   await addQueueItem({
     lessonId,
     ownerId,
@@ -339,7 +350,7 @@ export async function queueLessonComplete({
       last_position_seconds: next.last_position_seconds,
       total_watch_time_seconds: next.total_watch_time_seconds,
     },
-  });
+  }, epoch);
   return true;
 }
 
@@ -411,8 +422,10 @@ export interface SyncResult {
   failed: number;
   /** Items still queued afterwards. */
   remaining: number;
-  /** Items removed without sending: another account's, unreadable, or rejected for good by the server. */
+  /** Items removed without sending: unreadable, another account's past 30 days, or rejected for good by the server. */
   dropped: number;
+  /** Other accounts' items left queued for them to send when they sign in here (counted in `remaining`). */
+  otherAccounts?: number;
   /** Why nothing was attempted, when that happened. */
   skipped?: "offline" | "signed_out" | "busy";
 }
@@ -493,7 +506,12 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
   const stored = (items: OfflineQueueItem[]) =>
     items.map((item) => storedById.get(item.id) ?? item);
   let dropped = 0;
-  const unusable = [...foreign, ...invalid].map((item) => item.id).filter((id): id is number => typeof id === "number");
+  // Another account's items stay for that account (its session may have
+  // ended without logOut, e.g. a logout or password change on another
+  // phone) unless they have waited 30 days. Unreadable ones never sync.
+  const expired = foreign.filter((item) => otherAccountItemExpired(item.timestamp));
+  const otherAccounts = foreign.length - expired.length;
+  const unusable = [...expired, ...invalid].map((item) => item.id).filter((id): id is number => typeof id === "number");
   if (unusable.length > 0) {
     await clearQueuedUpdates(unusable).catch(() => undefined);
     dropped += unusable.length;
@@ -561,7 +579,7 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
     }
   }
 
-  return { synced, failed, dropped, remaining: await remainingCount() };
+  return { synced, failed, dropped, otherAccounts, remaining: await remainingCount() };
 }
 
 let syncInFlight: Promise<SyncResult> | null = null;

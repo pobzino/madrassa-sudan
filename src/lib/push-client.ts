@@ -96,19 +96,70 @@ async function turnOn(language: "ar" | "en"): Promise<"on" | "denied" | "dismiss
   }
 }
 
+// Set once this visit's refreshReminders ran; logging out removes it.
+const REFRESHED_KEY = "amal-push-refreshed";
+const UNLINK_TIMEOUT_MS = 2_500;
+
 /**
  * Re-sends an existing subscription once per visit, so the server keeps it
  * linked to whoever is signed in and picks up any change the browser made.
  */
 export async function refreshReminders() {
   try {
-    if (reminderState() !== "granted" || sessionStorage.getItem("amal-push-refreshed")) return;
-    sessionStorage.setItem("amal-push-refreshed", "1");
+    if (reminderState() !== "granted" || sessionStorage.getItem(REFRESHED_KEY)) return;
+    sessionStorage.setItem(REFRESHED_KEY, "1");
     const registration = await readyWorker();
     const subscription = await registration?.pushManager.getSubscription();
     if (subscription) await saveSubscription(subscription);
   } catch {
     // Reminders are a bonus; never interrupt learning over them.
+  }
+}
+
+/**
+ * Logging out: stop this phone getting the account's reminders, and let the
+ * next account to sign in here (in this same tab or app window) link it to
+ * itself. Call while the session is still valid — the server only removes
+ * the signed-in account's row. Keeps the browser's subscription and
+ * permission, so the next account needs no prompt. Never throws, and gives
+ * up after `timeoutMs` (offline, only the per-visit flag is removed).
+ */
+export async function unlinkRemindersOnLogout(timeoutMs = UNLINK_TIMEOUT_MS): Promise<void> {
+  try {
+    sessionStorage.removeItem(REFRESHED_KEY);
+  } catch {
+    // Storage unavailable: nothing was remembered.
+  }
+  if (typeof navigator === "undefined" || navigator.onLine === false || !("serviceWorker" in navigator)) return;
+
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const unlink = async () => {
+    // getRegistration, not ready: it answers at once even when no worker is active.
+    const registration = await navigator.serviceWorker.getRegistration();
+    const subscription = await registration?.pushManager?.getSubscription();
+    if (!subscription) return;
+    await fetch("/api/push/subscribe", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: subscription.endpoint }),
+      signal: controller.signal,
+    });
+  };
+  try {
+    await Promise.race([
+      unlink(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          resolve();
+        }, timeoutMs);
+      }),
+    ]);
+  } catch {
+    // Reminders must never stop a logout.
+  } finally {
+    clearTimeout(timer);
   }
 }
 

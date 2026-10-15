@@ -23,7 +23,7 @@ const SimPlayer = dynamic(() => import("@/components/slides/SimPlayer"), {
 });
 import { toast } from "sonner";
 import { Confetti } from "@/components/illustrations";
-import { getAuthState } from "@/lib/supabase/auth-cache";
+import { getAuthState, getLastVerifiedUser } from "@/lib/supabase/auth-cache";
 import { getCachedSimAudio } from "@/lib/offline/db";
 import { getOwnedOfflineLesson } from "@/lib/offline/identity";
 import { OFFLINE_HUB_PATH, offlinePlayerUrl } from "@/lib/offline/cache-names";
@@ -179,11 +179,23 @@ function timeoutSignal(ms: number): AbortSignal {
 }
 
 /**
+ * The phone's saved copy of the lesson — never one saved by an account other
+ * than the one verified in this visit (the owner record can still be the
+ * previous account's when this one's profile didn't load). Offline, with
+ * nobody verified, the owner record decides.
+ */
+async function getSavedCopy(lessonId: string) {
+  const saved = await getOwnedOfflineLesson(lessonId).catch(() => null);
+  const verified = getLastVerifiedUser();
+  return saved && (!verified || saved.ownerId === verified.id) ? saved : null;
+}
+
+/**
  * Opens this account's saved copy of the lesson in the offline player, which
  * needs no connection or sign-in check. Resolves false when there's no copy.
  */
 async function openSavedCopy(lessonId: string): Promise<boolean> {
-  const saved = await getOwnedOfflineLesson(lessonId).catch(() => null);
+  const saved = await getSavedCopy(lessonId);
   if (!saved) return false;
   window.location.replace(offlinePlayerUrl(lessonId));
   return true;
@@ -446,7 +458,7 @@ export default function LessonPlayerPage() {
       }
 
       // Local, so quick: with a saved copy to fall back on, don't wait long.
-      const savedCopy = await getOwnedOfflineLesson(lessonId).catch(() => null);
+      const savedCopy = await getSavedCopy(lessonId);
       if (signal.aborted) return;
       if (savedCopy) armTimeout(LOAD_TIMEOUT_WITH_SAVED_COPY_MS);
 
