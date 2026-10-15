@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import type { Language } from "@/contexts/LanguageContext";
 import { LivingOwl, type OwlMood } from "@/components/brand/LivingOwl";
@@ -12,8 +12,9 @@ const copy = {
   en: {
     title: "Sudan's children are learning with Amal",
     subtitle: "Free Maths and English lessons with Practice that checks every answer, in Arabic and English.",
+    board: "Our school so far",
     stats: {
-      signups: "Sign-ups so far",
+      signups: "Sign-ups",
       lessonsCompleted: "Lessons completed",
       practiceAttempts: "Practice sets completed",
     },
@@ -22,8 +23,9 @@ const copy = {
   ar: {
     title: "أطفال السودان يتعلمون مع آمال",
     subtitle: "دروس مجانية في الرياضيات واللغة الإنجليزية، مع تدريب يصحّح كل إجابة، بالعربية والإنجليزية.",
+    board: "مدرستنا حتى الآن",
     stats: {
-      signups: "حساب مسجّل حتى الآن",
+      signups: "حساب مسجّل",
       lessonsCompleted: "درس مكتمل",
       practiceAttempts: "تدريب مكتمل",
     },
@@ -172,6 +174,8 @@ function useAnimatedNumber(target: number) {
 
 // Chalk colours for the underline under each figure.
 const CHALK = ["#FDE68A", "#FBCFE8", "#BBF7D0"];
+// Pushpin colours for the partner cards.
+const PINS = ["#D21034", "#007229", "#F59E0B"];
 
 // One figure written on the board in chalk, with a hand-drawn underline.
 function ChalkStat({
@@ -194,7 +198,7 @@ function ChalkStat({
   const { ref, value: shown, bumps } = useAnimatedNumber(target);
 
   return (
-    <li className="flex items-baseline gap-4 sm:block">
+    <li className="flex flex-1 items-baseline gap-4 sm:block">
       <p ref={ref} className={`${hand} shrink-0 text-6xl leading-none text-[#fffdf2] tabular-nums sm:text-7xl`} style={{ textShadow: "0 0 2px rgba(255,255,255,.45)" }}>
         {/* Re-keyed on each new count so the fresh number is "rewritten" in chalk. */}
         <span aria-hidden key={bumps} className={`inline-block ${bumps > 0 ? "animate-[chalk-write_.9s_ease-out]" : ""}`}>
@@ -216,10 +220,25 @@ function ChalkStat({
   );
 }
 
+// A wobbly hand-drawn chalk line between figures: across on phones, down on wider screens.
+function ChalkDivider() {
+  return (
+    <li aria-hidden role="presentation" className="my-4 sm:mx-6 sm:my-1">
+      <svg viewBox="0 0 240 6" preserveAspectRatio="none" className="h-1.5 w-full sm:hidden" fill="none">
+        <path d="M2 4C40 1 80 5 120 3S200 5 238 2" stroke="rgba(255,255,255,.32)" strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      </svg>
+      <svg viewBox="0 0 6 120" preserveAspectRatio="none" className="hidden h-full w-1.5 sm:block" fill="none">
+        <path d="M3 2C1 30 5 58 3 86S2 110 4 118" stroke="rgba(255,255,255,.32)" strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      </svg>
+    </li>
+  );
+}
+
 /**
  * The live numbers written on a classroom chalkboard (brand green, wooden
  * frame), with the owl perched on top like the teacher: it waves when the
  * board comes into view and hops when a new sign-up ticks a number up.
+ * Partners are pinned up underneath like photos on a classroom wall.
  */
 export function SocialProof({ stats: initialStats, language }: { stats: HomeStats; language: Language }) {
   const txt = copy[language];
@@ -236,6 +255,11 @@ export function SocialProof({ stats: initialStats, language }: { stats: HomeStat
 
   const stats = useLiveStats(initialStats, () => react("excited", 1800));
   const formatter = statNumberFormat(language);
+  const figures = [
+    { value: stats.signups, label: txt.stats.signups },
+    { value: stats.lessonsCompleted, label: txt.stats.lessonsCompleted },
+    { value: stats.practiceAttempts, label: txt.stats.practiceAttempts },
+  ];
 
   useEffect(() => {
     const node = boardRef.current;
@@ -258,7 +282,7 @@ export function SocialProof({ stats: initialStats, language }: { stats: HomeStat
   return (
     <section aria-labelledby="social-proof-title" className="relative bg-white py-14 sm:py-20">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:gap-14">
+        <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-center lg:gap-14">
           <div className="text-center lg:text-start">
             <h2
               id="social-proof-title"
@@ -271,26 +295,55 @@ export function SocialProof({ stats: initialStats, language }: { stats: HomeStat
 
           <div ref={boardRef} className="relative pt-14 sm:pt-16">
             {/* The owl teacher sits on the frame. */}
-            <div aria-hidden className="absolute top-0 z-10 w-20 ltr:right-6 rtl:left-6 sm:w-24">
+            <div aria-hidden className="absolute top-0 z-10 w-20 ltr:right-8 rtl:left-8 sm:w-24">
               <LivingOwl mood={owlMood} restGaze={{ x: language === "ar" ? 0.5 : -0.5, y: 0.5 }} className="w-full" />
             </div>
 
-            {/* Wooden frame around the board. */}
-            <div className="relative rounded-[1.75rem] bg-[#c8843a] p-2.5 shadow-[0_24px_50px_-22px_rgba(120,60,10,.55)] sm:p-3.5">
+            {/* Wooden frame: lit along the top, shadowed underneath. */}
+            <div
+              className="relative rounded-[1.6rem] p-3 shadow-[0_28px_50px_-24px_rgba(110,55,10,.6),inset_0_2px_0_rgba(255,255,255,.35),inset_0_-4px_0_rgba(0,0,0,.18)] sm:p-4"
+              style={{ background: "linear-gradient(180deg, #d99a4e 0%, #c27d33 55%, #a9692a 100%)" }}
+            >
+              {/* The board, set into the frame. */}
               <div
-                className="relative overflow-hidden rounded-[1.2rem] px-6 pb-9 pt-7 sm:px-9 sm:pb-11 sm:pt-9"
-                style={{ background: "radial-gradient(120% 95% at 25% 15%, #1a7a43 0%, #0f6233 55%, #0b522a 100%)" }}
+                className="relative overflow-hidden rounded-[1.1rem] px-6 pb-10 pt-6 shadow-[inset_0_6px_18px_rgba(0,0,0,.35),inset_0_0_0_2px_rgba(0,0,0,.12)] sm:px-9 sm:pb-12 sm:pt-7"
+                style={{ background: "radial-gradient(130% 100% at 25% 10%, #1b7d45 0%, #11683a 50%, #0b532c 100%)" }}
               >
-                {/* Faint smudges of old chalk. */}
-                <span aria-hidden className="absolute inset-0 opacity-60" style={{ backgroundImage: "radial-gradient(40% 30% at 70% 30%, rgba(255,255,255,.07), transparent 70%), radial-gradient(30% 25% at 20% 80%, rgba(255,255,255,.06), transparent 70%)" }} />
-                <ul className="relative grid gap-6 sm:grid-cols-3 sm:gap-6">
-                  <ChalkStat value={stats.signups} live={stats.live} label={txt.stats.signups} formatter={formatter} chalk={CHALK[0]} hand={hand} />
-                  <ChalkStat value={stats.lessonsCompleted} live={stats.live} label={txt.stats.lessonsCompleted} formatter={formatter} chalk={CHALK[1]} hand={hand} />
-                  <ChalkStat value={stats.practiceAttempts} live={stats.live} label={txt.stats.practiceAttempts} formatter={formatter} chalk={CHALK[2]} hand={hand} />
+                {/* Eraser streaks and old chalk dust. */}
+                <span
+                  aria-hidden
+                  className="absolute inset-0"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(104deg, transparent 18%, rgba(255,255,255,.045) 26%, transparent 38%), linear-gradient(98deg, transparent 52%, rgba(255,255,255,.035) 60%, transparent 72%), radial-gradient(35% 25% at 80% 85%, rgba(255,255,255,.06), transparent 70%)",
+                  }}
+                />
+
+                <p className={`${hand} relative text-2xl text-white/80 sm:text-3xl`}>
+                  {txt.board}
+                  <svg aria-hidden viewBox="0 0 160 10" className="mt-0.5 block h-2.5 w-36" fill="none">
+                    <path d="M3 6C40 2 90 8 157 4" stroke="rgba(255,255,255,.55)" strokeWidth="2.5" strokeLinecap="round" />
+                  </svg>
+                </p>
+
+                <ul className="relative mt-5 flex flex-col sm:mt-7 sm:flex-row sm:items-stretch">
+                  {figures.map((figure, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && <ChalkDivider />}
+                      <ChalkStat value={figure.value} live={stats.live} label={figure.label} formatter={formatter} chalk={CHALK[i]} hand={hand} />
+                    </Fragment>
+                  ))}
                 </ul>
+
+                {/* Doodles a teacher left behind. */}
+                <svg aria-hidden viewBox="0 0 24 24" className="absolute bottom-3 h-6 w-6 ltr:left-4 rtl:right-4" fill="none">
+                  <path d="M12 3l2.4 5.6L20 9.3l-4.3 3.9 1.3 5.8L12 16l-5 3 1.3-5.8L4 9.3l5.6-.7z" stroke="rgba(255,255,255,.4)" strokeWidth="1.6" strokeLinejoin="round" />
+                </svg>
+                <span aria-hidden className={`${hand} absolute bottom-2 text-2xl text-[#FDE68A]/60 ltr:right-5 rtl:left-5`}>A+</span>
               </div>
+
               {/* Chalk tray with a stick of chalk and a duster. */}
-              <div aria-hidden className="absolute inset-x-8 -bottom-2.5 h-3 rounded-full bg-[#a86a28] shadow-[0_3px_0_rgba(0,0,0,.12)]">
+              <div aria-hidden className="absolute inset-x-10 -bottom-2.5 h-3 rounded-full bg-[#9c6026] shadow-[0_3px_0_rgba(0,0,0,.12),inset_0_1px_0_rgba(255,255,255,.25)]">
                 <span className="absolute -top-1.5 h-2 w-9 rounded-full bg-[#fffdf2] ltr:left-8 rtl:right-8" />
                 <span className="absolute -top-3 h-3.5 w-12 rounded-md bg-[#3f3f46] ltr:right-10 rtl:left-10">
                   <span className="absolute inset-x-0 bottom-0 h-1.5 rounded-b-md bg-[#d4d4d8]" />
@@ -300,10 +353,11 @@ export function SocialProof({ stats: initialStats, language }: { stats: HomeStat
           </div>
         </div>
 
-        <div id="partners" className="mt-16 scroll-mt-20 sm:mt-20">
-          <p className="text-center text-sm text-gray-500">{txt.partnersLabel}</p>
-          <ul className="mt-6 flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
-            {PARTNERS.map((partner) => {
+        {/* Partners, pinned up like photos on a classroom wall. */}
+        <div id="partners" className="mt-20 scroll-mt-20 text-center sm:mt-24">
+          <h3 className="font-fredoka text-xl font-semibold text-gray-900 sm:text-2xl">{txt.partnersLabel}</h3>
+          <ul className="mt-9 flex flex-wrap items-start justify-center gap-x-12 gap-y-10">
+            {PARTNERS.map((partner, i) => {
               const name = language === "ar" ? partner.nameAr : partner.name;
               return (
                 <li key={partner.id}>
@@ -312,15 +366,28 @@ export function SocialProof({ stats: initialStats, language }: { stats: HomeStat
                     target="_blank"
                     rel="noopener noreferrer"
                     title={name}
-                    className="block rounded-md transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#007229]"
+                    className={`relative block bg-white p-3 pb-2 shadow-[0_16px_30px_-16px_rgba(15,23,42,.5)] ring-1 ring-black/5 transition-transform duration-300 hover:-translate-y-1 hover:rotate-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#007229] ${
+                      i % 2 ? "rotate-2" : "-rotate-2"
+                    }`}
                   >
-                    <Image
-                      src={partner.logo.src}
-                      alt={name}
-                      width={partner.logo.width}
-                      height={partner.logo.height}
-                      className={partner.logo.className}
+                    <span
+                      aria-hidden
+                      className="absolute -top-2.5 left-1/2 z-10 h-5 w-5 -translate-x-1/2 rounded-full shadow-[0_3px_4px_rgba(0,0,0,.3)]"
+                      style={{ background: `radial-gradient(circle at 35% 30%, rgba(255,255,255,.7) 0 2px, ${PINS[i % PINS.length]} 3px)` }}
                     />
+                    <span
+                      className="flex h-28 w-56 items-center justify-center overflow-hidden sm:h-32 sm:w-64"
+                      style={{ background: partner.logoBackground }}
+                    >
+                      <Image
+                        src={partner.logo.src}
+                        alt={name}
+                        width={partner.logo.width}
+                        height={partner.logo.height}
+                        className={partner.logo.className}
+                      />
+                    </span>
+                    <span className={`${hand} mt-1.5 block text-xl text-gray-700`}>{partner.shortName}</span>
                   </a>
                 </li>
               );

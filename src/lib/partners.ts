@@ -6,6 +6,8 @@ export type Partner = {
   shortName: string;
   url: string;
   logo: { src: string; width: number; height: number; className: string };
+  /** Fills the card behind the logo, matching the logo file's own background. */
+  logoBackground: string;
 };
 
 export const PARTNERS: Partner[] = [
@@ -15,8 +17,9 @@ export const PARTNERS: Partner[] = [
     nameAr: "Waging Peace",
     shortName: "Waging Peace",
     url: "https://wagingpeace.info/",
+    logo: { src: "/partners/waging-peace-logo.jpg", width: 225, height: 125, className: "h-20 w-auto sm:h-24" },
     // The logo file has its own dark background.
-    logo: { src: "/partners/waging-peace-logo.jpg", width: 225, height: 125, className: "h-14 w-auto rounded-md sm:h-16" },
+    logoBackground: "#2e2e2e",
   },
   {
     id: "sdpd",
@@ -24,6 +27,7 @@ export const PARTNERS: Partner[] = [
     nameAr: "أطباء السودان للسلام والتنمية",
     shortName: "SDPD",
     url: "https://sdpdev.org/",
-    logo: { src: "/partners/sdpd-logo.png", width: 398, height: 88, className: "h-12 w-auto sm:h-14" },
+    logo: { src: "/partners/sdpd-logo.png", width: 398, height: 88, className: "h-auto w-[88%]" },
+    logoBackground: "#ffffff",
   },
 ];
