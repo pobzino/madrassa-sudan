@@ -37,31 +37,42 @@ const OWNER_META_KEY = 'owner';
 const OFFLINE_HUB_PATH = '/offline';
 const OFFLINE_PLAYER_PATH = '/offline/play';
 const SHELL_PATHS = [OFFLINE_HUB_PATH, OFFLINE_PLAYER_PATH];
-const PUBLIC_PAGE_PATHS = ['/', '/privacy', '/terms'];
+// The same for every visitor, so a cached copy can stand in offline.
+const PUBLIC_PAGE_PATHS = ['/', '/privacy', '/terms', '/parents', '/sample-lesson'];
 
-// Weak signal ("lie-fi") can leave a request hanging for a minute; after this
-// long, a navigation falls back to the offline pages instead.
+// Weak signal ("lie-fi") can leave a request hanging for a minute. A page load
+// only gives up on the network when there is something useful to show
+// instead: a downloaded lesson or a cached page after this long...
 const NAVIGATION_TIMEOUT_MS = 4000;
+// ...other app pages (the dashboard, Settings) after this long, and only when
+// the hub has saved lessons to offer...
+const APP_PAGE_TIMEOUT_MS = 8000;
+// ...and a page opened from the hub or the player (the family asked to try
+// the internet) after this long. Anything else waits as long as the browser does.
+const RETRY_TIMEOUT_MS = 20000;
+// An in-app tap on a downloaded lesson (the router's RSC request).
+const RSC_TIMEOUT_MS = 6000;
+// How long after that the router's fallback page load goes straight to the player.
+const RSC_GAVE_UP_MS = 15000;
 // Other GETs keep waiting for the network, but a cached copy wins after this.
 const CACHED_COPY_AFTER_MS = 4000;
 const DB_TIMEOUT_MS = 1500;
-// After a failed navigation, the offline shells open from the cache straight
-// away for a while, so hub → player doesn't wait out the timeout again.
-const RECENTLY_OFFLINE_MS = 60000;
 const MAX_PRECACHE_FILES = 300;
 const PRECACHE_CONCURRENCY = 6;
 
 // Build files a shell refers to, including escaped URLs inside the inline
 // flight data. The lookahead stops `.js` matching the start of `.json`.
 const STATIC_ASSET_PATTERN = /\/_next\/static\/[^"'\s\\)<>]+?\.(?:js|css|woff2|woff|ttf)(?![\w-])/g;
-const CSS_URL_PATTERN = /url\(\s*(['"]?)([^'")\s]+)\1\s*\)/g;
-const FONT_PATH_PATTERN = /\.(?:woff2|woff|ttf)$/;
 // Chunks a build file loads on demand (the activity widgets, the sync code),
 // which Turbopack names as literal "static/chunks/<file>" strings. The HTML
 // never lists them, so without this a widget first opened offline can't load.
 const LAZY_CHUNK_PATTERN = /static\/chunks\/[A-Za-z0-9._~/-]+?\.(?:js|css)(?![\w-])/g;
 
-let lastNavigationFailureAt = 0;
+// The on-demand chunks install found, still being cached after install.
+let backgroundPrecache = null;
+// A downloaded lesson whose in-app request was cut off: { id, at }.
+let rscGaveUp = null;
+const TIMED_OUT = new Error('timeout');
 
 function noop() {}
 
@@ -77,15 +88,35 @@ function offlinePlayerUrl(lessonId) {
   return OFFLINE_PLAYER_PATH + '?id=' + encodeURIComponent(lessonId);
 }
 
-function withTimeout(promise, ms) {
+// The network's answer, however long it takes, unless it is still pending
+// after `ms` and `giveUp()` then says an offline copy is worth showing: then
+// it rejects with TIMED_OUT. The timer starts with the request and the check
+// runs only once it fires, so a quick answer never waits on it. `ms` null
+// means no time limit.
+function networkUnlessSlow(network, ms, giveUp) {
+  if (ms === null) return network;
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('timeout')), ms);
-    promise.then(
-      (value) => {
+    let pending = true;
+    const timer = setTimeout(() => {
+      Promise.resolve()
+        .then(giveUp)
+        .catch(() => false)
+        .then((yes) => {
+          if (!yes || !pending) return;
+          pending = false;
+          reject(TIMED_OUT);
+        });
+    }, ms);
+    network.then(
+      (response) => {
+        if (!pending) return;
+        pending = false;
         clearTimeout(timer);
-        resolve(value);
+        resolve(response);
       },
       (error) => {
+        if (!pending) return;
+        pending = false;
         clearTimeout(timer);
         reject(error);
       }
@@ -198,24 +229,6 @@ function extractStaticAssetUrls(html) {
   return Array.from(urls).slice(0, MAX_PRECACHE_FILES);
 }
 
-// Font files a stylesheet loads (`url(../media/x.woff2)`), as same-origin paths.
-function extractCssFontUrls(css, cssPath) {
-  const base = absoluteUrl(cssPath);
-  const paths = new Set();
-  for (const match of css.matchAll(CSS_URL_PATTERN)) {
-    let resolved;
-    try {
-      resolved = new URL(match[2], base);
-    } catch {
-      continue;
-    }
-    if (resolved.origin !== self.location.origin) continue;
-    if (!resolved.pathname.startsWith('/_next/static/')) continue;
-    if (FONT_PATH_PATTERN.test(resolved.pathname)) paths.add(resolved.pathname);
-  }
-  return Array.from(paths);
-}
-
 // On-demand chunks a build file refers to, as same-origin paths.
 function extractLazyChunkUrls(js) {
   const paths = new Set();
@@ -251,23 +264,29 @@ async function precacheFile(staticCache, path) {
   return response;
 }
 
-async function precacheStaticFiles(paths) {
+// Caches `paths` and, as each script arrives, the chunks it loads on demand.
+// With `required`, any of those failing throws; anything else is optional: a
+// widget that can't load shows "Continue" (warm.ts also loads them online).
+// Returns the on-demand chunks it found but didn't cache, when `followLazy` is off.
+async function precacheStaticFiles(paths, { required = false, followLazy = true } = {}) {
   const staticCache = await caches.open(STATIC_CACHE);
-  const required = new Set(paths);
-  const queue = Array.from(required);
+  const queue = Array.from(new Set(paths)).slice(0, MAX_PRECACHE_FILES);
   const seen = new Set(queue);
+  const found = new Set();
 
   const enqueue = (discovered) => {
-    for (const found of discovered) {
-      if (seen.has(found) || seen.size >= MAX_PRECACHE_FILES) continue;
-      seen.add(found);
-      queue.push(found);
+    for (const path of discovered) {
+      if (seen.has(path) || seen.size >= MAX_PRECACHE_FILES) continue;
+      seen.add(path);
+      if (followLazy) queue.push(path);
+      else found.add(path);
     }
   };
 
-  // The queue grows while it runs: each stylesheet adds the fonts it loads
-  // and each script the chunks it loads on demand, so step by the batch
-  // actually taken, not the batch size.
+  // The queue grows while it runs, so step by the batch actually taken, not
+  // the batch size. Stylesheets aren't read: the fonts the pages need are
+  // the ones the HTML preloads (Latin and Arabic), and the other subsets in
+  // the CSS (Cyrillic, Greek, Vietnamese...) are never fetched online either.
   for (let index = 0; index < queue.length; ) {
     const batch = queue.slice(index, index + PRECACHE_CONCURRENCY);
     index += batch.length;
@@ -277,36 +296,47 @@ async function precacheStaticFiles(paths) {
         try {
           response = await precacheFile(staticCache, path);
         } catch (error) {
-          // Files reached only through another file are optional: fonts fall
-          // back to the system font, and a widget that can't load shows
-          // "Continue" (warm.ts also loads them while online). Everything a
-          // shell lists is required.
-          if (required.has(path)) throw error;
+          if (required) throw error;
           return;
         }
-        if (path.endsWith('.css')) {
-          enqueue(extractCssFontUrls(await response.clone().text(), path));
-        } else if (path.endsWith('.js')) {
-          enqueue(extractLazyChunkUrls(await response.clone().text()));
-        }
+        if (path.endsWith('.js')) enqueue(extractLazyChunkUrls(await response.clone().text()));
       })
     );
   }
+  return Array.from(found);
 }
 
+// The shells and every build file they list, which install waits for. The
+// chunks those load on demand come after, so the worker (and with it
+// reminders, which need an active worker) is ready sooner on a slow link.
 async function precacheShells() {
   const shells = await Promise.all(SHELL_PATHS.map(fetchShell));
-  await precacheStaticFiles(extractStaticAssetUrls(shells.map((shell) => shell.html).join('\n')));
+  const lazyChunks = await precacheStaticFiles(
+    extractStaticAssetUrls(shells.map((shell) => shell.html).join('\n')),
+    { required: true, followLazy: false }
+  );
   // Shells last, so a shell is never cached without its build files.
   const shellCache = await caches.open(SHELL_CACHE);
   await Promise.all(shells.map((shell) => shellCache.put(shell.path, shell.response)));
+  return lazyChunks;
 }
 
-// Install — cache the offline shells and everything they load, then take over
+// Install — cache the offline shells and the files they list, then take over
 // straight away so new handlers (like lesson reminders) work without closing
 // every tab first. If any of it fails, install fails and the browser retries.
 self.addEventListener('install', (event) => {
-  event.waitUntil(precacheShells().then(() => self.skipWaiting()));
+  event.waitUntil(
+    precacheShells().then((lazyChunks) => {
+      // Not in activate's waitUntil either: page loads wait for activation.
+      // Each fetch event keeps the worker alive until this is done.
+      backgroundPrecache = precacheStaticFiles(lazyChunks)
+        .catch(noop)
+        .then(() => {
+          backgroundPrecache = null;
+        });
+      return self.skipWaiting();
+    })
+  );
 });
 
 // ── Activate: keep this build and the previous one, drop the rest ────────────
@@ -375,17 +405,23 @@ self.addEventListener('activate', (event) => {
 
 // ── Is a lesson downloaded? (read-only IndexedDB check) ──────────────────────
 
-function ownsLesson(lesson, owner) {
-  return Boolean(
-    lesson && owner && typeof owner.userId === 'string' && lesson.ownerId === owner.userId
-  );
+function isOwnerRecord(owner) {
+  return Boolean(owner && typeof owner.userId === 'string');
 }
 
-// 'yes' | 'no' | 'unknown'. Mirrors the player's rule: a lesson counts only if
-// its record belongs to the owner on this phone. Never creates or upgrades the
-// database: db.ts owns its schema, and an empty database made here would be
-// opened later without its stores.
-function lessonDownloadState(lessonId) {
+function ownsLesson(lesson, owner) {
+  return Boolean(lesson && isOwnerRecord(owner) && lesson.ownerId === owner.userId);
+}
+
+const NO_RECORDS = { owner: false, owned: false };
+
+// 'unknown', or { owner, owned }: whether a family signed in on this phone
+// (the owner record), and whether that owner saved `lessonId` (with no id:
+// any lesson). Mirrors the player's rule: a lesson counts only if its record
+// belongs to the owner on this phone. Never creates or upgrades the database:
+// db.ts owns its schema, and an empty database made here would be opened
+// later without its stores.
+function readOfflineRecords(lessonId) {
   return new Promise((resolve) => {
     if (typeof indexedDB === 'undefined' || !indexedDB) {
       resolve('unknown');
@@ -432,7 +468,7 @@ function lessonDownloadState(lessonId) {
       } catch {
         // Nothing to abort.
       }
-      finish('no');
+      finish(NO_RECORDS);
     };
     request.onerror = (event) => {
       if (event && typeof event.preventDefault === 'function') event.preventDefault();
@@ -451,16 +487,34 @@ function lessonDownloadState(lessonId) {
       // An old or broken database without these stores has no owned lessons.
       const names = db.objectStoreNames;
       if (!names.contains(LESSONS_STORE) || !names.contains(META_STORE)) {
-        finish('no');
+        finish(NO_RECORDS);
         return;
       }
 
       try {
         const tx = db.transaction([LESSONS_STORE, META_STORE], 'readonly');
-        const lessonRequest = tx.objectStore(LESSONS_STORE).get(lessonId);
         const ownerRequest = tx.objectStore(META_STORE).get(OWNER_META_KEY);
+        const lessonRequest = lessonId ? tx.objectStore(LESSONS_STORE).get(lessonId) : null;
+        let ownsAny = false;
+        if (!lessonRequest) {
+          // There's no owner index, so walk the lessons until one is theirs.
+          ownerRequest.onsuccess = () => {
+            const owner = ownerRequest.result;
+            if (!isOwnerRecord(owner)) return;
+            const cursorRequest = tx.objectStore(LESSONS_STORE).openCursor();
+            cursorRequest.onsuccess = () => {
+              const cursor = cursorRequest.result;
+              if (!cursor) return;
+              if (ownsLesson(cursor.value, owner)) ownsAny = true;
+              else cursor.continue();
+            };
+          };
+        }
         tx.oncomplete = () =>
-          finish(ownsLesson(lessonRequest.result, ownerRequest.result) ? 'yes' : 'no');
+          finish({
+            owner: isOwnerRecord(ownerRequest.result),
+            owned: lessonRequest ? ownsLesson(lessonRequest.result, ownerRequest.result) : ownsAny,
+          });
         tx.onerror = () => finish('unknown');
         tx.onabort = () => finish('unknown');
       } catch {
@@ -468,6 +522,13 @@ function lessonDownloadState(lessonId) {
       }
     };
   });
+}
+
+// 'yes' | 'no' | 'unknown'.
+async function lessonDownloadState(lessonId) {
+  const records = await readOfflineRecords(lessonId);
+  if (records === 'unknown') return 'unknown';
+  return records.owned ? 'yes' : 'no';
 }
 
 async function isLessonDownloaded(lessonId) {
@@ -481,6 +542,21 @@ async function isLessonDownloaded(lessonId) {
   // Couldn't read the database: the saved audio is the next best sign (any
   // version of it: each save stores it as /offline-audio/<id>?v=…).
   return Boolean(await matchInCache(AUDIO_CACHE, OFFLINE_AUDIO_PREFIX + lessonId, { ignoreSearch: true }));
+}
+
+// { owner, owned } for the phone as a whole: is a family signed in here, and
+// have they saved any lesson?
+async function offlineFamily() {
+  let records;
+  try {
+    records = await readOfflineRecords(null);
+  } catch {
+    records = 'unknown';
+  }
+  if (records !== 'unknown') return records;
+  // Couldn't read the database: saved audio is the next best sign of both.
+  const audio = await caches.has(AUDIO_CACHE).catch(() => false);
+  return { owner: audio, owned: audio };
 }
 
 // ── Offline responses ────────────────────────────────────────────────────────
@@ -526,10 +602,47 @@ async function offlineNavigationResponse(route) {
 
   // Everything else goes to the saved-lessons hub, as a real redirect so the
   // address bar (and the router) show /offline rather than the failed URL.
-  if (!(route.kind === 'shell' && route.key === OFFLINE_HUB_PATH)) {
-    if (await matchShell(OFFLINE_HUB_PATH)) return redirectTo(OFFLINE_HUB_PATH);
+  // Only for a family signed in on this phone: a visitor would just see
+  // "Your saved lessons … log out".
+  if (
+    !(route.kind === 'shell' && route.key === OFFLINE_HUB_PATH) &&
+    (await matchShell(OFFLINE_HUB_PATH)) &&
+    (await offlineFamily()).owner
+  ) {
+    return redirectTo(OFFLINE_HUB_PATH);
   }
   return offlinePage();
+}
+
+// Whether giving up on a slow network leaves something worth showing.
+async function hasUsefulOfflineCopy(route) {
+  if (route.kind === 'shell' || route.kind === 'public') return Boolean(await matchShell(route.key));
+  if (route.kind === 'lesson') {
+    return (await isLessonDownloaded(route.id)) && Boolean(await matchShell(OFFLINE_PLAYER_PATH));
+  }
+  if (route.kind === 'other') {
+    const family = await offlineFamily();
+    return family.owner && family.owned && Boolean(await matchShell(OFFLINE_HUB_PATH));
+  }
+  return false;
+}
+
+// The hub's "Try the internet again" and the player's links to the full
+// lesson or Practice: the family asked for the internet, so give it longer.
+function openedFromOfflinePages(request) {
+  try {
+    const referrer = new URL(request.referrer);
+    return referrer.origin === self.location.origin && SHELL_PATHS.includes(normalizePath(referrer.pathname));
+  } catch {
+    return false;
+  }
+}
+
+function navigationTimeoutMs(request, route) {
+  // Sign-in callbacks wait as long as the browser does.
+  if (route.kind === 'auth') return null;
+  if (route.kind !== 'shell' && openedFromOfflinePages(request)) return RETRY_TIMEOUT_MS;
+  return route.kind === 'other' ? APP_PAGE_TIMEOUT_MS : NAVIGATION_TIMEOUT_MS;
 }
 
 // ── Fetch strategies ─────────────────────────────────────────────────────────
@@ -598,39 +711,91 @@ function networkFirst(event, request, { cacheName, cacheKey, isCacheable }) {
   });
 }
 
-async function respondToNavigation(network, route) {
-  if (route.kind === 'shell' && Date.now() - lastNavigationFailureAt < RECENTLY_OFFLINE_MS) {
-    const cached = await matchShell(route.key);
-    if (cached) return cached;
-  }
+// An in-app tap on a lesson (the router's RSC request). The router has no time
+// limit of its own and falls back to a full page load only when its request
+// fails, so on lie-fi a downloaded lesson would never open. For a downloaded
+// lesson, a request still hanging after RSC_TIMEOUT_MS is cut off, and the
+// page load that follows goes straight to the player. Nothing is cached, and
+// nothing else is cut off: a slow but working connection still gets its page.
+async function lessonPayload(request, lessonId) {
+  const controller = new AbortController();
+  // The router dropped the tap (another tap came first): drop the request too.
+  const pageSignal = request.signal;
+  if (pageSignal && pageSignal.aborted) controller.abort();
+  else if (pageSignal) pageSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  const network = fetch(request, { signal: controller.signal });
   try {
-    // Sign-in callbacks wait as long as the browser does.
-    const response = await (route.kind === 'auth' ? network : withTimeout(network, NAVIGATION_TIMEOUT_MS));
-    lastNavigationFailureAt = 0;
-    return response;
+    return await networkUnlessSlow(network, RSC_TIMEOUT_MS, async () => {
+      if (pageSignal && pageSignal.aborted) return false;
+      return isLessonDownloaded(lessonId);
+    });
+  } catch (error) {
+    if (error !== TIMED_OUT) throw error;
+    controller.abort();
+    rscGaveUp = { id: lessonId, at: Date.now() };
+    // A network error: the router then loads the page in full.
+    return Response.error();
+  }
+}
+
+// True once, for the page load that follows a cut-off in-app tap.
+function takeRscGaveUp(route) {
+  const gaveUp = rscGaveUp;
+  if (!gaveUp || route.kind !== 'lesson' || gaveUp.id !== route.id) return false;
+  rscGaveUp = null;
+  return Date.now() - gaveUp.at < RSC_GAVE_UP_MS;
+}
+
+async function respondToNavigation(request, route, network) {
+  try {
+    return await networkUnlessSlow(network, navigationTimeoutMs(request, route), () =>
+      hasUsefulOfflineCopy(route)
+    );
   } catch {
-    lastNavigationFailureAt = Date.now();
     return offlineNavigationResponse(route);
   }
 }
 
+// The offline shells come from this build's own cache, with no network at
+// all: they are prerendered once per build, the same for everyone, and cached
+// at install together with their build files. A copy fetched later could be a
+// newer deploy's, whose build files this worker never cached.
+async function respondToShellNavigation(request, route) {
+  const cached = await matchInCache(SHELL_CACHE, route.key, { ignoreSearch: true, ignoreVary: true });
+  return cached || respondToNavigation(request, route, fetch(request));
+}
+
+// The network already timed out on the in-app tap: don't wait out another one.
+async function openDownloadedLesson(request, route) {
+  if ((await isLessonDownloaded(route.id)) && (await matchShell(OFFLINE_PLAYER_PATH))) {
+    return redirectTo(offlinePlayerUrl(route.id));
+  }
+  return respondToNavigation(request, route, fetch(request));
+}
+
 function handleNavigation(event, request, url) {
   const route = classifyNavigation(url.pathname);
-  const cacheKey = route.kind === 'shell' || route.kind === 'public' ? route.key : null;
+  if (route.kind === 'shell') {
+    event.respondWith(respondToShellNavigation(request, route));
+    return;
+  }
+  if (takeRscGaveUp(route)) {
+    event.respondWith(openDownloadedLesson(request, route));
+    return;
+  }
+
   const network = fetch(request);
-  // Keep the shell fresh, even when the answer arrives after the timeout.
-  event.waitUntil(
-    network
-      .then((response) => {
-        lastNavigationFailureAt = 0;
-        if (cacheKey && isShellResponse(response)) {
-          return putInCache(SHELL_CACHE, cacheKey, response.clone());
-        }
-        return undefined;
-      })
-      .catch(noop)
-  );
-  event.respondWith(respondToNavigation(network, route));
+  if (route.kind === 'public') {
+    // Keep the public pages fresh, even when the answer arrives after the timeout.
+    event.waitUntil(
+      network
+        .then((response) =>
+          isShellResponse(response) ? putInCache(SHELL_CACHE, route.key, response.clone()) : undefined
+        )
+        .catch(noop)
+    );
+  }
+  event.respondWith(respondToNavigation(request, route, network));
 }
 
 // Fetch handler
@@ -647,6 +812,8 @@ self.addEventListener('fetch', (event) => {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
   // fetch() rejects these outside DevTools; let the browser handle them.
   if (request.cache === 'only-if-cached' && request.mode !== 'same-origin') return;
+  // Install's on-demand chunks are still being cached: stay alive for them.
+  if (backgroundPrecache) event.waitUntil(backgroundPrecache);
 
   // 1. Cross-origin (Supabase data, storage, CDNs): untouched, except lesson
   // images a download saved.
@@ -656,7 +823,14 @@ self.addEventListener('fetch', (event) => {
   }
 
   // 2. Personal or live: RSC payloads, API routes, and this script itself.
-  if (isRscRequest(request, url)) return;
+  // Never cached; only an in-app tap on a lesson gets a time limit (prefetches don't).
+  if (isRscRequest(request, url)) {
+    const lessonId = lessonIdFromPath(normalizePath(url.pathname));
+    if (lessonId && !request.headers.has('Next-Router-Prefetch')) {
+      event.respondWith(lessonPayload(request, lessonId));
+    }
+    return;
+  }
   if (url.pathname.startsWith('/api/') || url.pathname === '/sw.js') return;
 
   // 3. Build files — cache first.
@@ -671,7 +845,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 5. Page loads — network with a timeout, then the offline shells.
+  // 5. Page loads — the offline shells from the cache; other pages from the
+  // network, giving up on it only when there is an offline copy to show.
   if (request.mode === 'navigate') {
     handleNavigation(event, request, url);
     return;
@@ -681,15 +856,17 @@ self.addEventListener('fetch', (event) => {
   if (request.headers.has('Range')) return;
   if (url.pathname === '/auth' || url.pathname.startsWith('/auth/')) return;
 
-  // 6. The offline shells fetched as plain GETs (the warm-up after a download)
-  // refresh the shell cache.
+  // 6. The offline shells fetched as plain GETs (the warm-up after a download):
+  // network first, cached copy as the fallback. Never written: install is the
+  // only writer, so the shell cache never holds a newer deploy's HTML whose
+  // build files this worker doesn't have.
   const shellPath = normalizePath(url.pathname);
   if (SHELL_PATHS.includes(shellPath)) {
     event.respondWith(
       networkFirst(event, request, {
         cacheName: SHELL_CACHE,
         cacheKey: shellPath,
-        isCacheable: isShellResponse,
+        isCacheable: () => false,
       })
     );
     return;

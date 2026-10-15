@@ -26,6 +26,7 @@ const COPY = {
     on: "Reminders are on ✓",
     onBody: "A test notification is on its way.",
     error: "Couldn't turn reminders on just now. Please try again later.",
+    pending: "Almost done: we'll finish turning reminders on in a moment.",
     notNow: "Not now",
     close: "Close",
   },
@@ -47,6 +48,7 @@ const COPY = {
     on: "تم تفعيل التذكيرات ✓",
     onBody: "إشعار تجريبي في الطريق إليك.",
     error: "تعذّر تفعيل التذكيرات الآن. حاول مرة أخرى لاحقاً.",
+    pending: "اقتربنا: سنُكمل تفعيل التذكيرات بعد لحظات.",
     notNow: "ليس الآن",
     close: "إغلاق",
   },
@@ -74,7 +76,7 @@ export function BlockedRemindersHelp() {
 export function RemindersPrompt({ source, onClose }: { source: RemindersSource; onClose: () => void }) {
   const { language, isRtl } = useLanguage();
   const t = COPY[language];
-  const [state, setState] = useState<"ask" | "busy" | "on" | "denied" | "error">("ask");
+  const [state, setState] = useState<"ask" | "busy" | "on" | "denied" | "pending" | "error">("ask");
 
   useEffect(() => {
     trackAnalyticsEvent("reminders_prompt_view", { source });
@@ -94,7 +96,7 @@ export function RemindersPrompt({ source, onClose }: { source: RemindersSource; 
       setState("on");
       window.setTimeout(onClose, 2500);
     } else if (outcome === "denied") setState("denied");
-    else if (outcome === "error") setState("error");
+    else if (outcome === "error" || outcome === "pending") setState(outcome);
     else setState("ask");
   };
 
@@ -142,6 +144,7 @@ export function RemindersPrompt({ source, onClose }: { source: RemindersSource; 
             </button>
           ) : null}
           {state === "error" && <p className="mt-3 text-center text-sm text-red-600">{t.error}</p>}
+          {state === "pending" && <p className="mt-3 text-center text-sm text-gray-600">{t.pending}</p>}
         </div>
 
         {state !== "on" && (

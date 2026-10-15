@@ -3,8 +3,11 @@
  * service worker has it cached when there's no connection:
  *   - every exploration widget chunk (React.lazy loads them on first use,
  *     and a widget first needed offline would otherwise fail);
- *   - fresh copies of the /offline and /offline/play shells plus the build
- *     files they reference (the worker refreshes its shell cache from these).
+ *   - the /offline and /offline/play shells plus the build files they
+ *     reference. The worker never stores these shells (install is the only
+ *     place it does, together with their build files), but the build files
+ *     pass through its cache, so a newer deploy's worker can copy them from
+ *     there at install instead of downloading them again.
  * Called after each successful download and by the offline player when online.
  */
 

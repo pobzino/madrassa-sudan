@@ -9,12 +9,20 @@ export const dynamic = "force-static";
 const TEMPLATE_PATH = path.join(process.cwd(), "src/sw/service-worker.template.js");
 const VERSION_PLACEHOLDER = "'__AMAL_VERSION__'";
 
+// It ends up in cache names and a JS string literal.
+function sanitize(value: string | undefined): string {
+  return (value ?? "").trim().replace(/[^A-Za-z0-9._-]/g, "").slice(0, 64);
+}
+
 function workerVersion(): string {
   for (const candidate of [process.env.NEXT_PUBLIC_RUNTIME_VERSION, process.env.COMMIT_REF]) {
-    // It ends up in cache names and a JS string literal.
-    const version = (candidate ?? "").trim().replace(/[^A-Za-z0-9._-]/g, "").slice(0, 64);
+    const version = sanitize(candidate);
     // The build script writes the literal "dev" when git isn't available.
-    if (version && version !== "dev") return version;
+    if (!version || version === "dev") continue;
+    // Netlify's deploy id: a rebuild of the same commit can still produce new
+    // build files, so it gets a fresh worker too.
+    const deploy = sanitize(process.env.DEPLOY_ID);
+    return deploy ? `${version.slice(0, 12)}-${deploy}`.slice(0, 64) : version;
   }
   return "dev";
 }
