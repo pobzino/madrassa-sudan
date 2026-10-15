@@ -86,6 +86,10 @@ function query(table: string, { asService = false }: { asService?: boolean } = {
       filters.push([key, value]);
       return api;
     },
+    is: (key: string, value: unknown) => {
+      filters.push([key, value]);
+      return api;
+    },
     not: () => api,
     limit: () => api,
     order: () => api,
@@ -270,6 +274,9 @@ describe("learner-scoped offline writes", () => {
 
 function seedServer() {
   state.tables = {
+    profiles: [
+      { id: "u1", auth_user_id: "u1", parent_account_id: null, role: "parent" },
+    ],
     lessons: [
       { id: LESSON, is_published: true, created_by: "teacher" },
       { id: "lesson-2", is_published: true, created_by: "teacher" },
