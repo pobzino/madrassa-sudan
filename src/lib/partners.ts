@@ -30,4 +30,13 @@ export const PARTNERS: Partner[] = [
     logo: { src: "/partners/sdpd-logo.png", width: 398, height: 88, className: "h-auto w-[88%]" },
     logoBackground: "#ffffff",
   },
+  {
+    id: "gpo",
+    name: "Governance Programming Overseas",
+    nameAr: "Governance Programming Overseas",
+    shortName: "GPO",
+    url: "https://www.governance-programming.org/",
+    logo: { src: "/partners/gpo-logo.png", width: 640, height: 387, className: "h-[88%] w-auto" },
+    logoBackground: "#ffffff",
+  },
 ];
