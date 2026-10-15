@@ -540,6 +540,9 @@ export default function LessonPlayerPage() {
         } else {
           outdated = true;
         }
+        // Saved before schema 2 (no pictures, no gate): still plays from the
+        // phone, but offer saving it again.
+        if (savedCopy.schema !== 2) outdated = true;
       }
       if (signal.aborted) return;
       setLessonSim(sim);

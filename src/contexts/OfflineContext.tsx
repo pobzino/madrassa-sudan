@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { useOnlineStatus } from "@/components/offline/useOnlineStatus";
@@ -35,6 +36,8 @@ import {
   pruneOrphanedStorage,
   reconcileInterruptedDownloads,
 } from "@/lib/offline/download-manager";
+import { canUseServiceWorker, ensureServiceWorker, isOfflinePlaybackReady } from "@/lib/offline/readiness";
+import { warmOfflinePlayerChunks } from "@/lib/offline/warm";
 
 /**
  * What this phone has saved for offline, for the signed-in dashboard.
@@ -56,8 +59,16 @@ interface OfflineContextValue {
   ready: boolean;
   downloads: Map<string, DownloadState>;
   downloadedLessonIds: Set<string>;
-  /** Saved lessons the teacher re-recorded since (set by checkForUpdates). */
+  /** Saved lessons the teacher re-recorded since, or saved before schema 2 (set by checkForUpdates). */
   updateAvailableIds: Set<string>;
+  /**
+   * The offline pages are cached, so saved lessons really open with no
+   * connection. False while the service worker is still installing, or
+   * after its install failed: saved lessons then show "Almost ready".
+   */
+  offlineReady: boolean;
+  /** This browser can run the service worker at all (in-app browsers often can't). */
+  serviceWorkerSupported: boolean;
   storageUsed: number;
   storageQuota: number;
   /** Never rejects: the result says whether the lesson was saved. */
@@ -111,6 +122,9 @@ function withoutItem<T>(set: Set<T>, item: T): Set<T> {
   return next;
 }
 
+// Whether the browser supports a service worker never changes while the page is open.
+const subscribeToNothing = () => () => undefined;
+
 export function OfflineProvider({ children }: { children: ReactNode }) {
   const isOnline = useOnlineStatus();
   const [ready, setReady] = useState(false);
@@ -125,6 +139,76 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   // Wi-Fi background saves don't hold it (nobody may be watching).
   const [manualSaves, setManualSaves] = useState(0);
   useScreenWakeLock(manualSaves > 0);
+
+  // Starts true so a saved lesson doesn't flash "Almost ready" on every page
+  // load; the first check corrects it within moments when it isn't.
+  const [offlineReady, setOfflineReady] = useState(true);
+  const offlineReadyRef = useRef(true);
+  const retryOfflineSetupRef = useRef<() => Promise<void>>(async () => undefined);
+  const serviceWorkerSupported = useSyncExternalStore(subscribeToNothing, canUseServiceWorker, () => true);
+
+  // Re-checks whenever the worker might have finished installing, and gives
+  // a failed install another go while the family is online.
+  useEffect(() => {
+    let disposed = false;
+    const cleanups: Array<() => void> = [];
+    const watched = new WeakSet<EventTarget>();
+    const listen = (target: EventTarget, type: string, listener: () => void) => {
+      target.addEventListener(type, listener);
+      cleanups.push(() => target.removeEventListener(type, listener));
+    };
+
+    // `retry` registers the worker again when it isn't ready. Only on mount,
+    // reconnecting, reopening the app and after a save: retrying straight
+    // after a failed install would repeat it endlessly on a bad connection.
+    const check = async ({ retry }: { retry: boolean }): Promise<void> => {
+      const isReady = await isOfflinePlaybackReady();
+      if (disposed) return;
+      const becameReady = isReady && !offlineReadyRef.current;
+      offlineReadyRef.current = isReady;
+      setOfflineReady(isReady);
+      // The pages were just cached: cache the activity code with them.
+      if (becameReady) void warmOfflinePlayerChunks({ force: true });
+      if (isReady || !canUseServiceWorker()) return;
+
+      // Not ready: hear the moment an install finishes (or a new one starts).
+      const registration =
+        retry && navigator.onLine
+          ? await ensureServiceWorker()
+          : ((await navigator.serviceWorker.getRegistration().catch(() => undefined)) ?? null);
+      if (disposed || !registration) return;
+      if (!watched.has(registration)) {
+        watched.add(registration);
+        listen(registration, "updatefound", recheck);
+      }
+      const worker = registration.installing ?? registration.waiting;
+      if (worker && !watched.has(worker)) {
+        watched.add(worker);
+        listen(worker, "statechange", recheck);
+      }
+    };
+    const recheck = () => void check({ retry: false });
+    const retry = () => void check({ retry: true });
+    const retryWhenVisible = () => {
+      if (document.visibilityState === "visible") retry();
+    };
+
+    retryOfflineSetupRef.current = () => check({ retry: true });
+    // Like ServiceWorkerRegister, leave registering until the page has loaded.
+    if (document.readyState === "complete") {
+      retry();
+    } else {
+      recheck();
+      listen(window, "load", retry);
+    }
+    if (canUseServiceWorker()) listen(navigator.serviceWorker, "controllerchange", recheck);
+    listen(window, "online", retry);
+    listen(document, "visibilitychange", retryWhenVisible);
+    return () => {
+      disposed = true;
+      for (const cleanup of cleanups) cleanup();
+    };
+  }, []);
 
   const refreshEstimate = useCallback(async () => {
     const estimate = await getStorageEstimate();
@@ -224,6 +308,8 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
         setDownloadedIds((prev) => new Set(prev).add(lessonId));
         setUpdateIds((prev) => withoutItem(prev, lessonId));
         void refreshEstimate();
+        // The lesson is on the phone; make sure the pages that open it are too.
+        void retryOfflineSetupRef.current();
         return { status: "saved", lesson };
       } catch (error) {
         if (isDownloadCancelled(error)) {
@@ -298,6 +384,8 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       downloads,
       downloadedLessonIds: downloadedIds,
       updateAvailableIds: updateIds,
+      offlineReady,
+      serviceWorkerSupported,
       storageUsed,
       storageQuota,
       downloadLesson,
@@ -313,6 +401,8 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       downloads,
       downloadedIds,
       updateIds,
+      offlineReady,
+      serviceWorkerSupported,
       storageUsed,
       storageQuota,
       downloadLesson,

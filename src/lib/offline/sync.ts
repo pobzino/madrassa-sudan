@@ -410,7 +410,21 @@ export async function queueLessonProgress(input: QueueLessonProgressInput): Prom
   ]);
   const gated = resolvePracticeGated(record, input.practiceGated);
   const next = mergeLocalProgress(previous, snapshotOf(record, input.ownerId), input, gated);
-  if (!progressIncreased(previous, next)) return previous ?? next;
+
+  // A copy saved before the gate was stored: the phone can't know whether
+  // Practice must be passed, so it never shows the lesson finished, but it
+  // still asks. The sync checks the gate on the server before completing
+  // (and the database drops a gated completion anyway). The progress item
+  // is replaced on every save, so a request once queued stays in it.
+  const gateUnknown = typeof input.practiceGated !== "boolean" && record !== null && record.practice === undefined;
+  let requestCompletion = next.completed && !gated;
+  let changed = progressIncreased(previous, next);
+  if (gateUnknown && !next.completed) {
+    const alreadyRequested = await hasQueuedCompletion(input.ownerId, input.lessonId).catch(() => false);
+    requestCompletion = input.completedCandidate || alreadyRequested;
+    if (input.completedCandidate && !alreadyRequested) changed = true;
+  }
+  if (!changed) return previous ?? next;
 
   const now = new Date().toISOString();
   const local: LocalLessonProgress = {
@@ -420,16 +434,27 @@ export async function queueLessonProgress(input: QueueLessonProgressInput): Prom
     ...next,
     updatedAt: now,
   };
-  const completesNow = next.completed && !gated && previous?.completed !== true;
+  // The queue keeps the first completed_at, so repeating a request is harmless.
+  const completesNow = requestCompletion && previous?.completed !== true;
   await saveLocalProgressAndQueue(local, {
     last_position_seconds: next.last_position_seconds,
     total_watch_time_seconds: next.total_watch_time_seconds,
-    completed: next.completed && !gated,
+    completed: requestCompletion,
     // When it was finished, kept through later saves (the item's timestamp
     // moves on with every save; streaks count the day it was finished).
     ...(completesNow ? { completed_at: now } : {}),
   });
   return next;
+}
+
+/** Whether a completion request for this lesson is already waiting to sync. */
+async function hasQueuedCompletion(ownerId: string, lessonId: string): Promise<boolean> {
+  const items = await getQueuedUpdates();
+  return items.some((item) => {
+    const normalized = normalizeQueueItem(item);
+    if (!normalized || normalized.ownerId !== ownerId || normalized.lessonId !== lessonId) return false;
+    return normalized.kind === "complete" || (normalized.kind === "progress" && normalized.data.completed === true);
+  });
 }
 
 /**

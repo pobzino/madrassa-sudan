@@ -228,7 +228,7 @@ export default function LearningPathTree({
 }) {
   const t = translations[language];
   const current = currentStepId ?? path.currentStepId;
-  const { isLessonDownloaded } = useOffline();
+  const { isLessonDownloaded, offlineReady } = useOffline();
 
   // The owl follows the tapped node; until the student taps, it sits on the
   // current progress node. A tap selects a node (owl glides there) and reveals
@@ -360,7 +360,9 @@ export default function LearningPathTree({
           const isSelected = selId === node.id;
           const label = labelFor(node);
           const href = hrefFor(node);
-          const saved = node.kind === "lesson" && isLessonDownloaded(node.step.lessonId);
+          // Badged only once it really opens offline; until then the action
+          // row's save control says "Almost ready".
+          const saved = offlineReady && node.kind === "lesson" && isLessonDownloaded(node.step.lessonId);
 
           return (
             <div key={node.id} className="absolute" style={{ left: x, top: y }}>

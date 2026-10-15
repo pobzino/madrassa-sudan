@@ -5,6 +5,10 @@ import type { ExplorationWidgetProps, LetterTraceConfig } from '@/lib/exploratio
 
 const VIEWBOX = 200;
 const CANVAS_SIZE = 300;
+// Long enough for a slow upload plus the AI grading on a working connection
+// (shorter would turn real grades into unchecked passes); the same limit as
+// the app's other lie-fi timeouts.
+const TRACE_CHECK_TIMEOUT_MS = 10_000;
 
 interface DrawnPoint {
   x: number;
@@ -30,6 +34,7 @@ export default function LetterTraceWidget({
   const [starRating, setStarRating] = useState(0);
   const [aiFeedback, setAiFeedback] = useState<string | null>(null);
   const completedRef = useRef(false);
+  const checkControllerRef = useRef<AbortController | null>(null);
 
   const scale = CANVAS_SIZE / VIEWBOX;
 
@@ -196,6 +201,27 @@ export default function LetterTraceWidget({
     const imageDataUrl = captureCanvas();
     if (!imageDataUrl) return;
 
+    // No AI check possible: let the child carry on.
+    const passUnchecked = () => {
+      completedRef.current = true;
+      setCompleted(true);
+      setFeedback('good');
+      setStarRating(2);
+      setTimeout(() => onComplete(), 500);
+    };
+
+    // Offline (e.g. a lesson saved on the phone): don't even try.
+    if (navigator.onLine === false) {
+      passUnchecked();
+      return;
+    }
+
+    // On a connection that accepts the request and then stalls, fetch never
+    // settles, and Check, Clear and Continue would stay blocked for minutes.
+    const controller = new AbortController();
+    checkControllerRef.current = controller;
+    const timer = window.setTimeout(() => controller.abort(), TRACE_CHECK_TIMEOUT_MS);
+
     setChecking(true);
     try {
       const res = await fetch('/api/lesson-progress/trace-check', {
@@ -206,14 +232,11 @@ export default function LetterTraceWidget({
           target_text: displayText,
           script,
         }),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
-        completedRef.current = true;
-        setCompleted(true);
-        setFeedback('good');
-        setStarRating(2);
-        setTimeout(() => onComplete(), 500);
+        passUnchecked();
         return;
       }
 
@@ -230,15 +253,24 @@ export default function LetterTraceWidget({
         if (data.feedback) setAiFeedback(data.feedback);
       }
     } catch {
-      completedRef.current = true;
-      setCompleted(true);
-      setFeedback('good');
-      setStarRating(2);
-      setTimeout(() => onComplete(), 500);
+      // Network failure or timeout. Not when the widget closed mid-check.
+      if (checkControllerRef.current === controller) passUnchecked();
     } finally {
+      window.clearTimeout(timer);
+      if (checkControllerRef.current === controller) checkControllerRef.current = null;
       setChecking(false);
     }
   }, [checking, hasDrawn, captureCanvas, displayText, script, onComplete]);
+
+  // The child skipped ahead (Play, +10 s, Chapters): drop a pending check.
+  useEffect(
+    () => () => {
+      const controller = checkControllerRef.current;
+      checkControllerRef.current = null;
+      controller?.abort();
+    },
+    []
+  );
 
   const handleReset = useCallback(() => {
     setAllStrokes([]);

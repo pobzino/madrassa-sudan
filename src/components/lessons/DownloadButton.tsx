@@ -19,7 +19,8 @@ import {
  * - `full`: icon + full label, for the lesson page's top bar.
  *
  * While saving, a tap offers to stop. Once saved it only shows that it's
- * saved (or offers an update when the teacher re-recorded the lesson).
+ * saved (or offers an update when the teacher re-recorded the lesson), or
+ * "Almost ready" while the offline pages that open it aren't cached yet.
  * Removing a saved lesson happens on the Downloads page, never from a stray
  * tap here.
  */
@@ -38,6 +39,9 @@ const COPY = {
     needsInternet: "Connect to the internet to save this lesson",
     stopHint: "tap to stop",
     confirmStop: "Stop saving this lesson?",
+    almostReady: "Almost ready — keep Amal open on the internet",
+    almostReadyShort: "Almost ready",
+    unsupported: "Open Amal in Chrome or Safari to save lessons",
   },
   ar: {
     save: "احفظ للمشاهدة بدون إنترنت",
@@ -52,6 +56,9 @@ const COPY = {
     needsInternet: "اتصل بالإنترنت لحفظ هذا الدرس",
     stopHint: "اضغط للإيقاف",
     confirmStop: "إيقاف حفظ هذا الدرس؟",
+    almostReady: "يكاد يكون جاهزًا — أبقِ آمال مفتوحًا وأنت متصل بالإنترنت",
+    almostReadyShort: "شبه جاهز",
+    unsupported: "افتح آمال في Chrome أو Safari لحفظ الدروس",
   },
 };
 
@@ -120,8 +127,17 @@ export default function DownloadButton({
 }: DownloadButtonProps) {
   const { language } = useLanguage();
   const t = COPY[language];
-  const { ready, downloads, downloadedLessonIds, updateAvailableIds, downloadLesson, cancelDownload, isOnline } =
-    useOffline();
+  const {
+    ready,
+    downloads,
+    downloadedLessonIds,
+    updateAvailableIds,
+    downloadLesson,
+    cancelDownload,
+    isOnline,
+    offlineReady,
+    serviceWorkerSupported,
+  } = useOffline();
   // Re-saved from here: the page's "outdated" hint no longer applies.
   const [resaved, setResaved] = useState(false);
 
@@ -162,8 +178,21 @@ export default function DownloadButton({
 
   // Saved and current: a status, not a button.
   const showSaved = isDownloaded && !canUpdate && !isDownloading;
+  // Saved, but the pages that open it offline aren't cached yet (the service
+  // worker is still installing, or its install failed and is retried).
+  const almostReady = showSaved && !offlineReady;
   // Until the phone's downloads were read, "Save" could flash on a saved lesson.
   if (!ready) return null;
+  // No service worker in this browser (often an app's built-in browser): a
+  // saved lesson could never open offline, so don't offer to save one.
+  if (!serviceWorkerSupported && !isDownloading) {
+    return variant === "full" ? (
+      <span className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium text-gray-500 ${className}`}>
+        <DownloadIcon className="h-4 w-4 shrink-0" />
+        {t.unsupported}
+      </span>
+    ) : null;
+  }
   // No recording: a tap could only fail. A saved copy or running save still shows.
   if (!canSave && !isDownloaded && !download) return null;
   // Offline, nothing can be saved; keep showing what already is.
@@ -179,7 +208,7 @@ export default function DownloadButton({
   const label = isDownloading
     ? `${t.saving} ${progress}%`
     : showSaved
-      ? t.saved
+      ? (almostReady ? t.almostReady : t.saved)
       : canUpdate
         ? t.update
         : hasError
@@ -188,7 +217,7 @@ export default function DownloadButton({
   const shortLabel = isDownloading
     ? `${progress}%`
     : showSaved
-      ? t.savedShort
+      ? (almostReady ? t.almostReadyShort : t.savedShort)
       : canUpdate
         ? t.updateShort
         : hasError
@@ -204,7 +233,7 @@ export default function DownloadButton({
     const box = size === "sm" ? "w-8 h-8" : "w-10 h-10";
     const icon = size === "sm" ? "w-4 h-4" : "w-5 h-5";
     const tone = showSaved
-      ? "bg-emerald-100 text-emerald-700"
+      ? (almostReady ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")
       : isDownloading
         ? "bg-white text-[#007229]"
         : hasError
@@ -218,7 +247,7 @@ export default function DownloadButton({
         <span className="text-[10px] font-bold">{progress}%</span>
       </>
     ) : showSaved ? (
-      <CheckIcon className={icon} />
+      almostReady ? <DownloadIcon className={`${icon} animate-pulse`} /> : <CheckIcon className={icon} />
     ) : hasError ? (
       <RetryIcon className={icon} />
     ) : (
@@ -257,7 +286,7 @@ export default function DownloadButton({
     : "min-h-11 gap-2 px-3 py-1.5 rounded-xl text-sm font-semibold";
   const iconClass = compact ? "h-3.5 w-3.5 shrink-0" : "h-4 w-4 shrink-0";
   const tone = showSaved
-    ? "bg-emerald-50 text-emerald-700"
+    ? (almostReady ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700")
     : isDownloading
       ? "bg-[#007229]/10 text-[#007229]"
       : hasError
@@ -287,7 +316,11 @@ export default function DownloadButton({
           />
         )}
         <span className={`relative inline-flex items-center ${compact ? "gap-1" : "gap-2"}`}>
-          {showSaved ? <CheckIcon className={iconClass} /> : <DownloadIcon className={`${iconClass} animate-pulse`} />}
+          {showSaved && !almostReady ? (
+            <CheckIcon className={iconClass} />
+          ) : (
+            <DownloadIcon className={`${iconClass} animate-pulse`} />
+          )}
           {text}
         </span>
       </Pill>

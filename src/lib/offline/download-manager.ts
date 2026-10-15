@@ -1057,13 +1057,17 @@ export async function checkForUpdates(supabase: SupabaseClient<Database>): Promi
       const server = latest.get(lesson.id);
       // No row: unpublished or removed. Keep the copy as it is.
       if (!server) continue;
-      const stale = isSimOutdated(
-        {
-          simId: lesson.simId ?? lesson.sim?.sim.id,
-          simUpdatedAt: lesson.simUpdatedAt ?? lesson.sim?.sim.updated_at,
-        },
-        server
-      );
+      // A copy saved before schema 2 has no pictures and no practice gate,
+      // so it can't show itself finished either: saving it again fixes both.
+      const stale =
+        lesson.schema !== 2 ||
+        isSimOutdated(
+          {
+            simId: lesson.simId ?? lesson.sim?.sim.id,
+            simUpdatedAt: lesson.simUpdatedAt ?? lesson.sim?.sim.updated_at,
+          },
+          server
+        );
       if (stale) outdated.push(lesson.id);
       if (stale !== (lesson.updateAvailable === true)) {
         await updateOfflineLesson(lesson.id, { updateAvailable: stale }).catch(() => null);

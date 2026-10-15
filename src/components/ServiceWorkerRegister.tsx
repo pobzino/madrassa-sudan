@@ -2,15 +2,10 @@
 
 import { useEffect } from "react";
 import { LEGACY_SW_CACHES, SHELL_CACHE_PREFIX, STATIC_CACHE_PREFIX, SW_META_CACHE } from "@/lib/offline/cache-names";
+import { canUseServiceWorker, ensureServiceWorker } from "@/lib/offline/readiness";
 // Imported here, in the root layout, so it catches the browser's one-tap
 // install offer even if that arrives before any install button renders.
 import { trackAppLaunch } from "@/lib/pwa-install";
-
-function canUseServiceWorker() {
-  if (!("serviceWorker" in navigator)) return false;
-  if (window.isSecureContext) return true;
-  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
-}
 
 export default function ServiceWorkerRegister() {
   useEffect(() => {
@@ -75,9 +70,20 @@ export default function ServiceWorkerRegister() {
       window.addEventListener("load", register, { once: true });
     }
 
+    // A failed first install (one dropped request on a bad connection) leaves
+    // no worker, and saved lessons then can't open offline. Try again when the
+    // connection or the app comes back, not only on the next full page load.
+    const registerAgain = () => {
+      if (document.visibilityState === "visible") void ensureServiceWorker();
+    };
+    window.addEventListener("online", registerAgain);
+    document.addEventListener("visibilitychange", registerAgain);
+
     return () => {
       cancelled = true;
       window.removeEventListener("load", register);
+      window.removeEventListener("online", registerAgain);
+      document.removeEventListener("visibilitychange", registerAgain);
     };
   }, []);
 

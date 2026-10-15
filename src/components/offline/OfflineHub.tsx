@@ -55,6 +55,7 @@ const COPY = {
     needsRedownloadHint: "Connect to the internet and save it again.",
     updateAvailable: "Update available",
     updateAvailableHint: "A newer version is ready. Save it again while online.",
+    oldCopyHint: "Save it again while online to get its pictures and see when it's finished.",
     saved: (date: string) => `Saved ${date}`,
     finished: "Finished",
     play: (title: string) => `Play ${title}`,
@@ -91,6 +92,7 @@ const COPY = {
     needsRedownloadHint: "اتصل بالإنترنت واحفظه مرة أخرى.",
     updateAvailable: "يتوفر تحديث",
     updateAvailableHint: "نسخة أحدث جاهزة. احفظه مرة أخرى وأنت متصل بالإنترنت.",
+    oldCopyHint: "احفظه مرة أخرى وأنت متصل بالإنترنت لتظهر صوره ويظهر إكماله.",
     saved: (date: string) => `حُفظ في ${date}`,
     finished: "مكتمل",
     play: (title: string) => `شغّل ${title}`,
@@ -401,11 +403,15 @@ function SavedLessonCard({
   const percent = watchedPercent(progress?.last_position_seconds ?? 0, lessonDurationSec(lesson), progress?.completed);
   const savedDate = formatSavedDate(lesson.downloadedAt, language);
 
+  // A copy saved before schema 2 still plays, but without its pictures and
+  // without showing when it's finished: offer the update, even offline.
   const badge = !audioReady
     ? { label: t.needsRedownload, hint: t.needsRedownloadHint, className: "bg-amber-100 text-amber-800" }
-    : lesson.updateAvailable
-      ? { label: t.updateAvailable, hint: t.updateAvailableHint, className: "bg-blue-50 text-blue-700" }
-      : { label: progress?.completed ? t.finished : t.ready, hint: null, className: "bg-emerald-100 text-emerald-800" };
+    : lesson.schema !== 2
+      ? { label: t.updateAvailable, hint: t.oldCopyHint, className: "bg-blue-50 text-blue-700" }
+      : lesson.updateAvailable
+        ? { label: t.updateAvailable, hint: t.updateAvailableHint, className: "bg-blue-50 text-blue-700" }
+        : { label: progress?.completed ? t.finished : t.ready, hint: null, className: "bg-emerald-100 text-emerald-800" };
 
   return (
     <li className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-black/5">

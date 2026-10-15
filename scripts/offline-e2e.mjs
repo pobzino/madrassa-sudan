@@ -4,7 +4,8 @@
 // lessons hub, the lesson plays in the offline player (audio from the phone,
 // slide image from the asset cache), progress is queued under the owner,
 // /lessons/<id> redirects to the player, another account's copy stays hidden,
-// and logging out offline wipes it all. Needs no Supabase.
+// and logging out offline wipes it all; a failed worker install is retried
+// once back online. Needs no Supabase.
 //
 //   AMAL_SITE_URL=http://localhost:3907 node scripts/offline-e2e.mjs
 //
@@ -298,6 +299,38 @@ try {
     });
   });
   check('no saved lessons survive logout', reopened.lessons === 0, JSON.stringify({ ...reopened, databasesRightAfterLogout: after.databases }));
+
+  // 6. A first worker install that fails (one dropped request) leaves no
+  // worker: saved lessons must not count as ready (same rule as
+  // isOfflinePlaybackReady), and the app registers again when the connection
+  // comes back, without a reload. Needs the server, which step 4 stops.
+  if (!killCmd) {
+    const retryContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    let failShell = true;
+    await retryContext.route('**/offline/play*', (route) =>
+      route.request().serviceWorker() && failShell ? route.abort('internetdisconnected') : route.continue()
+    );
+    const retryPage = await retryContext.newPage();
+    retryPage.on('pageerror', (error) => pageErrors.push(error.message));
+    const offlinePagesReady = () => retryPage.evaluate(async () => {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration?.active) return false;
+      const options = { ignoreSearch: true, ignoreVary: true };
+      for (const name of (await caches.keys()).filter((n) => n.startsWith('amal-shell-'))) {
+        const cache = await caches.open(name);
+        if ((await cache.match('/offline', options)) && (await cache.match('/offline/play', options))) return true;
+      }
+      return false;
+    });
+    await retryPage.goto(`${baseURL}/privacy`, { waitUntil: 'load' });
+    await retryPage.waitForTimeout(5000);
+    check('failed worker install: offline pages not ready', !(await offlinePagesReady()));
+    failShell = false;
+    await retryPage.evaluate(() => window.dispatchEvent(new Event('online')));
+    await retryPage.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 30000 }).catch(() => undefined);
+    check('back online: the worker installs without a reload', await offlinePagesReady());
+    await retryContext.close();
+  }
 } catch (error) {
   check('script ran to completion', false, String(error && error.stack || error));
 } finally {
