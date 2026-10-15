@@ -61,7 +61,12 @@ await context.addInitScript(() => {
 });
 const page = await context.newPage();
 const pageErrors = [];
-page.on('pageerror', (error) => pageErrors.push(error.message));
+page.on('pageerror', (error) => {
+  // With the server stopped, WebKit also reports requests the app catches
+  // (warming the offline pages, the worker's update check) as page errors.
+  if (serverStopped && engine === 'webkit' && /due to access control checks/.test(error.message)) return;
+  pageErrors.push(error.message);
+});
 
 try {
   // 1. Online: open the hub; the worker installs and takes control.
