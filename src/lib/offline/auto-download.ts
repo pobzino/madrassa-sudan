@@ -2,7 +2,8 @@
 // it plays later without using mobile data. Only Android browsers report the
 // connection type, so iPhones keep the manual download button. Keeps the last
 // few automatic downloads and removes older ones; manual downloads are never
-// touched.
+// touched. Off unless switched on (on the Downloads page) until offline
+// lessons have been checked on real phones.
 
 const SETTING_KEY = "amal-auto-download";
 const AUTO_IDS_KEY = "amal-auto-downloaded";
@@ -14,7 +15,7 @@ type NetworkInformation = { type?: string; saveData?: boolean };
 
 export function isAutoDownloadEnabled() {
   try {
-    return localStorage.getItem(SETTING_KEY) !== "off";
+    return localStorage.getItem(SETTING_KEY) === "on";
   } catch {
     return false;
   }

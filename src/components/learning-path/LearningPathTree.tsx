@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { OwlExcited } from "@/components/illustrations";
+import { PathOwl } from "./PathOwl";
 import LessonComputerDownloadButton from "@/components/lessons/LessonComputerDownloadButton";
 import type {
   SubjectLearningPath,
@@ -355,23 +355,10 @@ export default function LearningPathTree({
                   }}
                 />
               )}
-              {/* Owl rides the selected node — glides in from where it was */}
+              {/* Owl rides the selected node — flies in from where it was */}
               {isSelected && (
-                <div
-                  key={selId ?? "owl"}
-                  className="absolute left-1/2 -top-[58px] z-10 pointer-events-none"
-                  style={
-                    {
-                      transform: "translateX(-50%)",
-                      "--owl-dx": `${owlDx}px`,
-                      "--owl-dy": `${owlDy}px`,
-                      animation: "owl-glide 1900ms cubic-bezier(0.33, 0, 0.2, 1)",
-                    } as CSSProperties
-                  }
-                >
-                  <div className="animate-bounce">
-                    <OwlExcited className="w-14 h-14 drop-shadow-md" />
-                  </div>
+                <div key={selId ?? "owl"} className="absolute left-1/2 -top-[64px] z-10 -translate-x-1/2 pointer-events-none">
+                  <PathOwl dx={owlDx} dy={owlDy} />
                 </div>
               )}
               {/* Disc — tap to select (owl glides here); locked nodes inert */}

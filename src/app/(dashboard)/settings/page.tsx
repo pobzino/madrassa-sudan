@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { RemindersSetting } from "@/components/pwa/RemindersSetting";
 import type { Profile } from "@/lib/database.types";
 import { getCachedProfile, getCachedUser, primeCachedProfile } from "@/lib/supabase/auth-cache";
 import { clearPrivateOfflineData } from "@/lib/offline/db";
@@ -547,6 +548,9 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+
+          {/* Lesson reminders (parents, who are the ones asked to turn them on) */}
+          {profile?.role === "parent" && <RemindersSetting />}
 
           {/* Security Section */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

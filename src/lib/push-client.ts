@@ -90,9 +90,71 @@ export function isRemindersCardHidden() {
   }
 }
 
-export function hideRemindersCard(days = 30) {
+export function hideRemindersCard(days = 3) {
   try {
     localStorage.setItem(REMINDERS_CARD_HIDDEN_KEY, String(Date.now() + days * 24 * 60 * 60 * 1000));
+  } catch {
+    // Storage can be unavailable in private or locked-down browsers.
+  }
+}
+
+/** True when this device has a live push subscription. */
+export async function remindersSubscribed() {
+  try {
+    if (reminderState() !== "granted") return false;
+    const registration = await readyWorker();
+    return Boolean(await registration?.pushManager.getSubscription());
+  } catch {
+    return false;
+  }
+}
+
+/** Turns reminders off on this device and tells the server to stop sending. */
+export async function disableReminders() {
+  try {
+    const registration = await readyWorker();
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) return true;
+    await fetch("/api/push/subscribe", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: subscription.endpoint }),
+    });
+    await subscription.unsubscribe();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// How often we ask. Our own prompt comes before the phone's permission box,
+// because once someone taps "Don't allow" the browser never lets us ask again.
+const ASKS_KEY = "amal-reminder-asks";
+const MAX_ASKS = 4;
+const DAYS_BETWEEN_ASKS = 3;
+
+function readAsks(): { count: number; last: number } {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ASKS_KEY) ?? "{}");
+    return { count: Number(parsed.count) || 0, last: Number(parsed.last) || 0 };
+  } catch {
+    return { count: 0, last: 0 };
+  }
+}
+
+/** Whether it's time to show the reminders prompt again: first time, then every few days, up to a limit. */
+export function shouldAskForReminders(now = Date.now()) {
+  const { count, last } = readAsks();
+  return count < MAX_ASKS && now - last >= DAYS_BETWEEN_ASKS * 24 * 60 * 60 * 1000;
+}
+
+export function remindersAskCount() {
+  return readAsks().count;
+}
+
+export function markRemindersAsked(now = Date.now()) {
+  try {
+    localStorage.setItem(ASKS_KEY, JSON.stringify({ count: readAsks().count + 1, last: now }));
   } catch {
     // Storage can be unavailable in private or locked-down browsers.
   }

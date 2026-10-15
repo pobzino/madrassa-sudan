@@ -11,6 +11,7 @@ import { clearAuthCache, getCachedProfile, getCachedUser } from "@/lib/supabase/
 import FeedbackModal from "@/components/FeedbackModal";
 import NavigationProgress from "@/components/NavigationProgress";
 import OfflineBanner from "@/components/OfflineBanner";
+import { AutoNudges } from "@/components/pwa/InstallNudges";
 import {
   FloatingRocket,
   GraduationCapIcon,
@@ -486,15 +487,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {[
             { href: "/dashboard", label: t.home, icon: <HomeNavIcon className="h-6 w-6" /> },
             { href: "/lessons", label: t.lessons, icon: <BookNavIcon className="h-6 w-6" /> },
-            {
-              href: "/downloads",
-              label: t.downloads,
-              icon: (
-                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" />
-                </svg>
-              ),
-            },
             { href: "/progress", label: t.progress, icon: <ChartNavIcon className="h-6 w-6" /> },
           ].map((tab) => {
             const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
@@ -512,6 +504,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           })}
         </nav>
       )}
+
+      {/* Offers to add Amal to the phone and turn on reminders, at calm moments. */}
+      {!isInTeacherView && profile && <AutoNudges allowReminders={profile.role === "parent"} pathname={pathname} />}
 
       {/* Feedback Modal */}
       <FeedbackModal open={showFeedback} onClose={() => setShowFeedback(false)} />
