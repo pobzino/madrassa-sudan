@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+  afterAccessRefused,
+  afterServerFailure,
   clampActivityTime,
+  classifyProgressError,
+  isParked,
+  isParkedTooLong,
+  isQueueItemDue,
   mergeLocalProgress,
   mergeProgressForSync,
   normalizeQueueItem,
+  orderLessonsForSync,
   partitionQueueByOwner,
+  pickAnswersToSend,
   progressIncreased,
   resolvePracticeGated,
+  shouldGiveUp,
   summarizeProgressItems,
 } from "@/lib/offline/sync";
 import type { OfflineQueueItem, ProgressQueueItem } from "@/lib/offline/db";
@@ -211,5 +220,86 @@ describe("queue items", () => {
       completed: true,
       completedAt: "2026-10-11T00:00:00Z",
     });
+  });
+});
+
+describe("retry rules", () => {
+  const at = (iso: string) => new Date(iso);
+
+  it("retries the first two server failures at once, then backs off up to a day", () => {
+    let retry = afterServerFailure(undefined, 500, at("2026-10-01T00:00:00Z"));
+    expect(retry).toEqual({ serverFailures: 1, lastStatus: 500, firstFailedAt: "2026-10-01T00:00:00.000Z" });
+    retry = afterServerFailure(retry, 502, at("2026-10-01T00:01:00Z"));
+    expect(retry.nextTryAt).toBeUndefined();
+    retry = afterServerFailure(retry, 500, at("2026-10-01T00:02:00Z"));
+    expect(retry).toMatchObject({
+      serverFailures: 3,
+      firstFailedAt: "2026-10-01T00:00:00.000Z",
+      nextTryAt: "2026-10-01T00:32:00.000Z",
+    });
+    for (let index = 0; index < 10; index += 1) retry = afterServerFailure(retry, 500, at("2026-10-02T00:00:00Z"));
+    expect(retry.nextTryAt).toBe("2026-10-03T00:00:00.000Z");
+  });
+
+  it("is due when nothing is waiting, or the wait is over", () => {
+    expect(isQueueItemDue({}, NOW)).toBe(true);
+    expect(isQueueItemDue({ retry: { nextTryAt: "2026-10-15T13:00:00Z" } }, NOW)).toBe(false);
+    expect(isQueueItemDue({ retry: { nextTryAt: "2026-10-15T11:00:00Z" } }, NOW)).toBe(true);
+  });
+
+  it("gives up only after ten server failures spread over at least two weeks", () => {
+    expect(shouldGiveUp({ serverFailures: 50, firstFailedAt: "2026-10-10T00:00:00Z" }, NOW)).toBe(false);
+    expect(shouldGiveUp({ serverFailures: 9, firstFailedAt: "2026-01-01T00:00:00Z" }, NOW)).toBe(false);
+    expect(shouldGiveUp({ serverFailures: 10, firstFailedAt: "2026-09-30T00:00:00Z" }, NOW)).toBe(true);
+    expect(shouldGiveUp(undefined, NOW)).toBe(false);
+  });
+
+  it("parks a refused item for a day, keeps the first refusal, and expires it after a month", () => {
+    const parked = afterAccessRefused(undefined, NOW);
+    expect(parked).toEqual({ rejectedAt: NOW.toISOString(), nextTryAt: "2026-10-16T12:00:00.000Z" });
+    expect(isParked({ retry: parked })).toBe(true);
+    const again = afterAccessRefused(parked, at("2026-10-20T00:00:00Z"));
+    expect(again.rejectedAt).toBe(NOW.toISOString());
+    expect(isParkedTooLong(again, at("2026-11-13T00:00:00Z"))).toBe(false);
+    expect(isParkedTooLong(again, at("2026-11-14T12:00:00Z"))).toBe(true);
+    expect(isParked({})).toBe(false);
+  });
+
+  it("reads a refused or impossible progress write from its Postgres code", () => {
+    expect(classifyProgressError({ code: "42501", message: "row-level security" })).toBe("parked");
+    expect(classifyProgressError({ code: "23503" })).toBe("gone");
+    expect(classifyProgressError({ code: "", message: "TypeError: Failed to fetch" })).toBe("retry");
+    expect(classifyProgressError(new Error("timeout"))).toBe("retry");
+  });
+});
+
+describe("sync order", () => {
+  it("sends lessons completed on the phone first, earliest completion first", () => {
+    const lessons = [
+      { id: "a", completedAt: null },
+      { id: "b", completedAt: "2026-10-14T00:00:00Z" },
+      { id: "c", completedAt: "2026-10-12T00:00:00Z" },
+      { id: "d", completedAt: null },
+    ];
+    expect(orderLessonsForSync(lessons).map((lesson) => lesson.id)).toEqual(["c", "b", "a", "d"]);
+  });
+
+  it("sends one answer per slide: a real answer over a skip, then the latest", () => {
+    const answer = (id: number, slideId: string, value: unknown, answeredAt: string): OfflineQueueItem => ({
+      id,
+      lessonId: "l",
+      ownerId: "u",
+      kind: "slide_response",
+      timestamp: answeredAt,
+      data: { slideId, answer: value, answeredAt },
+    });
+    const { send, superseded } = pickAnswersToSend([
+      answer(1, "s1", 0, "2026-10-10T00:00:00Z"),
+      answer(2, "s1", 2, "2026-10-10T00:01:00Z"),
+      answer(3, "s1", null, "2026-10-10T00:02:00Z"),
+      answer(4, "s2", 1, "2026-10-09T00:00:00Z"),
+    ]);
+    expect(send.map((item) => item.id)).toEqual([4, 2]);
+    expect(superseded.map((item) => item.id).sort()).toEqual([1, 3]);
   });
 });

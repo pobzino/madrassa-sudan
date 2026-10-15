@@ -7,15 +7,22 @@
  * queued). Answers are always also kept in the local `responses` store so the
  * player can show them again, including offline. The server re-grades every
  * answer when it arrives, so local `isCorrect` is only for display.
+ *
+ * Bad connections mean answers can reach the server late and out of order
+ * (a retry succeeds while the first try is still queued). Every answer
+ * carries the time it was given and an id, the queue keeps one answer per
+ * slide, and the server ignores an answer older than the one it has, so a
+ * late send can't replace a newer answer or its grade.
  */
 
 import { answerFromLegacy, slideToInteraction, toServerSlideAnswer } from "@/lib/interactions/adapters";
 import type { InteractionAnswer } from "@/lib/interactions/types";
 import type { Slide } from "@/lib/slides.types";
 import {
-  addQueueItem,
   getLocalSlideResponses,
-  putLocalSlideResponses,
+  queueSlideResponseItem,
+  removeQueuedSlideResponses,
+  updateLocalSlideResponse,
   type LocalSlideResponse,
   type LocalSlideResponses,
 } from "./db";
@@ -23,9 +30,20 @@ import {
 /** The shape SimPlayer's `savedResponses` prop takes. */
 export type SavedSlideResponses = Record<string, { answer: unknown; isCorrect: boolean }>;
 
+/**
+ * What to do with an answer the server didn't take:
+ *   - retry: no connection, signed out, timeout, rate limit or a server error;
+ *   - parked: the account can't open the lesson right now (unpublished, class
+ *     changed, membership waiting for a teacher) — keep it and try again later;
+ *   - gone: the lesson or slide no longer exists, or the server refused the
+ *     answer itself — it can never succeed.
+ */
+export type SlideResponseFailure = "retry" | "parked" | "gone";
+
 export type SlideResponsePostResult =
-  | { ok: true; isCorrect: boolean | null }
-  | { ok: false; retryable: boolean; status: number | null };
+  /** `stale`: the server kept a newer answer for the slide; `isCorrect` is then null (not this answer's grade). */
+  | { ok: true; isCorrect: boolean | null; stale?: boolean }
+  | { ok: false; retryable: boolean; outcome: SlideResponseFailure; status: number | null };
 
 export interface SlideResponseInput {
   ownerId: string;
@@ -35,7 +53,17 @@ export interface SlideResponseInput {
   answer: unknown;
   isCorrect: boolean | null;
   timeSpentSeconds?: number;
+  /**
+   * When the student answered (ISO, phone clock). Stamped once, when the
+   * answer is reported, and kept through retries and sync, so answers are
+   * ordered by when they were given rather than when they were sent.
+   */
+  answeredAt?: string;
+  /** Identifies this answer, so the server recognises a resend (lie-fi: it was saved but the reply was lost). */
+  answerId?: string;
 }
+
+type StampedInput<T> = T & { answeredAt: string; answerId: string };
 
 const POST_TIMEOUT_MS = 10_000;
 
@@ -45,9 +73,66 @@ export function isRetryableStatus(status: number | null): boolean {
   return status === 401 || status === 408 || status === 429 || status >= 500;
 }
 
+/** Sorts a failed POST into retry / parked / gone (see SlideResponseFailure). `code` is the response body's `code`. */
+export function classifyFailedPost(status: number | null, code?: unknown): SlideResponseFailure {
+  if (isRetryableStatus(status)) return "retry";
+  if (status === 403 && code === "no_access") return "parked";
+  return "gone";
+}
+
+/** A random id for one answer. Older browsers (and plain-http pages) have no crypto.randomUUID. */
+export function newAnswerId(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  } catch {
+    // Not a secure context.
+  }
+  const part = () => Math.random().toString(36).slice(2, 10).padEnd(8, "0");
+  return `${Date.now().toString(36)}-${part()}-${part()}`;
+}
+
+function stamp<T extends { answeredAt?: string; answerId?: string }>(input: T): StampedInput<T> {
+  return { ...input, answeredAt: input.answeredAt ?? new Date().toISOString(), answerId: input.answerId ?? newAnswerId() };
+}
+
+function isRealAnswer(answer: unknown): boolean {
+  return answer !== null && answer !== undefined;
+}
+
+/**
+ * Whether a saved answer is the one a server reply is about: the same answer
+ * id, or (answers saved before ids existed) the same time or the same value.
+ */
+export function isSameAnswer(
+  entry: Pick<LocalSlideResponse, "answer" | "answeredAt" | "answerId">,
+  sent: { answer?: unknown; answeredAt?: unknown; answerId?: unknown }
+): boolean {
+  if (typeof entry.answerId === "string" && typeof sent.answerId === "string") return entry.answerId === sent.answerId;
+  if (typeof entry.answeredAt === "string" && entry.answeredAt === sent.answeredAt) return true;
+  return JSON.stringify(toServerSlideAnswer(entry.answer)) === JSON.stringify(toServerSlideAnswer(sent.answer));
+}
+
+/**
+ * Puts the server's grade on the saved answer, only when the saved answer is
+ * still the one that was graded (a newer answer keeps its own grade).
+ */
+export async function applyServerGrade(
+  ownerId: string,
+  lessonId: string,
+  slideId: string,
+  sent: { answer?: unknown; answeredAt?: unknown; answerId?: unknown },
+  isCorrect: boolean
+): Promise<void> {
+  await updateLocalSlideResponse(ownerId, lessonId, slideId, (entry) =>
+    entry && entry.isCorrect !== isCorrect && isSameAnswer(entry, sent) ? { ...entry, isCorrect } : undefined
+  );
+}
+
 /**
  * POSTs one answer to /api/lessons/<id>/slide-responses, converted to the
- * shape the route accepts. Never throws.
+ * shape the route accepts. Never throws. `answeredAt` and `answerId` let the
+ * server ignore an answer older than the one it has, and a resend of one it
+ * already saved.
  */
 export async function postSlideResponse(
   lessonId: string,
@@ -55,12 +140,20 @@ export async function postSlideResponse(
   answer: unknown,
   {
     timeSpentSeconds,
+    answeredAt,
+    answerId,
     signal,
     timeoutMs = POST_TIMEOUT_MS,
-  }: { timeSpentSeconds?: number; signal?: AbortSignal; timeoutMs?: number } = {}
+  }: {
+    timeSpentSeconds?: number;
+    answeredAt?: string;
+    answerId?: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  } = {}
 ): Promise<SlideResponsePostResult> {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
-    return { ok: false, retryable: true, status: null };
+    return { ok: false, retryable: true, outcome: "retry", status: null };
   }
 
   const controller = new AbortController();
@@ -80,31 +173,37 @@ export async function postSlideResponse(
         ...(typeof timeSpentSeconds === "number" && timeSpentSeconds >= 0
           ? { time_spent_seconds: Math.round(timeSpentSeconds) }
           : {}),
+        ...(answeredAt ? { answered_at: answeredAt } : {}),
+        ...(answerId ? { client_answer_id: answerId } : {}),
       }),
     });
     if (!response.ok) {
-      return { ok: false, retryable: isRetryableStatus(response.status), status: response.status };
+      const body = (await response.json().catch(() => null)) as { code?: unknown } | null;
+      return {
+        ok: false,
+        retryable: isRetryableStatus(response.status),
+        outcome: classifyFailedPost(response.status, body?.code),
+        status: response.status,
+      };
     }
-    const json = (await response.json().catch(() => null)) as { is_correct?: unknown } | null;
+    const json = (await response.json().catch(() => null)) as { is_correct?: unknown; stale?: unknown } | null;
+    if (json?.stale === true) return { ok: true, isCorrect: null, stale: true };
     return { ok: true, isCorrect: typeof json?.is_correct === "boolean" ? json.is_correct : null };
   } catch {
-    return { ok: false, retryable: true, status: null };
+    return { ok: false, retryable: true, outcome: "retry", status: null };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", abort);
   }
 }
 
-/** Queues one answer for syncOfflineQueue to send. */
-export async function queueSlideResponse({
-  ownerId,
-  lessonId,
-  slideId,
-  answer,
-  timeSpentSeconds,
-}: Omit<SlideResponseInput, "isCorrect">): Promise<void> {
-  const answeredAt = new Date().toISOString();
-  await addQueueItem({
+/**
+ * Queues one answer for syncOfflineQueue to send: at most one per slide,
+ * the one the server should end up with (see queueSlideResponseItem).
+ */
+export async function queueSlideResponse(input: Omit<SlideResponseInput, "isCorrect">): Promise<void> {
+  const { ownerId, lessonId, slideId, answer, timeSpentSeconds, answeredAt, answerId } = stamp(input);
+  await queueSlideResponseItem({
     lessonId,
     ownerId,
     kind: "slide_response",
@@ -113,20 +212,25 @@ export async function queueSlideResponse({
       slideId,
       answer: toServerSlideAnswer(answer),
       answeredAt,
+      answerId,
       ...(typeof timeSpentSeconds === "number" ? { timeSpentSeconds } : {}),
     },
   });
 }
 
-async function saveLocally({ ownerId, lessonId, slideId, answer, isCorrect }: SlideResponseInput) {
-  await putLocalSlideResponses(ownerId, lessonId, {
-    [slideId]: { answer: answer ?? null, isCorrect, answeredAt: new Date().toISOString() },
-  });
+async function saveLocally({ ownerId, lessonId, slideId, answer, isCorrect, answeredAt, answerId }: StampedInput<SlideResponseInput>) {
+  await updateLocalSlideResponse(ownerId, lessonId, slideId, (current) =>
+    // A skip never hides an answer this phone already shows.
+    !isRealAnswer(answer) && current && isRealAnswer(current.answer)
+      ? undefined
+      : { answer: answer ?? null, isCorrect, answeredAt, answerId }
+  );
 }
 
 /** Offline player: keep the answer on the phone and queue it. */
 export async function saveSlideResponseOffline(input: SlideResponseInput): Promise<void> {
-  await Promise.all([saveLocally(input), queueSlideResponse(input)]);
+  const answer = stamp(input);
+  await Promise.all([saveLocally(answer), queueSlideResponse(answer)]);
 }
 
 /**
@@ -135,16 +239,28 @@ export async function saveSlideResponseOffline(input: SlideResponseInput): Promi
  * the local one when it answers.
  */
 export async function submitSlideResponse(input: SlideResponseInput): Promise<SlideResponsePostResult> {
-  await saveLocally(input).catch(() => undefined);
-  const result = await postSlideResponse(input.lessonId, input.slideId, input.answer, {
-    timeSpentSeconds: input.timeSpentSeconds,
+  const answer = stamp(input);
+  const { ownerId, lessonId, slideId, answeredAt, answerId } = answer;
+  await saveLocally(answer).catch(() => undefined);
+  const result = await postSlideResponse(lessonId, slideId, answer.answer, {
+    timeSpentSeconds: answer.timeSpentSeconds,
+    answeredAt,
+    answerId,
   });
   if (result.ok) {
+    // Older answers to this slide still queued from a failed send must not
+    // be replayed over this one by the next sync.
+    await removeQueuedSlideResponses(ownerId, lessonId, slideId, {
+      real: isRealAnswer(answer.answer),
+      time: Date.parse(answeredAt),
+    }).catch(() => undefined);
     if (result.isCorrect !== null && result.isCorrect !== input.isCorrect) {
-      await saveLocally({ ...input, isCorrect: result.isCorrect }).catch(() => undefined);
+      await applyServerGrade(ownerId, lessonId, slideId, answer, result.isCorrect).catch(() => undefined);
     }
-  } else if (result.retryable) {
-    await queueSlideResponse(input).catch(() => undefined);
+  } else if (result.outcome === "retry") {
+    // Not queued when a newer answer to the slide was given meanwhile (it is
+    // sent or queued on its own).
+    await queueSlideResponse(answer).catch(() => undefined);
   }
   return result;
 }
