@@ -231,6 +231,16 @@ function subscribeToUprightPhone(onChange: () => void) {
 }
 const isUprightPhone = () => window.matchMedia(UPRIGHT_PHONE_QUERY).matches;
 
+// Phones either way up: in full screen the controls float over the slide
+// (like a video app) instead of taking height from it.
+const SMALL_SCREEN_QUERY = '(max-width: 639px), (max-height: 500px)';
+function subscribeToSmallScreen(onChange: () => void) {
+  const query = window.matchMedia(SMALL_SCREEN_QUERY);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+const isSmallScreen = () => window.matchMedia(SMALL_SCREEN_QUERY).matches;
+
 /** Android Chrome can lock a full-screen page to landscape; other browsers refuse. */
 async function lockLandscape() {
   const orientation = (typeof screen !== 'undefined' ? screen.orientation : undefined) as
@@ -1862,6 +1872,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   // Full screen on a phone that is still upright (iPhone can't lock the
   // orientation): turn the player 90° so it fills the screen sideways.
   const sideways = fullscreen && uprightPhone;
+  const smallScreen = useSyncExternalStore(subscribeToSmallScreen, isSmallScreen, () => false);
+  const phoneFullscreen = fullscreen && smallScreen;
   const activityOpen = Boolean(
     (activeGate && (activeGate.type === 'activity_gate' || activeGate.type === 'exploration_gate'))
       || (activeExplorationSlide && currentSlide?.type === 'exploration')
@@ -2187,7 +2199,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
       {/* Whenever the saved copy plays, connected or not: a phone on Wi-Fi with
           no internet still reports itself online. */}
-      {playingFromDevice && (
+      {playingFromDevice && !phoneFullscreen && (
         <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-t border-emerald-100 text-emerald-800 text-xs font-medium" style={fullscreenBarInsets(16)}>
           <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <rect x="5" y="2" width="14" height="20" rx="2" ry="2" /><line x1="12" y1="18" x2="12.01" y2="18" />
@@ -2220,7 +2232,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
       {/* Control bar — force LTR so play/progress/time order is consistent */}
       {!hideControls && (
-        <div className={`grid shrink-0 transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${controlsVisible ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`} inert={!controlsVisible} aria-hidden={!controlsVisible}>
+        <div className={`${phoneFullscreen ? 'absolute inset-x-0 bottom-0 z-40 ' : ''}grid shrink-0 transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${controlsVisible ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`} inert={!controlsVisible} aria-hidden={!controlsVisible}>
         <div className={`min-h-0 ${controlsVisible ? '' : 'overflow-hidden'}`}>
         <div ref={controlsRef} dir="ltr" className="sim-controls flex flex-wrap items-center gap-x-1 px-3 py-1 bg-white border-t border-gray-200" style={fullscreenBarInsets(12)}>
           {/* Play / Pause */}
