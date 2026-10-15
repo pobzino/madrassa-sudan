@@ -12,6 +12,7 @@ import FeedbackModal from "@/components/FeedbackModal";
 import NavigationProgress from "@/components/NavigationProgress";
 import OfflineBanner from "@/components/OfflineBanner";
 import { AutoNudges } from "@/components/pwa/InstallNudges";
+import { useInstallPlatform } from "@/components/pwa/AddToPhone";
 import {
   FloatingRocket,
   GraduationCapIcon,
@@ -185,6 +186,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   // Show teacher nav when on /teacher/* or /admin routes, student nav otherwise
   const isInTeacherView = pathname.startsWith("/teacher") || pathname.startsWith("/admin");
+  const inInstalledApp = useInstallPlatform() === "installed";
 
   // Different nav items for teachers vs students
   // Student nav: 4 primary items with colored icon backgrounds for kids
@@ -435,14 +437,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <OfflineBanner />
       <NavigationProgress />
 
-      {/* Mobile Header */}
+      {/* Mobile Header. In the installed app, learner pages use the bottom tab bar
+          instead of the menu, and the logo opens the dashboard, not the website. */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-lg border-b border-gray-100 z-40 flex items-center justify-between px-4">
-        <Link href="/">
+        <Link href={inInstalledApp && !isInTeacherView ? "/dashboard" : "/"}>
           <MadrassaLogo size="sm" />
         </Link>
         <button
           onClick={() => setSidebarOpen(true)}
-          className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
+          className={`p-2 rounded-xl hover:bg-gray-100 transition-colors ${isInTeacherView ? "" : "standalone:hidden"}`}
         >
           {Icons.menu}
         </button>
@@ -488,6 +491,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             { href: "/dashboard", label: t.home, icon: <HomeNavIcon className="h-6 w-6" /> },
             { href: "/lessons", label: t.lessons, icon: <BookNavIcon className="h-6 w-6" /> },
             { href: "/progress", label: t.progress, icon: <ChartNavIcon className="h-6 w-6" /> },
+            { href: "/settings", label: t.settings, icon: <span className="[&>svg]:h-6 [&>svg]:w-6">{Icons.settings}</span> },
           ].map((tab) => {
             const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
             return (

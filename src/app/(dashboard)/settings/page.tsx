@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { RemindersSetting } from "@/components/pwa/RemindersSetting";
+import { AccountActions } from "@/components/settings/AccountActions";
 import type { Profile } from "@/lib/database.types";
 import { getCachedProfile, getCachedUser, primeCachedProfile } from "@/lib/supabase/auth-cache";
 import { clearPrivateOfflineData } from "@/lib/offline/db";
@@ -717,6 +718,9 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+
+          {/* Log out (and staff links): the installed app has no menu, so they live here too. */}
+          {profile && <AccountActions isStaff={profile.role === "teacher" || profile.role === "admin"} />}
 
           {/* Admin: Feature Flags */}
           {profile?.role === "admin" && (

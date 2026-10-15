@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { PathOwl } from "./PathOwl";
 import LessonComputerDownloadButton from "@/components/lessons/LessonComputerDownloadButton";
@@ -226,9 +226,12 @@ export default function LearningPathTree({
   const selId = selectedId ?? current;
 
   // Measure the container so the path spans its full width responsively.
+  // Measured before the first paint, and nothing is drawn until then:
+  // guessing a width first drew a squeezed desktop-sized path for a frame
+  // (on every subject switch, since the tree remounts per path).
   const containerRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(880);
-  useEffect(() => {
+  const [width, setWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const update = () => setWidth(el.clientWidth || 880);
@@ -238,7 +241,7 @@ export default function LearningPathTree({
     return () => observer.disconnect();
   }, []);
 
-  const W = width;
+  const W = width ?? 0;
   // Derive the layout from the label width so node labels always stay on-screen
   // and never overlap, from phone widths up to desktop.
   const labelWidth = Math.min(180, Math.max(96, W * 0.42));
@@ -313,6 +316,7 @@ export default function LearningPathTree({
 
   return (
     <div ref={containerRef} className="relative w-full" style={{ height: totalH }}>
+      {width !== null && (
       <div className="relative w-full" style={{ height: totalH }}>
         {/* The winding road — a solid white surface with a soft drop shadow and a
             faint edge so it stays crisp and high-contrast over the colourful
@@ -445,6 +449,7 @@ export default function LearningPathTree({
           );
         })}
       </div>
+      )}
     </div>
   );
 }
