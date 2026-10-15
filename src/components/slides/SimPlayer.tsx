@@ -221,25 +221,6 @@ function subscribeToPhoneWidth(onChange: () => void) {
 }
 const isPhoneWidth = () => window.matchMedia(PHONE_QUERY).matches;
 
-// Phones held upright: a 16:9 slide only fills the top quarter of the screen.
-// Slides are drawn at the phone's own size instead, filling the screen down to
-// the controls; the templates already lay themselves out for narrow widths.
-// Slides the teacher drew on, pointed at or spotlit keep the 16:9 shape,
-// because those positions were recorded on the wide slide.
-const UPRIGHT_PHONE_QUERY = '(max-width: 639px) and (orientation: portrait)';
-function subscribeToUprightPhone(onChange: () => void) {
-  const query = window.matchMedia(UPRIGHT_PHONE_QUERY);
-  query.addEventListener('change', onChange);
-  return () => query.removeEventListener('change', onChange);
-}
-const isUprightPhone = () => window.matchMedia(UPRIGHT_PHONE_QUERY).matches;
-// Room for the page's top bar and the player's controls below the slide.
-const UPRIGHT_SLIDE_HEIGHT = 'max(22rem, calc(100svh - 12.5rem))';
-
-function drawsOnSlide(event: SimEvent): boolean {
-  return event.type.startsWith('stroke') || event.type === 'clear_strokes' || event.type === 'laser' || event.type.startsWith('spotlight');
-}
-
 function SimSlideViewport({ children }: { children: ReactNode }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
@@ -1858,11 +1839,6 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   }, [canHideControls, controlsActivity]);
 
   const isPhone = useSyncExternalStore(subscribeToPhoneWidth, isPhoneWidth, () => false);
-  const uprightPhone = useSyncExternalStore(subscribeToUprightPhone, isUprightPhone, () => false);
-  const slidesWithDrawings = useMemo(
-    () => new Set(projectedEvents.filter(drawsOnSlide).map((event) => event.slide_id)),
-    [projectedEvents]
-  );
   const activityOpen = Boolean(
     (activeGate && (activeGate.type === 'activity_gate' || activeGate.type === 'exploration_gate'))
       || (activeExplorationSlide && currentSlide?.type === 'exploration')
@@ -1916,28 +1892,6 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       </div>
     );
   }
-
-  // Upright phone layout for this slide (see UPRIGHT_PHONE_QUERY).
-  const upright = uprightPhone && !fullscreen && currentSlide.type !== 'whiteboard' && !slidesWithDrawings.has(currentSlide.id);
-  const slideCard = (
-        <SlideCard
-          // Key on slide id so the entrance animation replays each time
-          // the active slide changes during replay. Reveal state flows
-          // through `revealedCount` so bullet reveals do NOT remount.
-          key={`${currentSlide?.id ?? ''}:${language}`}
-          className={`${upright ? '!aspect-auto h-full ' : ''}${!upright && currentSlide.type === 'diagram_description' && (currentSlide.body_ar || '').length <= 80 && (currentSlide.body_en || '').length <= 80 ? 'max-sm:[&_p]:text-[28px] max-sm:[&_p]:leading-relaxed' : ''}`}
-          slide={currentSlide}
-          language={language}
-          chromeless
-          applyEntranceAnimation
-          revealedCount={currentSurface?.revealed_bullets}
-          showActivityAnswer={currentSurface?.answer_revealed ?? false}
-          activityInteractive
-          activityInteractiveDisabled={!activeGate}
-          activityAnswer={activeGate ? studentAnswer : (currentSurface?.activity_answer ?? null)}
-          onActivityAnswerChange={activeGate ? handleStudentAnswer : undefined}
-        />
-  );
 
   // Your turn / feedback, with Submit, Try again and Continue.
   const activityBar = activeGate && activeGate.type === 'activity_gate' ? (
@@ -2014,11 +1968,25 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       {/* Slide area */}
       <div className={fullscreen ? 'flex flex-1 min-h-0 items-center justify-center overflow-hidden bg-black' : ''} style={fullscreen ? { containerType: 'size' } : undefined}>
       <div className="relative w-full" style={fullscreen ? { width: 'min(100cqw, calc(100cqh * 16 / 9))' } : undefined}>
-          {upright ? (
-            <div className="relative overflow-hidden" style={{ height: UPRIGHT_SLIDE_HEIGHT }}>{slideCard}</div>
-          ) : (
-            <SimSlideViewport>{slideCard}</SimSlideViewport>
-          )}
+          <SimSlideViewport>
+          <SlideCard
+            // Key on slide id so the entrance animation replays each time
+            // the active slide changes during replay. Reveal state flows
+            // through `revealedCount` so bullet reveals do NOT remount.
+            key={`${currentSlide?.id ?? ''}:${language}`}
+            className={currentSlide.type === 'diagram_description' && (currentSlide.body_ar || '').length <= 80 && (currentSlide.body_en || '').length <= 80 ? 'max-sm:[&_p]:text-[28px] max-sm:[&_p]:leading-relaxed' : ''}
+            slide={currentSlide}
+            language={language}
+            chromeless
+            applyEntranceAnimation
+            revealedCount={currentSurface?.revealed_bullets}
+            showActivityAnswer={currentSurface?.answer_revealed ?? false}
+            activityInteractive
+            activityInteractiveDisabled={!activeGate}
+            activityAnswer={activeGate ? studentAnswer : (currentSurface?.activity_answer ?? null)}
+            onActivityAnswerChange={activeGate ? handleStudentAnswer : undefined}
+          />
+          </SimSlideViewport>
           {currentSurface && currentSurface.strokes.length > 0 && (
             <StrokesOverlay strokes={currentSurface.strokes} />
           )}

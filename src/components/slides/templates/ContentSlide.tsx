@@ -88,10 +88,9 @@ export default function ContentSlide({ slide, language, revealedCount }: Props) 
       </svg>
       <div className="absolute bottom-[-40px] right-[-40px] w-[160px] h-[160px] rounded-full bg-[#007229]/5" />
 
-      {/* A narrow slide (upright phone) stacks the picture above the text. */}
-      <div className={`flex-1 min-h-0 flex ${isHorizontal ? (layout === 'image_left' ? 'flex-row' : 'flex-row-reverse') : 'flex-col'} @max-xl:flex-col gap-4 p-6 sm:p-10 md:p-14 @max-xl:p-5`}>
+      <div className={`flex-1 flex ${isHorizontal ? (layout === 'image_left' ? 'flex-row' : 'flex-row-reverse') : 'flex-col'} gap-4 p-6 sm:p-10 md:p-14`}>
         {hasImage && (isHorizontal || isImageTop) && (
-          <div className={isHorizontal ? 'w-2/5 flex-shrink-0 flex items-center @max-xl:w-full @max-xl:h-[40%]' : 'flex-shrink-0 h-1/3'}>
+          <div className={isHorizontal ? 'w-2/5 flex-shrink-0 flex items-center' : 'flex-shrink-0 h-1/3'}>
             <SlideImage
               src={slide.image_url!}
               className={`w-full ${isHorizontal ? 'h-full max-h-full' : 'h-full'} shadow-md`}
