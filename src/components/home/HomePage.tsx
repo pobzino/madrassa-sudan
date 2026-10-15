@@ -100,6 +100,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
         tagline: "نبني مستقبل السودان، طفل بطفل",
         links: { parents: "للأهل", privacy: "الخصوصية", terms: "الشروط", contact: "تواصل معنا", donate: "ادعم آمال" },
         partners: "بالشراكة مع",
+        builtBy: "طُوّر بواسطة",
         copyright: "© ٢٠٢٦ مدرسة آمال",
       },
     },
@@ -162,6 +163,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
         tagline: "Building Sudan's future, one child at a time",
         links: { parents: "For Parents", privacy: "Privacy", terms: "Terms", contact: "Contact", donate: "Support Amal" },
         partners: "In partnership with",
+        builtBy: "Built by",
         copyright: "© 2026 Amal School",
       },
     },
@@ -518,6 +520,19 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
               Company number {LEGAL_ENTITY.companyNumber}
             </a>
             . Registered office: {LEGAL_ENTITY.registeredOffice}.
+          </p>
+          <p className="mt-3 text-center text-[11px] text-gray-400 sm:text-xs">
+            {txt.footer.builtBy}{" "}
+            {/* No "noreferrer", so the studio can see visits that come from here. */}
+            <a
+              href="https://www.loxdigital.com/work/amal-school/"
+              target="_blank"
+              rel="noopener"
+              dir="ltr"
+              className="font-semibold text-gray-500 transition-colors hover:text-[#007229]"
+            >
+              LOX Digital
+            </a>
           </p>
         </div>
       </footer>
