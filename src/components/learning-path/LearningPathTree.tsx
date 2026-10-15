@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { OwlExcited } from "@/components/illustrations";
 import LessonComputerDownloadButton from "@/components/lessons/LessonComputerDownloadButton";
@@ -157,6 +157,35 @@ function NodeDisc({ node, isCurrent }: { node: TreeNode; isCurrent: boolean }) {
  * control point hundreds of px past the node, so the curve overshoots the SVG
  * bounds and gets clipped ("cut" road). Capping keeps turns tight + on-screen.
  */
+/**
+ * The selected node's buttons, centred under it but nudged sideways when the
+ * row is wider than the label and would otherwise run off the screen edge.
+ */
+function EdgeSafeRow({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const row = ref.current;
+    if (!row) return;
+    row.style.translate = "";
+    // The pop-in animation scales around the centre, so the centre is reliable
+    // even mid-animation; offsetWidth ignores the scale.
+    const rect = row.getBoundingClientRect();
+    const centre = (rect.left + rect.right) / 2;
+    const half = row.offsetWidth / 2;
+    const margin = 8;
+    const screen = document.documentElement.clientWidth;
+    const pastRight = centre + half - (screen - margin);
+    const pastLeft = margin - (centre - half);
+    // `translate` (not `transform`) so it doesn't fight the pop-in animation.
+    row.style.translate = `${pastRight > 0 ? -pastRight : pastLeft > 0 ? pastLeft : 0}px 0`;
+  });
+  return (
+    <div ref={ref} className="mt-1.5 inline-flex items-center justify-center gap-1.5 whitespace-nowrap animate-pop-in" style={{ textShadow: "none" }}>
+      {children}
+    </div>
+  );
+}
+
 function smoothPath(pts: { x: number; y: number }[], reach: number): string {
   if (pts.length < 2) return "";
   const cap = (v: number) => Math.max(-reach, Math.min(reach, v));
@@ -381,10 +410,7 @@ export default function LearningPathTree({
                 </p>
                 {label.sub && <p className="text-[10px] font-medium text-amber-500">{label.sub}</p>}
                 {isSelected && href && (
-                  <div
-                    className="mt-1.5 inline-flex items-center justify-center gap-1.5 animate-pop-in"
-                    style={{ textShadow: "none" }}
-                  >
+                  <EdgeSafeRow>
                     <Link
                       href={href}
                       className="inline-block px-3.5 py-1 rounded-full bg-[#007229] text-white text-[11px] font-bold font-fredoka shadow-sm hover:bg-[#005C22] transition-colors"
@@ -425,7 +451,7 @@ export default function LearningPathTree({
                         />
                       </>
                     )}
-                  </div>
+                  </EdgeSafeRow>
                 )}
               </div>
             </div>
