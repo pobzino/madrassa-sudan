@@ -1841,9 +1841,14 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   // The "playback may stop" warning keeps the controls up; playing a saved
   // copy offline is normal, so that notice doesn't.
   const showOfflineWarning = isOffline && !playingFromDevice;
+  const smallScreen = useSyncExternalStore(subscribeToSmallScreen, isSmallScreen, () => false);
+  const phoneFullscreen = fullscreen && smallScreen;
+  // Phone full screen, like a video app: a tap on the lesson hides the
+  // controls (paused too) and the next tap brings them back.
+  const canTapToHide = phoneFullscreen && !isScrubbing && !showChapters && !activeGate && !activeExplorationSlide;
   const canHideControls = fullscreen && isPlaying && !buffering && !isScrubbing
     && !showChapters && !activeGate && !activeExplorationSlide && !error && !showOfflineWarning;
-  const controlsVisible = !canHideControls || !controlsIdle;
+  const controlsVisible = !(canHideControls || canTapToHide) || !controlsIdle;
   // Fullscreen covers the whole screen (viewport-fit=cover): full-width bars
   // keep their ends clear of a landscape notch or a corner camera. Physical
   // sides, as the insets are. Not the root, whose white would show beside
@@ -1872,8 +1877,6 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   // Full screen on a phone that is still upright (iPhone can't lock the
   // orientation): turn the player 90° so it fills the screen sideways.
   const sideways = fullscreen && uprightPhone;
-  const smallScreen = useSyncExternalStore(subscribeToSmallScreen, isSmallScreen, () => false);
-  const phoneFullscreen = fullscreen && smallScreen;
   const activityOpen = Boolean(
     (activeGate && (activeGate.type === 'activity_gate' || activeGate.type === 'exploration_gate'))
       || (activeExplorationSlide && currentSlide?.type === 'exploration')
@@ -2006,7 +2009,13 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       paddingLeft: 'env(safe-area-inset-top)', paddingRight: 'env(safe-area-inset-bottom)',
     } : fullscreen ? { position: expanded ? 'fixed' : undefined, inset: 0, zIndex: 9999, width: '100%', height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : { scrollMarginTop: '4.5rem' }}>
       {/* Slide area */}
-      <div className={fullscreen ? 'flex flex-1 min-h-0 items-center justify-center overflow-hidden bg-black' : ''} style={fullscreen ? { containerType: 'size' } : undefined}>
+      <div
+        className={fullscreen ? 'flex flex-1 min-h-0 items-center justify-center overflow-hidden bg-black' : ''}
+        style={fullscreen ? { containerType: 'size' } : undefined}
+        onClick={() => {
+          if (canTapToHide && controlsVisible) setControlsIdle(true);
+        }}
+      >
       <div className="relative w-full" style={fullscreen ? { width: 'min(100cqw, calc(100cqh * 16 / 9))' } : undefined}>
           <SimSlideViewport>
           <SlideCard
@@ -2093,6 +2102,18 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
           style={sideways ? { height: '100%' } : { height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
           <div className="relative min-h-0 flex-1 overflow-hidden">
+            {/* Always a way out, whatever the activity (explorations have no
+                Continue until they're finished). */}
+            <button
+              type="button"
+              onClick={handleContinueGate}
+              className="absolute end-3 top-3 z-30 flex items-center gap-1 rounded-full bg-black/60 px-3 py-1.5 text-sm font-bold text-white shadow"
+            >
+              {language === 'ar' ? 'تخطٍّ' : 'Skip'}
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
             {activeGate?.type === 'activity_gate' && (
               <SlideCard
                 key={`phone:${currentSlide?.id ?? ''}:${language}`}
