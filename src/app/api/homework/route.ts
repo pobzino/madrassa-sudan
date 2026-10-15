@@ -122,7 +122,8 @@ export async function POST(request: NextRequest) {
         .from("cohort_students")
         .select("student_id")
         .eq("cohort_id", data.cohort_id)
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .eq("status", "approved");
 
       if (cohortStudents && cohortStudents.length > 0) {
         const submissionsToInsert = cohortStudents.map((cs) => ({

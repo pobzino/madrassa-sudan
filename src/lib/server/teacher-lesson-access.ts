@@ -19,13 +19,16 @@ export async function getTeacherRole(
   // Primary source of truth: public.profiles.role
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_approved")
     .eq("id", userId)
     .maybeSingle();
 
   const profileRole = normalizeTeacherRole(profile?.role);
   if (profileRole) {
-    return profileRole;
+    // A public signup can ask for the teacher role; it carries no teacher
+    // rights until an admin approves the account. /api routes are not behind
+    // the middleware's approval redirect, so check it here too.
+    return profile?.is_approved === true ? profileRole : null;
   }
 
   // Fallback: auth app_metadata.role (admin-managed, not user-editable)

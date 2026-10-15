@@ -16,11 +16,13 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
 import { submitHomeworkSchema, saveDraftSchema } from "@/lib/homework.validation";
 import {
+  countsAsNewHomeworkCompletion,
   gradeHomeworkAnswers,
   isOpenSubmissionStatus,
   meetsPassingScore,
   normalizeSubmittedAnswers,
   OPEN_SUBMISSION_STATUSES,
+  passMarkPoints,
   type GradableQuestion,
 } from "@/lib/homework-grading";
 
@@ -94,7 +96,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Practice assignments are global (cohort_id is null) — any signed-in
-    // student may submit. Cohort homework still requires active enrollment.
+    // student may submit. Cohort homework still requires an active, approved
+    // enrollment (a pending join request does not count).
     if (assignment.cohort_id) {
       const { data: cohortMembership } = await supabase
         .from("cohort_students")
@@ -102,6 +105,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .eq("cohort_id", assignment.cohort_id)
         .eq("student_id", user.id)
         .eq("is_active", true)
+        .eq("status", "approved")
         .single();
 
       if (!cohortMembership) {
@@ -253,8 +257,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Update submission with auto-graded score
-    if (allQuestionsAutoGradable && autoGradablePoints > 0) {
+    // Update submission with auto-graded score. When every question can be
+    // marked automatically the attempt is graded even if some (or all) were
+    // left blank — they score 0 — so it never sits in "submitted" waiting for
+    // a teacher and can still be retaken.
+    const fullyAutoGraded = allQuestionsAutoGradable && questions.length > 0;
+    if (fullyAutoGraded) {
       const { error: gradeError } = await admin
         .from("homework_submissions")
         .update({
@@ -279,41 +287,51 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // the recording alone never marks the lesson complete, so record it here so
     // dashboards, counters and the streak trigger stay in step with the path
     // tree. Below the threshold nothing is written — the student just retries.
+    const passedNow = meetsPassingScore(autoGradedScore, assignment.total_points, assignment.passing_score);
     let lessonCompleted = false;
     let firstLessonCompletion = false;
-    if (
-      isPractice &&
-      assignment.lesson_id &&
-      meetsPassingScore(autoGradedScore, assignment.total_points, assignment.passing_score)
-    ) {
-      const { data: existingLessonProgress } = await supabase
-        .from("lesson_progress")
-        .select("completed")
-        .eq("student_id", user.id)
-        .eq("lesson_id", assignment.lesson_id)
-        .maybeSingle();
+    if (isPractice && assignment.lesson_id && passedNow) {
+      // The service role skips RLS, so check lesson access the way the
+      // student's own lesson_progress policy does: no completion (or streak
+      // bump) for a lesson that is unpublished or limited to another class.
+      const { data: canAccessLesson, error: lessonAccessError } = await admin.rpc(
+        "can_user_access_published_lesson",
+        { p_user_id: user.id, p_lesson_id: assignment.lesson_id }
+      );
+      if (lessonAccessError) {
+        console.error("Error checking lesson access for Practice completion:", lessonAccessError);
+      }
 
-      if (!existingLessonProgress?.completed) {
-        const { error: lessonProgressError } = await admin.from("lesson_progress").upsert(
-          {
-            student_id: user.id,
-            lesson_id: assignment.lesson_id,
-            completed: true,
-            completed_at: nowIso,
-          },
-          { onConflict: "student_id,lesson_id" }
-        );
+      if (canAccessLesson === true) {
+        const { data: existingLessonProgress } = await supabase
+          .from("lesson_progress")
+          .select("completed")
+          .eq("student_id", user.id)
+          .eq("lesson_id", assignment.lesson_id)
+          .maybeSingle();
 
-        if (lessonProgressError) {
-          console.error("Error recording Practice lesson completion:", lessonProgressError);
-        } else {
-          lessonCompleted = true;
-          const { count } = await supabase
-            .from("lesson_progress")
-            .select("id", { count: "exact", head: true })
-            .eq("student_id", user.id)
-            .eq("completed", true);
-          firstLessonCompletion = count === 1;
+        if (!existingLessonProgress?.completed) {
+          const { error: lessonProgressError } = await admin.from("lesson_progress").upsert(
+            {
+              student_id: user.id,
+              lesson_id: assignment.lesson_id,
+              completed: true,
+              completed_at: nowIso,
+            },
+            { onConflict: "student_id,lesson_id" }
+          );
+
+          if (lessonProgressError) {
+            console.error("Error recording Practice lesson completion:", lessonProgressError);
+          } else {
+            lessonCompleted = true;
+            const { count } = await supabase
+              .from("lesson_progress")
+              .select("id", { count: "exact", head: true })
+              .eq("student_id", user.id)
+              .eq("completed", true);
+            firstLessonCompletion = count === 1;
+          }
         }
       }
     }
@@ -340,12 +358,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const attemptNumber = (priorAttempts ?? 0) + 1;
 
+    // A Practice counts toward the homework total on its first pass, so look
+    // for an earlier passing attempt (read before this one is logged).
+    let passedBefore = false;
+    if (isPractice && passedNow) {
+      const { count: priorPasses } = await admin
+        .from("homework_attempts")
+        .select("id", { count: "exact", head: true })
+        .eq("assignment_id", assignmentId)
+        .eq("student_id", user.id)
+        .gte("score", passMarkPoints(assignment.total_points ?? 0, assignment.passing_score));
+      passedBefore = (priorPasses ?? 0) > 0;
+    }
+    const countsAsNewHomework = countsAsNewHomeworkCompletion({
+      isPractice,
+      // Submissions from before the attempt log only carry attempt_count.
+      priorAttempts: Math.max(priorAttempts ?? 0, existingSubmission?.attempt_count ?? 0),
+      passedNow,
+      passedBefore,
+    });
+
     const { error: attemptError } = await admin.from("homework_attempts").insert({
       assignment_id: assignmentId,
       student_id: user.id,
       submission_id: submissionId,
       attempt_number: attemptNumber,
-      score: autoGradablePoints > 0 ? autoGradedScore : null,
+      score: fullyAutoGraded || autoGradablePoints > 0 ? autoGradedScore : null,
       max_score: assignment.total_points ?? null,
       correct_count: correctCount,
       total_questions: questions.length,
@@ -360,15 +398,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .update({ attempt_count: attemptNumber })
       .eq("id", submissionId);
 
-    // Update student streak
-    const streakDays = await updateStudentStreak(admin, user.id);
+    // Update student streak (every submission is activity for the day; the
+    // homework total counts each assignment once, not every retake).
+    const streakDays = await updateStudentStreak(admin, user.id, countsAsNewHomework);
 
     return NextResponse.json({
       success: true,
       streakDays,
       data: {
         submission_id: submissionId,
-        status: allQuestionsAutoGradable ? "graded" : "submitted",
+        status: fullyAutoGraded ? "graded" : "submitted",
         is_late: isLate,
         auto_graded_score: autoGradedScore,
         auto_gradable_points: autoGradablePoints,
@@ -443,6 +482,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         .eq("cohort_id", assignment.cohort_id)
         .eq("student_id", user.id)
         .eq("is_active", true)
+        .eq("status", "approved")
         .single();
 
       if (!cohortMembership) {
@@ -573,7 +613,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
 // Helper function to update student streak — returns current streak days.
 // Runs with the service role: students can only read their streak row.
-async function updateStudentStreak(admin: ServiceClient, userId: string): Promise<number> {
+// countHomework adds this assignment to total_homework_completed (see
+// countsAsNewHomeworkCompletion); the day streak moves either way.
+async function updateStudentStreak(
+  admin: ServiceClient,
+  userId: string,
+  countHomework: boolean
+): Promise<number> {
   const today = new Date().toISOString().split("T")[0];
 
   const { data: existingStreak } = await admin
@@ -604,7 +650,7 @@ async function updateStudentStreak(admin: ServiceClient, userId: string): Promis
         current_streak_days: newStreak,
         longest_streak_days: Math.max(newStreak, existingStreak.longest_streak_days),
         last_activity_date: today,
-        total_homework_completed: existingStreak.total_homework_completed + 1,
+        total_homework_completed: existingStreak.total_homework_completed + (countHomework ? 1 : 0),
         updated_at: new Date().toISOString(),
       })
       .eq("id", existingStreak.id);
@@ -616,7 +662,7 @@ async function updateStudentStreak(admin: ServiceClient, userId: string): Promis
       current_streak_days: 1,
       longest_streak_days: 1,
       last_activity_date: today,
-      total_homework_completed: 1,
+      total_homework_completed: countHomework ? 1 : 0,
     });
 
     return 1;

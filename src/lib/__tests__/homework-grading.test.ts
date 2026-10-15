@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  countsAsNewHomeworkCompletion,
   decideRetake,
   gradeHomeworkAnswers,
   isOpenSubmissionStatus,
@@ -188,5 +189,30 @@ describe("isOpenSubmissionStatus", () => {
     expect(isOpenSubmissionStatus("submitted")).toBe(false);
     expect(isOpenSubmissionStatus("graded")).toBe(false);
     expect(isOpenSubmissionStatus("returned")).toBe(false);
+  });
+});
+
+describe("countsAsNewHomeworkCompletion", () => {
+  it("counts regular homework and week tests once, on the first submission", () => {
+    const first = { isPractice: false, priorAttempts: 0, passedNow: false, passedBefore: false };
+    expect(countsAsNewHomeworkCompletion(first)).toBe(true);
+    expect(countsAsNewHomeworkCompletion({ ...first, priorAttempts: 1 })).toBe(false);
+    expect(countsAsNewHomeworkCompletion({ ...first, priorAttempts: 3, passedNow: true })).toBe(false);
+  });
+
+  it("counts a Practice once, on its first pass, however many failed retakes came first", () => {
+    // fail, retake, fail, retake, pass: only the pass counts
+    const attempts = [
+      { passedNow: false, passedBefore: false },
+      { passedNow: false, passedBefore: false },
+      { passedNow: true, passedBefore: false },
+    ];
+    const counted = attempts.filter((a, i) =>
+      countsAsNewHomeworkCompletion({ isPractice: true, priorAttempts: i, ...a })
+    ).length;
+    expect(counted).toBe(1);
+    expect(
+      countsAsNewHomeworkCompletion({ isPractice: true, priorAttempts: 4, passedNow: true, passedBefore: true })
+    ).toBe(false);
   });
 });

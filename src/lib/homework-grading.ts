@@ -157,6 +157,30 @@ export function meetsPassingScore(
   return score != null && total > 0 && score >= passMarkPoints(total, passingScorePercent);
 }
 
+export interface HomeworkCompletionCountInput {
+  isPractice: boolean;
+  /** Attempts already recorded for this assignment, not counting this one. */
+  priorAttempts: number;
+  /** This attempt meets the pass mark. */
+  passedNow: boolean;
+  /** An earlier attempt already met the pass mark. */
+  passedBefore: boolean;
+}
+
+/**
+ * Whether a submission adds one to student_streaks.total_homework_completed.
+ * Each assignment counts once, however often it is retaken: a Practice on its
+ * first pass (the attempt that also completes its lesson), anything else on
+ * its first submission. Submitting wrong answers and retaking in a loop used
+ * to add 20 points per cycle.
+ */
+export function countsAsNewHomeworkCompletion(input: HomeworkCompletionCountInput): boolean {
+  if (input.isPractice) {
+    return input.passedNow && !input.passedBefore;
+  }
+  return input.priorAttempts === 0;
+}
+
 export interface RetakeAssignmentInput {
   is_test: boolean | null;
   is_practice: boolean | null;
