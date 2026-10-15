@@ -597,6 +597,10 @@ export interface SyncResult {
    * rejected for good, or given up on (see the rules at the top).
    */
   dropped: number;
+  /** Lessons with progress or answers the server saved in this run (for analytics). */
+  lessons?: number;
+  /** Answers the server saved in this run. */
+  answers?: number;
   /** Other accounts' items left queued for them to send when they sign in here (counted in `remaining`). */
   otherAccounts?: number;
   /** Why nothing was attempted, when that happened. */
@@ -687,6 +691,8 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
   }
 
   let synced = 0;
+  const syncedLessons = new Set<string>();
+  let syncedAnswers = 0;
   let failed = 0;
   let networkDown = false;
   const now = new Date();
@@ -733,6 +739,7 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
           await syncLessonProgress(supabase, userId, lessonId, progressItems);
           await removeQueueItemsIfUnchanged(stored(progressItems));
           synced += progressItems.length;
+          syncedLessons.add(lessonId);
         } catch (error) {
           const outcome = classifyProgressError(error);
           if (outcome === "gone") {
@@ -781,6 +788,8 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
         // `stale`: the server already had a newer answer; the phone's grade stays.
         if (!result.stale) await updateLocalGrade(item, slideId, result.isCorrect);
         synced += 1;
+        syncedAnswers += 1;
+        syncedLessons.add(lessonId);
       } else if (result.outcome === "gone") {
         // The slide was removed, the lesson deleted, or the answer refused for good.
         await removeQueueItemsIfUnchanged(stored([item])).catch(() => undefined);
@@ -812,7 +821,15 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
     }
   }
 
-  return { synced, failed, dropped, otherAccounts, remaining: await remainingCount() };
+  return {
+    synced,
+    failed,
+    dropped,
+    lessons: syncedLessons.size,
+    answers: syncedAnswers,
+    otherAccounts,
+    remaining: await remainingCount(),
+  };
 }
 
 let syncInFlight: Promise<SyncResult> | null = null;

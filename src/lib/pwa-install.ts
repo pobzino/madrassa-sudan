@@ -69,7 +69,8 @@ let installedElsewhere = false;
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((listener) => listener());
 
-function isStandalone() {
+/** True when Amal was opened from the home-screen icon (the installed app). */
+export function isStandalone() {
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
     window.matchMedia("(display-mode: fullscreen)").matches ||

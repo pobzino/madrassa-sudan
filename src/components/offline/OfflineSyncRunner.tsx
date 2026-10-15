@@ -12,7 +12,9 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { trackAnalyticsEvent } from "@/lib/analytics";
 import type { SyncResult } from "@/lib/offline/sync";
+import { isStandalone } from "@/lib/pwa-install";
 
 /** Fired on window after a sync that sent or dropped items, so pages can refresh their counts. */
 export const OFFLINE_SYNCED_EVENT = "amal:offline-synced";
@@ -75,7 +77,15 @@ export default function OfflineSyncRunner() {
       if (result.synced > 0 || result.dropped > 0) {
         window.dispatchEvent(new CustomEvent(OFFLINE_SYNCED_EVENT, { detail: result }));
       }
-      if (result.synced > 0) toast.success(COPY[languageRef.current]);
+      if (result.synced > 0) {
+        toast.success(COPY[languageRef.current]);
+        // Sent once the phone is back online: nothing can be reported while offline.
+        trackAnalyticsEvent("offline_progress_synced", {
+          lessons: result.lessons ?? 0,
+          answers: result.answers ?? 0,
+          in_app: isStandalone(),
+        });
+      }
     };
 
     const scheduleRun = (delay: number) => {

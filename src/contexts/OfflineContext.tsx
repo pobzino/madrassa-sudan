@@ -12,6 +12,8 @@ import {
   type ReactNode,
 } from "react";
 import { useOnlineStatus } from "@/components/offline/useOnlineStatus";
+import { trackAnalyticsEvent } from "@/lib/analytics";
+import { isStandalone } from "@/lib/pwa-install";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -307,6 +309,12 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
         );
         setDownloadedIds((prev) => new Set(prev).add(lessonId));
         setUpdateIds((prev) => withoutItem(prev, lessonId));
+        trackAnalyticsEvent("offline_lesson_saved", {
+          lesson_id: lessonId,
+          source: lesson.origin === "auto" ? "auto" : "manual",
+          in_app: isStandalone(),
+          size_mb: Math.round(((lesson.audioSize || 0) + (lesson.assetBytes || 0)) / 100_000) / 10,
+        });
         void refreshEstimate();
         // The lesson is on the phone; make sure the pages that open it are too.
         void retryOfflineSetupRef.current();
@@ -320,6 +328,12 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
           return { status: "cancelled" };
         }
         const code = error instanceof DownloadError ? error.code : "unknown";
+        trackAnalyticsEvent("offline_lesson_save_failed", {
+          lesson_id: lessonId,
+          error_type: code,
+          source: manual ? "manual" : "auto",
+          in_app: isStandalone(),
+        });
         if (code === "no_audio") {
           // Nothing to save, so nothing to retry: the caller's message says
           // why, and no Retry row is left behind (the manager stored none).
@@ -361,6 +375,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   const deleteLesson = useCallback(
     async (lessonId: string) => {
       await doDelete(lessonId);
+      trackAnalyticsEvent("offline_lesson_removed", { lesson_id: lessonId, in_app: isStandalone() });
       setDownloadedIds((prev) => withoutItem(prev, lessonId));
       setUpdateIds((prev) => withoutItem(prev, lessonId));
       setDownloads((prev) => withoutKey(prev, lessonId));
