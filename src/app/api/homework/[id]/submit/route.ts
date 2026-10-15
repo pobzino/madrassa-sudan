@@ -13,9 +13,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
+import { createServiceClient } from "@/lib/supabase/service";
 import { submitHomeworkSchema, saveDraftSchema } from "@/lib/homework.validation";
 import { getLearnerContextResult } from "@/lib/server/learner-context";
+import { createOwnedLearnerAdminClient } from "@/lib/server/learner-admin";
 import {
   countsAsNewHomeworkCompletion,
   gradeHomeworkAnswers,
@@ -74,14 +75,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const data = validationResult.data;
 
-    if (!hasServiceRoleConfig()) {
-      console.error("Homework submission: service role is not configured; grading writes are server-only.");
-      return NextResponse.json(
-        { error: "Homework submission is temporarily unavailable" },
-        { status: 503 }
-      );
+    const learnerService = await createOwnedLearnerAdminClient(resolved.context);
+    if (learnerService.error === "service_role_unavailable") {
+      return NextResponse.json({ error: "Homework submission is temporarily unavailable" }, { status: 503 });
     }
-    const admin = createServiceClient();
+    if (learnerService.error || !learnerService.admin) {
+      return NextResponse.json({ error: "Learner is no longer available" }, { status: learnerService.error === "ownership_check_failed" ? 500 : 403 });
+    }
+    const admin = learnerService.admin;
 
     // Verify assignment exists and is published (RLS: the student must be able to see it)
     const { data: assignment, error: assignmentError } = await supabase
@@ -274,7 +275,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           status: "graded",
           graded_at: nowIso,
         })
-        .eq("id", submissionId);
+        .eq("id", submissionId)
+        .eq("student_id", learnerId);
       if (gradeError) console.error("Error saving auto-graded score:", gradeError);
     } else if (autoGradablePoints > 0) {
       // Partial auto-grade, save score but keep as submitted for manual grading
@@ -283,7 +285,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .update({
           score: autoGradedScore,
         })
-        .eq("id", submissionId);
+        .eq("id", submissionId)
+        .eq("student_id", learnerId);
       if (gradeError) console.error("Error saving partial auto-graded score:", gradeError);
     }
 
@@ -400,7 +403,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     await admin
       .from("homework_submissions")
       .update({ attempt_count: attemptNumber })
-      .eq("id", submissionId);
+      .eq("id", submissionId)
+      .eq("student_id", learnerId);
 
     // Update student streak (every submission is activity for the day; the
     // homework total counts each assignment once, not every retake).
@@ -660,7 +664,8 @@ async function updateStudentStreak(
         total_homework_completed: existingStreak.total_homework_completed + (countHomework ? 1 : 0),
         updated_at: new Date().toISOString(),
       })
-      .eq("id", existingStreak.id);
+      .eq("id", existingStreak.id)
+      .eq("student_id", userId);
 
     return newStreak;
   } else {

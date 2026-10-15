@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getLearnerContextResult } from '@/lib/server/learner-context'
 import type { QuizSettings } from '@/lib/database.types'
+import { createOwnedLearnerAdminClient, type LearnerAdminClient } from '@/lib/server/learner-admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -50,6 +51,10 @@ export async function POST(
   const resolved = await getLearnerContextResult(request, supabase)
   if (resolved.response) return resolved.response
   const learnerId = resolved.context.learnerId
+  const service = await createOwnedLearnerAdminClient(resolved.context)
+  if (service.error === 'service_role_unavailable') return NextResponse.json({ error: 'Saving answers is temporarily unavailable' }, { status: 503 })
+  if (service.error || !service.admin) return NextResponse.json({ error: 'Learner is no longer available' }, { status: service.error === 'ownership_check_failed' ? 500 : 403 })
+  const admin = service.admin
 
   const body = await request.json()
   const validation = ResponseSchema.safeParse(body)
@@ -125,7 +130,7 @@ export async function POST(
 
     const newAttemptNumber = (existingResponse.attempt_number ?? 1) + 1
 
-    const { data: updatedResponse, error: updateError } = await supabase
+    const { data: updatedResponse, error: updateError } = await admin
       .from('lesson_question_responses')
       .update({
         answer,
@@ -136,6 +141,8 @@ export async function POST(
         updated_at: new Date().toISOString()
       })
       .eq('id', existingResponse.id)
+      .eq('student_id', learnerId)
+      .eq('question_id', question_id)
       .select()
       .single()
 
@@ -145,7 +152,7 @@ export async function POST(
 
     responseData = updatedResponse
   } else {
-    const { data: newResponse, error: insertError } = await supabase
+    const { data: newResponse, error: insertError } = await admin
       .from('lesson_question_responses')
       .insert({
         student_id: learnerId,
@@ -166,7 +173,7 @@ export async function POST(
     responseData = newResponse
   }
 
-  const progressSummary = await updateLessonProgress(supabase, learnerId, lessonId)
+  const progressSummary = await updateLessonProgress(supabase, learnerId, admin, lessonId)
   const canRetry =
     question.allow_retry &&
     quizSettings.allow_retries &&
@@ -183,7 +190,8 @@ export async function POST(
 async function updateLessonProgress(
   supabase: Awaited<ReturnType<typeof createClient>>,
   studentId: string,
-  lessonId: string
+  admin: LearnerAdminClient,
+  lessonId: string,
 ) {
   const { data: questions } = await supabase
     .from('lesson_questions')
@@ -226,7 +234,7 @@ async function updateLessonProgress(
     .maybeSingle()
 
   if (existingProgress) {
-    await supabase
+    await admin
       .from('lesson_progress')
       .update({
         questions_answered: questionsAnswered,
@@ -235,8 +243,10 @@ async function updateLessonProgress(
         quiz_passed: quizPassed
       })
       .eq('id', existingProgress.id)
+      .eq('student_id', studentId)
+      .eq('lesson_id', lessonId)
   } else {
-    await supabase
+    await admin
       .from('lesson_progress')
       .insert({
         student_id: studentId,

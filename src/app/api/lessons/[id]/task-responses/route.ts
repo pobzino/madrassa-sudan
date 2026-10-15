@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { createServiceClient, hasServiceRoleConfig } from '@/lib/supabase/service'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
@@ -12,6 +11,7 @@ import {
 import type { Database } from '@/lib/database.types'
 import { recalculateLessonTaskProgress } from '@/lib/server/lesson-task-progress'
 import { getLearnerContextResult } from '@/lib/server/learner-context'
+import { createOwnedLearnerAdminClient } from '@/lib/server/learner-admin'
 
 const TaskResponseSchema = z.object({
   task_id: z.string().uuid(),
@@ -59,6 +59,9 @@ export async function POST(
   const resolved = await getLearnerContextResult(request, supabase)
   if (resolved.response) return resolved.response
   const learnerId = resolved.context.learnerId
+  const service = await createOwnedLearnerAdminClient(resolved.context)
+  if (service.error === 'service_role_unavailable') return NextResponse.json({ error: 'Saving answers is temporarily unavailable' }, { status: 503 })
+  if (service.error || !service.admin) return NextResponse.json({ error: 'Learner is no longer available' }, { status: service.error === 'ownership_check_failed' ? 500 : 403 })
 
   const body = await request.json()
   const validation = TaskResponseSchema.safeParse(body)
@@ -82,11 +85,7 @@ export async function POST(
   if (canAccessLesson !== true) {
     return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
   }
-  if (!hasServiceRoleConfig()) {
-    console.error('Task responses: service role is not configured; answers are saved server-side.')
-    return NextResponse.json({ error: 'Saving answers is temporarily unavailable' }, { status: 503 })
-  }
-  const admin = createServiceClient()
+  const admin = service.admin
 
   const { data: taskRow, error: taskError } = await supabase
     .from('lesson_tasks')

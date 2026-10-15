@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getLearnerContextResult } from '@/lib/server/learner-context';
+import { createOwnedLearnerAdminClient } from '@/lib/server/learner-admin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,6 +19,9 @@ export async function POST(request: NextRequest) {
     const resolved = await getLearnerContextResult(request, supabase);
     if (resolved.response) return resolved.response;
     const learnerId = resolved.context.learnerId;
+    const service = await createOwnedLearnerAdminClient(resolved.context);
+    if (service.error === 'service_role_unavailable') return NextResponse.json({ error: 'Starting assessment is temporarily unavailable' }, { status: 503 });
+    if (service.error || !service.admin) return NextResponse.json({ error: 'Learner is no longer available' }, { status: service.error === 'ownership_check_failed' ? 500 : 403 });
 
     const body = await request.json();
     const { subjectId } = body;
@@ -67,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new attempt
-    const { data: attempt, error: attemptError } = await supabase
+    const { data: attempt, error: attemptError } = await service.admin
       .from('diagnostic_attempts')
       .insert({
         student_id: learnerId,
