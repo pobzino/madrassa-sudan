@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import type { Language } from "@/contexts/LanguageContext";
+import { LivingOwl, type OwlMood } from "@/components/brand/LivingOwl";
+import { handwritingClass } from "./handwriting";
 import { isHomeStats, roundDownStat, statNumberFormat, type HomeStats } from "@/lib/home-stats";
 import { PARTNERS } from "@/lib/partners";
 
@@ -36,8 +38,15 @@ function prefersReducedMotion() {
 }
 
 // Keeps the counters in step with the live totals while the page is open.
-function useLiveStats(initial: HomeStats) {
+function useLiveStats(initial: HomeStats, onIncrease: () => void) {
   const [stats, setStats] = useState(initial);
+  const statsRef = useRef(initial);
+  const onIncreaseRef = useRef(onIncrease);
+
+  useEffect(() => {
+    statsRef.current = stats;
+    onIncreaseRef.current = onIncrease;
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +57,14 @@ function useLiveStats(initial: HomeStats) {
         if (!response.ok) return;
         const next: unknown = await response.json();
         if (cancelled || !isHomeStats(next)) return;
+        const current = statsRef.current;
+        if (
+          next.live &&
+          current.live &&
+          (next.signups > current.signups || next.lessonsCompleted > current.lessonsCompleted || next.practiceAttempts > current.practiceAttempts)
+        ) {
+          onIncreaseRef.current();
+        }
         // Counts only ever go up; ignore an older cached response.
         setStats((current) =>
           next.live
@@ -153,39 +170,95 @@ function useAnimatedNumber(target: number) {
   return { ref, value, bumps };
 }
 
-// One figure in the stats row: the number, then what it counts.
-function Stat({ value, live, label, formatter }: { value: number; live: boolean; label: string; formatter: Intl.NumberFormat }) {
+// Chalk colours for the underline under each figure.
+const CHALK = ["#FDE68A", "#FBCFE8", "#BBF7D0"];
+
+// One figure written on the board in chalk, with a hand-drawn underline.
+function ChalkStat({
+  value,
+  live,
+  label,
+  formatter,
+  chalk,
+  hand,
+}: {
+  value: number;
+  live: boolean;
+  label: string;
+  formatter: Intl.NumberFormat;
+  chalk: string;
+  hand: string;
+}) {
   // Live counts are shown exactly; fallback minimums are rounded with a "+".
   const target = live ? value : roundDownStat(value);
   const { ref, value: shown, bumps } = useAnimatedNumber(target);
 
   return (
-    <li className="px-3 py-5 first:ps-0 last:pe-0 sm:px-6 sm:py-6">
-      <p ref={ref} className="font-fredoka text-3xl font-semibold leading-none tabular-nums text-gray-900 sm:text-5xl">
-        {/* Re-keyed on each new count so the number briefly glows green. */}
-        <span aria-hidden key={bumps} className={bumps > 0 ? "animate-[stat-tick_1.4s_ease-out]" : undefined}>
+    <li className="flex items-baseline gap-4 sm:block">
+      <p ref={ref} className={`${hand} shrink-0 text-6xl leading-none text-[#fffdf2] tabular-nums sm:text-7xl`} style={{ textShadow: "0 0 2px rgba(255,255,255,.45)" }}>
+        {/* Re-keyed on each new count so the fresh number is "rewritten" in chalk. */}
+        <span aria-hidden key={bumps} className={`inline-block ${bumps > 0 ? "animate-[chalk-write_.9s_ease-out]" : ""}`}>
           {formatter.format(shown)}
-          {!live && <span className="text-[#007229]">+</span>}
+          {!live && "+"}
         </span>
         <span className="sr-only">
           {formatter.format(target)}
           {live ? "" : "+"}
         </span>
       </p>
-      <p className="mt-2 text-xs leading-snug text-gray-500 sm:text-sm">{label}</p>
+      <div className="min-w-0">
+        <svg aria-hidden viewBox="0 0 120 12" className="hidden h-3 w-28 sm:block" fill="none">
+          <path d="M3 8C25 3 48 10 70 6S108 3 117 7" stroke={chalk} strokeWidth="3" strokeLinecap="round" opacity="0.85" />
+        </svg>
+        <p className={`${hand} text-2xl leading-tight text-white/85 sm:mt-1`}>{label}</p>
+      </div>
     </li>
   );
 }
 
+/**
+ * The live numbers written on a classroom chalkboard (brand green, wooden
+ * frame), with the owl perched on top like the teacher: it waves when the
+ * board comes into view and hops when a new sign-up ticks a number up.
+ */
 export function SocialProof({ stats: initialStats, language }: { stats: HomeStats; language: Language }) {
   const txt = copy[language];
-  const stats = useLiveStats(initialStats);
+  const hand = handwritingClass(language);
+  const [owlMood, setOwlMood] = useState<OwlMood>("idle");
+  const boardRef = useRef<HTMLDivElement>(null);
+  const moodTimer = useRef(0);
+
+  const react = useCallback((mood: OwlMood, ms: number) => {
+    window.clearTimeout(moodTimer.current);
+    setOwlMood(mood);
+    moodTimer.current = window.setTimeout(() => setOwlMood("idle"), ms);
+  }, []);
+
+  const stats = useLiveStats(initialStats, () => react("excited", 1800));
   const formatter = statNumberFormat(language);
 
+  useEffect(() => {
+    const node = boardRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        observer.disconnect();
+        react("wave", 2600);
+      },
+      { threshold: 0.5 },
+    );
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(moodTimer.current);
+    };
+  }, [react]);
+
   return (
-    <section aria-labelledby="social-proof-title" className="relative bg-white py-12 sm:py-20">
+    <section aria-labelledby="social-proof-title" className="relative bg-white py-14 sm:py-20">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="grid gap-8 lg:grid-cols-[1fr_1.15fr] lg:items-center lg:gap-14">
+        <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:gap-14">
           <div className="text-center lg:text-start">
             <h2
               id="social-proof-title"
@@ -196,14 +269,38 @@ export function SocialProof({ stats: initialStats, language }: { stats: HomeStat
             <p className="mx-auto mt-4 max-w-xl text-base text-gray-600 sm:text-lg lg:mx-0">{txt.subtitle}</p>
           </div>
 
-          <ul className="grid grid-cols-3 divide-x divide-gray-200 border-y border-gray-200 rtl:divide-x-reverse">
-            <Stat value={stats.signups} live={stats.live} label={txt.stats.signups} formatter={formatter} />
-            <Stat value={stats.lessonsCompleted} live={stats.live} label={txt.stats.lessonsCompleted} formatter={formatter} />
-            <Stat value={stats.practiceAttempts} live={stats.live} label={txt.stats.practiceAttempts} formatter={formatter} />
-          </ul>
+          <div ref={boardRef} className="relative pt-14 sm:pt-16">
+            {/* The owl teacher sits on the frame. */}
+            <div aria-hidden className="absolute top-0 z-10 w-20 ltr:right-6 rtl:left-6 sm:w-24">
+              <LivingOwl mood={owlMood} restGaze={{ x: language === "ar" ? 0.5 : -0.5, y: 0.5 }} className="w-full" />
+            </div>
+
+            {/* Wooden frame around the board. */}
+            <div className="relative rounded-[1.75rem] bg-[#c8843a] p-2.5 shadow-[0_24px_50px_-22px_rgba(120,60,10,.55)] sm:p-3.5">
+              <div
+                className="relative overflow-hidden rounded-[1.2rem] px-6 pb-9 pt-7 sm:px-9 sm:pb-11 sm:pt-9"
+                style={{ background: "radial-gradient(120% 95% at 25% 15%, #1a7a43 0%, #0f6233 55%, #0b522a 100%)" }}
+              >
+                {/* Faint smudges of old chalk. */}
+                <span aria-hidden className="absolute inset-0 opacity-60" style={{ backgroundImage: "radial-gradient(40% 30% at 70% 30%, rgba(255,255,255,.07), transparent 70%), radial-gradient(30% 25% at 20% 80%, rgba(255,255,255,.06), transparent 70%)" }} />
+                <ul className="relative grid gap-6 sm:grid-cols-3 sm:gap-6">
+                  <ChalkStat value={stats.signups} live={stats.live} label={txt.stats.signups} formatter={formatter} chalk={CHALK[0]} hand={hand} />
+                  <ChalkStat value={stats.lessonsCompleted} live={stats.live} label={txt.stats.lessonsCompleted} formatter={formatter} chalk={CHALK[1]} hand={hand} />
+                  <ChalkStat value={stats.practiceAttempts} live={stats.live} label={txt.stats.practiceAttempts} formatter={formatter} chalk={CHALK[2]} hand={hand} />
+                </ul>
+              </div>
+              {/* Chalk tray with a stick of chalk and a duster. */}
+              <div aria-hidden className="absolute inset-x-8 -bottom-2.5 h-3 rounded-full bg-[#a86a28] shadow-[0_3px_0_rgba(0,0,0,.12)]">
+                <span className="absolute -top-1.5 h-2 w-9 rounded-full bg-[#fffdf2] ltr:left-8 rtl:right-8" />
+                <span className="absolute -top-3 h-3.5 w-12 rounded-md bg-[#3f3f46] ltr:right-10 rtl:left-10">
+                  <span className="absolute inset-x-0 bottom-0 h-1.5 rounded-b-md bg-[#d4d4d8]" />
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div id="partners" className="mt-14 scroll-mt-20 sm:mt-20">
+        <div id="partners" className="mt-16 scroll-mt-20 sm:mt-20">
           <p className="text-center text-sm text-gray-500">{txt.partnersLabel}</p>
           <ul className="mt-6 flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
             {PARTNERS.map((partner) => {
