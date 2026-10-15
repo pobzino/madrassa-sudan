@@ -10,7 +10,6 @@ import type {
   Lesson,
   LessonProgress,
   LessonQuestion,
-  LessonSlideResponse,
   QuizSettings,
   Subject,
 } from "@/lib/database.types";
@@ -22,20 +21,27 @@ import dynamic from "next/dynamic";
 const SimPlayer = dynamic(() => import("@/components/slides/SimPlayer"), {
   loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
 });
+import { toast } from "sonner";
 import { Confetti } from "@/components/illustrations";
-import { getCachedUser } from "@/lib/supabase/auth-cache";
-import { getOfflineLesson, getCachedSimAudio, queueProgressUpdate } from "@/lib/offline/db";
+import { getAuthState } from "@/lib/supabase/auth-cache";
+import { getCachedSimAudio } from "@/lib/offline/db";
+import { getOwnedOfflineLesson } from "@/lib/offline/identity";
+import { OFFLINE_HUB_PATH, offlinePlayerUrl } from "@/lib/offline/cache-names";
+import { queueLessonComplete, queueLessonProgress } from "@/lib/offline/sync";
+import {
+  getSavedSlideResponses,
+  postSlideResponse,
+  serverResponsesToLocal,
+  submitSlideResponse,
+  toSavedSlideResponses,
+  type SavedSlideResponses,
+} from "@/lib/offline/slide-responses";
 import { autoDownloadLesson } from "@/lib/offline/auto-download";
 import { useOffline } from "@/contexts/OfflineContext";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import ProgressGateModal from "@/components/lessons/ProgressGateModal";
 import SimVideoExportButton from "@/components/lessons/SimVideoExportButton";
-import {
-  getSlideInteractionStorageKey,
-  readStoredSlideInteractionResponses,
-  type SlideInteractionResult,
-  type StoredSlideInteractionResponses,
-} from "@/lib/slide-interactions";
+import DownloadButton from "@/components/lessons/DownloadButton";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { requestInstallNudge } from "@/lib/pwa-install";
@@ -55,7 +61,7 @@ const translations = {
     startPractice: "ابدأ التدريب",
     retryPractice: "أعد التدريب",
     practiceHint: "أكمل التدريب لإنهاء الدرس",
-    downloadVideo: "تحميل الفيديو",
+    downloadVideo: "تنزيل ملف الفيديو",
     question: "سؤال",
     submit: "إرسال",
     correct: "إجابة صحيحة!",
@@ -67,6 +73,12 @@ const translations = {
     of: "من",
     minutes: "دقيقة",
     grade: "الصف",
+    notAvailableOffline: "هذا الدرس غير محفوظ على هذا الهاتف. اتصل بالإنترنت لمشاهدته.",
+    savedLessons: "دروسي المحفوظة",
+    loadFailed: "تعذر تحميل الدرس. تحقق من اتصالك وحاول مرة أخرى.",
+    retry: "إعادة المحاولة",
+    savedOnPhone: "حُفظ على هذا الهاتف. سيُرسل عند عودة الإنترنت.",
+    notSaved: "تعذّر الحفظ. تحقق من اتصالك وحاول مرة أخرى.",
   },
   en: {
     loading: "Loading...",
@@ -79,7 +91,7 @@ const translations = {
     startPractice: "Start Practice",
     retryPractice: "Retry Practice",
     practiceHint: "Pass the practice to finish this lesson",
-    downloadVideo: "Download video",
+    downloadVideo: "Download video file",
     question: "Question",
     submit: "Submit",
     correct: "Correct!",
@@ -91,6 +103,12 @@ const translations = {
     of: "of",
     minutes: "min",
     grade: "Grade",
+    notAvailableOffline: "This lesson isn't saved on this phone. Connect to the internet to watch it.",
+    savedLessons: "My saved lessons",
+    loadFailed: "The lesson could not load. Check your connection and try again.",
+    retry: "Try again",
+    savedOnPhone: "Saved on this phone. It will be sent when you're back online.",
+    notSaved: "Couldn't save that. Check your connection and try again.",
   },
 };
 
@@ -147,35 +165,28 @@ function resolveQuizSettings(value: unknown): QuizSettings {
   };
 }
 
-function mapSlideResponsesToStoredState(
-  responses: LessonSlideResponse[] | null | undefined
-): StoredSlideInteractionResponses {
-  if (!responses || responses.length === 0) {
-    return {};
-  }
+// With a saved copy to fall back on, a connection this slow isn't worth
+// waiting for: the offline player plays the copy right away.
+const LOAD_TIMEOUT_MS = 30_000;
+const LOAD_TIMEOUT_WITH_SAVED_COPY_MS = 12_000;
+// Progress writes that hang (lie-fi) are saved on the phone instead.
+const PROGRESS_WRITE_TIMEOUT_MS = 10_000;
 
-  return responses.reduce<StoredSlideInteractionResponses>((acc, response) => {
-    const payload =
-      response.response_data && typeof response.response_data === "object" && !Array.isArray(response.response_data)
-        ? (response.response_data as Record<string, unknown>)
-        : {};
+function timeoutSignal(ms: number): AbortSignal {
+  const controller = new AbortController();
+  window.setTimeout(() => controller.abort(), ms);
+  return controller.signal;
+}
 
-    acc[response.slide_id] = {
-      answer:
-        payload.answer === null ||
-        typeof payload.answer === "string" ||
-        typeof payload.answer === "number" ||
-        typeof payload.answer === "boolean" ||
-        (Array.isArray(payload.answer) && payload.answer.every((item) => typeof item === "string"))
-          ? (payload.answer as SlideInteractionResult["answer"])
-          : null,
-      completedAt: response.completed_at,
-      isCorrect: response.is_correct,
-      timeSpentSeconds: response.time_spent_seconds,
-    };
-
-    return acc;
-  }, {});
+/**
+ * Opens this account's saved copy of the lesson in the offline player, which
+ * needs no connection or sign-in check. Resolves false when there's no copy.
+ */
+async function openSavedCopy(lessonId: string): Promise<boolean> {
+  const saved = await getOwnedOfflineLesson(lessonId).catch(() => null);
+  if (!saved) return false;
+  window.location.replace(offlinePlayerUrl(lessonId));
+  return true;
 }
 
 function pickLocalizedText(
@@ -207,6 +218,9 @@ export default function LessonPlayerPage() {
   // with a practice attached, passing the practice IS completion — the manual
   // "mark complete" button disappears and the video end routes into practice.
   const [practiceAssignmentId, setPracticeAssignmentId] = useState<string | null>(null);
+  // False until the gate lookup answered. Unknown is treated as gated when
+  // saving progress, so a failed lookup can never complete a gated lesson.
+  const [practiceGateKnown, setPracticeGateKnown] = useState(false);
   const [practicePassed, setPracticePassed] = useState(false);
   const [adjacentLessons, setAdjacentLessons] = useState<{ prev: Lesson | null; next: Lesson | null }>({ prev: null, next: null });
   // True while the lesson is playing, to keep the phone's screen on.
@@ -214,8 +228,14 @@ export default function LessonPlayerPage() {
   useScreenWakeLock(screenAwake);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  // Offline with no saved copy of this lesson on the phone.
+  const [unavailableOffline, setUnavailableOffline] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
+  // Completed with no connection: queued, shown as done until it syncs.
+  const [completedOnPhone, setCompletedOnPhone] = useState(false);
+  // The server already has this lesson completed (playback won't resend it).
+  const progressCompletedRef = useRef(false);
   const lastSimPctRef = useRef(0);
   const furthestSecRef = useRef(0);
   const watchTimeSecRef = useRef(0);
@@ -233,16 +253,21 @@ export default function LessonPlayerPage() {
     let cancelled = false;
     async function loadPracticeGate() {
       if (!lessonId || !userId) return;
-      const { data: step } = await supabase
+      const { data: step, error: stepError } = await supabase
         .from("learning_path_steps")
         .select("practice_assignment_id")
         .eq("lesson_id", lessonId)
         .not("practice_assignment_id", "is", null)
         .limit(1)
         .maybeSingle();
-      const practiceId = step?.practice_assignment_id ?? null;
       if (cancelled) return;
+      if (stepError) {
+        setPracticeGateKnown(false);
+        return;
+      }
+      const practiceId = step?.practice_assignment_id ?? null;
       setPracticeAssignmentId(practiceId);
+      setPracticeGateKnown(true);
       if (!practiceId) return;
       const [{ data: assignment }, { data: sub }] = await Promise.all([
         supabase
@@ -281,20 +306,26 @@ export default function LessonPlayerPage() {
   // that were uploaded as full-frame video before the sim recorder existed).
   const [lessonSim, setLessonSim] = useState<SimPayload | null>(null);
   const [legacyVideoUrl, setLegacyVideoUrl] = useState<string | null>(null);
+  // The recording plays from the copy saved on this phone.
+  const [playingFromDevice, setPlayingFromDevice] = useState(false);
+  // A saved copy exists but the teacher re-recorded the lesson since.
+  const [savedCopyOutdated, setSavedCopyOutdated] = useState(false);
 
-  // MP4 the student can save for offline viewing: the teacher-exported sim
+  // MP4 the student can download as a video file: the teacher-exported sim
   // render (lessons.video_url_720p) or, for pre-sim lessons, the legacy
-  // full-frame video probed from the lesson-videos bucket.
+  // full-frame video probed from the lesson-videos bucket. (Watching without
+  // internet in Amal itself is "Save for offline".)
   const downloadVideoUrl = lesson?.video_url_720p || legacyVideoUrl;
+  // Saving for offline needs the recording's narration (and sim access to play it).
+  const canSaveForOffline = canAccessSims && Boolean(lessonSim?.audio_url);
 
   // Question/quiz state
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
   const [correctQuestions, setCorrectQuestions] = useState<Set<string>>(new Set());
 
-  // Slide interaction state (used by SimPlayer for savedResponses)
-  const [slideDeck, setSlideDeck] = useState<Slide[]>([]);
+  // Slide interaction state: earlier answers, typed, for SimPlayer's savedResponses
   const [slideLanguageMode, setSlideLanguageMode] = useState<SlideLanguageMode | null>(null);
-  const [slideInteractionResponses, setSlideInteractionResponses] = useState<StoredSlideInteractionResponses>({});
+  const [slideInteractionResponses, setSlideInteractionResponses] = useState<SavedSlideResponses>({});
   const lessonContentLanguage =
     slideLanguageMode === "ar" || slideLanguageMode === "en" ? slideLanguageMode : language;
 
@@ -366,96 +397,71 @@ export default function LessonPlayerPage() {
   const [showProgressGate, setShowProgressGate] = useState(false);
   const [quizSettings, setQuizSettings] = useState<QuizSettings>(DEFAULT_QUIZ_SETTINGS);
 
-  // Offline state
-  const [isOfflineMode, setIsOfflineMode] = useState(false);
-
   // Celebration state
   const [showConfetti, setShowConfetti] = useState(false);
-  // Load lesson data
+  // Load lesson data. Without a connection the saved copy (if any) opens in
+  // the offline player instead: this page needs the server, and offline its
+  // auth calls can stall for ~25 s on an expired session.
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
     let disposed = false;
-    const timeout = window.setTimeout(() => {
-      controller.abort();
+    let redirecting = false;
+    let audioObjectUrl: string | null = null;
+
+    // The server didn't answer (or too slowly): play the saved copy if there
+    // is one, otherwise show the error with a retry.
+    const fail = async () => {
+      if (disposed) return;
+      if (await openSavedCopy(lessonId)) {
+        redirecting = true;
+        return;
+      }
+      if (disposed) return;
       setLoadError(true);
       setLoading(false);
-    }, 30_000);
+    };
+    let timeout = 0;
+    const armTimeout = (ms: number) => {
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(() => {
+        controller.abort();
+        void fail();
+      }, ms);
+    };
+    armTimeout(LOAD_TIMEOUT_MS);
+
     async function loadData() {
       setLoading(true);
       setLoadError(false);
-      // Offline mode: load from IndexedDB
+      setUnavailableOffline(false);
+
       if (!navigator.onLine) {
-        try {
-          const offlineLesson = await getOfflineLesson(lessonId);
-          if (offlineLesson) {
-            setIsOfflineMode(true);
-            // The saved session works without a connection, so progress made
-            // offline is queued for this learner and synced later.
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) setUserId(session.user.id);
-            setLesson({
-              id: offlineLesson.id,
-              title_ar: offlineLesson.title_ar,
-              title_en: offlineLesson.title_en,
-              grade_level: offlineLesson.grade_level,
-              thumbnail_url: offlineLesson.thumbnailUrl,
-              subject_id: "",
-              is_published: true,
-            } as Lesson);
-
-            if (offlineLesson.subject_name_ar) {
-              setSubject({
-                id: "",
-                name_ar: offlineLesson.subject_name_ar,
-                name_en: offlineLesson.subject_name_en || "",
-                display_order: 0,
-                created_at: "",
-                icon: null,
-                description: null,
-              });
-            }
-
-            // Load sim with offline audio
-            if (offlineLesson.sim) {
-              const audioBlob = await getCachedSimAudio(lessonId);
-              const sim = { ...offlineLesson.sim };
-              if (audioBlob) {
-                sim.audio_url = URL.createObjectURL(audioBlob);
-              }
-              setLessonSim(sim);
-            }
-
-            if (Array.isArray(offlineLesson.slides)) {
-              setSlideDeck(offlineLesson.slides as Slide[]);
-            }
-            setSlideLanguageMode(null);
-
-            setQuestions(offlineLesson.questions as LessonQuestion[]);
-            setLoading(false);
-            return;
-          }
-        } catch {
-          // Fall through to online loading
+        if (await openSavedCopy(lessonId)) {
+          redirecting = true;
+          return;
         }
-        // Not downloaded — show not found
-        setLoading(false);
+        if (!disposed) setUnavailableOffline(true);
         return;
       }
 
-      const user = await getCachedUser(supabase);
+      // Local, so quick: with a saved copy to fall back on, don't wait long.
+      const savedCopy = await getOwnedOfflineLesson(lessonId).catch(() => null);
       if (signal.aborted) return;
-      if (!user) {
+      if (savedCopy) armTimeout(LOAD_TIMEOUT_WITH_SAVED_COPY_MS);
+
+      const auth = await getAuthState(supabase);
+      if (signal.aborted) return;
+      if (auth.status === "signed_out") {
+        redirecting = true;
         router.push("/auth/login");
         return;
       }
+      // No answer from the server and nobody verified yet: the catch below
+      // falls back to the saved copy.
+      if (!auth.user) throw new Error("Auth check did not reach the server");
+      const user = auth.user;
       setUserId(user.id);
-      const storageKey = getSlideInteractionStorageKey(lessonId, user.id);
-      try {
-        setSlideInteractionResponses(readStoredSlideInteractionResponses(window.localStorage.getItem(storageKey)));
-      } catch {
-        // Private browsing can disable storage; server responses still work.
-      }
 
       // Fetch lesson
       const { data: lessonData, error: lessonError } = await supabase
@@ -491,9 +497,7 @@ export default function LessonPlayerPage() {
 
       if (signal.aborted) return;
 
-      if (Array.isArray(slidesRes?.slideDeck?.slides)) {
-        setSlideDeck(slidesRes.slideDeck.slides as Slide[]);
-      }
+      const deckSlides: Slide[] = Array.isArray(slidesRes?.slideDeck?.slides) ? slidesRes.slideDeck.slides : [];
       const loadedSlideLanguageMode = slidesRes?.slideDeck?.language_mode;
       setSlideLanguageMode(
         loadedSlideLanguageMode === "ar" ||
@@ -503,29 +507,44 @@ export default function LessonPlayerPage() {
           : null
       );
 
-      if (Array.isArray(slideResponsesRes?.responses)) {
-        const mappedResponses = mapSlideResponsesToStoredState(
-          slideResponsesRes.responses as LessonSlideResponse[]
-        );
-        setSlideInteractionResponses(mappedResponses);
-        try {
-          window.localStorage.setItem(storageKey, JSON.stringify(mappedResponses));
-        } catch {
-          // The server remains the source of truth when storage is unavailable.
-        }
-      }
-
       const sim = (simRes?.sim as SimPayload | null) ?? null;
+
+      // Earlier answers, as typed answers SimPlayer can show. The server
+      // stores legacy values, read back through each slide's interaction
+      // (the recording's own snapshot wins over the current deck). Answers
+      // given on this phone and not yet sent are newer, so they win.
+      const fromServer = toSavedSlideResponses({
+        bySlide: serverResponsesToLocal(slideResponsesRes?.responses, [
+          ...deckSlides,
+          ...(sim?.sim.deck_snapshot ?? []),
+        ]),
+      });
+      const fromPhone = await getSavedSlideResponses(user.id, lessonId);
+      if (signal.aborted) return;
+      setSlideInteractionResponses({ ...fromServer, ...fromPhone });
+
       // If this exact recording is downloaded, play it from the phone to save mobile data.
-      if (sim) {
-        const saved = await getOfflineLesson(lessonId).catch(() => null);
-        if (saved?.sim?.sim.id === sim.sim.id && saved.sim.sim.updated_at === sim.sim.updated_at) {
+      let fromDevice = false;
+      let outdated = false;
+      if (sim && savedCopy) {
+        const sameRecording =
+          (savedCopy.simId ?? savedCopy.sim?.sim.id) === sim.sim.id &&
+          (savedCopy.simUpdatedAt ?? savedCopy.sim?.sim.updated_at) === sim.sim.updated_at;
+        if (sameRecording) {
           const audioBlob = await getCachedSimAudio(lessonId).catch(() => null);
-          if (audioBlob) sim.audio_url = URL.createObjectURL(audioBlob);
+          if (audioBlob && !disposed) {
+            audioObjectUrl = URL.createObjectURL(audioBlob);
+            sim.audio_url = audioObjectUrl;
+            fromDevice = true;
+          }
+        } else {
+          outdated = true;
         }
       }
       if (signal.aborted) return;
       setLessonSim(sim);
+      setPlayingFromDevice(fromDevice);
+      setSavedCopyOutdated(outdated);
 
       // No sim recorded? Probe for a legacy mp4 in the lesson-videos bucket.
       // Older lessons (pre-sim-recorder) were uploaded as plain mp4 files at
@@ -601,6 +620,7 @@ export default function LessonPlayerPage() {
         furthestSecRef.current = progressData.last_position_seconds ?? 0;
         watchTimeSecRef.current = progressData.total_watch_time_seconds ?? 0;
         lessonCompletionTrackedRef.current = progressData.completed === true;
+        progressCompletedRef.current = progressData.completed === true;
       }
 
       // Follow the published learning path's week/step sequence. Subjects that
@@ -623,16 +643,22 @@ export default function LessonPlayerPage() {
           // Navigation should not keep the lesson itself on a loading screen.
         });
     }
-    void loadData().catch(() => {
-      if (!disposed) setLoadError(true);
-    }).finally(() => {
-      window.clearTimeout(timeout);
-      if (!disposed) setLoading(false);
-    });
+    void loadData()
+      .catch(async () => {
+        if (signal.aborted) return; // The timeout already handled it.
+        await fail();
+      })
+      .finally(() => {
+        window.clearTimeout(timeout);
+        // Keep the loading screen while the browser leaves for another page
+        // (or while the timeout's fallback decides where to go).
+        if (!disposed && !redirecting && !signal.aborted) setLoading(false);
+      });
     return () => {
       disposed = true;
       window.clearTimeout(timeout);
       controller.abort();
+      if (audioObjectUrl) URL.revokeObjectURL(audioObjectUrl);
     };
   }, [lessonId, router, supabase, loadAttempt]);
 
@@ -658,46 +684,16 @@ export default function LessonPlayerPage() {
     return () => window.clearTimeout(timer);
   }, [nextLessonId, lessonId]);
 
-  const persistSlideInteractionResponse = useCallback(
-    async (slideId: string, result: SlideInteractionResult) => {
+  // Activity answers from SimPlayer (a typed answer, or null for a skipped
+  // activity). Kept on this phone, sent to the server (which grades it), and
+  // queued for the next sync when the connection drops.
+  const handleSlideResponse = useCallback(
+    (slideId: string, answer: unknown, isCorrect: boolean | null) => {
       if (!userId) {
+        void postSlideResponse(lessonId, slideId, answer);
         return;
       }
-
-      const storageKey = getSlideInteractionStorageKey(lessonId, userId);
-      let nextResult = result;
-
-      try {
-        const response = await fetch(`/api/lessons/${lessonId}/slide-responses`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            slide_id: slideId,
-            answer: result.answer,
-            time_spent_seconds: result.timeSpentSeconds ?? 0,
-          }),
-        });
-
-        if (response.ok) {
-          const json = await response.json();
-          nextResult = {
-            ...result,
-            isCorrect: json.is_correct ?? result.isCorrect,
-          };
-        }
-      } catch {
-        // Fallback to local persistence below.
-      }
-
-      setSlideInteractionResponses((prev) => {
-        const next = {
-          ...prev,
-          [slideId]: nextResult,
-        };
-
-        window.localStorage.setItem(storageKey, JSON.stringify(next));
-        return next;
-      });
+      void submitSlideResponse({ ownerId: userId, lessonId, slideId, answer, isCorrect });
     },
     [lessonId, userId]
   );
@@ -806,6 +802,13 @@ export default function LessonPlayerPage() {
     furthestSecRef.current = furthestSec;
     watchTimeSecRef.current = watchTimeSec;
 
+    // On a practice-gated lesson, playback never owns completion — passing the
+    // Practice does (the submit route writes it). Until the gate lookup has
+    // answered, the lesson counts as gated. Completion is only ever sent as
+    // true, and only once, so a re-watch can't clear (or re-date) one already
+    // earned.
+    const gated = !practiceGateKnown || Boolean(practiceAssignmentId);
+    const completeNow = isCompleted && !gated && !progressCompletedRef.current;
     const progressData = {
       student_id: userId,
       lesson_id: lessonId,
@@ -813,32 +816,38 @@ export default function LessonPlayerPage() {
       total_watch_time_seconds: watchTimeSec,
       questions_answered: answeredQuestions.size,
       questions_correct: correctQuestions.size,
-      // On a practice-gated lesson, playback never owns completion — passing the
-      // Practice does (the submit route writes it). Omitting the fields also
-      // stops a re-watch from clearing a completion already earned.
-      ...(practiceAssignmentId
-        ? {}
-        : {
-            completed: isCompleted,
-            completed_at: isCompleted ? new Date().toISOString() : null,
-          }),
+      ...(completeNow ? { completed: true, completed_at: new Date().toISOString() } : {}),
     };
 
-    if (!navigator.onLine) {
-      await queueProgressUpdate({
+    // No connection (or the write failed): keep it on the phone; the sync
+    // merges it into the server row later and never lowers anything.
+    const saveOnPhone = () =>
+      queueLessonProgress({
+        ownerId: userId,
         lessonId,
-        table: "lesson_progress",
-        data: progressData,
-        timestamp: new Date().toISOString(),
-      });
-      return;
-    }
+        positionSec: furthestSec,
+        watchSec: watchTimeSec,
+        completedCandidate: isCompleted,
+        practiceGated: practiceGateKnown ? Boolean(practiceAssignmentId) : undefined,
+      }).catch(() => undefined);
 
-    const { data: updatedProgress } = await supabase.from("lesson_progress").upsert(progressData, { onConflict: "student_id,lesson_id" }).select().single();
-    if (updatedProgress) {
-      setProgress(updatedProgress);
-      if (updatedProgress.completed) {
-        void trackCanonicalLessonCompletion("video_completion");
+    if (!navigator.onLine) {
+      await saveOnPhone();
+    } else {
+      const { data: updatedProgress, error } = await supabase
+        .from("lesson_progress")
+        .upsert(progressData, { onConflict: "student_id,lesson_id" })
+        .select()
+        .abortSignal(timeoutSignal(PROGRESS_WRITE_TIMEOUT_MS))
+        .single();
+      if (error || !updatedProgress) {
+        await saveOnPhone();
+      } else {
+        setProgress(updatedProgress);
+        progressCompletedRef.current = updatedProgress.completed === true;
+        if (updatedProgress.completed) {
+          void trackCanonicalLessonCompletion("video_completion");
+        }
       }
     }
 
@@ -847,7 +856,7 @@ export default function LessonPlayerPage() {
     if (pct >= 99 && practiceAssignmentId && !practicePassed) {
       router.push(`/practice/${practiceAssignmentId}?from=lesson`);
     }
-  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practicePassed, router, trackCanonicalLessonCompletion, trackVideoPlayback]);
+  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practiceGateKnown, practicePassed, router, trackCanonicalLessonCompletion, trackVideoPlayback]);
 
   // Close progress gate and let sim handle replay
   const handleRewatchQuiz = useCallback(() => {
@@ -863,23 +872,45 @@ export default function LessonPlayerPage() {
       return;
     }
 
-    const { data: updatedProgress } = await supabase.from("lesson_progress").upsert({
-      student_id: userId,
-      lesson_id: lessonId,
-      completed: true,
-      completed_at: new Date().toISOString(),
-      last_position_seconds: simDurationSec,
-      total_watch_time_seconds: simDurationSec,
-      questions_answered: answeredQuestions.size,
-      questions_correct: correctQuestions.size,
-      quiz_passed: correctQuestions.size >= quizSettings.min_pass_questions,
-    }, {
-      onConflict: "student_id,lesson_id",
-    }).select().single();
+    let saved = false;
+    if (navigator.onLine) {
+      const { data: updatedProgress, error } = await supabase.from("lesson_progress").upsert({
+        student_id: userId,
+        lesson_id: lessonId,
+        completed: true,
+        completed_at: new Date().toISOString(),
+        last_position_seconds: simDurationSec,
+        total_watch_time_seconds: simDurationSec,
+        questions_answered: answeredQuestions.size,
+        questions_correct: correctQuestions.size,
+        quiz_passed: correctQuestions.size >= quizSettings.min_pass_questions,
+      }, {
+        onConflict: "student_id,lesson_id",
+      }).select().abortSignal(timeoutSignal(PROGRESS_WRITE_TIMEOUT_MS)).single();
 
-    if (updatedProgress) {
-      setProgress(updatedProgress);
-      void trackCanonicalLessonCompletion("manual_lesson_completion");
+      if (!error && updatedProgress) {
+        saved = true;
+        setProgress(updatedProgress);
+        progressCompletedRef.current = updatedProgress.completed === true;
+        void trackCanonicalLessonCompletion("manual_lesson_completion");
+      }
+    }
+
+    // No connection: keep the completion on the phone for the next sync
+    // (never for a practice-gated lesson, which passing the Practice completes).
+    if (!saved) {
+      const queued = await queueLessonComplete({
+        ownerId: userId,
+        lessonId,
+        positionSec: simDurationSec,
+        practiceGated: practiceGateKnown ? Boolean(practiceAssignmentId) : undefined,
+      }).catch(() => false);
+      if (!queued) {
+        toast.error(t.notSaved);
+        return;
+      }
+      setCompletedOnPhone(true);
+      toast.success(t.savedOnPhone);
     }
 
     // Celebrate lesson completion!
@@ -891,8 +922,12 @@ export default function LessonPlayerPage() {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-6 text-center">
         <div>
-          <p className="mb-4 text-gray-700">{language === "ar" ? "تعذر تحميل الدرس. تحقق من اتصالك وحاول مرة أخرى." : "The lesson could not load. Check your connection and try again."}</p>
-          <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="min-h-11 rounded-lg bg-[#007229] px-5 py-2 font-semibold text-white">{language === "ar" ? "إعادة المحاولة" : "Try again"}</button>
+          <p className="mb-4 text-gray-700">{t.loadFailed}</p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="min-h-11 rounded-lg bg-[#007229] px-5 py-2 font-semibold text-white">{t.retry}</button>
+            {/* A full page load: the saved-lessons hub works without a connection. */}
+            <a href={OFFLINE_HUB_PATH} className="inline-flex min-h-11 items-center rounded-lg border border-gray-200 bg-white px-5 py-2 font-semibold text-[#007229] hover:bg-gray-50">{t.savedLessons}</a>
+          </div>
         </div>
       </div>
     );
@@ -915,17 +950,24 @@ export default function LessonPlayerPage() {
     return (
       <div className="min-h-screen bg-[#FCFCFC] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-500 text-lg mb-4">
-            {isOfflineMode || !navigator.onLine
-              ? (language === "ar" ? "هذا الدرس غير متاح بدون إنترنت" : "This lesson is not available offline")
-              : t.lessonNotFound}
+          <p className="text-gray-500 text-lg mb-4 max-w-sm px-4">
+            {unavailableOffline ? t.notAvailableOffline : t.lessonNotFound}
           </p>
-          <Link
-            href="/lessons"
-            className="px-6 py-3 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-lg shadow-[#007229]/30"
-          >
-            {t.backToLessons}
-          </Link>
+          {unavailableOffline ? (
+            <a
+              href={OFFLINE_HUB_PATH}
+              className="inline-block px-6 py-3 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-lg shadow-[#007229]/30"
+            >
+              {t.savedLessons}
+            </a>
+          ) : (
+            <Link
+              href="/lessons"
+              className="px-6 py-3 bg-[#007229] text-white rounded-xl hover:bg-[#005C22] transition-colors shadow-lg shadow-[#007229]/30"
+            >
+              {t.backToLessons}
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -938,8 +980,10 @@ export default function LessonPlayerPage() {
 
       {/* Top bar */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-3 py-3 sm:px-4 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+        {/* The actions wrap under the title on narrow phones, so "Save for
+            offline" keeps its full label instead of shrinking to an icon. */}
+        <div className="max-w-7xl mx-auto px-3 py-3 sm:px-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <div className="flex min-w-[12rem] flex-1 items-center gap-2 sm:gap-4">
             <Link
               href="/lessons"
               aria-label={t.backToLessons}
@@ -961,32 +1005,37 @@ export default function LessonPlayerPage() {
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
-            {/* Download the lesson as MP4. Pre-rendered videos (legacy
+          <div className="ms-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {/* Save for offline: the lesson then plays on this phone with no
+                internet (from the saved-lessons hub, or this page offline).
+                Only lessons with narration can be saved. */}
+            {(canSaveForOffline || offline.isLessonDownloaded(lessonId)) && (
+              <DownloadButton lessonId={lessonId} variant="full" updateAvailable={savedCopyOutdated} />
+            )}
+
+            {/* Download the lesson as an MP4 file. Pre-rendered videos (legacy
                 lessons or batch-produced files) download instantly via a
                 direct link; otherwise the sim is rendered to MP4 right in
-                the browser — nothing is stored server-side. Hidden offline:
-                slide images may not be cached locally. */}
-            {!isOfflineMode &&
-              (downloadVideoUrl ? (
-                <a
-                  href={`${downloadVideoUrl}${downloadVideoUrl.includes("?") ? "&" : "?"}download=`}
-                  aria-label={t.downloadVideo}
-                  title={t.downloadVideo}
-                  className="flex min-h-11 min-w-11 justify-center items-center gap-2 px-3 py-1.5 text-gray-600 rounded-lg hover:text-[#007229] hover:bg-gray-100 transition-colors text-sm font-medium"
-                >
-                  {Icons.download}
-                  <span className="hidden sm:inline">{t.downloadVideo}</span>
-                </a>
-              ) : lessonSim ? (
-                <SimVideoExportButton
-                  getPayload={() => lessonSim}
-                  language={lessonContentLanguage}
-                  label={t.downloadVideo}
-                  filename={pickLocalizedText(lessonContentLanguage, lesson.title_ar, lesson.title_en) || "lesson"}
-                  className="flex min-h-11 min-w-11 justify-center items-center gap-2 px-3 py-1.5 text-gray-600 rounded-lg hover:text-[#007229] hover:bg-gray-100 transition-colors text-sm font-medium max-sm:[&>span]:hidden"
-                />
-              ) : null)}
+                the browser — nothing is stored server-side. */}
+            {downloadVideoUrl ? (
+              <a
+                href={`${downloadVideoUrl}${downloadVideoUrl.includes("?") ? "&" : "?"}download=`}
+                aria-label={t.downloadVideo}
+                title={t.downloadVideo}
+                className="flex min-h-11 min-w-11 justify-center items-center gap-2 px-3 py-1.5 text-gray-600 rounded-lg hover:text-[#007229] hover:bg-gray-100 transition-colors text-sm font-medium"
+              >
+                {Icons.download}
+                <span className="hidden sm:inline">{t.downloadVideo}</span>
+              </a>
+            ) : lessonSim ? (
+              <SimVideoExportButton
+                getPayload={() => lessonSim}
+                language={lessonContentLanguage}
+                label={t.downloadVideo}
+                filename={pickLocalizedText(lessonContentLanguage, lesson.title_ar, lesson.title_en) || "lesson"}
+                className="flex min-h-11 min-w-11 justify-center items-center gap-2 px-3 py-1.5 text-gray-600 rounded-lg hover:text-[#007229] hover:bg-gray-100 transition-colors text-sm font-medium max-sm:[&>span]:hidden"
+              />
+            ) : null}
 
             {/* Completion status. Practice-gated lessons have no manual
                 mark-complete: passing the Practice is completion. */}
@@ -1005,7 +1054,7 @@ export default function LessonPlayerPage() {
                   {t.startPractice}
                 </button>
               )
-            ) : progress?.completed ? (
+            ) : progress?.completed || completedOnPhone ? (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-[#007229]/10 text-[#007229] rounded-full text-sm font-medium">
                 {Icons.check}
                 <span>{t.completed}</span>
@@ -1028,7 +1077,22 @@ export default function LessonPlayerPage() {
           empty state. */}
       {lessonSim && canAccessSims ? (
         <div className="mx-auto max-w-6xl sm:px-3 sm:py-3">
-          <SimPlayer className="max-sm:rounded-none max-sm:border-x-0" payload={lessonSim} language={lessonContentLanguage} lessonId={lessonId} savedResponses={slideInteractionResponses} onProgress={handleSimProgress} onPlayStateChange={handleSimPlaybackState} onActivitySubmit={trackLessonActivity} />
+          {/* Answers go through onSlideResponse (saved on the phone, sent, and
+              queued if the connection drops) instead of SimPlayer's own POST.
+              The resume position is per account, shared with the offline player. */}
+          <SimPlayer
+            className="max-sm:rounded-none max-sm:border-x-0"
+            payload={lessonSim}
+            language={lessonContentLanguage}
+            lessonId={lessonId}
+            savedResponses={slideInteractionResponses}
+            onSlideResponse={handleSlideResponse}
+            playingFromDevice={playingFromDevice}
+            resumeKey={userId ? `${userId}:${lessonId}` : undefined}
+            onProgress={handleSimProgress}
+            onPlayStateChange={handleSimPlaybackState}
+            onActivitySubmit={trackLessonActivity}
+          />
         </div>
       ) : legacyVideoUrl ? (
         <div className="relative bg-black aspect-video max-h-[70vh] mx-auto">

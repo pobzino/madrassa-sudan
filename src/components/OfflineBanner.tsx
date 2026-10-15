@@ -1,18 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useOnlineStatus } from "@/components/offline/useOnlineStatus";
+import { OFFLINE_HUB_PATH } from "@/lib/offline/cache-names";
 
 export default function OfflineBanner() {
-  const [isOnline, setIsOnline] = useState(
-    () => typeof navigator === "undefined" || navigator.onLine
-  );
+  // Server render and hydration read "online", so connected families never
+  // see an offline banner flash (and there's no hydration mismatch).
+  const isOnline = useOnlineStatus();
   const [showReconnected, setShowReconnected] = useState(false);
   const wasOfflineRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!navigator.onLine) wasOfflineRef.current = true;
     const goOnline = () => {
-      setIsOnline(true);
       if (!wasOfflineRef.current) return;
       wasOfflineRef.current = false;
       setShowReconnected(true);
@@ -26,7 +28,6 @@ export default function OfflineBanner() {
         reconnectTimerRef.current = null;
       }
       setShowReconnected(false);
-      setIsOnline(false);
     };
     window.addEventListener("online", goOnline);
     window.addEventListener("offline", goOffline);
@@ -41,6 +42,7 @@ export default function OfflineBanner() {
 
   return (
     <div
+      role="status"
       className={`fixed top-0 left-0 right-0 z-[60] px-4 py-2 text-center text-sm font-medium transition-all ${
         isOnline
           ? "bg-emerald-500 text-white"
@@ -55,11 +57,17 @@ export default function OfflineBanner() {
           Back online! — عدت للاتصال!
         </span>
       ) : (
-        <span className="flex items-center justify-center gap-2">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l8.735 8.735m0 0a.374.374 0 11.53.53m-.53-.53l.53.53m0 0L21 21M14.652 9.348a3.75 3.75 0 010 5.304m2.121-7.425a6.75 6.75 0 010 9.546m2.121-11.667c3.808 3.807 3.808 9.98 0 13.788" />
-          </svg>
-          You&apos;re offline — أنت غير متصل
+        <span className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+          <span className="flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l8.735 8.735m0 0a.374.374 0 11.53.53m-.53-.53l.53.53m0 0L21 21M14.652 9.348a3.75 3.75 0 010 5.304m2.121-7.425a6.75 6.75 0 010 9.546m2.121-11.667c3.808 3.807 3.808 9.98 0 13.788" />
+            </svg>
+            You&apos;re offline — أنت غير متصل
+          </span>
+          {/* A full page load: the saved-lessons hub works with no connection. */}
+          <a href={OFFLINE_HUB_PATH} className="rounded-full bg-white/20 px-3 py-0.5 font-bold underline-offset-2 hover:bg-white/30 hover:underline">
+            My saved lessons — دروسي المحفوظة
+          </a>
         </span>
       )}
     </div>

@@ -3,10 +3,9 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { clearAuthCache } from "@/lib/supabase/auth-cache";
-import { clearPrivateOfflineData } from "@/lib/offline/db";
+import { clearAuthCache, isOfflineLike } from "@/lib/supabase/auth-cache";
+import { logOut } from "@/lib/auth/logout";
 
 const translations = {
   ar: {
@@ -16,6 +15,7 @@ const translations = {
     checkAgain: "تحقق مرة أخرى",
     checking: "جاري التحقق...",
     logout: "تسجيل الخروج",
+    loggingOut: "جارٍ تسجيل الخروج…",
     approved: "تمت الموافقة! جاري التحويل...",
   },
   en: {
@@ -25,6 +25,7 @@ const translations = {
     checkAgain: "Check Again",
     checking: "Checking...",
     logout: "Log Out",
+    loggingOut: "Logging out…",
     approved: "Approved! Redirecting...",
   },
 };
@@ -32,6 +33,7 @@ const translations = {
 export default function PendingApprovalPage() {
   const [checking, setChecking] = useState(false);
   const [approved, setApproved] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
@@ -40,9 +42,10 @@ export default function PendingApprovalPage() {
   const checkApproval = async () => {
     setChecking(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error } = await supabase.auth.getUser();
       if (!user) {
-        router.push("/auth/login");
+        // No connection is not the same as signed out: stay and let them check again.
+        if (!isOfflineLike(error)) router.push("/auth/login");
         return;
       }
 
@@ -68,11 +71,11 @@ export default function PendingApprovalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The shared log-out ends with a full page load, so the busy state stays.
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    await clearPrivateOfflineData();
-    clearAuthCache();
-    router.push("/");
+    if (loggingOut) return;
+    setLoggingOut(true);
+    await logOut();
   };
 
   return (
@@ -122,10 +125,11 @@ export default function PendingApprovalPage() {
               </button>
 
               <button
-                onClick={handleLogout}
-                className="w-full py-3 px-4 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition-colors"
+                onClick={() => void handleLogout()}
+                disabled={loggingOut}
+                className="w-full py-3 px-4 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-60"
               >
-                {t.logout}
+                {loggingOut ? t.loggingOut : t.logout}
               </button>
             </div>
           </>

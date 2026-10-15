@@ -3,7 +3,8 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { PathOwl } from "./PathOwl";
-import LessonComputerDownloadButton from "@/components/lessons/LessonComputerDownloadButton";
+import DownloadButton from "@/components/lessons/DownloadButton";
+import { useOffline } from "@/contexts/OfflineContext";
 import type {
   SubjectLearningPath,
   TreeWeek,
@@ -11,8 +12,8 @@ import type {
 } from "@/lib/lessons/useLearningPath";
 
 const translations = {
-  ar: { startTest: "ابدأ الاختبار", retake: "أعد المحاولة", passed: "ناجح", passMark: "75% للنجاح", open: "افتح", test: "اختبار", practice: "التدريب", practiceRetry: "أعد التدريب", practiceAgain: "تدرّب مرة أخرى", watched: (p: number) => `شاهدت ${p}%`, resume: "أكمل" },
-  en: { startTest: "Start test", retake: "Retake", passed: "Passed", passMark: "75% to pass", open: "Open", test: "Test", practice: "Practice", practiceRetry: "Retry practice", practiceAgain: "Practice again", watched: (p: number) => `${p}% watched`, resume: "Continue" },
+  ar: { startTest: "ابدأ الاختبار", retake: "أعد المحاولة", passed: "ناجح", passMark: "75% للنجاح", open: "افتح", test: "اختبار", practice: "التدريب", practiceRetry: "أعد التدريب", practiceAgain: "تدرّب مرة أخرى", watched: (p: number) => `شاهدت ${p}%`, resume: "أكمل", savedOnPhone: "محفوظ على هذا الهاتف" },
+  en: { startTest: "Start test", retake: "Retake", passed: "Passed", passMark: "75% to pass", open: "Open", test: "Test", practice: "Practice", practiceRetry: "Retry practice", practiceAgain: "Practice again", watched: (p: number) => `${p}% watched`, resume: "Continue", savedOnPhone: "Saved on this phone" },
 };
 
 type TreeNode =
@@ -103,7 +104,18 @@ function WatchedRing({ percent }: { percent: number }) {
   );
 }
 
-function NodeDisc({ node, isCurrent }: { node: TreeNode; isCurrent: boolean }) {
+/** Marks a lesson saved for offline: it plays on this phone without internet. */
+function SavedBadge() {
+  return (
+    <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-[#007229] text-white shadow-sm">
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16.5v1.75A1.75 1.75 0 005.75 20h12.5A1.75 1.75 0 0020 18.25V16.5M16 11.5l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+    </span>
+  );
+}
+
+function NodeDisc({ node, isCurrent, saved = false }: { node: TreeNode; isCurrent: boolean; saved?: boolean }) {
   if (node.kind === "lesson") {
     const { state } = node.step;
     const completed = state === "completed";
@@ -123,6 +135,7 @@ function NodeDisc({ node, isCurrent }: { node: TreeNode; isCurrent: boolean }) {
           {completed ? <CheckIcon /> : locked ? <LockIcon /> : <PlayIcon className="w-7 h-7 ml-0.5" />}
         </div>
         {completed && <Sparkle />}
+        {saved && <SavedBadge />}
       </div>
     );
   }
@@ -215,6 +228,7 @@ export default function LearningPathTree({
 }) {
   const t = translations[language];
   const current = currentStepId ?? path.currentStepId;
+  const { isLessonDownloaded } = useOffline();
 
   // The owl follows the tapped node; until the student taps, it sits on the
   // current progress node. A tap selects a node (owl glides there) and reveals
@@ -346,6 +360,7 @@ export default function LearningPathTree({
           const isSelected = selId === node.id;
           const label = labelFor(node);
           const href = hrefFor(node);
+          const saved = node.kind === "lesson" && isLessonDownloaded(node.step.lessonId);
 
           return (
             <div key={node.id} className="absolute" style={{ left: x, top: y }}>
@@ -374,12 +389,12 @@ export default function LearningPathTree({
                       setFromId(selId);
                       setSelectedId(node.id);
                     }}
-                    aria-label={label.title}
+                    aria-label={saved ? `${label.title} — ${t.savedOnPhone}` : label.title}
                   >
-                    <NodeDisc node={node} isCurrent={isSelected} />
+                    <NodeDisc node={node} isCurrent={isSelected} saved={saved} />
                   </button>
                 ) : (
-                  <NodeDisc node={node} isCurrent={isSelected} />
+                  <NodeDisc node={node} isCurrent={isSelected} saved={saved} />
                 )}
               </div>
               {/* Label below (+ Open CTA on the selected node) */}
@@ -430,18 +445,8 @@ export default function LearningPathTree({
                               : t.practice}
                         </Link>
                       )}
-                    {node.kind === "lesson" && (
-                      <>
-                        <LessonComputerDownloadButton
-                          lessonId={node.step.lessonId}
-                          title={node.step.title}
-                          videoUrl={node.step.videoUrl}
-                          language={language}
-                          iconOnly
-                          className="w-8 h-8 rounded-full bg-white text-gray-600 hover:text-[#007229] shadow-sm flex items-center justify-center transition-colors"
-                        />
-                      </>
-                    )}
+                    {/* Save for offline (the MP4 export lives on the lesson page). */}
+                    {node.kind === "lesson" && <DownloadButton lessonId={node.step.lessonId} variant="compact" />}
                   </EdgeSafeRow>
                 )}
               </div>

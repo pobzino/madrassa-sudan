@@ -7,6 +7,7 @@ import { Toaster } from "sonner";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
 import PostHogInitializer from "@/components/PostHogInitializer";
+import OfflineSyncRunner from "@/components/offline/OfflineSyncRunner";
 import { LEGAL_ENTITY } from "@/lib/legal-entity";
 
 const inter = Inter({
@@ -100,6 +101,8 @@ export default function RootLayout({
         />
         <LanguageWrapper>
           {children}
+          {/* Sends progress saved offline, on every route (the offline pages included). */}
+          <OfflineSyncRunner />
         </LanguageWrapper>
         <PostHogInitializer
           projectToken={process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN}

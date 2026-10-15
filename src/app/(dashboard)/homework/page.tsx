@@ -8,7 +8,7 @@ import { OwlThinking, OwlStreak } from "@/components/illustrations";
 import { MeadowBackdrop, StudyOwl } from "@/components/dashboard/DashboardScenes";
 import { StudentHomeworkList } from "@/components/homework/HomeworkList";
 import type { HomeworkAssignment, HomeworkSubmission, Subject } from "@/lib/database.types";
-import { getCachedUser } from "@/lib/supabase/auth-cache";
+import { getCachedUser, getLastAuthStatus } from "@/lib/supabase/auth-cache";
 
 const translations = {
   ar: {
@@ -66,7 +66,9 @@ export default function HomeworkPage() {
     async function loadData() {
       const user = await getCachedUser(supabase);
       if (!user) {
-        router.push("/auth/login");
+        // Offline or lie-fi (no answer) isn't signed out; DashboardLayout
+        // sends that case to the saved-lessons hub.
+        if (getLastAuthStatus() === "signed_out") router.push("/auth/login");
         return;
       }
 

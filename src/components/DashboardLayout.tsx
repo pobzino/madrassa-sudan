@@ -5,9 +5,13 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { clearPrivateOfflineData } from "@/lib/offline/db";
+import { useOffline } from "@/contexts/OfflineContext";
 import type { Profile } from "@/lib/database.types";
-import { clearAuthCache, getCachedProfile, getCachedUser } from "@/lib/supabase/auth-cache";
+import { getAuthState, getCachedProfile, type AuthStatus } from "@/lib/supabase/auth-cache";
+import { logOut } from "@/lib/auth/logout";
+import { getOwner, saveOwner } from "@/lib/offline/identity";
+import { OFFLINE_HUB_PATH } from "@/lib/offline/cache-names";
+import { confirmLogOutIfUnsynced } from "@/components/settings/AccountActions";
 import FeedbackModal from "@/components/FeedbackModal";
 import NavigationProgress from "@/components/NavigationProgress";
 import OfflineBanner from "@/components/OfflineBanner";
@@ -52,6 +56,7 @@ const translations = {
     privacy: "الخصوصية",
     terms: "الشروط",
     logout: "تسجيل الخروج",
+    loggingOut: "جارٍ تسجيل الخروج…",
     loading: "جاري التحميل...",
   },
   en: {
@@ -80,9 +85,28 @@ const translations = {
     privacy: "Privacy",
     terms: "Terms",
     logout: "Log out",
+    loggingOut: "Logging out…",
     loading: "Loading...",
   },
 };
+
+/** Saved-for-offline lessons, in the colourful style of the other nav icons. */
+const DownloadsNavIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    {/* Tray */}
+    <path d="M3.5 14.5v3.75A2.75 2.75 0 006.25 21h11.5a2.75 2.75 0 002.75-2.75V14.5" stroke="#005C22" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    {/* Arrow into it */}
+    <path d="M12 3v11" stroke="#007229" strokeWidth="2.5" strokeLinecap="round" />
+    <path d="M7.75 10.25L12 14.5l4.25-4.25" stroke="#D21034" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+// Pages that work from what's saved on the phone, so they stay put offline.
+const OFFLINE_CAPABLE_PATHS = ["/downloads"];
+// A lesson page handles a missing connection itself (it opens this account's
+// saved copy in the offline player, or says it isn't saved); sending it to
+// the hub from here as well would race that.
+const HANDLES_OFFLINE_ITSELF = /^\/lessons\/[^/]+\/?$/;
 
 // Icons - Clean, friendly navigation icons
 const Icons = {
@@ -140,48 +164,99 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [profile, setProfile] = useState<Profile | null>(null);
+  // Offline there's no profile query; the phone's owner record gives the name.
+  const [savedOwner, setSavedOwner] = useState<{ fullName: string; role: string | null } | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const { language, setLanguage } = useLanguage();
+  const { refreshDownloads } = useOffline();
   const t = translations[language];
   const isRtl = language === "ar";
   const authCheckRef = useRef(false);
+  const authStatusRef = useRef<AuthStatus | null>(null);
+  const loadProfileRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     // Prevent duplicate auth checks
     if (authCheckRef.current) return;
     authCheckRef.current = true;
 
+    const showSavedOwner = async () => {
+      const owner = await getOwner();
+      if (owner) setSavedOwner({ fullName: owner.fullName, role: owner.role });
+    };
+
+    // "Signed out" and "no connection" are different answers: only the first
+    // goes to the login page. Offline (or lie-fi timing out) with nobody
+    // verified in this visit, the saved-lessons hub is the useful place.
     async function loadProfile() {
       const supabase = createClient();
-      const user = await getCachedUser(supabase);
-      if (!user) {
+      const auth = await getAuthState(supabase);
+      authStatusRef.current = auth.status;
+      if (auth.status === "signed_out") {
         router.push("/auth/login");
         return;
       }
+      if (!auth.user) {
+        const here = window.location.pathname;
+        const staysPut =
+          OFFLINE_CAPABLE_PATHS.some((path) => here === path || here.startsWith(`${path}/`)) ||
+          HANDLES_OFFLINE_ITSELF.test(here);
+        if (!staysPut) {
+          window.location.assign(OFFLINE_HUB_PATH);
+        }
+        await showSavedOwner();
+        return;
+      }
 
-      const profileData = await getCachedProfile(supabase, user.id);
-      if (profileData) setProfile(profileData);
+      const profileData = await getCachedProfile(supabase, auth.user.id);
+      if (profileData) {
+        setProfile(profileData);
+        // A verified account owns this phone's downloads from now on (an
+        // account switch clears the previous one's first).
+        if (auth.status === "verified") {
+          const saved = await saveOwner(profileData).catch(() => null);
+          // Downloads saved before this phone had an owner record show up now.
+          if (saved) await refreshDownloads();
+        }
+      } else {
+        await showSavedOwner();
+      }
     }
-    void loadProfile();
-  }, [router, pathname]);
+    loadProfileRef.current = loadProfile;
+    void loadProfile().catch(() => undefined);
+  }, [router, refreshDownloads]);
 
+  // Back online after an offline start: verify now, so the profile loads and
+  // the owner record is refreshed without a reload.
+  useEffect(() => {
+    const recheck = () => {
+      if (authStatusRef.current !== "offline") return;
+      void loadProfileRef.current?.().catch(() => undefined);
+    };
+    window.addEventListener("online", recheck);
+    return () => window.removeEventListener("online", recheck);
+  }, []);
+
+  // The shared log-out (sync first, end the session even offline, clear this
+  // phone, full page load). It navigates itself, so the busy state stays.
   const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    await clearPrivateOfflineData();
-    clearAuthCache();
-    router.push("/");
+    if (loggingOut || !(await confirmLogOutIfUnsynced(language))) return;
+    setLoggingOut(true);
+    await logOut();
   };
 
   // Get first name or default - don't block render for this
-  const firstName = profile?.full_name?.split(" ")[0] || "";
+  const displayName = profile?.full_name || savedOwner?.fullName || "";
+  const firstName = displayName.split(" ")[0] || "";
+  const role = profile?.role ?? savedOwner?.role ?? null;
   const teacherDevBypass = process.env.NEXT_PUBLIC_DEV_ALLOW_TEACHER_VIEW === "1";
 
-  const isTeacherOrAdmin = teacherDevBypass || profile?.role === "teacher" || profile?.role === "admin";
+  const isTeacherOrAdmin = teacherDevBypass || role === "teacher" || role === "admin";
   const hideUnusedStudentNavigation = process.env.NODE_ENV === "production";
 
   // Show teacher nav when on /teacher/* or /admin routes, student nav otherwise
@@ -193,6 +268,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const studentNavItems = [
     { href: "/dashboard", label: t.dashboard, icon: <HomeNavIcon className="w-6 h-6" />, color: "bg-emerald-100 text-emerald-600" },
     { href: "/lessons", label: t.lessons, icon: <BookNavIcon className="w-6 h-6" />, color: "bg-violet-100 text-violet-600" },
+    { href: "/downloads", label: t.downloads, icon: <DownloadsNavIcon className="w-6 h-6" />, color: "bg-lime-100 text-lime-700" },
     ...(!hideUnusedStudentNavigation
       ? [{ href: "/homework", label: t.homework, icon: <ClipboardNavIcon className="w-6 h-6" />, color: "bg-amber-100 text-amber-600" }]
       : []),
@@ -223,7 +299,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { href: "/teacher/learning-path", label: t.learningPath, icon: <ChartNavIcon className="w-5 h-5" /> },
     { href: "/teacher/homework", label: t.manageHomework, icon: <ClipboardNavIcon className="w-5 h-5" /> },
     { href: "/teacher/cohorts", label: t.manageClasses, icon: <UsersNavIcon className="w-5 h-5" /> },
-    ...(profile?.role === "admin"
+    ...(role === "admin"
       ? [{
           href: "/admin",
           label: t.admin,
@@ -411,14 +487,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-gray-900 truncate">
-              {profile?.full_name || <span className="text-gray-300">...</span>}
+              {displayName || <span className="text-gray-300">...</span>}
             </p>
             <button
-              onClick={handleLogout}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-[#D21034] transition-colors"
+              onClick={() => void handleLogout()}
+              disabled={loggingOut}
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-[#D21034] transition-colors disabled:opacity-60"
             >
               {Icons.logout}
-              {t.logout}
+              {loggingOut ? t.loggingOut : t.logout}
             </button>
           </div>
           <button
@@ -500,6 +577,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {[
             { href: "/dashboard", label: t.home, icon: <HomeNavIcon className="h-6 w-6" /> },
             { href: "/lessons", label: t.lessons, icon: <BookNavIcon className="h-6 w-6" /> },
+            { href: "/downloads", label: t.downloads, icon: <DownloadsNavIcon className="h-6 w-6" /> },
             { href: "/progress", label: t.progress, icon: <ChartNavIcon className="h-6 w-6" /> },
             { href: "/settings", label: t.settings, icon: <span className="[&>svg]:h-6 [&>svg]:w-6">{Icons.settings}</span> },
           ].map((tab) => {
@@ -509,9 +587,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 key={tab.href}
                 href={tab.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold font-fredoka ${active ? "text-[#007229]" : "text-gray-500"}`}
+                className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold font-fredoka ${active ? "text-[#007229]" : "text-gray-500"}`}
               >
-                <span className={`flex h-8 w-14 items-center justify-center rounded-full ${active ? "bg-[#007229]/10" : ""}`}>{tab.icon}</span>
+                <span className={`flex h-8 w-12 items-center justify-center rounded-full ${active ? "bg-[#007229]/10" : ""}`}>{tab.icon}</span>
                 {tab.label}
               </Link>
             );

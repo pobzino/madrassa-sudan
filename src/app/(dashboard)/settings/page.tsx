@@ -8,7 +8,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { RemindersSetting } from "@/components/pwa/RemindersSetting";
 import { AccountActions } from "@/components/settings/AccountActions";
 import type { Profile } from "@/lib/database.types";
-import { getCachedProfile, getCachedUser, primeCachedProfile } from "@/lib/supabase/auth-cache";
+import { getCachedProfile, getCachedUser, getLastAuthStatus, primeCachedProfile } from "@/lib/supabase/auth-cache";
 import { clearPrivateOfflineData } from "@/lib/offline/db";
 
 const translations = {
@@ -194,7 +194,9 @@ export default function SettingsPage() {
     async function loadData() {
       const user = await getCachedUser(supabase);
       if (!user) {
-        router.push("/auth/login");
+        // Offline or lie-fi (no answer) isn't signed out; DashboardLayout
+        // sends that case to the saved-lessons hub.
+        if (getLastAuthStatus() === "signed_out") router.push("/auth/login");
         return;
       }
       setEmail(user.email || "");

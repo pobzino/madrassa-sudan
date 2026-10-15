@@ -122,6 +122,24 @@ interface SimPlayerProps {
    * answer. The lesson page uses this for anonymous aggregate analytics.
    */
   onActivitySubmit?: (result: { activityType: string; correct?: boolean }) => void;
+  /**
+   * Receives each activity answer instead of SimPlayer POSTing it itself
+   * (both submitted answers and skipped gates). `answer` is the typed
+   * InteractionAnswer, or null for a skip; `isCorrect` is null for skips and
+   * teacher-reviewed types. The caller saves, sends or queues it.
+   */
+  onSlideResponse?: (slideId: string, answer: unknown, isCorrect: boolean | null) => void;
+  /**
+   * The audio is a copy saved on this device (a blob: URL): no signed-URL
+   * refreshes, and the offline notice says it's playing from the phone.
+   */
+  playingFromDevice?: boolean;
+  /**
+   * Scopes the saved resume position to `sim-resume:<resumeKey>` (e.g.
+   * `${userId}:${lessonId}`, so accounts on a shared phone don't share it).
+   * Without it the key is `sim-resume:<lessonId>`.
+   */
+  resumeKey?: string;
 }
 
 /**
@@ -380,6 +398,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     showTeacherNotes = false,
     onProgress,
     onActivitySubmit,
+    onSlideResponse,
+    playingFromDevice = false,
+    resumeKey,
   },
   ref
 ) {
@@ -522,7 +543,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   }, [audio_url, markAudioReady]);
 
   // ── Resume position persistence (refs declared early, effects after applyAt) ──
-  const resumeKey = lessonId ? `sim-resume:${lessonId}` : null;
+  const resumeStorageKey = resumeKey
+    ? `sim-resume:${resumeKey}`
+    : lessonId
+      ? `sim-resume:${lessonId}`
+      : null;
   const resumeAppliedRef = useRef(false);
 
   // Keep audioSrc in sync when the prop changes (e.g. parent re-fetches).
@@ -562,7 +587,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   // Proactively refresh the signed audio URL before it expires (every 5h).
   // Also retries on audio error to handle already-expired URLs.
   const refreshAudioUrl = useCallback(async (): Promise<boolean> => {
-    if (!lessonId) return false;
+    // A saved copy has no signed URL to refresh, and offline the request
+    // would only fail (or swap the phone's copy for a stream).
+    if (!lessonId || playingFromDevice) return false;
     const endpoints = [`/api/lessons/${lessonId}/sim`];
     if (sim.id) {
       endpoints.push(`/api/teacher/lessons/${lessonId}/sims/${sim.id}`);
@@ -589,7 +616,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       }
     }
     return false;
-  }, [lessonId, sim.id]);
+  }, [lessonId, playingFromDevice, sim.id]);
 
   const handleAudioError = useCallback(
     async (event: SyntheticEvent<HTMLAudioElement, Event>) => {
@@ -612,21 +639,25 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       }
 
       setError(
-        language === 'ar'
-          ? 'تعذر تشغيل الصوت. تحقق من اتصالك وحاول مرة أخرى.'
-          : 'Audio could not play. Check your connection and try again.'
+        playingFromDevice
+          ? language === 'ar'
+            ? 'تعذر تشغيل الصوت المحفوظ على هذا الهاتف. اتصل بالإنترنت واحفظ الدرس مرة أخرى.'
+            : "The audio saved on this phone couldn't play. Connect to the internet and save the lesson again."
+          : language === 'ar'
+            ? 'تعذر تشغيل الصوت. تحقق من اتصالك وحاول مرة أخرى.'
+            : 'Audio could not play. Check your connection and try again.'
       );
     },
-    [language, onPlayStateChange, refreshAudioUrl]
+    [language, onPlayStateChange, playingFromDevice, refreshAudioUrl]
   );
 
   useEffect(() => {
-    if (!audio_url || !lessonId) return;
+    if (!audio_url || !lessonId || playingFromDevice) return;
     // Refresh every 5 hours (signed URLs last 6h)
     const REFRESH_MS = 5 * 60 * 60 * 1000;
     const timer = setInterval(refreshAudioUrl, REFRESH_MS);
     return () => clearInterval(timer);
-  }, [audio_url, lessonId, refreshAudioUrl]);
+  }, [audio_url, lessonId, playingFromDevice, refreshAudioUrl]);
 
   // Count of events with t <= realMs (binary search on sorted events).
   const eventsAtMs = useCallback(
@@ -669,10 +700,10 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   // ── Resume position effects (must be after applyAt) ───────────────────
   // Restore saved position once audio is ready
   useEffect(() => {
-    if (!resumeKey || resumeAppliedRef.current || !ready) return;
+    if (!resumeStorageKey || resumeAppliedRef.current || !ready) return;
     resumeAppliedRef.current = true;
     try {
-      const saved = localStorage.getItem(resumeKey);
+      const saved = localStorage.getItem(resumeStorageKey);
       if (!saved) return;
       const savedMs = Number(saved);
       if (!savedMs || savedMs <= 0 || savedMs >= virtualTotalMs - 1000) return;
@@ -683,16 +714,16 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
       applyAt(realMs, true);
     } catch { /* ignore */ }
-  }, [resumeKey, ready, virtualTotalMs, effectiveClips, applyAt]);
+  }, [resumeStorageKey, ready, virtualTotalMs, effectiveClips, applyAt]);
 
   // Periodically save the playback position (every 5 seconds)
   useEffect(() => {
-    if (!resumeKey || !isPlaying) return;
+    if (!resumeStorageKey || !isPlaying) return;
     const timer = setInterval(() => {
-      try { localStorage.setItem(resumeKey, String(playbackMs)); } catch { /* quota */ }
+      try { localStorage.setItem(resumeStorageKey, String(playbackMs)); } catch { /* quota */ }
     }, 5000);
     return () => clearInterval(timer);
-  }, [resumeKey, isPlaying, playbackMs]);
+  }, [resumeStorageKey, isPlaying, playbackMs]);
 
   // Rebuild the triggered-gates set so every gate strictly before `realMs`
   // is marked triggered. Called on seeks and whenever the gate list changes
@@ -1097,11 +1128,13 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
     // Teacher-reviewed types: show "submitted" instead of grading
     const isTeacherReviewed = interaction.type === 'free_response' || interaction.type === 'draw_answer';
+    let isCorrect: boolean | null = null;
     if (isTeacherReviewed) {
       setAnswerFeedback('submitted');
       onActivitySubmit?.({ activityType: interaction.type });
     } else {
       const result = gradeInteraction(interaction, studentAnswer);
+      isCorrect = result.is_correct;
       const feedback = result.is_correct ? 'correct' : 'incorrect';
       setAnswerFeedback(feedback);
       onActivitySubmit?.({
@@ -1113,8 +1146,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       }
     }
 
-    // Persist to DB when lessonId is available
-    if (lessonId) {
+    // The parent saves the answer (and queues it when there's no
+    // connection); otherwise persist to DB when lessonId is available.
+    if (onSlideResponse) {
+      onSlideResponse(currentSlide.id, studentAnswer, isCorrect);
+    } else if (lessonId) {
       fetch(`/api/lessons/${lessonId}/slide-responses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1124,7 +1160,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         }),
       }).catch(() => { /* best-effort — don't block UX */ });
     }
-  }, [studentAnswer, currentSlide, lessonId, onActivitySubmit]);
+  }, [studentAnswer, currentSlide, lessonId, onActivitySubmit, onSlideResponse]);
 
   const handleRetry = useCallback(() => {
     setStudentAnswer(null);
@@ -1167,21 +1203,25 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       setGateResults((prev) => ({ ...prev, [idx]: result }));
     }
     // Persist skipped gate to server so teachers see it
-    if (!answerFeedback && lessonId && currentSlide) {
-      fetch(`/api/lessons/${lessonId}/slide-responses`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slide_id: currentSlide.id,
-          answer: null,
-        }),
-      }).catch(() => { /* best-effort */ });
+    if (!answerFeedback && currentSlide) {
+      if (onSlideResponse) {
+        onSlideResponse(currentSlide.id, null, null);
+      } else if (lessonId) {
+        fetch(`/api/lessons/${lessonId}/slide-responses`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slide_id: currentSlide.id,
+            answer: null,
+          }),
+        }).catch(() => { /* best-effort */ });
+      }
     }
     clearActiveGateState();
     setStudentAnswer(null);
     setAnswerFeedback(null);
     handlePlay();
-  }, [clearActiveGateState, handlePlay, answerFeedback, activeExplorationSlide, lessonId, currentSlide]);
+  }, [clearActiveGateState, handlePlay, answerFeedback, activeExplorationSlide, lessonId, currentSlide, onSlideResponse]);
 
   const currentSurface: SimSlideSurface | null = currentSlide
     ? surface.slides[currentSlide.id] ?? null
@@ -1395,8 +1435,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     resumeAfterScrubRef.current = false;
   };
 
+  // The "playback may stop" warning keeps the controls up; playing a saved
+  // copy offline is normal, so that notice doesn't.
+  const showOfflineWarning = isOffline && !playingFromDevice;
   const canHideControls = fullscreen && isPlaying && !buffering && !isScrubbing
-    && !showChapters && !activeGate && !activeExplorationSlide && !error && !isOffline;
+    && !showChapters && !activeGate && !activeExplorationSlide && !error && !showOfflineWarning;
   const controlsVisible = !canHideControls || !controlsIdle;
 
   useEffect(() => {
@@ -1592,7 +1635,16 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         />
       )}
 
-      {isOffline && (
+      {isOffline && playingFromDevice && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-t border-emerald-100 text-emerald-800 text-xs font-medium">
+          <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2" /><line x1="12" y1="18" x2="12.01" y2="18" />
+          </svg>
+          {language === 'ar' ? 'يُشغَّل من هذا الهاتف' : 'Playing from this phone'}
+        </div>
+      )}
+
+      {showOfflineWarning && (
         <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-t border-amber-200 text-amber-700 text-xs font-medium">
           <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.56 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" />

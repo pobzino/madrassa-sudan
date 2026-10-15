@@ -7,14 +7,29 @@ import type {
 
 type WidgetComponent = ComponentType<ExplorationWidgetProps<ExplorationWidgetConfig>>;
 
+/**
+ * The raw chunk loaders behind EXPLORATION_WIDGETS. Exported so offline
+ * downloads can load (and the service worker cache) every widget chunk ahead
+ * of time — a widget first needed with no connection would otherwise fail.
+ */
+export const EXPLORATION_WIDGET_LOADERS = {
+  number_line: () => import('@/components/explorations/NumberLineWidget'),
+  slider_explore: () => import('@/components/explorations/SliderExploreWidget'),
+  image_hotspot: () => import('@/components/explorations/ImageHotspotWidget'),
+  letter_trace: () => import('@/components/explorations/LetterTraceWidget'),
+  counting_objects: () => import('@/components/explorations/CountingObjectsWidget'),
+  sorting: () => import('@/components/explorations/SortingWidget'),
+  color_picker: () => import('@/components/explorations/ColorPickerWidget'),
+} satisfies Record<ExplorationWidgetType, () => Promise<unknown>>;
+
 export const EXPLORATION_WIDGETS: Record<ExplorationWidgetType, React.LazyExoticComponent<WidgetComponent>> = {
-  number_line: lazy(() => import('@/components/explorations/NumberLineWidget')) as React.LazyExoticComponent<WidgetComponent>,
-  slider_explore: lazy(() => import('@/components/explorations/SliderExploreWidget')) as React.LazyExoticComponent<WidgetComponent>,
-  image_hotspot: lazy(() => import('@/components/explorations/ImageHotspotWidget')) as React.LazyExoticComponent<WidgetComponent>,
-  letter_trace: lazy(() => import('@/components/explorations/LetterTraceWidget')) as React.LazyExoticComponent<WidgetComponent>,
-  counting_objects: lazy(() => import('@/components/explorations/CountingObjectsWidget')) as React.LazyExoticComponent<WidgetComponent>,
-  sorting: lazy(() => import('@/components/explorations/SortingWidget')) as React.LazyExoticComponent<WidgetComponent>,
-  color_picker: lazy(() => import('@/components/explorations/ColorPickerWidget')) as React.LazyExoticComponent<WidgetComponent>,
+  number_line: lazy(EXPLORATION_WIDGET_LOADERS.number_line) as React.LazyExoticComponent<WidgetComponent>,
+  slider_explore: lazy(EXPLORATION_WIDGET_LOADERS.slider_explore) as React.LazyExoticComponent<WidgetComponent>,
+  image_hotspot: lazy(EXPLORATION_WIDGET_LOADERS.image_hotspot) as React.LazyExoticComponent<WidgetComponent>,
+  letter_trace: lazy(EXPLORATION_WIDGET_LOADERS.letter_trace) as React.LazyExoticComponent<WidgetComponent>,
+  counting_objects: lazy(EXPLORATION_WIDGET_LOADERS.counting_objects) as React.LazyExoticComponent<WidgetComponent>,
+  sorting: lazy(EXPLORATION_WIDGET_LOADERS.sorting) as React.LazyExoticComponent<WidgetComponent>,
+  color_picker: lazy(EXPLORATION_WIDGET_LOADERS.color_picker) as React.LazyExoticComponent<WidgetComponent>,
 };
 
 export function getExplorationWidget(

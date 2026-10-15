@@ -1,9 +1,56 @@
 'use client';
 
-import { Suspense, useCallback, useState } from 'react';
+import { Component, Suspense, useCallback, useState, type ReactNode } from 'react';
 import { Search } from 'lucide-react';
 import type { ExplorationWidgetType, ExplorationWidgetConfig } from '@/lib/explorations/types';
 import { EXPLORATION_WIDGETS, WIDGET_LABELS } from '@/lib/explorations/registry';
+
+/**
+ * Each widget is a separately loaded chunk. If it can't load (offline, and
+ * never cached) or crashes, show a way to carry on instead of letting the
+ * error reach the page's error boundary and replace the whole lesson.
+ */
+class WidgetErrorBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.warn('ExplorationOverlay: widget failed to load', error);
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+function WidgetUnavailable({ language, onContinue }: { language: 'ar' | 'en'; onContinue: () => void }) {
+  return (
+    <div role="alert" className="flex max-w-sm flex-col items-center gap-3 text-center">
+      <p className="text-base font-semibold text-slate-700">
+        {language === 'ar' ? 'تعذّر فتح هذا النشاط الآن.' : "This activity couldn't open right now."}
+      </p>
+      <p className="text-sm text-slate-500">
+        {language === 'ar' ? 'يمكنك متابعة الدرس الآن.' : 'You can carry on with the lesson.'}
+      </p>
+      <button
+        type="button"
+        onClick={onContinue}
+        className="mt-1 flex min-h-11 items-center gap-1.5 rounded-full bg-[#007229] px-5 py-2 text-sm font-bold text-white shadow-[0_3px_0_#005C22] transition-transform hover:scale-105 active:scale-100"
+      >
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <path d="M8 5v14l11-7z" />
+        </svg>
+        {language === 'ar' ? 'متابعة' : 'Continue'}
+      </button>
+    </div>
+  );
+}
 
 interface ExplorationOverlayProps {
   widgetType: ExplorationWidgetType;
@@ -63,23 +110,28 @@ export default function ExplorationOverlay({
 
       {/* Widget area */}
       <div className="flex-1 flex items-center justify-center px-4 py-6 overflow-auto">
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center py-12 text-slate-400">
-              <svg className="animate-spin h-6 w-6 mr-2" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              {language === 'ar' ? 'جاري التحميل...' : 'Loading...'}
-            </div>
-          }
+        <WidgetErrorBoundary
+          key={widgetType}
+          fallback={<WidgetUnavailable language={language} onContinue={onContinue} />}
         >
-          <Widget
-            config={config}
-            language={language}
-            onComplete={handleComplete}
-          />
-        </Suspense>
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-12 text-slate-400">
+                <svg className="animate-spin h-6 w-6 mr-2" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                {language === 'ar' ? 'جاري التحميل...' : 'Loading...'}
+              </div>
+            }
+          >
+            <Widget
+              config={config}
+              language={language}
+              onComplete={handleComplete}
+            />
+          </Suspense>
+        </WidgetErrorBoundary>
       </div>
     </div>
   );

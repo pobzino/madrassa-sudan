@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { useOnlineStatus } from "@/components/offline/useOnlineStatus";
 import posthog from "posthog-js";
 import { getOpaqueLearnerAnalyticsId } from "@/lib/analytics-identity";
 import { createClient } from "@/lib/supabase/client";
@@ -22,6 +23,7 @@ export default function PostHogInitializer({ host, projectToken }: PostHogInitia
   const pathname = usePathname();
   const configurationKey = projectToken && host ? `${projectToken}:${host}` : undefined;
   const shouldRecordSession = canRecordSession(pathname);
+  const online = useOnlineStatus();
 
   useEffect(() => {
     if (!projectToken || !host || !configurationKey) return;
@@ -55,6 +57,15 @@ export default function PostHogInitializer({ host, projectToken }: PostHogInitia
       initializedFor = configurationKey;
     }
 
+    if (!canRecordSession(pathname) && posthog.__loaded) {
+      posthog.stopSessionRecording();
+    }
+
+    // Offline, leave the auth client alone: creating it starts a refresh of an
+    // expired session that retries for ~25 s, and getUser can't answer anyway.
+    // The identity is set up when the connection returns (`online` changes).
+    if (!online || !navigator.onLine) return;
+
     const supabase = createClient();
     let cancelled = false;
 
@@ -72,31 +83,29 @@ export default function PostHogInitializer({ host, projectToken }: PostHogInitia
       identifiedAccountId = accountId;
     };
 
-    void supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) {
+    // Only an explicit sign-out clears the identity: a check that fails
+    // (lie-fi, a timeout, an expired token being refreshed) says nothing
+    // about who is signed in.
+    void supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        if (data.user) return identifyAuthenticatedAccount(data.user.id);
+      })
+      .catch(() => undefined);
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
         clearIdentity();
         return;
       }
-      return identifyAuthenticatedAccount(data.user.id);
+      if (session?.user) void identifyAuthenticatedAccount(session.user.id);
     });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session?.user) {
-        clearIdentity();
-        return;
-      }
-      void identifyAuthenticatedAccount(session.user.id);
-    });
-
-    if (!canRecordSession(pathname) && posthog.__loaded) {
-      posthog.stopSessionRecording();
-    }
 
     return () => {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [configurationKey, host, pathname, projectToken, shouldRecordSession]);
+  }, [configurationKey, host, online, pathname, projectToken, shouldRecordSession]);
 
   return null;
 }

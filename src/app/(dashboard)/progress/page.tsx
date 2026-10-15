@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { OwlThinking, OwlCelebrating } from "@/components/illustrations";
 import type { Subject } from "@/lib/database.types";
-import { getCachedUser } from "@/lib/supabase/auth-cache";
+import { getCachedUser, getLastAuthStatus } from "@/lib/supabase/auth-cache";
 import { Clapperboard, BookOpen, GraduationCap, PenLine, ClipboardCheck, Flame, Star, Trophy, CircleDot, Sparkles, type LucideIcon } from "lucide-react";
 
 const translations = {
@@ -161,7 +161,9 @@ export default function ProgressPage() {
     async function loadData() {
       const user = await getCachedUser(supabase);
       if (!user) {
-        router.push("/auth/login");
+        // Offline or lie-fi (no answer) isn't signed out; DashboardLayout
+        // sends that case to the saved-lessons hub.
+        if (getLastAuthStatus() === "signed_out") router.push("/auth/login");
         return;
       }
 

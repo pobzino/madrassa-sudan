@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { LEGACY_SW_CACHES, SHELL_CACHE_PREFIX, STATIC_CACHE_PREFIX, SW_META_CACHE } from "@/lib/offline/cache-names";
 // Imported here, in the root layout, so it catches the browser's one-tap
 // install offer even if that arrives before any install button renders.
 import { trackAppLaunch } from "@/lib/pwa-install";
@@ -34,15 +35,18 @@ export default function ServiceWorkerRegister() {
         const registrations = await navigator.serviceWorker.getRegistrations();
         await Promise.all(registrations.map((registration) => registration.unregister()));
 
+        // Only the worker's own caches: downloaded lessons (audio, images)
+        // stay, so offline downloads can be tried in development too.
         if ("caches" in window) {
           const cacheNames = await window.caches.keys();
           await Promise.all(
             cacheNames
               .filter(
                 (name) =>
-                  name.startsWith("amal-sw-") ||
-                  name.startsWith("amal-static-") ||
-                  name.startsWith("amal-pages-"),
+                  name.startsWith(SHELL_CACHE_PREFIX) ||
+                  name.startsWith(STATIC_CACHE_PREFIX) ||
+                  name === SW_META_CACHE ||
+                  (LEGACY_SW_CACHES as readonly string[]).includes(name),
               )
               .map((name) => window.caches.delete(name)),
           );

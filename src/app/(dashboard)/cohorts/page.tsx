@@ -7,7 +7,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { OwlThinking, OwlSad } from "@/components/illustrations";
 import { School } from "lucide-react";
 import type { Profile } from "@/lib/database.types";
-import { getCachedUser } from "@/lib/supabase/auth-cache";
+import { getCachedUser, getLastAuthStatus } from "@/lib/supabase/auth-cache";
 
 const translations = {
   ar: {
@@ -122,7 +122,9 @@ export default function CohortsPage() {
   const loadData = useCallback(async () => {
     const user = await getCachedUser(supabase);
     if (!user) {
-      router.push("/auth/login");
+      // Offline or lie-fi (no answer) isn't signed out; DashboardLayout
+      // sends that case to the saved-lessons hub.
+      if (getLastAuthStatus() === "signed_out") router.push("/auth/login");
       return;
     }
     setUserId(user.id);

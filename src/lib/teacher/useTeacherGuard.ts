@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { getCachedUser, getCachedProfile } from "@/lib/supabase/auth-cache";
+import { getCachedUser, getCachedProfile, getLastAuthStatus } from "@/lib/supabase/auth-cache";
 import type { Profile } from "@/lib/database.types";
 
 export function useTeacherGuard() {
@@ -18,7 +18,9 @@ export function useTeacherGuard() {
     async function checkRole() {
       const user = await getCachedUser(supabase);
       if (!user) {
-        router.push("/auth/login");
+        // Offline or lie-fi (no answer) isn't signed out; DashboardLayout
+        // sends that case to the saved-lessons hub.
+        if (getLastAuthStatus() === "signed_out") router.push("/auth/login");
         return;
       }
 

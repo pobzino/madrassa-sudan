@@ -2,70 +2,101 @@
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useOffline } from "@/contexts/OfflineContext";
-import { getAllOfflineLessons, getCachedSimAudio, type OfflineLesson } from "@/lib/offline/db";
+import { useOffline, type DownloadResult } from "@/contexts/OfflineContext";
+import { getCachedSimAudio, hasCachedSimAudio, type DownloadState, type OfflineLesson } from "@/lib/offline/db";
+import { getOwnedOfflineLessons } from "@/lib/offline/identity";
+import { offlinePlayerUrl } from "@/lib/offline/cache-names";
+import {
+  AUDIO_FORMAT_WARNING,
+  downloadErrorMessage,
+  getPersistenceStatus,
+  requestPersistentStorage,
+} from "@/lib/offline/download-manager";
 import LessonComputerDownloadButton from "@/components/lessons/LessonComputerDownloadButton";
+import { useInstallPlatform } from "@/components/pwa/AddToPhone";
 import { canDetectWifi, isAutoDownloadEnabled, setAutoDownloadEnabled } from "@/lib/offline/auto-download";
 
 const translations = {
   ar: {
     title: "التحميلات",
-    subtitle: "الدروس المحفوظة على هذا الجهاز",
+    subtitle: "الدروس المحفوظة على هذا الهاتف تعمل بدون إنترنت.",
     online: "متصل",
     offline: "بدون إنترنت",
     storage: "المساحة المستخدمة",
     unavailable: "غير متاح",
-    downloadedLessons: "الدروس المحملة",
-    activeDownloads: "تحميلات نشطة",
-    noDownloads: "لا توجد دروس محملة بعد",
-    noDownloadsHint: "ستظهر الدروس المحفوظة هنا.",
+    savedLessons: "الدروس المحفوظة",
+    savingNow: "قيد الحفظ",
+    needsAttention: "يحتاج إلى انتباه",
+    noDownloads: "لا توجد دروس محفوظة بعد",
+    noDownloadsHint: "احفظ الدروس وأنت متصل بالإنترنت لتشاهدها هنا بدون إنترنت.",
+    iosNote: "على الآيفون، احفظ الدروس داخل تطبيق أمل المثبّت — قد يحذفها متصفح سفاري.",
     browseLessons: "تصفح الدروس",
-    downloadFile: "تحميل MP4",
-    open: "فتح",
+    play: "شاهد",
     remove: "حذف",
-    retry: "إعادة المحاولة",
+    retry: "حاول مرة أخرى",
     cancel: "إلغاء",
-    downloading: "جاري التحميل",
-    failed: "فشل التحميل",
-    completed: "مكتمل",
+    saving: "جارٍ الحفظ",
+    ready: "جاهز",
+    needsRedownload: "يحتاج إلى إعادة التنزيل",
+    saveAgain: "احفظ مرة أخرى",
+    updateAvailable: "يتوفر تحديث",
+    update: "حدّث",
     grade: "الصف",
-    downloaded: "تم التحميل",
-    confirmRemove: "حذف هذا الدرس من التحميلات؟",
+    savedOn: "حُفظ في",
+    size: "الحجم",
+    confirmRemove: "حذف هذا الدرس من هذا الهاتف؟",
     unknownLesson: "درس",
-    audio: "الصوت",
+    needsInternet: "اتصل بالإنترنت أولاً",
+    persisted: "الدروس المحفوظة محمية على هذا الهاتف.",
+    bestEffort: "قد يحذف هذا الهاتف الدروس المحفوظة إذا امتلأت مساحته.",
+    keepSafe: "احمِ دروسي",
+    notGranted: "لم يسمح المتصفح بذلك. تثبيت أمل على هاتفك يساعد.",
     autoDownload: "تحميل الدرس التالي عبر الواي فاي",
     autoDownloadHint: "أثناء التعلّم على الواي فاي، يُحفظ الدرس التالي على هذا الهاتف ليعمل لاحقاً بدون بيانات الجوال.",
   },
   en: {
     title: "Downloads",
-    subtitle: "Lessons saved on this device",
+    subtitle: "Lessons saved on this phone play without internet.",
     online: "Online",
     offline: "Offline",
     storage: "Storage used",
     unavailable: "Unavailable",
-    downloadedLessons: "Downloaded lessons",
-    activeDownloads: "Active downloads",
-    noDownloads: "No downloaded lessons yet",
-    noDownloadsHint: "Saved lessons will appear here.",
+    savedLessons: "Saved lessons",
+    savingNow: "Saving now",
+    needsAttention: "Needs attention",
+    noDownloads: "No saved lessons yet",
+    noDownloadsHint: "Save lessons while online to watch them here without internet.",
+    iosNote: "On iPhone, save lessons inside the installed Amal app — Safari can clear them.",
     browseLessons: "Browse lessons",
-    downloadFile: "Download MP4",
-    open: "Open",
+    play: "Play",
     remove: "Remove",
-    retry: "Retry",
+    retry: "Try again",
     cancel: "Cancel",
-    downloading: "Downloading",
-    failed: "Download failed",
-    completed: "Completed",
+    saving: "Saving",
+    ready: "Ready",
+    needsRedownload: "Needs re-download",
+    saveAgain: "Save again",
+    updateAvailable: "Update available",
+    update: "Update",
     grade: "Grade",
-    downloaded: "Downloaded",
-    confirmRemove: "Remove this lesson from downloads?",
+    savedOn: "Saved",
+    size: "Size",
+    confirmRemove: "Remove this lesson from this phone?",
     unknownLesson: "Lesson",
-    audio: "Audio",
+    needsInternet: "Connect to the internet first",
+    persisted: "Saved lessons are protected on this phone.",
+    bestEffort: "This phone may clear saved lessons if it runs low on space.",
+    keepSafe: "Keep my lessons safe",
+    notGranted: "The browser didn't allow it. Installing Amal on your phone helps.",
     autoDownload: "Download the next lesson on Wi-Fi",
     autoDownloadHint: "While you learn on Wi-Fi, the next lesson saves to this phone so it plays later without mobile data.",
   },
 };
+
+type Copy = (typeof translations)["en"];
+type Persistence = "persisted" | "best-effort" | "unsupported";
 
 const noSubscription = () => () => {};
 
@@ -114,6 +145,85 @@ function formatDate(value: string, language: "ar" | "en") {
   }).format(date);
 }
 
+function pick(language: "ar" | "en", arabic: string | null | undefined, english: string | null | undefined) {
+  return (language === "ar" ? arabic || english : english || arabic) || "";
+}
+
+/** Saved lessons, newest first, and which of them lost their audio (evicted or half-cleared). */
+async function readSavedLessons() {
+  const saved = await getOwnedOfflineLessons();
+  saved.sort((a, b) => Date.parse(b.downloadedAt) - Date.parse(a.downloadedAt));
+  const audioChecks = await Promise.all(
+    saved.map(async (lesson) => [lesson.id, await hasCachedSimAudio(lesson.id).catch(() => true)] as const)
+  );
+  return {
+    lessons: saved,
+    missingAudio: new Set(audioChecks.filter(([, present]) => !present).map(([id]) => id)),
+  };
+}
+
+function ProgressBar({ percent }: { percent: number }) {
+  return (
+    <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#007229]/10">
+      <div className="h-full rounded-full bg-[#007229] transition-[width] duration-300" style={{ width: `${percent}%` }} />
+    </div>
+  );
+}
+
+/** A download in progress, or one that failed, for a lesson that isn't saved (yet). */
+function DownloadRow({
+  state,
+  t,
+  language,
+  isOnline,
+  onRetry,
+  onDismiss,
+}: {
+  state: DownloadState;
+  t: Copy;
+  language: "ar" | "en";
+  isOnline: boolean;
+  onRetry: () => void;
+  onDismiss: () => void;
+}) {
+  const downloading = state.status === "downloading";
+  const percent = Math.round(state.progress);
+  const title = pick(language, state.title_ar, state.title_en) || t.unknownLesson;
+  return (
+    <div className="rounded-xl border border-gray-100 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-gray-800">{title}</p>
+          <p className={`text-xs ${downloading ? "text-gray-500" : "text-red-600"}`}>
+            {downloading ? `${t.saving} ${percent}%` : downloadErrorMessage(state.errorCode, language)}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {!downloading && (
+            <button
+              type="button"
+              disabled={!isOnline}
+              title={isOnline ? undefined : t.needsInternet}
+              onClick={onRetry}
+              className="min-h-9 rounded-lg bg-[#007229] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#005C22] disabled:opacity-50"
+            >
+              {t.retry}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="min-h-9 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-200"
+          >
+            {downloading ? t.cancel : t.remove}
+          </button>
+        </div>
+      </div>
+      {downloading && <ProgressBar percent={percent} />}
+    </div>
+  );
+}
+
 export default function DownloadsPage() {
   const { language } = useLanguage();
   const t = translations[language];
@@ -122,51 +232,80 @@ export default function DownloadsPage() {
     isOnline,
     downloads,
     downloadedLessonIds,
+    updateAvailableIds,
     storageUsed,
     storageQuota,
     downloadLesson,
     cancelDownload,
     deleteLesson,
-    refreshDownloads,
+    checkForUpdates,
   } = useOffline();
   const [lessons, setLessons] = useState<OfflineLesson[]>([]);
+  const [missingAudio, setMissingAudio] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [persistence, setPersistence] = useState<Persistence | null>(null);
   // Only Android browsers can tell Wi-Fi from mobile data, so only they get the switch.
   const wifiAware = useSyncExternalStore(noSubscription, canDetectWifi, () => false);
+  const platform = useInstallPlatform();
+  // iPhone storage in a Safari tab is separate from the installed app and can be cleared.
+  const inIosBrowser = platform === "ios-safari" || platform === "ios-browser";
 
-  const loadLessons = useCallback(async () => {
-    setLoading(true);
-    try {
-      const saved = await getAllOfflineLessons();
-      saved.sort((a, b) => Date.parse(b.downloadedAt) - Date.parse(a.downloadedAt));
-      setLessons(saved);
-    } catch {
-      setLessons([]);
-    } finally {
-      setLoading(false);
-    }
+  const applySaved = useCallback((result: Awaited<ReturnType<typeof readSavedLessons>> | null) => {
+    setLessons(result?.lessons ?? []);
+    setMissingAudio(result?.missingAudio ?? new Set());
+    setLoading(false);
   }, []);
 
-  useEffect(() => {
-    void refreshDownloads();
-    void loadLessons();
-  }, [refreshDownloads, loadLessons]);
-
-  useEffect(() => {
-    void loadLessons();
-  }, [downloadedLessonIds, loadLessons]);
-
-  const activeDownloads = useMemo(
-    () =>
-      Array.from(downloads.values()).filter(
-        (download) => download.status !== "completed"
-      ),
-    [downloads]
+  const loadLessons = useCallback(
+    () => readSavedLessons().catch(() => null).then(applySaved),
+    [applySaved]
   );
 
+  // Re-read whenever the context's view of the phone changes (a save, an
+  // update check, a removal, logout in another tab).
+  useEffect(() => {
+    let cancelled = false;
+    void readSavedLessons()
+      .catch(() => null)
+      .then((result) => {
+        if (!cancelled) applySaved(result);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [downloadedLessonIds, updateAvailableIds, applySaved]);
+
+  useEffect(() => {
+    void getPersistenceStatus().then(setPersistence);
+    // Online, flag lessons the teacher re-recorded since they were saved.
+    if (navigator.onLine) void checkForUpdates();
+  }, [checkForUpdates]);
+
+  const savedIds = useMemo(() => new Set(lessons.map((lesson) => lesson.id)), [lessons]);
+  // Downloads of lessons not saved yet: in progress, or failed with a reason.
+  const pendingRows = useMemo(
+    () =>
+      Array.from(downloads.values()).filter(
+        (state) => state.status !== "completed" && state.status !== "idle" && !savedIds.has(state.lessonId)
+      ),
+    [downloads, savedIds]
+  );
+  const activeRows = pendingRows.filter((state) => state.status === "downloading");
+  const failedRows = pendingRows.filter((state) => state.status === "error");
+
   const usedPercent = storageQuota > 0 ? Math.min(100, Math.round((storageUsed / storageQuota) * 100)) : 0;
-  const downloadedAudioBytes = lessons.reduce((total, lesson) => total + (lesson.audioSize || 0), 0);
+  const savedBytes = lessons.reduce((total, lesson) => total + (lesson.audioSize || 0) + (lesson.assetBytes || 0), 0);
+
+  const reportResult = (result: DownloadResult) => {
+    if (result.status === "failed") toast.error(downloadErrorMessage(result.code, language));
+    else if (result.status === "saved" && result.lesson.audioMayNotPlay) toast.warning(AUDIO_FORMAT_WARNING[language]);
+  };
+
+  const handleSave = async (lessonId: string) => {
+    reportResult(await downloadLesson(lessonId));
+    await loadLessons();
+  };
 
   const handleRemove = async (lessonId: string) => {
     if (!window.confirm(t.confirmRemove)) return;
@@ -177,6 +316,12 @@ export default function DownloadsPage() {
     } finally {
       setRemovingId(null);
     }
+  };
+
+  const handleKeepSafe = async () => {
+    const granted = await requestPersistentStorage();
+    setPersistence(granted ? "persisted" : "best-effort");
+    if (!granted) toast(t.notGranted);
   };
 
   return (
@@ -196,10 +341,14 @@ export default function DownloadsPage() {
         </div>
       </div>
 
+      {inIosBrowser && (
+        <p className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">{t.iosNote}</p>
+      )}
+
       {wifiAware && <AutoDownloadSetting label={t.autoDownload} hint={t.autoDownloadHint} />}
 
       <div className="grid gap-4 md:grid-cols-[1.15fr_0.85fr] mb-6">
-        <section className={`bg-white border border-gray-100 rounded-2xl p-4 shadow-sm ${activeDownloads.length === 0 ? "md:col-span-2" : ""}`}>
+        <section className={`bg-white border border-gray-100 rounded-2xl p-4 shadow-sm ${pendingRows.length === 0 ? "md:col-span-2" : ""}`}>
           <div className="flex items-center justify-between gap-3 mb-3">
             <h2 className="text-sm font-bold text-gray-800">{t.storage}</h2>
             <span className="text-xs font-semibold text-gray-500">
@@ -211,66 +360,66 @@ export default function DownloadsPage() {
           </div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
             <span className="px-2 py-1 rounded-lg bg-gray-50">
-              {lessons.length} {t.downloadedLessons}
+              {lessons.length} {t.savedLessons}
             </span>
             <span className="px-2 py-1 rounded-lg bg-gray-50">
-              {t.audio}: {formatBytes(downloadedAudioBytes)}
+              {t.size}: {formatBytes(savedBytes)}
             </span>
           </div>
+          {persistence === "persisted" && (
+            <p className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-700">
+              <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+              </svg>
+              {t.persisted}
+            </p>
+          )}
+          {persistence === "best-effort" && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-gray-500">{t.bestEffort}</p>
+              <button
+                type="button"
+                onClick={() => void handleKeepSafe()}
+                className="min-h-9 rounded-lg bg-[#007229]/10 px-3 py-1.5 text-xs font-bold text-[#007229] hover:bg-[#007229]/15"
+              >
+                {t.keepSafe}
+              </button>
+            </div>
+          )}
         </section>
 
-        {activeDownloads.length > 0 && (
-          <section className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-            <h2 className="text-sm font-bold text-gray-800 mb-3">{t.activeDownloads}</h2>
-            <div className="space-y-3">
-              {activeDownloads.map((download) => {
-                const isDownloading = download.status === "downloading";
-                return (
-                  <div key={download.lessonId} className="rounded-xl border border-gray-100 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">
-                          {t.unknownLesson} {download.lessonId.slice(0, 8)}
-                        </p>
-                        <p className={`text-xs ${download.status === "error" ? "text-red-500" : "text-gray-500"}`}>
-                          {download.status === "error" ? download.error || t.failed : `${t.downloading} ${download.progress}%`}
-                        </p>
-                      </div>
-                      {isDownloading ? (
-                        <button
-                          type="button"
-                          onClick={() => cancelDownload(download.lessonId)}
-                          className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs font-bold hover:bg-gray-200"
-                        >
-                          {t.cancel}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={!isOnline}
-                          onClick={() => void downloadLesson(download.lessonId)}
-                          className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 disabled:opacity-50"
-                        >
-                          {t.retry}
-                        </button>
-                      )}
-                    </div>
-                    {isDownloading && (
-                      <div className="mt-3 h-2 rounded-full bg-blue-50 overflow-hidden">
-                        <div className="h-full rounded-full bg-blue-500" style={{ width: `${download.progress}%` }} />
-                      </div>
-                    )}
+        {pendingRows.length > 0 && (
+          <section className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm space-y-5">
+            {[
+              { heading: t.savingNow, rows: activeRows },
+              { heading: t.needsAttention, rows: failedRows },
+            ]
+              .filter((group) => group.rows.length > 0)
+              .map((group) => (
+                <div key={group.heading}>
+                  <h2 className="text-sm font-bold text-gray-800 mb-3">{group.heading}</h2>
+                  <div className="space-y-3">
+                    {group.rows.map((state) => (
+                      <DownloadRow
+                        key={state.lessonId}
+                        state={state}
+                        t={t}
+                        language={language}
+                        isOnline={isOnline}
+                        onRetry={() => void handleSave(state.lessonId)}
+                        onDismiss={() => cancelDownload(state.lessonId)}
+                      />
+                    ))}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              ))}
           </section>
         )}
       </div>
 
       <section>
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h2 className="text-lg font-bold font-fredoka text-gray-900">{t.downloadedLessons}</h2>
+          <h2 className="text-lg font-bold font-fredoka text-gray-900">{t.savedLessons}</h2>
           <Link
             href="/lessons"
             className="inline-flex items-center justify-center px-3 py-2 rounded-xl bg-[#007229] text-white text-sm font-bold hover:bg-[#005C22] transition-colors"
@@ -298,8 +447,23 @@ export default function DownloadsPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {lessons.map((lesson) => {
-              const title = (language === "ar" ? lesson.title_ar : lesson.title_en) || lesson.title_ar || lesson.title_en;
-              const subject = language === "ar" ? lesson.subject_name_ar : lesson.subject_name_en;
+              const title = pick(language, lesson.title_ar, lesson.title_en);
+              const subject = pick(language, lesson.subject_name_ar, lesson.subject_name_en);
+              const state = downloads.get(lesson.id);
+              const saving = state?.status === "downloading";
+              const failed = state?.status === "error";
+              const noAudio = missingAudio.has(lesson.id);
+              const outdated = updateAvailableIds.has(lesson.id) || lesson.updateAvailable === true;
+              const percent = Math.round(state?.progress ?? 0);
+              const badge = saving
+                ? { text: `${t.saving} ${percent}%`, tone: "bg-[#007229]/10 text-[#007229]" }
+                : noAudio
+                  ? { text: t.needsRedownload, tone: "bg-red-50 text-red-700" }
+                  : outdated
+                    ? { text: t.updateAvailable, tone: "bg-amber-50 text-amber-800" }
+                    : { text: t.ready, tone: "bg-emerald-50 text-emerald-700" };
+              // Missing audio or a newer recording: save it again (online only).
+              const refreshLabel = noAudio ? t.saveAgain : outdated ? t.update : failed ? t.retry : null;
               return (
                 <article key={lesson.id} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col min-h-52">
                   <div className="flex-1">
@@ -317,52 +481,80 @@ export default function DownloadsPage() {
                           </span>
                         </div>
                       </div>
-                      <span className="w-9 h-9 flex-shrink-0 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
-                      </span>
+                      <span className={`flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${badge.tone}`}>{badge.text}</span>
                     </div>
                     <dl className="mt-4 grid grid-cols-2 gap-2 text-xs text-gray-500">
                       <div className="rounded-xl bg-gray-50 p-2">
-                        <dt className="font-semibold">{t.downloaded}</dt>
+                        <dt className="font-semibold">{t.savedOn}</dt>
                         <dd className="mt-0.5">{formatDate(lesson.downloadedAt, language)}</dd>
                       </div>
                       <div className="rounded-xl bg-gray-50 p-2">
-                        <dt className="font-semibold">{t.audio}</dt>
-                        <dd className="mt-0.5">{formatBytes(lesson.audioSize)}</dd>
+                        <dt className="font-semibold">{t.size}</dt>
+                        <dd className="mt-0.5">{formatBytes((lesson.audioSize || 0) + (lesson.assetBytes || 0))}</dd>
                       </div>
                     </dl>
+                    {saving && <ProgressBar percent={percent} />}
+                    {failed && !saving && (
+                      <p className="mt-3 text-xs font-medium text-red-600">{downloadErrorMessage(state?.errorCode, language)}</p>
+                    )}
+                    {lesson.audioMayNotPlay && !noAudio && (
+                      <p className="mt-3 text-xs font-medium text-amber-700">{AUDIO_FORMAT_WARNING[language]}</p>
+                    )}
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <LessonComputerDownloadButton
-                      lessonId={lesson.id}
-                      title={title}
-                      videoUrl={lesson.videoUrl}
-                      language={language}
-                      getPayload={async () => {
-                        if (!lesson.sim) return null;
-                        const audioBlob = await getCachedSimAudio(lesson.id);
-                        if (!audioBlob) return lesson.sim;
-                        return {
-                          ...lesson.sim,
-                          audio_url: URL.createObjectURL(audioBlob),
-                        };
-                      }}
-                      className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-blue-50 text-blue-700 text-sm font-bold hover:bg-blue-100 transition-colors"
-                    />
-                    <Link
-                      href={`/lessons/${lesson.id}`}
-                      className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-xl bg-[#007229] text-white text-sm font-bold hover:bg-[#005C22] transition-colors"
-                    >
-                      {t.open}
-                    </Link>
+                    {!noAudio &&
+                      (isOnline ? (
+                        <Link
+                          href={`/lessons/${lesson.id}`}
+                          className="flex-1 inline-flex min-h-10 items-center justify-center px-3 py-2 rounded-xl bg-[#007229] text-white text-sm font-bold hover:bg-[#005C22] transition-colors"
+                        >
+                          {t.play}
+                        </Link>
+                      ) : (
+                        // A full page load: the offline player needs no connection.
+                        <a
+                          href={offlinePlayerUrl(lesson.id)}
+                          className="flex-1 inline-flex min-h-10 items-center justify-center px-3 py-2 rounded-xl bg-[#007229] text-white text-sm font-bold hover:bg-[#005C22] transition-colors"
+                        >
+                          {t.play}
+                        </a>
+                      ))}
+                    {refreshLabel && !saving && (
+                      <button
+                        type="button"
+                        disabled={!isOnline}
+                        title={isOnline ? undefined : t.needsInternet}
+                        onClick={() => void handleSave(lesson.id)}
+                        className={`${noAudio ? "flex-1 bg-[#007229] text-white hover:bg-[#005C22]" : "bg-amber-50 text-amber-800 hover:bg-amber-100"} inline-flex min-h-10 items-center justify-center px-3 py-2 rounded-xl text-sm font-bold transition-colors disabled:opacity-50`}
+                      >
+                        {refreshLabel}
+                      </button>
+                    )}
+                    {!noAudio && (
+                      <LessonComputerDownloadButton
+                        lessonId={lesson.id}
+                        title={title}
+                        videoUrl={lesson.videoUrl}
+                        language={language}
+                        iconOnly
+                        getPayload={async () => {
+                          if (!lesson.sim) return null;
+                          const audioBlob = await getCachedSimAudio(lesson.id);
+                          if (!audioBlob) return lesson.sim;
+                          return {
+                            ...lesson.sim,
+                            audio_url: URL.createObjectURL(audioBlob),
+                          };
+                        }}
+                        className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                      />
+                    )}
                     <button
                       type="button"
                       disabled={removingId === lesson.id}
                       onClick={() => void handleRemove(lesson.id)}
-                      className="px-3 py-2 rounded-xl bg-red-50 text-red-700 text-sm font-bold hover:bg-red-100 disabled:opacity-50"
+                      className="min-h-10 px-3 py-2 rounded-xl bg-red-50 text-red-700 text-sm font-bold hover:bg-red-100 disabled:opacity-50"
                     >
                       {t.remove}
                     </button>

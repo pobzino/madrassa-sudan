@@ -405,3 +405,56 @@ export function answerFromLegacy(
         : null;
   }
 }
+
+/** Answer shapes POST /api/lessons/[id]/slide-responses accepts. */
+export type ServerSlideAnswer =
+  | LegacyAnswer
+  | { type: 'draw_answer'; image_data_url: string };
+
+const INTERACTION_ANSWER_TYPES = new Set<string>([
+  'free_response',
+  'choose_correct',
+  'fill_missing_word',
+  'true_false',
+  'tap_to_count',
+  'match_pairs',
+  'sequence_order',
+  'sort_groups',
+  'draw_answer',
+  'drag_drop_label',
+]);
+
+/**
+ * Convert whatever a player produced (a typed InteractionAnswer, an
+ * already-legacy value, or nothing for a skipped activity) into the shape the
+ * slide-responses route validates. The route rejects typed answer objects, so
+ * players must send this rather than their raw answer. Unknown shapes become
+ * null (recorded as skipped) instead of failing the whole request.
+ */
+export function toServerSlideAnswer(answer: unknown): ServerSlideAnswer {
+  if (answer === null || answer === undefined) return null;
+  if (typeof answer === 'string' || typeof answer === 'boolean') return answer;
+  if (typeof answer === 'number') return Number.isFinite(answer) ? answer : null;
+
+  if (Array.isArray(answer)) {
+    return answer.every((item) => typeof item === 'string' || typeof item === 'number')
+      ? answer.map(String)
+      : null;
+  }
+
+  if (typeof answer === 'object') {
+    const type = (answer as { type?: unknown }).type;
+    if (typeof type !== 'string' || !INTERACTION_ANSWER_TYPES.has(type)) return null;
+    try {
+      const legacy = answerToLegacy(answer as InteractionAnswer);
+      // Guard against partially-filled answers (e.g. missing placements).
+      if (legacy === undefined) return null;
+      if (typeof legacy === 'number' && !Number.isFinite(legacy)) return null;
+      return legacy;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}

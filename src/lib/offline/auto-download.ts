@@ -1,12 +1,14 @@
 // Downloads the next lesson in the background while a family is on Wi-Fi, so
 // it plays later without using mobile data. Only Android browsers report the
-// connection type, so iPhones keep the manual download button. Keeps the last
-// few automatic downloads and removes older ones; manual downloads are never
-// touched. Off unless switched on (on the Downloads page) until offline
-// lessons have been checked on real phones.
+// connection type, so iPhones keep the manual save button. Automatic
+// downloads are marked `origin: "auto"` on their record; the last few are
+// kept and older ones removed. Saving a lesson by hand makes it manual, and
+// manual downloads are never removed here. Off unless switched on (on the
+// Downloads page) until offline lessons have been checked on real phones.
 
-const SETTING_KEY = "amal-auto-download";
-const AUTO_IDS_KEY = "amal-auto-downloaded";
+import { AUTO_DOWNLOAD_SETTING_KEY, LEGACY_AUTO_DOWNLOADED_KEY } from "./cache-names";
+import type { OfflineLesson, OfflineOrigin } from "./db";
+
 const KEEP_AUTO_DOWNLOADS = 3;
 // Leave room on the phone: skip when less than this is free.
 const MIN_FREE_BYTES = 200 * 1024 * 1024;
@@ -15,7 +17,7 @@ type NetworkInformation = { type?: string; saveData?: boolean };
 
 export function isAutoDownloadEnabled() {
   try {
-    return localStorage.getItem(SETTING_KEY) === "on";
+    return localStorage.getItem(AUTO_DOWNLOAD_SETTING_KEY) === "on";
   } catch {
     return false;
   }
@@ -23,7 +25,7 @@ export function isAutoDownloadEnabled() {
 
 export function setAutoDownloadEnabled(enabled: boolean) {
   try {
-    localStorage.setItem(SETTING_KEY, enabled ? "on" : "off");
+    localStorage.setItem(AUTO_DOWNLOAD_SETTING_KEY, enabled ? "on" : "off");
   } catch {
     // Storage can be unavailable in private or locked-down browsers.
   }
@@ -41,29 +43,51 @@ function onUnmeteredConnection() {
   return connection.type === "wifi" || connection.type === "ethernet";
 }
 
-function autoIds(): string[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(AUTO_IDS_KEY) ?? "[]");
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveAutoIds(ids: string[]) {
-  try {
-    localStorage.setItem(AUTO_IDS_KEY, JSON.stringify(ids));
-  } catch {
-    // See above.
-  }
-}
-
 async function hasRoom() {
   try {
     const { quota = 0, usage = 0 } = (await navigator.storage?.estimate?.()) ?? {};
     return !quota || quota - usage > MIN_FREE_BYTES;
   } catch {
     return true;
+  }
+}
+
+/**
+ * Automatic downloads to remove: every "auto" lesson beyond the newest
+ * `keep`, never one in `protectedIds`. Pure, for tests.
+ */
+export function pickAutoDownloadsToEvict(
+  lessons: Pick<OfflineLesson, "id" | "origin" | "downloadedAt">[],
+  { keep = KEEP_AUTO_DOWNLOADS, protectedIds = [] }: { keep?: number; protectedIds?: string[] } = {}
+): string[] {
+  return lessons
+    .filter((lesson) => lesson.origin === "auto")
+    .sort((left, right) => Date.parse(right.downloadedAt) - Date.parse(left.downloadedAt))
+    .slice(keep)
+    .map((lesson) => lesson.id)
+    .filter((id) => !protectedIds.includes(id));
+}
+
+/** v1 kept automatic downloads in a localStorage list; move that onto the records once. */
+async function migrateLegacyAutoIds() {
+  let ids: string[] = [];
+  try {
+    const raw = localStorage.getItem(LEGACY_AUTO_DOWNLOADED_KEY);
+    if (!raw) return;
+    const parsed: unknown = JSON.parse(raw);
+    ids = Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return;
+  }
+  const { getOfflineLesson, updateOfflineLesson } = await import("./db");
+  for (const id of ids) {
+    const lesson = await getOfflineLesson(id).catch(() => null);
+    if (lesson && !lesson.origin) await updateOfflineLesson(id, { origin: "auto" }).catch(() => null);
+  }
+  try {
+    localStorage.removeItem(LEGACY_AUTO_DOWNLOADED_KEY);
+  } catch {
+    // Logout removes it too.
   }
 }
 
@@ -79,7 +103,7 @@ export async function autoDownloadLesson(
     isDownloaded,
     keepId,
   }: {
-    download: (lessonId: string) => Promise<void>;
+    download: (lessonId: string, options?: { origin?: OfflineOrigin }) => Promise<unknown>;
     remove: (lessonId: string) => Promise<void>;
     isDownloaded: (lessonId: string) => boolean;
     keepId?: string;
@@ -88,16 +112,19 @@ export async function autoDownloadLesson(
   if (!isAutoDownloadEnabled() || !navigator.onLine || !onUnmeteredConnection()) return;
   if (isDownloaded(lessonId) || !(await hasRoom())) return;
 
-  await download(lessonId);
-  if (!isDownloaded(lessonId) && !(await stillSaved(lessonId))) return;
+  try {
+    await download(lessonId, { origin: "auto" });
+  } catch {
+    return; // The download's own state shows the failure.
+  }
 
-  const ids = [...autoIds().filter((id) => id !== lessonId), lessonId];
-  const stale = ids.slice(0, Math.max(0, ids.length - KEEP_AUTO_DOWNLOADS)).filter((id) => id !== keepId);
+  await migrateLegacyAutoIds().catch(() => undefined);
+  const { getOwnedOfflineLessons } = await import("./identity");
+  const lessons = await getOwnedOfflineLessons().catch(() => []);
+  if (!lessons.some((lesson) => lesson.id === lessonId)) return;
+
+  const stale = pickAutoDownloadsToEvict(lessons, {
+    protectedIds: [lessonId, ...(keepId ? [keepId] : [])],
+  });
   for (const id of stale) await remove(id).catch(() => undefined);
-  saveAutoIds(ids.filter((id) => !stale.includes(id)));
-}
-
-async function stillSaved(lessonId: string) {
-  const { getOfflineLesson } = await import("./db");
-  return Boolean(await getOfflineLesson(lessonId).catch(() => null));
 }

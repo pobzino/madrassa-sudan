@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { Profile, Subject } from "@/lib/database.types";
-import { getCachedProfile, getCachedUser } from "@/lib/supabase/auth-cache";
+import { getCachedProfile, getCachedUser, getLastAuthStatus } from "@/lib/supabase/auth-cache";
 import {
   TrophyIcon,
   BookOpenIcon,
@@ -114,7 +114,9 @@ export default function DashboardPage() {
   useEffect(() => {
     async function loadData() {
       const user = await getCachedUser(supabase);
-      if (!user) { router.push("/auth/login"); return; }
+      // No user and no answer from the server (offline, lie-fi) isn't signed
+      // out: DashboardLayout sends that case to the saved-lessons hub.
+      if (!user) { if (getLastAuthStatus() === "signed_out") router.push("/auth/login"); return; }
 
       const profileData = await getCachedProfile(supabase, user.id);
       if (profileData) setProfile(profileData);

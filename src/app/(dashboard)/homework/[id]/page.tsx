@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { OwlCelebrating, OwlEncouraging, OwlCorrect, OwlPointing, Confetti } from "@/components/illustrations";
 import type { HomeworkAssignment, HomeworkQuestion, HomeworkSubmission, HomeworkResponse, Subject } from "@/lib/database.types";
-import { getCachedUser } from "@/lib/supabase/auth-cache";
+import { getCachedUser, getLastAuthStatus } from "@/lib/supabase/auth-cache";
 import { toast } from "sonner";
 import {
   getHomeworkFileName,
@@ -300,7 +300,9 @@ export default function HomeworkAssignmentPage() {
     async function loadData() {
       const user = await getCachedUser(supabase);
       if (!user) {
-        router.push("/auth/login");
+        // Offline or lie-fi (no answer) isn't signed out; DashboardLayout
+        // sends that case to the saved-lessons hub.
+        if (getLastAuthStatus() === "signed_out") router.push("/auth/login");
         return;
       }
       setUserId(user.id);

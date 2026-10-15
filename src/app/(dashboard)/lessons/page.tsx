@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { OwlThinking, OwlSad } from "@/components/illustrations";
 import type { Lesson, Subject, LessonProgress } from "@/lib/database.types";
-import { getCachedUser } from "@/lib/supabase/auth-cache";
+import { getCachedUser, getLastAuthStatus } from "@/lib/supabase/auth-cache";
 import SlideCard from "@/components/slides/SlideCard";
 import OwlImage, { isOwlImage } from "@/components/slides/OwlImage";
 import type { Slide } from "@/lib/slides.types";
@@ -111,7 +111,9 @@ export default function LessonsPage() {
     async function loadData() {
       const user = await getCachedUser(supabase);
       if (!user) {
-        router.push("/auth/login");
+        // Only a definite "signed out" goes to login. With no connection the
+        // dashboard layout sends the family to their saved lessons instead.
+        if (getLastAuthStatus() === "signed_out") router.push("/auth/login");
         return;
       }
       setUserId(user.id);
