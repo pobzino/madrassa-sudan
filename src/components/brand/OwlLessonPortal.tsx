@@ -19,7 +19,6 @@ type PortalStep = {
 
 type OwlLessonPortalProps = {
   isRtl: boolean;
-  label: string;
   title: string;
   subtitle: string;
   steps: PortalStep[];
@@ -39,7 +38,6 @@ const cardIcons = [VideoIcon, GamepadIcon, TrophyIcon];
  */
 export function OwlLessonPortal({
   isRtl,
-  label,
   title,
   subtitle,
   steps,
@@ -163,7 +161,7 @@ export function OwlLessonPortal({
   return (
     <section
       id="sims"
-      className="relative isolate scroll-mt-14 bg-[#007229] sm:scroll-mt-16"
+      className="relative isolate scroll-mt-14 bg-[#FEF2F2] sm:scroll-mt-16"
       aria-label={title}
       data-owl-lesson-portal
     >
@@ -175,7 +173,7 @@ export function OwlLessonPortal({
         <div
           ref={stageRef}
           data-portal-stage
-          className="sticky top-14 mx-auto h-[calc(100svh-3.5rem)] max-w-[100rem] overflow-hidden border-x-[10px] border-[#007229] bg-[#FEF2F2] sm:top-16 sm:h-[calc(100svh-4rem)] sm:border-x-[18px]"
+          className="sticky top-14 h-[calc(100svh-3.5rem)] overflow-hidden bg-[#FEF2F2] sm:top-16 sm:h-[calc(100svh-4rem)]"
         >
           <div
             className="pointer-events-none absolute inset-0 opacity-55"
@@ -238,10 +236,7 @@ export function OwlLessonPortal({
             className="pointer-events-none absolute inset-x-4 top-1/2 z-30 -translate-y-1/2 text-center text-white"
             aria-hidden="true"
           >
-            <p className="font-fredoka text-xs font-bold tracking-[0.16em] text-white/75 sm:text-sm">
-              {label}
-            </p>
-            <h2 className="mx-auto mt-3 max-w-4xl font-fredoka text-4xl font-semibold leading-[0.98] text-balance sm:text-6xl lg:text-7xl">
+            <h2 className="mx-auto max-w-4xl font-fredoka text-4xl font-semibold leading-[0.98] text-balance sm:text-6xl lg:text-7xl">
               {title}
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-sm font-medium leading-relaxed text-white/85 sm:text-lg">

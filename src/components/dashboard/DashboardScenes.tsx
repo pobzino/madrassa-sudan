@@ -294,7 +294,8 @@ function GroundShadow({ className }: { className: string }) {
   return <div className={`absolute left-1/2 -translate-x-1/2 bottom-0 rounded-[50%] bg-black/10 blur-[2px] ${className}`} />;
 }
 
-export function LandingHeroScene() {
+/** Pass `owls={false}` when the page draws its own (interactive) owls on the hills. */
+export function LandingHeroScene({ owls = true }: { owls?: boolean }) {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
       {/* sky → meadow */}
@@ -352,20 +353,22 @@ export function LandingHeroScene() {
       <svg className="absolute bottom-0 left-0 w-full h-[96px]" viewBox="0 0 1440 96" preserveAspectRatio="none" fill="#aed7b6"><path d="M0 50c320-44 540-20 720 14s440 34 720-14v46H0z" /></svg>
 
       {/* owl trio standing on the hills */}
-      <div className="absolute bottom-[26px] left-1/2 -translate-x-1/2 flex items-end justify-center gap-4 sm:gap-12">
-        <div className="relative w-20 sm:w-28 hidden sm:block">
-          <OwlMath className="w-full" />
-          <GroundShadow className="w-16 h-3" />
+      {owls && (
+        <div className="absolute bottom-[26px] left-1/2 -translate-x-1/2 flex items-end justify-center gap-4 sm:gap-12">
+          <div className="relative w-20 sm:w-28 hidden sm:block">
+            <OwlMath className="w-full" />
+            <GroundShadow className="w-16 h-3" />
+          </div>
+          <div className="relative w-32 sm:w-52">
+            <OwlWaving className="w-full drop-shadow-md" />
+            <GroundShadow className="w-24 h-4" />
+          </div>
+          <div className="relative w-20 sm:w-28 hidden sm:block">
+            <OwlEnglish className="w-full" />
+            <GroundShadow className="w-16 h-3" />
+          </div>
         </div>
-        <div className="relative w-32 sm:w-52">
-          <OwlWaving className="w-full drop-shadow-md" />
-          <GroundShadow className="w-24 h-4" />
-        </div>
-        <div className="relative w-20 sm:w-28 hidden sm:block">
-          <OwlEnglish className="w-full" />
-          <GroundShadow className="w-16 h-3" />
-        </div>
-      </div>
+      )}
 
       {/* foreground flowers */}
       {[10, 22, 34, 66, 78, 90].map((x, i) => (

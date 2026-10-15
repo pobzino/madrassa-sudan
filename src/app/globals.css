@@ -435,3 +435,30 @@ html {
 [dir="rtl"] {
   font-family: var(--font-cairo);
 }
+
+/* Home "How it works": handwritten notes and the owl's speech bubble. */
+@keyframes hiw-note {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes hiw-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes stat-flash {
+  from { opacity: 0.85; }
+  to { opacity: 0; }
+}
+
+/* "How it works" meadow celebration bursts. */
+@keyframes hiw-burst {
+  0% { transform: scale(0.2); opacity: 0; }
+  15% { opacity: 1; }
+  70% { opacity: 0.9; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+/* Floating symbols in the subject worlds. */
+@keyframes subject-float {
+  0%, 100% { transform: translateY(0) rotate(var(--tilt, 0deg)); }
+  50% { transform: translateY(-12px) rotate(var(--tilt, 0deg)); }
+}
