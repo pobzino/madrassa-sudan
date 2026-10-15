@@ -505,7 +505,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
             {txt.footer.builtBy}{" "}
             {/* No "noreferrer", so the studio can see visits that come from here. */}
             <a
-              href="https://www.loxdigital.com/work/amal-school/"
+              href="https://www.loxdigital.com/"
               target="_blank"
               rel="noopener"
               dir="ltr"
