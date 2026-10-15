@@ -26,7 +26,8 @@ function localised(value: unknown, fallback: Localised): Localised {
 }
 
 // A one-off notification to every device with reminders on, in each family's
-// language. Body (all optional): { title: {en, ar}, body: {en, ar}, url, dryRun }.
+// language. Body (all optional): { title: {en, ar}, body: {en, ar}, url,
+// roles: ["admin"], dryRun }. `roles` limits it to accounts with those roles.
 export async function POST(request: NextRequest) {
   if (!hasAutomationSecret(request, process.env.EMAIL_AUTOMATION_SECRET)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -37,15 +38,17 @@ export async function POST(request: NextRequest) {
   const title = localised(input.title, HELLO.title);
   const body = localised(input.body, HELLO.body);
   const url = typeof input.url === "string" && input.url.startsWith("/") ? input.url : HELLO.url;
+  const roles = Array.isArray(input.roles) ? input.roles.filter((role): role is string => typeof role === "string") : null;
 
   const client = createServiceClient();
   const db = client as unknown as UntypedClient;
   const subscribers = [...(await usersWithPush(db))];
   const messages = new Map<string, PushMessage>();
   for (let i = 0; i < subscribers.length; i += 100) {
-    const { data, error } = await client.from("profiles").select("id, preferred_language").in("id", subscribers.slice(i, i + 100));
+    const { data, error } = await client.from("profiles").select("id, role, preferred_language").in("id", subscribers.slice(i, i + 100));
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     for (const profile of data ?? []) {
+      if (roles && !roles.includes(profile.role)) continue;
       const language = languageOf(profile.preferred_language);
       messages.set(profile.id, { title: title[language], body: body[language], url, tag: "announcement", lang: language });
     }

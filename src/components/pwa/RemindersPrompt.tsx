@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { trackAnalyticsEvent } from "@/lib/analytics";
-import { enableReminders } from "@/lib/push-client";
+import { enableReminders, hideRemindersCard } from "@/lib/push-client";
 
 export type RemindersSource = "first_open" | "after_install" | "lesson" | "repeat" | "dashboard" | "settings";
 
@@ -145,7 +145,15 @@ export function RemindersPrompt({ source, onClose }: { source: RemindersSource; 
         </div>
 
         {state !== "on" && (
-          <button type="button" onClick={onClose} className="mt-3 w-full py-2 text-sm font-semibold text-gray-500">
+          <button
+            type="button"
+            onClick={() => {
+              // "Not now" also quiets the dashboard card for a few days, so it doesn't ask again straight away.
+              if (state !== "denied") hideRemindersCard();
+              onClose();
+            }}
+            className="mt-3 w-full py-2 text-sm font-semibold text-gray-500"
+          >
             {state === "denied" ? t.close : t.notNow}
           </button>
         )}

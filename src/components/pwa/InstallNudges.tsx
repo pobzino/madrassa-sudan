@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { OwlWaving } from "@/components/illustrations";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { trackAnalyticsEvent } from "@/lib/analytics";
@@ -22,7 +22,7 @@ import {
   remindersAskCount,
   reminderState,
   shouldAskForReminders,
-  type ReminderState,
+  subscribeToReminders,
 } from "@/lib/push-client";
 import { AddToPhone, useInstallPlatform, type InstallSource } from "./AddToPhone";
 import { RemindersPrompt, type RemindersSource } from "./RemindersPrompt";
@@ -200,18 +200,20 @@ export function DashboardInstallNudge({ allowReminders = false }: { allowReminde
   const [sheet, setSheet] = useState<InstallSource | null>(null);
   const [prompt, setPrompt] = useState<RemindersSource | null>(null);
   const [cardHidden, setCardHidden] = useState(() => isInstallCardHidden());
-  const [reminders, setReminders] = useState<ReminderState | "busy" | "on" | "error">(() => reminderState());
-  const [remindersHidden, setRemindersHidden] = useState(() => isRemindersCardHidden());
+  // Live, so turning reminders on in the prompt (or Settings) hides this card at once.
+  const permission = useSyncExternalStore(subscribeToReminders, reminderState, () => null);
+  const remindersHidden = useSyncExternalStore(subscribeToReminders, isRemindersCardHidden, () => true);
+  const [cardState, setCardState] = useState<"idle" | "busy" | "on" | "error">("idle");
 
   useEffect(() => {
-    if (reminders === "granted") void refreshReminders();
-  }, [reminders]);
+    if (permission === "granted") void refreshReminders();
+  }, [permission]);
 
   if (!platform) return null;
   const installed = platform === "installed";
   const showInstallCard = !installed && !cardHidden;
-  const showReminders =
-    allowReminders && !showInstallCard && (reminders === "on" || reminders === "error" || reminders === "busy" || (reminders === "default" && !remindersHidden));
+  // "on" stays for a moment so the parent sees it worked from the card itself.
+  const showReminders = allowReminders && !showInstallCard && (cardState !== "idle" || (permission === "default" && !remindersHidden));
 
   const add = async () => {
     if (platform === "one-tap") {
@@ -227,15 +229,16 @@ export function DashboardInstallNudge({ allowReminders = false }: { allowReminde
   };
 
   const turnOnReminders = async () => {
-    setReminders("busy");
+    setCardState("busy");
     const outcome = await enableReminders(language);
     trackAnalyticsEvent("reminders_result", { source: "dashboard", outcome, platform });
-    if (outcome === "on") setReminders("on");
-    else if (outcome === "error") setReminders("error");
+    if (outcome === "on") {
+      setCardState("on");
+      window.setTimeout(() => setCardState("idle"), 4000);
+    } else if (outcome === "error") setCardState("error");
     else {
       hideRemindersCard();
-      setRemindersHidden(true);
-      setReminders(outcome === "denied" ? "denied" : "default");
+      setCardState("idle");
     }
   };
 
@@ -256,16 +259,15 @@ export function DashboardInstallNudge({ allowReminders = false }: { allowReminde
       {showReminders && (
         <NudgeCard
           icon={<BellIcon />}
-          title={reminders === "on" ? t.remindersOn : t.remindersTitle}
-          body={reminders === "on" ? t.remindersOnBody : reminders === "error" ? t.remindersError : t.remindersBody}
-          action={reminders === "on" ? undefined : { label: reminders === "busy" ? t.remindersBusy : t.remindersButton, onClick: turnOnReminders, disabled: reminders === "busy" }}
+          title={cardState === "on" ? t.remindersOn : t.remindersTitle}
+          body={cardState === "on" ? t.remindersOnBody : cardState === "error" ? t.remindersError : t.remindersBody}
+          action={cardState === "on" ? undefined : { label: cardState === "busy" ? t.remindersBusy : t.remindersButton, onClick: turnOnReminders, disabled: cardState === "busy" }}
           onHide={
-            reminders === "on"
+            cardState === "on"
               ? undefined
               : () => {
                   hideRemindersCard();
-                  setRemindersHidden(true);
-                  setReminders("default");
+                  setCardState("idle");
                 }
           }
         />
@@ -280,15 +282,7 @@ export function DashboardInstallNudge({ allowReminders = false }: { allowReminde
           }}
         />
       )}
-      {prompt && (
-        <RemindersPrompt
-          source={prompt}
-          onClose={() => {
-            setPrompt(null);
-            setReminders(reminderState());
-          }}
-        />
-      )}
+      {prompt && <RemindersPrompt source={prompt} onClose={() => setPrompt(null)} />}
     </>
   );
 }

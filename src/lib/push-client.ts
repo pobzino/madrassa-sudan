@@ -13,6 +13,30 @@ export type ReminderState =
 
 const SERVICE_WORKER_TIMEOUT_MS = 8000;
 
+// One live view of "are reminders on?" shared by the prompt, the dashboard
+// card and Settings, so turning them on in one place updates the others.
+const reminderListeners = new Set<() => void>();
+let watchingPermission = false;
+
+function notifyReminders() {
+  reminderListeners.forEach((listener) => listener());
+}
+
+export function subscribeToReminders(listener: () => void) {
+  reminderListeners.add(listener);
+  // Also follow changes made in the phone's settings, where the browser reports them.
+  if (!watchingPermission && typeof navigator !== "undefined" && navigator.permissions?.query) {
+    watchingPermission = true;
+    navigator.permissions
+      .query({ name: "notifications" as PermissionName })
+      .then((status) => status.addEventListener("change", notifyReminders))
+      .catch(() => undefined);
+  }
+  return () => {
+    reminderListeners.delete(listener);
+  };
+}
+
 export function reminderState(): ReminderState {
   const hasWorker = "serviceWorker" in navigator;
   const hasPush = "PushManager" in window && "Notification" in window;
@@ -49,6 +73,14 @@ async function saveSubscription(subscription: PushSubscription, extra: Record<st
 
 /** Asks for permission (call it from a tap), subscribes and sends a "reminders are on" push. */
 export async function enableReminders(language: "ar" | "en"): Promise<"on" | "denied" | "dismissed" | "error"> {
+  try {
+    return await turnOn(language);
+  } finally {
+    notifyReminders();
+  }
+}
+
+async function turnOn(language: "ar" | "en"): Promise<"on" | "denied" | "dismissed" | "error"> {
   const permission = await Notification.requestPermission();
   if (permission === "denied") return "denied";
   if (permission !== "granted") return "dismissed";
@@ -96,6 +128,7 @@ export function hideRemindersCard(days = 3) {
   } catch {
     // Storage can be unavailable in private or locked-down browsers.
   }
+  notifyReminders();
 }
 
 /** True when this device has a live push subscription. */
@@ -124,6 +157,8 @@ export async function disableReminders() {
     return true;
   } catch {
     return false;
+  } finally {
+    notifyReminders();
   }
 }
 
