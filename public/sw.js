@@ -154,6 +154,8 @@ self.addEventListener('push', (event) => {
     icon: '/icons/icon-192.png',
     badge: '/icons/badge-96.png',
     tag: data.tag,
+    // A large picture under the text, where supported (Android).
+    image: typeof data.image === 'string' && data.image.startsWith('/') ? data.image : undefined,
     lang,
     dir: lang === 'ar' ? 'rtl' : 'ltr',
     data: { url: data.url || '/dashboard' },

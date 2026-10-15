@@ -12,6 +12,8 @@ export type PushMessage = {
   /** A newer notification with the same tag replaces the older one. */
   tag?: string;
   lang?: EmailLanguage;
+  /** A large picture shown under the text on Android, e.g. "/icons/icon-512.png". */
+  image?: string;
 };
 
 const number = (language: EmailLanguage, value: number) =>

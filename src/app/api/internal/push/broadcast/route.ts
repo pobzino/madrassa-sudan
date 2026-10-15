@@ -27,7 +27,8 @@ function localised(value: unknown, fallback: Localised): Localised {
 
 // A one-off notification to every device with reminders on, in each family's
 // language. Body (all optional): { title: {en, ar}, body: {en, ar}, url,
-// roles: ["admin"], dryRun }. `roles` limits it to accounts with those roles.
+// image, roles: ["admin"], dryRun }. `roles` limits it to accounts with those
+// roles; `image` is a site path shown large under the text on Android.
 export async function POST(request: NextRequest) {
   if (!hasAutomationSecret(request, process.env.EMAIL_AUTOMATION_SECRET)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -38,6 +39,7 @@ export async function POST(request: NextRequest) {
   const title = localised(input.title, HELLO.title);
   const body = localised(input.body, HELLO.body);
   const url = typeof input.url === "string" && input.url.startsWith("/") ? input.url : HELLO.url;
+  const image = typeof input.image === "string" && input.image.startsWith("/") ? input.image : undefined;
   const roles = Array.isArray(input.roles) ? input.roles.filter((role): role is string => typeof role === "string") : null;
 
   const client = createServiceClient();
@@ -50,7 +52,7 @@ export async function POST(request: NextRequest) {
     for (const profile of data ?? []) {
       if (roles && !roles.includes(profile.role)) continue;
       const language = languageOf(profile.preferred_language);
-      messages.set(profile.id, { title: title[language], body: body[language], url, tag: "announcement", lang: language });
+      messages.set(profile.id, { title: title[language], body: body[language], url, tag: "announcement", lang: language, ...(image ? { image } : {}) });
     }
   }
 
