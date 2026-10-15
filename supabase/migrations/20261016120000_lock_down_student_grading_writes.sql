@@ -985,12 +985,21 @@ GRANT EXECUTE ON FUNCTION public.get_assignment_submission_stats(uuid) TO servic
 GRANT EXECUTE ON FUNCTION public.get_teacher_pending_grading_count(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.update_lesson_quiz_progress(uuid, uuid, boolean, integer) TO service_role;
 
-DROP TRIGGER IF EXISTS sync_homework_submissions_for_cohort_student_trigger ON public.cohort_students;
-CREATE TRIGGER sync_homework_submissions_for_cohort_student_trigger
-  AFTER INSERT OR UPDATE OF is_active, cohort_id, status ON public.cohort_students
-  FOR EACH ROW
-  WHEN (NEW.is_active = true AND NEW.status = 'approved')
-  EXECUTE FUNCTION public.handle_cohort_student_submission_sync();
+-- Production never got 20260411120000 (no handler, no trigger): it has never
+-- created submission rows automatically, so the trigger is only refreshed
+-- where it already exists.
+DO $$
+BEGIN
+  IF to_regprocedure('public.handle_cohort_student_submission_sync()') IS NOT NULL THEN
+    DROP TRIGGER IF EXISTS sync_homework_submissions_for_cohort_student_trigger ON public.cohort_students;
+    CREATE TRIGGER sync_homework_submissions_for_cohort_student_trigger
+      AFTER INSERT OR UPDATE OF is_active, cohort_id, status ON public.cohort_students
+      FOR EACH ROW
+      WHEN (NEW.is_active = true AND NEW.status = 'approved')
+      EXECUTE FUNCTION public.handle_cohort_student_submission_sync();
+  END IF;
+END;
+$$;
 
 
 -- ── 9. Guardian links ────────────────────────────────────────────────────────
@@ -1223,6 +1232,18 @@ CREATE TRIGGER guard_cohort_teacher_client_insert
   FOR EACH ROW
   EXECUTE FUNCTION public.guard_cohort_teacher_client_insert();
 
+-- ── Production's hand-made policies ───────────────────────────────────────────
+-- Production has policies no migration created. These let a student write
+-- their own submissions, answers and lesson progress directly, or let a
+-- pending or rejected class member read the class's homework and answer keys;
+-- the policies above replace them (guarded, approved members only).
+DROP POLICY IF EXISTS "Students manage own progress" ON public.lesson_progress;
+DROP POLICY IF EXISTS "Students can insert own submissions" ON public.homework_submissions;
+DROP POLICY IF EXISTS "Students can update own submissions" ON public.homework_submissions;
+DROP POLICY IF EXISTS "Students manage own homework responses" ON public.homework_responses;
+DROP POLICY IF EXISTS "Homework viewable by cohort members" ON public.homework_assignments;
+DROP POLICY IF EXISTS "Students view homework questions" ON public.homework_questions;
+
 -- (c) Fail closed. Raises, which rolls back everything above, if on these
 -- tables RLS is off, or a PERMISSIVE policy a client can still reach (given
 -- the grants above) is not one of this file's: any write policy on the
@@ -1286,6 +1307,12 @@ BEGIN
             ('homework_submissions', 'Students can start their own homework submissions'),
             ('homework_submissions', 'Students can update their own open homework submissions'),
             ('homework_submissions', 'Teachers can grade homework submissions'),
+            -- Production's own teacher grading policies (class teachers and admins;
+            -- unapproved staff are shut out by the RESTRICTIVE policy).
+            ('homework_submissions', 'Teachers can grade submissions'),
+            ('homework_submissions', 'Teachers can insert submissions for their cohorts'),
+            ('homework_responses', 'Teachers can grade homework responses'),
+            ('homework_responses', 'Teachers grade homework responses'),
             ('homework_responses', 'Students can add answers to their own submissions'),
             ('homework_responses', 'Students can edit answers on their own submissions'),
             ('homework_responses', 'Students can remove answers on their open submissions'),
