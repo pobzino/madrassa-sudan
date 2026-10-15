@@ -1,11 +1,12 @@
 import "server-only";
 
 // Sends automated emails through Resend. Nothing goes out unless
-// EMAIL_AUTOMATIONS_ENABLED is "true", and EMAIL_TEST_RECIPIENT (when set)
-// redirects every email to one inbox, for a safe run on production data.
+// EMAIL_AUTOMATIONS_ENABLED is "true". EMAIL_TEST_RECIPIENT (a comma-separated
+// list, where "admins" means every approved admin) turns on test mode: runs
+// send a few samples to those inboxes instead, and record nothing.
 
 export type OutgoingEmail = {
-  to: string;
+  to: string | string[];
   subject: string;
   html: string;
   text: string;
@@ -29,7 +30,10 @@ export function emailAutomationConfig() {
     apiKey: process.env.RESEND_API_KEY,
     from: process.env.EMAIL_FROM,
     replyTo: process.env.EMAIL_REPLY_TO,
-    testRecipient: process.env.EMAIL_TEST_RECIPIENT?.trim() || null,
+    testRecipients: (process.env.EMAIL_TEST_RECIPIENT ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
   };
 }
 
@@ -48,8 +52,8 @@ export async function sendEmails(emails: OutgoingEmail[], idempotencyKey?: strin
 
   const payload = emails.map((email) => ({
     from: config.from,
-    to: [config.testRecipient ?? email.to],
-    subject: config.testRecipient ? `[Test, for ${email.to}] ${email.subject}` : email.subject,
+    to: Array.isArray(email.to) ? email.to : [email.to],
+    subject: email.subject,
     html: email.html,
     text: email.text,
     ...(config.replyTo ? { reply_to: config.replyTo } : {}),

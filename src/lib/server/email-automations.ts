@@ -42,7 +42,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const NUDGE_FOR_DAYS = 28;
 // The auth callback also runs for password resets, so only new parents get a welcome.
 const WELCOME_WITHIN_DAYS = 14;
-// With EMAIL_TEST_RECIPIENT set, a run sends a few samples and records nothing.
+// In test mode (EMAIL_TEST_RECIPIENT set), a run sends a few samples and records nothing.
 const TEST_RECIPIENT_LIMIT = 3;
 
 export type RunReport = {
@@ -120,19 +120,38 @@ async function userIdsIn(db: UntypedClient, table: "email_suppressions" | "email
   return new Set(rows.map((row) => row.user_id));
 }
 
+/** Test-mode inboxes from EMAIL_TEST_RECIPIENT, with "admins" swapped for every approved admin. */
+async function testRecipients(db: UntypedClient) {
+  const listed = emailAutomationConfig().testRecipients;
+  if (!listed.includes("admins")) return listed;
+  const { data: admins, error } = await db.from("profiles").select("id").eq("role", "admin").eq("is_approved", true);
+  if (error) throw new Error(error.message);
+  const adminEmails = await Promise.all(
+    (admins ?? []).map(async ({ id }: { id: string }) => (await db.auth.admin.getUserById(id)).data.user?.email ?? null),
+  );
+  const inboxes = [...listed.filter((value) => value !== "admins"), ...adminEmails.filter(isDeliverableAmalEmail)];
+  return [...new Set(inboxes.map((email) => email!.toLowerCase()))];
+}
+
 /**
  * Claims each person in the email log before sending, so overlapping runs or
  * retries never send twice, and releases the claim if Resend refuses the batch.
  */
 async function deliver(db: UntypedClient, kind: EmailKind, periodKey: string, prepared: Prepared[]) {
-  const { testRecipient } = emailAutomationConfig();
-  const queue = testRecipient ? prepared.slice(0, TEST_RECIPIENT_LIMIT) : prepared;
+  const redirectTo = await testRecipients(db);
+  const testMode = redirectTo.length > 0;
+  const queue = testMode
+    ? prepared.slice(0, TEST_RECIPIENT_LIMIT).map((item) => ({
+        ...item,
+        email: { ...item.email, to: redirectTo, subject: `[Test, for ${item.email.to}] ${item.email.subject}` },
+      }))
+    : prepared;
   let sent = 0;
   let failed = 0;
   let error: string | undefined;
 
   for (let batch of chunk(queue, RESEND_BATCH_LIMIT)) {
-    if (!testRecipient) {
+    if (!testMode) {
       const { data, error: claimError } = await db
         .from("email_log")
         .upsert(
@@ -149,14 +168,14 @@ async function deliver(db: UntypedClient, kind: EmailKind, periodKey: string, pr
     const outcome = await sendEmails(batch.map((item) => item.email));
     if (outcome.status === "sent") {
       sent += batch.length;
-      if (!testRecipient && batch.length === 1 && outcome.ids[0]) {
+      if (!testMode && batch.length === 1 && outcome.ids[0]) {
         await db.from("email_log").update({ resend_id: outcome.ids[0] }).eq("user_id", batch[0].userId).eq("kind", kind).eq("period_key", periodKey);
       }
       continue;
     }
     failed += batch.length;
     error = outcome.status === "failed" ? outcome.error : outcome.reason;
-    if (!testRecipient) {
+    if (!testMode) {
       await db.from("email_log").delete().eq("kind", kind).eq("period_key", periodKey).in("user_id", batch.map((item) => item.userId));
     }
     if (outcome.status === "skipped") break;
