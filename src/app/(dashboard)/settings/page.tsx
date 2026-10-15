@@ -549,8 +549,9 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Lesson reminders (parents, who are the ones asked to turn them on) */}
-          {profile?.role === "parent" && <RemindersSetting />}
+          {/* Lesson reminders: parents get streak and weekly reminders; admins can turn
+              them on to receive announcements and test sends. */}
+          {(profile?.role === "parent" || profile?.role === "admin") && <RemindersSetting />}
 
           {/* Security Section */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
