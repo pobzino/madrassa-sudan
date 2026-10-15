@@ -159,6 +159,17 @@ export interface SimPlayerHandle {
 const DESIGN_WIDTH = 1280;
 const DESIGN_HEIGHT = 720;
 
+// Phones: the slide is drawn for a wide screen and shrunk to fit (about half
+// size on a 375px phone), which makes an activity's text and buttons tiny.
+// While an activity is open it gets the whole screen at the phone's own size.
+const PHONE_QUERY = '(max-width: 639px)';
+function subscribeToPhoneWidth(onChange: () => void) {
+  const query = window.matchMedia(PHONE_QUERY);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+const isPhoneWidth = () => window.matchMedia(PHONE_QUERY).matches;
+
 function SimSlideViewport({ children }: { children: ReactNode }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
@@ -1462,6 +1473,53 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     return () => window.clearTimeout(timeout);
   }, [canHideControls, controlsActivity]);
 
+  const isPhone = useSyncExternalStore(subscribeToPhoneWidth, isPhoneWidth, () => false);
+  const activityOpen = Boolean(
+    (activeGate && (activeGate.type === 'activity_gate' || activeGate.type === 'exploration_gate'))
+      || (activeExplorationSlide && currentSlide?.type === 'exploration')
+  );
+  const phoneActivity = isPhone && activityOpen;
+
+  // Phones: pressing play brings the whole player on screen (it sits below
+  // the lesson's title), so the slide and its controls are never half hidden.
+  useEffect(() => {
+    if (!isPlaying || !isPhone || fullscreen) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const { top, bottom } = el.getBoundingClientRect();
+    if (top < 0 || bottom > window.innerHeight) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [isPlaying, isPhone, fullscreen]);
+
+  // Phones: turning sideways while a lesson plays fills the screen, like a
+  // video app; turning back undoes it (only when the turn caused it).
+  const autoExpandedRef = useRef(false);
+  useEffect(() => {
+    const landscapePhone = window.matchMedia('(orientation: landscape) and (max-height: 500px)');
+    const onChange = () => {
+      if (landscapePhone.matches) {
+        if (isPlaying && !fullscreen) {
+          autoExpandedRef.current = true;
+          setExpanded(true);
+        }
+      } else if (autoExpandedRef.current) {
+        autoExpandedRef.current = false;
+        setExpanded(false);
+      }
+    };
+    landscapePhone.addEventListener('change', onChange);
+    return () => landscapePhone.removeEventListener('change', onChange);
+  }, [isPlaying, fullscreen]);
+
+  // The page behind the activity panel mustn't scroll under the family's thumb.
+  useEffect(() => {
+    if (!phoneActivity) return;
+    const { overflow } = document.body.style;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = overflow;
+    };
+  }, [phoneActivity]);
+
   if (!currentSlide) {
     return (
       <div className={`flex items-center justify-center text-slate-500 ${className}`}>
@@ -1470,8 +1528,78 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     );
   }
 
+  // Your turn / feedback, with Submit, Try again and Continue.
+  const activityBar = activeGate && activeGate.type === 'activity_gate' ? (
+      <div className={`flex items-center justify-between gap-3 px-4 py-2.5 flex-shrink-0 transition-colors ${
+        answerFeedback === 'correct'
+          ? 'bg-emerald-600'
+          : answerFeedback === 'incorrect'
+            ? 'bg-rose-600'
+            : answerFeedback === 'submitted'
+              ? 'bg-blue-600'
+              : 'bg-[#007229]'
+      }`}>
+        <span className="text-sm font-semibold text-white flex items-center gap-2">
+          {answerFeedback === 'correct' ? (
+            <>
+              <OwlCorrect className="w-7 h-7 -my-1" />
+              {language === 'ar' ? 'أحسنت!' : 'Great job!'}
+            </>
+          ) : answerFeedback === 'submitted' ? (
+            <>
+              <OwlCorrect className="w-7 h-7 -my-1" />
+              {language === 'ar' ? 'تم الإرسال! سيراجعها المعلم' : 'Submitted! Your teacher will review it'}
+            </>
+          ) : answerFeedback === 'incorrect' ? (
+            <>
+              <OwlWrong className="w-7 h-7 -my-1" />
+              {language === 'ar' ? 'حاول مرة أخرى' : 'Try again!'}
+            </>
+          ) : (
+            <>
+              <OwlPointing className="w-7 h-7 -my-1" />
+              {language === 'ar' ? 'دورك! أجب ثم أرسل' : 'Your turn! Answer then submit'}
+            </>
+          )}
+        </span>
+        <div className="flex items-center gap-2">
+          {/* Submit button — when answer selected but not yet graded */}
+          {!answerFeedback && studentAnswer && (
+            <button
+              type="button"
+              onClick={handleSubmitAnswer}
+              className="flex items-center gap-1.5 rounded-full bg-amber-400 px-4 py-1.5 text-sm font-bold text-slate-900 shadow transition-transform hover:scale-105 active:scale-100"
+            >
+              {language === 'ar' ? 'إرسال' : 'Submit'}
+            </button>
+          )}
+          {/* Try Again button — when incorrect */}
+          {answerFeedback === 'incorrect' && (
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="flex items-center gap-1.5 rounded-full bg-white/90 px-4 py-1.5 text-sm font-bold text-rose-700 shadow transition-transform hover:scale-105 active:scale-100"
+            >
+              {language === 'ar' ? 'حاول مرة أخرى' : 'Try Again'}
+            </button>
+          )}
+          {/* Continue button — always available */}
+          <button
+            type="button"
+            onClick={handleContinueGate}
+            className="flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-sm font-bold text-slate-900 shadow transition-transform hover:scale-105 active:scale-100"
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            {language === 'ar' ? 'متابعة' : 'Continue'}
+          </button>
+        </div>
+      </div>
+  ) : null;
+
   return (
-    <div ref={containerRef} data-sim-player data-controls-visible={controlsVisible} onPointerDownCapture={wakeControls} onPointerMove={(event) => { if (event.pointerType === 'mouse' && fullscreen) wakeControls(); }} onKeyDownCapture={wakeControls} className={`relative overflow-hidden bg-white border border-gray-200 rounded-lg ${className} ${fullscreen ? 'flex flex-col !border-0 !rounded-none !shadow-none' : ''}`} style={fullscreen ? { position: expanded ? 'fixed' : undefined, inset: 0, zIndex: 9999, width: '100%', height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}>
+    <div ref={containerRef} data-sim-player data-controls-visible={controlsVisible} onPointerDownCapture={wakeControls} onPointerMove={(event) => { if (event.pointerType === 'mouse' && fullscreen) wakeControls(); }} onKeyDownCapture={wakeControls} className={`relative overflow-hidden bg-white border border-gray-200 rounded-lg ${className} ${fullscreen ? 'flex flex-col !border-0 !rounded-none !shadow-none' : ''}`} style={fullscreen ? { position: expanded ? 'fixed' : undefined, inset: 0, zIndex: 9999, width: '100%', height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : { scrollMarginTop: '4.5rem' }}>
       {/* Slide area */}
       <div className={fullscreen ? 'flex flex-1 min-h-0 items-center justify-center overflow-hidden bg-black' : ''} style={fullscreen ? { containerType: 'size' } : undefined}>
       <div className="relative w-full" style={fullscreen ? { width: 'min(100cqw, calc(100cqh * 16 / 9))' } : undefined}>
@@ -1520,7 +1648,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
           )}
 
           {/* Exploration gate — interactive exploration widget (covers slide) */}
-          {activeGate && activeGate.type === 'exploration_gate' && (
+          {!phoneActivity && activeGate && activeGate.type === 'exploration_gate' && (
             <ExplorationOverlay
               widgetType={activeGate.widget_type}
               config={activeGate.config}
@@ -1530,7 +1658,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
           )}
 
           {/* Exploration slide auto-pause — shows the widget from the slide config */}
-          {activeExplorationSlide && currentSlide?.type === 'exploration' && currentSlide.exploration_widget_type && currentSlide.exploration_config && (
+          {!phoneActivity && activeExplorationSlide && currentSlide?.type === 'exploration' && currentSlide.exploration_widget_type && currentSlide.exploration_config && (
             <ExplorationOverlay
               widgetType={currentSlide.exploration_widget_type}
               config={currentSlide.exploration_config}
@@ -1546,73 +1674,52 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         <button type="button" onClick={wakeControls} aria-label={language === 'ar' ? 'إظهار أدوات التشغيل' : 'Show playback controls'} className="absolute inset-0 z-40 cursor-default bg-transparent focus-visible:outline-2 focus-visible:outline-white" />
       )}
 
-      {/* Activity gate — prompt bar between slide and control bar */}
-      {activeGate && activeGate.type === 'activity_gate' && (
-        <div className={`flex items-center justify-between gap-3 px-4 py-2.5 flex-shrink-0 transition-colors ${
-          answerFeedback === 'correct'
-            ? 'bg-emerald-600'
-            : answerFeedback === 'incorrect'
-              ? 'bg-rose-600'
-              : answerFeedback === 'submitted'
-                ? 'bg-blue-600'
-                : 'bg-[#007229]'
-        }`}>
-          <span className="text-sm font-semibold text-white flex items-center gap-2">
-            {answerFeedback === 'correct' ? (
-              <>
-                <OwlCorrect className="w-7 h-7 -my-1" />
-                {language === 'ar' ? 'أحسنت!' : 'Great job!'}
-              </>
-            ) : answerFeedback === 'submitted' ? (
-              <>
-                <OwlCorrect className="w-7 h-7 -my-1" />
-                {language === 'ar' ? 'تم الإرسال! سيراجعها المعلم' : 'Submitted! Your teacher will review it'}
-              </>
-            ) : answerFeedback === 'incorrect' ? (
-              <>
-                <OwlWrong className="w-7 h-7 -my-1" />
-                {language === 'ar' ? 'حاول مرة أخرى' : 'Try again!'}
-              </>
-            ) : (
-              <>
-                <OwlPointing className="w-7 h-7 -my-1" />
-                {language === 'ar' ? 'دورك! أجب ثم أرسل' : 'Your turn! Answer then submit'}
-              </>
+      {/* Activity gate — prompt bar between slide and control bar (on phones it is in the activity panel) */}
+      {!phoneActivity && activityBar}
+
+      {/* Phones: the open activity, full screen at the phone's own size. */}
+      {phoneActivity && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={language === 'ar' ? 'نشاط' : 'Activity'}
+          className="fixed inset-0 z-[10000] flex flex-col bg-white"
+          style={{ height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            {activeGate?.type === 'activity_gate' && (
+              <SlideCard
+                key={`phone:${currentSlide?.id ?? ''}:${language}`}
+                className="!aspect-auto h-full"
+                slide={currentSlide}
+                language={language}
+                chromeless
+                showActivityAnswer={currentSurface?.answer_revealed ?? false}
+                activityInteractive
+                activityInteractiveDisabled={false}
+                activityAnswer={studentAnswer}
+                onActivityAnswerChange={handleStudentAnswer}
+              />
             )}
-          </span>
-          <div className="flex items-center gap-2">
-            {/* Submit button — when answer selected but not yet graded */}
-            {!answerFeedback && studentAnswer && (
-              <button
-                type="button"
-                onClick={handleSubmitAnswer}
-                className="flex items-center gap-1.5 rounded-full bg-amber-400 px-4 py-1.5 text-sm font-bold text-slate-900 shadow transition-transform hover:scale-105 active:scale-100"
-              >
-                {language === 'ar' ? 'إرسال' : 'Submit'}
-              </button>
+            {activeGate?.type === 'exploration_gate' && (
+              <ExplorationOverlay
+                widgetType={activeGate.widget_type}
+                config={activeGate.config}
+                language={language}
+                onContinue={handleContinueGate}
+              />
             )}
-            {/* Try Again button — when incorrect */}
-            {answerFeedback === 'incorrect' && (
-              <button
-                type="button"
-                onClick={handleRetry}
-                className="flex items-center gap-1.5 rounded-full bg-white/90 px-4 py-1.5 text-sm font-bold text-rose-700 shadow transition-transform hover:scale-105 active:scale-100"
-              >
-                {language === 'ar' ? 'حاول مرة أخرى' : 'Try Again'}
-              </button>
+            {activeExplorationSlide && currentSlide?.type === 'exploration' && currentSlide.exploration_widget_type && currentSlide.exploration_config && (
+              <ExplorationOverlay
+                widgetType={currentSlide.exploration_widget_type}
+                config={currentSlide.exploration_config}
+                language={language}
+                onContinue={handleContinueGate}
+              />
             )}
-            {/* Continue button — always available */}
-            <button
-              type="button"
-              onClick={handleContinueGate}
-              className="flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-sm font-bold text-slate-900 shadow transition-transform hover:scale-105 active:scale-100"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-              {language === 'ar' ? 'متابعة' : 'Continue'}
-            </button>
+            {confettiKey > 0 && <SlideConfetti key={`phone-${confettiKey}`} id={confettiKey} />}
           </div>
+          {activityBar}
         </div>
       )}
 
