@@ -13,7 +13,7 @@ const KEEP_AUTO_DOWNLOADS = 3;
 // Leave room on the phone: skip when less than this is free.
 const MIN_FREE_BYTES = 200 * 1024 * 1024;
 
-type NetworkInformation = { type?: string; saveData?: boolean };
+type NetworkInformation = { type?: string; saveData?: boolean; effectiveType?: string };
 
 export function isAutoDownloadEnabled() {
   try {
@@ -40,6 +40,9 @@ export function canDetectWifi() {
 function onUnmeteredConnection() {
   const connection = (navigator as Navigator & { connection?: NetworkInformation }).connection;
   if (!connection || connection.saveData) return false;
+  // A phone hotspot also reports "wifi"; a very slow link is the most common
+  // sign of one (or of Wi-Fi too weak to finish a lesson anyway).
+  if (connection.effectiveType === "slow-2g" || connection.effectiveType === "2g") return false;
   return connection.type === "wifi" || connection.type === "ethernet";
 }
 

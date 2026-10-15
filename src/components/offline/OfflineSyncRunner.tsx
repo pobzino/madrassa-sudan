@@ -21,9 +21,11 @@ const ONLINE_DEBOUNCE_MS = 2_000;
 // A foreground return syncs at most this often.
 const FOREGROUND_MIN_INTERVAL_MS = 60_000;
 
+// The queue also holds online writes that failed on a bad connection, so this
+// can't promise the progress came from a saved lesson.
 const COPY = {
-  en: "Progress from your saved lessons has been sent.",
-  ar: "تم إرسال التقدّم الذي أنجزته في الدروس المحفوظة.",
+  en: "Your progress has been saved to your account.",
+  ar: "تم حفظ تقدّمكم في حسابكم.",
 };
 
 // The Supabase session cookie (sb-<project ref>-auth-token, or its .0/.1

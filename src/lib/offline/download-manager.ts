@@ -256,12 +256,14 @@ export async function reconcileInterruptedDownloads(): Promise<DownloadState[]> 
 // ── Storage ──────────────────────────────────────────────────────────────────
 
 /**
- * Asks the browser not to evict downloads under storage pressure. Called
- * once per page session, from the first download (ideally still inside the
- * tap that started it). Resolves to whether storage is persistent.
+ * Asks the browser not to evict downloads under storage pressure. Downloads
+ * call it once per page session (ideally still inside the tap that started
+ * one); the "Keep my lessons safe" button passes `force`, since a browser that
+ * said no earlier can say yes later (e.g. once the app is installed).
+ * Resolves to whether storage is persistent.
  */
-export function requestPersistentStorage(): Promise<boolean> {
-  if (persistRequested || typeof navigator === "undefined" || !navigator.storage?.persist) {
+export function requestPersistentStorage({ force = false }: { force?: boolean } = {}): Promise<boolean> {
+  if ((persistRequested && !force) || typeof navigator === "undefined" || !navigator.storage?.persist) {
     return getPersistenceStatus().then((status) => status === "persisted");
   }
   persistRequested = true;

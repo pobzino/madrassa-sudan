@@ -13,9 +13,10 @@ import { AUDIO_FORMAT_WARNING, downloadErrorMessage } from "@/lib/offline/downlo
  * - `compact`: icon + one word, for the learning path's action row.
  * - `full`: icon + full label, for the lesson page's top bar.
  *
- * Once saved it only shows that it's saved (or offers an update when the
- * teacher re-recorded the lesson). Removing a saved lesson happens on the
- * Downloads page, never from a stray tap here.
+ * While saving, a tap offers to stop. Once saved it only shows that it's
+ * saved (or offers an update when the teacher re-recorded the lesson).
+ * Removing a saved lesson happens on the Downloads page, never from a stray
+ * tap here.
  */
 
 const COPY = {
@@ -30,6 +31,8 @@ const COPY = {
     retry: "Try saving again",
     retryShort: "Retry",
     needsInternet: "Connect to the internet to save this lesson",
+    stopHint: "tap to stop",
+    confirmStop: "Stop saving this lesson?",
   },
   ar: {
     save: "احفظ للمشاهدة بدون إنترنت",
@@ -42,6 +45,8 @@ const COPY = {
     retry: "حاول الحفظ مرة أخرى",
     retryShort: "أعد المحاولة",
     needsInternet: "اتصل بالإنترنت لحفظ هذا الدرس",
+    stopHint: "اضغط للإيقاف",
+    confirmStop: "إيقاف حفظ هذا الدرس؟",
   },
 };
 
@@ -103,7 +108,8 @@ export default function DownloadButton({
 }: DownloadButtonProps) {
   const { language } = useLanguage();
   const t = COPY[language];
-  const { ready, downloads, downloadedLessonIds, updateAvailableIds, downloadLesson, isOnline } = useOffline();
+  const { ready, downloads, downloadedLessonIds, updateAvailableIds, downloadLesson, cancelDownload, isOnline } =
+    useOffline();
   // Re-saved from here: the page's "outdated" hint no longer applies.
   const [resaved, setResaved] = useState(false);
 
@@ -120,7 +126,11 @@ export default function DownloadButton({
       // Cards wrap this in a link; a tap here must not open the lesson.
       event.preventDefault();
       event.stopPropagation();
-      if (isDownloading || !isOnline) return;
+      if (isDownloading) {
+        if (window.confirm(t.confirmStop)) cancelDownload(lessonId);
+        return;
+      }
+      if (!isOnline) return;
 
       const result = await downloadLesson(lessonId);
       if (result.status === "saved") setResaved(true);
@@ -130,7 +140,7 @@ export default function DownloadButton({
         toast.warning(AUDIO_FORMAT_WARNING[language]);
       }
     },
-    [downloadLesson, isDownloading, isOnline, language, lessonId]
+    [cancelDownload, downloadLesson, isDownloading, isOnline, language, lessonId, t.confirmStop]
   );
 
   // Saved and current: a status, not a button.
@@ -165,7 +175,11 @@ export default function DownloadButton({
         : hasError
           ? t.retryShort
           : t.saveShort;
-  const tooltip = errorMessage ? `${label} — ${errorMessage}` : label;
+  const tooltip = errorMessage
+    ? `${label} — ${errorMessage}`
+    : isDownloading
+      ? `${label} — ${t.stopHint}`
+      : label;
 
   if (variant === "icon") {
     const box = size === "sm" ? "w-8 h-8" : "w-10 h-10";
@@ -192,7 +206,7 @@ export default function DownloadButton({
       <DownloadIcon className={icon} />
     );
 
-    if (showSaved || isDownloading) {
+    if (showSaved) {
       return (
         <span
           role="status"
@@ -236,11 +250,13 @@ export default function DownloadButton({
             : "bg-[#007229]/10 text-[#007229] hover:bg-[#007229]/15";
 
   if (showSaved || isDownloading) {
+    // Saving: the same pill, but a tap offers to stop.
+    const Pill = isDownloading ? "button" : "span";
     return (
-      <span
-        role="status"
-        aria-label={label}
-        title={label}
+      <Pill
+        {...(isDownloading ? { type: "button" as const, onClick: handleClick } : { role: "status" })}
+        aria-label={isDownloading ? tooltip : label}
+        title={isDownloading ? tooltip : label}
         className={`relative inline-flex items-center overflow-hidden ${shape} ${tone} ${className}`}
       >
         {/* Fills from the start edge as the download progresses. */}
@@ -255,7 +271,7 @@ export default function DownloadButton({
           {showSaved ? <CheckIcon className={iconClass} /> : <DownloadIcon className={`${iconClass} animate-pulse`} />}
           {text}
         </span>
-      </span>
+      </Pill>
     );
   }
 

@@ -54,7 +54,7 @@ const translations = {
     keepSafe: "احمِ دروسي",
     notGranted: "لم يسمح المتصفح بذلك. تثبيت أمل على هاتفك يساعد.",
     autoDownload: "تحميل الدرس التالي عبر الواي فاي",
-    autoDownloadHint: "أثناء التعلّم على الواي فاي، يُحفظ الدرس التالي على هذا الهاتف ليعمل لاحقاً بدون بيانات الجوال.",
+    autoDownloadHint: "أثناء التعلّم على الواي فاي، يُحفظ الدرس التالي على هذا الهاتف ليعمل لاحقاً بدون إنترنت. إذا كان الواي فاي من هاتف آخر (نقطة اتصال)، فقد يستهلك ذلك بياناته.",
   },
   en: {
     title: "Downloads",
@@ -91,7 +91,7 @@ const translations = {
     keepSafe: "Keep my lessons safe",
     notGranted: "The browser didn't allow it. Installing Amal on your phone helps.",
     autoDownload: "Download the next lesson on Wi-Fi",
-    autoDownloadHint: "While you learn on Wi-Fi, the next lesson saves to this phone so it plays later without mobile data.",
+    autoDownloadHint: "While you learn on Wi-Fi, the next lesson saves to this phone so it plays later without internet. If the Wi-Fi is another phone's hotspot, this uses that phone's data.",
   },
 };
 
@@ -319,7 +319,7 @@ export default function DownloadsPage() {
   };
 
   const handleKeepSafe = async () => {
-    const granted = await requestPersistentStorage();
+    const granted = await requestPersistentStorage({ force: true });
     setPersistence(granted ? "persisted" : "best-effort");
     if (!granted) toast(t.notGranted);
   };
@@ -529,6 +529,16 @@ export default function DownloadsPage() {
                         className={`${noAudio ? "flex-1 bg-[#007229] text-white hover:bg-[#005C22]" : "bg-amber-50 text-amber-800 hover:bg-amber-100"} inline-flex min-h-10 items-center justify-center px-3 py-2 rounded-xl text-sm font-bold transition-colors disabled:opacity-50`}
                       >
                         {refreshLabel}
+                      </button>
+                    )}
+                    {/* An update in progress can be stopped here as well as where it started. */}
+                    {saving && (
+                      <button
+                        type="button"
+                        onClick={() => cancelDownload(lesson.id)}
+                        className="inline-flex min-h-10 items-center justify-center px-3 py-2 rounded-xl bg-gray-100 text-gray-700 text-sm font-bold hover:bg-gray-200 transition-colors"
+                      >
+                        {t.cancel}
                       </button>
                     )}
                     {!noAudio && (

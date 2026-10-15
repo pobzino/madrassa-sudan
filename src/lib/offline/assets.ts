@@ -108,6 +108,23 @@ export class AssetDownloadError extends Error {
 // A hung image request (lie-fi) fails the download instead of stalling it.
 const ASSET_TIMEOUT_MS = 45_000;
 
+/**
+ * Our own site and Supabase storage always send CORS headers, so a failed CORS
+ * fetch from them is a network blip, not a host without CORS. Falling back to
+ * no-cors there would store an unreadable opaque copy (it can hide an error
+ * page, and Chrome charges ~7 MB of quota for each one).
+ */
+function servesCors(url: string): boolean {
+  try {
+    const { origin } = new URL(url);
+    if (typeof location !== "undefined" && origin === location.origin) return true;
+    const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    return Boolean(supabase) && origin === new URL(supabase as string).origin;
+  } catch {
+    return false;
+  }
+}
+
 async function fetchAsset(url: string, parentSignal?: AbortSignal): Promise<Response> {
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -116,12 +133,24 @@ async function fetchAsset(url: string, parentSignal?: AbortSignal): Promise<Resp
   const { signal } = controller;
 
   try {
-    try {
+    const fetchCors = async () => {
       const response = await fetch(url, { mode: "cors", credentials: "omit", signal });
       if (!response.ok) throw new AssetDownloadError(url, response.status);
       return response;
+    };
+    try {
+      return await fetchCors();
     } catch (error) {
       if (signal.aborted || error instanceof AssetDownloadError) throw error;
+      if (servesCors(url)) {
+        // One retry for a dropped connection, then the image (and the save) fails.
+        try {
+          return await fetchCors();
+        } catch (retryError) {
+          if (signal.aborted || retryError instanceof AssetDownloadError) throw retryError;
+          throw new AssetDownloadError(url);
+        }
+      }
       // A host without CORS headers (a teacher-pasted hotspot image): an
       // opaque response still displays in <img> when the worker serves it.
       try {
@@ -203,7 +232,9 @@ export async function cacheLessonAssets(
       await Promise.all(
         batch.map(async (url) => {
           if (signal?.aborted) throw new DOMException("Download cancelled", "AbortError");
-          const existing = await cache.match(url);
+          let existing = await cache.match(url);
+          // An opaque copy of a CORS host is from an earlier blip: fetch it properly.
+          if (existing?.type === "opaque" && servesCors(url)) existing = undefined;
           if (existing) {
             bytesByUrl[url] = Number(existing.headers.get("content-length")) || 0;
           } else {
