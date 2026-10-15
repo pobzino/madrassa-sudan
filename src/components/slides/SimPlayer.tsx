@@ -568,6 +568,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const [controlsIdle, setControlsIdle] = useState(false);
   const [controlsActivity, setControlsActivity] = useState(0);
   const controlsRef = useRef<HTMLDivElement>(null);
+  // Whether the controls were hidden when the current tap began: that tap
+  // only brings them back (its click mustn't hide them again).
+  const tapStartedHiddenRef = useRef(false);
   const wakeControls = useCallback(() => {
     setControlsIdle(false);
     setControlsActivity((value) => value + 1);
@@ -2002,7 +2005,10 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   ) : null;
 
   return (
-    <div ref={containerRef} data-sim-player data-controls-visible={controlsVisible} onPointerDownCapture={wakeControls} onPointerMove={(event) => { if (event.pointerType === 'mouse' && fullscreen) wakeControls(); }} onKeyDownCapture={wakeControls} className={`relative overflow-hidden bg-white border border-gray-200 rounded-lg ${className} ${fullscreen ? 'flex flex-col !border-0 !rounded-none !shadow-none' : ''}`} style={sideways ? {
+    <div ref={containerRef} data-sim-player data-controls-visible={controlsVisible} onPointerDownCapture={() => {
+      tapStartedHiddenRef.current = !controlsVisible;
+      wakeControls();
+    }} onPointerMove={(event) => { if (event.pointerType === 'mouse' && fullscreen) wakeControls(); }} onKeyDownCapture={wakeControls} className={`relative overflow-hidden bg-white border border-gray-200 rounded-lg ${className} ${fullscreen ? 'flex flex-col !border-0 !rounded-none !shadow-none' : ''}`} style={sideways ? {
       position: 'fixed', top: 0, left: 0, zIndex: 9999, width: '100dvh', height: '100vw',
       // Rotated about its top-left corner, then shifted back on screen.
       transform: 'rotate(90deg) translateY(-100%)', transformOrigin: 'top left',
@@ -2013,6 +2019,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         className={fullscreen ? 'flex flex-1 min-h-0 items-center justify-center overflow-hidden bg-black' : ''}
         style={fullscreen ? { containerType: 'size' } : undefined}
         onClick={() => {
+          if (tapStartedHiddenRef.current) return;
           if (canTapToHide && controlsVisible) setControlsIdle(true);
         }}
       >
