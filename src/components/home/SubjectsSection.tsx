@@ -28,6 +28,8 @@ type World = {
   background: string;
   paper: string;
   accent: string;
+  /** Light pad under the owl, for worlds whose colour is close to the owl's own red. */
+  owlPad: string;
   symbols: { text: string; x: number; y: number; size: number; tilt: number; delay: number }[];
 };
 
@@ -38,6 +40,7 @@ const WORLDS: World[] = [
     // Squared maths paper.
     paper: "linear-gradient(rgba(255,255,255,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px)",
     accent: "#007229",
+    owlPad: "bg-black/20",
     symbols: [
       { text: "+", x: 68, y: 7, size: 54, tilt: -10, delay: 0 },
       { text: "÷", x: 87, y: 4, size: 44, tilt: 12, delay: 0.8 },
@@ -50,10 +53,12 @@ const WORLDS: World[] = [
   },
   {
     badge: "english",
-    background: "linear-gradient(150deg, #c2620a 0%, #b45309 45%, #7c2d12 100%)",
+    // The brand reds (the owl's own palette), pairing with the green Maths world.
+    background: "linear-gradient(150deg, #e8334f 0%, #D21034 45%, #a01028 100%)",
     // Lined exercise-book paper.
-    paper: "linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px)",
-    accent: "#b45309",
+    paper: "linear-gradient(rgba(255,255,255,.09) 1px, transparent 1px)",
+    accent: "#D21034",
+    owlPad: "bg-white/25",
     symbols: [
       { text: "A", x: 68, y: 6, size: 54, tilt: -8, delay: 0 },
       { text: "b", x: 87, y: 4, size: 46, tilt: 10, delay: 0.8 },
@@ -127,7 +132,7 @@ export function SubjectsSection({ language, isRtl }: { language: Language; isRtl
                 onPointerMove={tilt}
                 onFocus={() => setHovered(i)}
                 onBlur={() => setHovered(null)}
-                className="group relative block min-h-[260px] overflow-hidden rounded-[2rem] p-6 text-white shadow-[0_30px_60px_-20px_rgba(80,30,10,.45)] transition-transform duration-200 ease-out focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-white sm:min-h-[340px] sm:p-9"
+                className="group relative block min-h-[260px] overflow-hidden rounded-[2rem] p-6 text-white shadow-[0_30px_60px_-20px_rgba(15,23,42,.35)] transition-transform duration-200 ease-out focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-white sm:min-h-[340px] sm:p-9"
                 style={{ background: world.background }}
               >
                 <span aria-hidden className="absolute inset-0" style={{ backgroundImage: world.paper, backgroundSize: "28px 28px" }} />
@@ -153,7 +158,15 @@ export function SubjectsSection({ language, isRtl }: { language: Language; isRtl
                 ))}
 
                 {/* A little hill for the owl to stand on. */}
-                <span aria-hidden className="absolute -bottom-10 h-28 w-56 rounded-[50%] bg-black/20 ltr:-right-6 rtl:-left-6 sm:w-72" />
+                <span aria-hidden className={`absolute -bottom-10 h-28 w-56 rounded-[50%] ltr:-right-6 rtl:-left-6 sm:w-72 ${world.owlPad}`} />
+                {/* A soft halo so the red owl stands out on the red world. */}
+                {world.badge === "english" && (
+                  <span
+                    aria-hidden
+                    className="absolute bottom-0 h-40 w-40 rounded-full ltr:-right-2 rtl:-left-2 sm:h-56 sm:w-56"
+                    style={{ background: "radial-gradient(circle, rgba(255,255,255,.4) 0%, rgba(255,255,255,0) 68%)" }}
+                  />
+                )}
 
                 <div className="relative z-10 flex h-full max-w-[62%] flex-col">
                   <h3 className="font-fredoka text-4xl font-semibold leading-none sm:text-5xl">{content.name}</h3>
