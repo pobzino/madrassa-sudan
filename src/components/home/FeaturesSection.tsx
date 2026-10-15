@@ -2,22 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
-import { GamepadIcon, PracticeIcon, RobotIcon, TrophyIcon, VideoIcon } from "@/components/illustrations";
 import { SectionScene } from "@/components/dashboard/DashboardScenes";
 import { LivingOwl, type OwlMood } from "@/components/brand/LivingOwl";
+import { FEATURE_ICON_TONES, FeatureIcon } from "./FeatureIcons";
 
 type Feature = { title: string; desc: string; iconType: string; color: string };
-
-const FeatureIcon = ({ type, className }: { type: string; className?: string }) => {
-  switch (type) {
-    case "video": return <VideoIcon className={className} />;
-    case "robot": return <RobotIcon className={className} />;
-    case "gamepad": return <GamepadIcon className={className} />;
-    case "trophy": return <TrophyIcon className={className} />;
-    case "practice": return <PracticeIcon className={className} />;
-    default: return null;
-  }
-};
 
 // What the owl does on each card it visits, and for how long (seconds).
 const PERCH_ACTS: { mood: OwlMood; hold: number }[] = [
@@ -307,10 +296,7 @@ export function FeaturesSection({
                 className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-data-[owl-visit=true]:opacity-100`}
               />
               <div className="relative z-10">
-                <div
-                  data-feature-chip
-                  className="mb-3 h-10 w-10 text-[#007229] transition-colors group-hover:text-white group-data-[owl-visit=true]:text-white sm:mb-4 sm:h-14 sm:w-14"
-                >
+                <div data-feature-chip className={`mb-3 h-10 w-10 sm:mb-4 sm:h-12 sm:w-12 ${FEATURE_ICON_TONES[feature.iconType] ?? ""}`}>
                   <FeatureIcon type={feature.iconType} className="h-full w-full" />
                 </div>
                 <h3 className="mb-1 text-sm font-bold text-gray-900 transition-colors group-hover:text-white group-data-[owl-visit=true]:text-white sm:mb-3 sm:text-xl">

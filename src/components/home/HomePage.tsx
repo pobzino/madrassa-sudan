@@ -2,18 +2,13 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { ArrowRight, Check } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import {
-  FloatingRocket,
   MadrassaLogo,
-  SparkleIcon,
-  GraduationCapIcon,
-  BackpackIcon,
-  QuestionIcon,
   PlayIcon,
-  CelebrationIcon,
 } from "@/components/illustrations";
 import { LandingHeroScene, SectionScene, TeacherScene } from "@/components/dashboard/DashboardScenes";
 import HomepageSamplePreview from "@/components/sample/HomepageSamplePreview";
@@ -68,7 +63,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
           { title: "دروس ممتعة", desc: "فيديوهات تفاعلية مع رسوم متحركة تجعل التعلم مغامرة", color: "from-[#007229] to-[#00913D]", iconType: "video" },
           { title: "تدريب وتقييم", desc: "تدريب ممتع مع تقييم فوري يساعدك تعرف مستواك وتتحسّن", color: "from-[#D21034] to-[#E8334F]", iconType: "practice" },
           { title: "الألعاب التعليمية", desc: "اختبارات وتحديات ممتعة تجعلك تتعلم وأنت تلعب", color: "from-[#005C22] to-[#007229]", iconType: "gamepad" },
-          { title: "متابعة التقدم", desc: "تابع الدروس والتدريبات التي أكملتها وواصل من مكانك", color: "from-amber-500 to-orange-600", iconType: "trophy" },
+          { title: "متابعة التقدم", desc: "تابع الدروس والتدريبات التي أكملتها وواصل من مكانك", color: "from-amber-500 to-orange-600", iconType: "progress" },
         ],
       },
       sims: {
@@ -97,9 +92,9 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
         ],
       },
       finalCta: {
-        title: "مستعد للمغامرة؟",
+        title: "ابدأ التعلّم مجاناً",
         subtitle: `انضم إلى أكثر من ${signupsLabel} طالباً وولي أمر ومعلماً على آمال. مجاناً للأبد!`,
-        cta: "ابدأ الآن مجاناً",
+        cta: "أنشئ حساباً مجانياً",
       },
       footer: {
         tagline: "نبني مستقبل السودان، طفل بطفل",
@@ -130,7 +125,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
           { title: "Fun Lessons", desc: "Interactive videos with animations that make learning an adventure", color: "from-[#007229] to-[#00913D]", iconType: "video" },
           { title: "Practice & Feedback", desc: "Fun practice with instant feedback so you know your level and improve", color: "from-[#D21034] to-[#E8334F]", iconType: "practice" },
           { title: "Learning Games", desc: "Fun quizzes and challenges that let you learn while playing", color: "from-[#005C22] to-[#007229]", iconType: "gamepad" },
-          { title: "Progress Tracking", desc: "See completed lessons and Practice, then continue where you left off", color: "from-amber-500 to-orange-600", iconType: "trophy" },
+          { title: "Progress Tracking", desc: "See completed lessons and Practice, then continue where you left off", color: "from-amber-500 to-orange-600", iconType: "progress" },
         ],
       },
       sims: {
@@ -159,9 +154,9 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
         ],
       },
       finalCta: {
-        title: "Ready for the adventure?",
+        title: "Start learning for free",
         subtitle: `Join ${signupsLabel}+ learners, parents and teachers already on Amal. Free forever!`,
-        cta: "Start Free Now",
+        cta: "Create a free account",
       },
       footer: {
         tagline: "Building Sudan's future, one child at a time",
@@ -302,7 +297,6 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
                     className="group w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg font-bold text-white bg-[#007229] rounded-full hover:bg-[#005C22] transition-all shadow-xl shadow-[#007229]/30 hover:shadow-2xl hover:shadow-[#007229]/40 hover:-translate-y-1 flex items-center justify-center gap-2"
                   >
                     {txt.hero.cta1}
-                    <CelebrationIcon className="w-5 h-5 sm:w-6 sm:h-6" />
                   </Link>
                 )}
                 <Link
@@ -368,16 +362,6 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
         <section id="teachers" className="py-10 sm:py-16 relative">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="bg-gradient-to-br from-[#f9b13f] to-[#ef7e2c] rounded-2xl sm:rounded-3xl p-6 sm:p-8 md:p-16 relative overflow-hidden">
-              {/* Decorative elements */}
-              <div className="absolute top-0 right-0 w-32 sm:w-64 h-32 sm:h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-              <div className="absolute bottom-0 left-0 w-24 sm:w-48 h-24 sm:h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
-              <div className="absolute top-10 left-10 w-12 sm:w-16 h-12 sm:h-16 opacity-30 hidden sm:block">
-                <GraduationCapIcon className="w-full h-full text-white" />
-              </div>
-              <div className="absolute bottom-10 right-10 w-12 sm:w-16 h-12 sm:h-16 opacity-30 hidden sm:block">
-                <SparkleIcon className="w-full h-full text-white" />
-              </div>
-
               <div className="relative z-10 grid md:grid-cols-2 gap-6 sm:gap-12 items-center">
                 <div className="text-white">
                   <h2 className="font-fredoka text-2xl sm:text-3xl md:text-4xl font-semibold mb-3 sm:mb-4">{txt.teachers.title}</h2>
@@ -385,10 +369,8 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
 
                   <ul className="space-y-3 sm:space-y-4 mb-6 sm:mb-8">
                     {txt.teachers.benefits.map((benefit, i) => (
-                      <li key={i} className="flex items-center gap-2 sm:gap-3">
-                        <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-white flex items-center justify-center flex-shrink-0">
-                          <span className="text-amber-500 text-sm sm:text-base">✓</span>
-                        </div>
+                      <li key={i} className="flex items-start gap-3">
+                        <Check className="mt-0.5 h-5 w-5 shrink-0" strokeWidth={3} aria-hidden />
                         <span className="font-medium text-sm sm:text-base">{benefit}</span>
                       </li>
                     ))}
@@ -402,7 +384,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
                     className="inline-flex items-center gap-2 px-5 sm:px-8 py-3 sm:py-4 bg-white text-amber-600 rounded-full font-bold hover:bg-gray-100 transition-all shadow-xl text-sm sm:text-base"
                   >
                     {txt.teachers.cta}
-                    <span>→</span>
+                    <ArrowRight className="h-4 w-4 rtl:-scale-x-100" aria-hidden />
                   </Link>
                 </div>
 
@@ -418,12 +400,9 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
         <section id="faq" className="py-10 sm:py-16 bg-gray-50">
           <div className="max-w-3xl mx-auto px-4 sm:px-6">
             <div className="text-center mb-6 sm:mb-12">
-              <div className="inline-flex items-center gap-2 sm:gap-3">
-                <h2 className="font-fredoka text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-900">
-                  {txt.faq.title}
-                </h2>
-                <QuestionIcon className="w-7 h-7 sm:w-10 sm:h-10 text-[#007229]" />
-              </div>
+              <h2 className="font-fredoka text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-900">
+                {txt.faq.title}
+              </h2>
             </div>
 
             <div className="space-y-3 sm:space-y-4">
@@ -457,9 +436,6 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
           <SectionScene sky="linear-gradient(180deg,#e4efff 0%,#eef6ee 55%,#dcefdd 100%)" hill="#cfe6d3" hill2="#bfe0c6" clouds />
 
           <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 text-center">
-            <div className="w-14 h-14 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6">
-              <BackpackIcon className="w-full h-full text-emerald-600" />
-            </div>
             <h2 className="font-fredoka text-3xl sm:text-4xl md:text-5xl font-semibold text-gray-900 mb-3 sm:mb-4">
               {txt.finalCta.title}
             </h2>
@@ -482,7 +458,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
                 className="inline-flex items-center gap-2 sm:gap-3 px-6 sm:px-10 py-3.5 sm:py-5 text-base sm:text-xl font-bold text-white bg-[#007229] rounded-full hover:bg-[#005C22] transition-all shadow-xl shadow-[#007229]/30 hover:shadow-2xl hover:shadow-[#007229]/40 hover:-translate-y-1"
               >
                 {txt.finalCta.cta}
-                <FloatingRocket className="w-6 h-6 sm:w-8 sm:h-8" />
+                <ArrowRight className="h-5 w-5 rtl:-scale-x-100" aria-hidden />
               </Link>
             )}
           </div>

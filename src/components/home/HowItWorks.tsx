@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, BookOpen, Calculator, Check, Lock, Music2, Play } from "lucide-react";
 import type { Language } from "@/contexts/LanguageContext";
 import { LivingOwl, type OwlMood } from "@/components/brand/LivingOwl";
+import { SudanFlagToAmalOwl } from "@/components/brand/SudanFlagToAmalOwl";
 import { useOwlShow, type OwlAct } from "@/components/brand/useOwlShow";
 import { DayMeadow, DaySky } from "./DayMeadow";
 import { handwritingClass } from "./handwriting";
@@ -234,11 +235,12 @@ export function HowItWorks({ language, isRtl, isAuthenticated }: { language: Lan
           <div className="relative mx-auto grid w-full max-w-6xl items-center gap-5 px-4 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:gap-10">
             {/* Full step list: visible on desktop, read by screen readers everywhere. */}
             <div className="sr-only lg:not-sr-only">
-              <div className="relative">
-                <span aria-hidden className="absolute bottom-7 top-7 w-[3px] overflow-hidden rounded-full bg-emerald-900/10 ltr:left-[1.85rem] rtl:right-[1.85rem]">
-                  <span className="block h-full origin-top bg-amber-400" style={{ transform: "scaleY(var(--hiw-progress, 0))" }} />
+              {/* Plain numbered steps along a thin rail that fills as you scroll. */}
+              <div className="relative ps-7">
+                <span aria-hidden className="absolute bottom-3 top-3 w-0.5 overflow-hidden rounded-full bg-gray-900/10 ltr:left-0 rtl:right-0">
+                  <span className="block h-full origin-top bg-[#007229]" style={{ transform: "scaleY(var(--hiw-progress, 0))" }} />
                 </span>
-                <ol className="relative space-y-2">
+                <ol className="space-y-1">
                   {txt.steps.map((step, i) => {
                     const current = i === active;
                     return (
@@ -247,27 +249,21 @@ export function HowItWorks({ language, isRtl, isAuthenticated }: { language: Lan
                           type="button"
                           onClick={() => scrollToStep(i)}
                           aria-current={current ? "step" : undefined}
-                          className={`relative flex w-full items-start gap-4 rounded-2xl px-4 py-4 text-start transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007229] sm:px-5 ${
-                            current ? "bg-white/90 shadow-lg shadow-emerald-900/5 ring-1 ring-emerald-100" : "hover:bg-white/50"
-                          }`}
+                          className="block w-full rounded-lg py-3 text-start focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#007229]"
                         >
+                          <span className={`flex items-baseline gap-3 font-fredoka text-2xl font-semibold transition-colors ${current ? "text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>
+                            <span className={`text-base tabular-nums ${i <= active ? "text-[#007229]" : "text-gray-400"}`} dir="ltr">
+                              {String(i + 1).padStart(2, "0")}
+                            </span>
+                            {step.title}
+                          </span>
                           <span
-                            className={`relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-fredoka text-sm font-bold transition-colors ${
-                              i <= active ? "bg-amber-400 text-amber-950" : "bg-white text-gray-400 ring-1 ring-gray-200"
+                            className={`grid transition-[grid-template-rows,opacity] duration-300 ${
+                              current ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
                             }`}
                           >
-                            {i < active ? <Check className="h-4 w-4" strokeWidth={3} /> : String(i + 1).padStart(2, "0")}
-                          </span>
-                          <span className="min-w-0">
-                            <span className={`block font-fredoka text-xl font-semibold ${current ? "text-gray-900" : "text-gray-500"}`}>{step.title}</span>
-                            <span
-                              className={`grid transition-[grid-template-rows,opacity] duration-300 ${
-                                current ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-                              }`}
-                            >
-                              <span className="overflow-hidden">
-                                <span className="block pt-1.5 text-base leading-relaxed text-gray-600">{step.desc}</span>
-                              </span>
+                            <span className="overflow-hidden">
+                              <span className="block max-w-md pt-2 text-base leading-relaxed text-gray-600 ltr:pl-8 rtl:pr-8">{step.desc}</span>
                             </span>
                           </span>
                         </button>
@@ -283,8 +279,8 @@ export function HowItWorks({ language, isRtl, isAuthenticated }: { language: Lan
             <div aria-hidden className="lg:hidden">
               <div className="flex gap-1.5">
                 {[0, 1, 2].map((i) => (
-                  <span key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-emerald-900/10">
-                    <span className="block h-full origin-left bg-amber-400 rtl:origin-right" style={segmentFill(i)} />
+                  <span key={i} className="h-0.5 flex-1 overflow-hidden rounded-full bg-gray-900/10">
+                    <span className="block h-full origin-left bg-[#007229] rtl:origin-right" style={segmentFill(i)} />
                   </span>
                 ))}
               </div>
@@ -343,16 +339,14 @@ export function HowItWorks({ language, isRtl, isAuthenticated }: { language: Lan
 function Device({ txt, active }: { txt: Copy; active: number }) {
   const screens = [<WelcomeScreen key="welcome" txt={txt} />, <PathScreen key="path" txt={txt} />, <PracticeScreen key="practice" txt={txt} />];
 
-  // Styled like the site's own cards (white, soft green ring, soft shadow) so it sits in the meadow.
+  // A plain phone: white body, the screen and a home bar, nothing decorative.
   return (
     <div className="relative z-10 w-[232px] -rotate-1 rtl:rotate-1 sm:w-[300px]">
-      <span aria-hidden className="absolute -bottom-5 left-1/2 h-6 w-[78%] -translate-x-1/2 rounded-[50%] bg-emerald-900/15 blur-md" />
-      <div className="relative rounded-[2.4rem] bg-white p-3 text-gray-900 shadow-[0_30px_60px_-24px_rgba(6,78,59,.4)] ring-1 ring-emerald-100">
-        <span aria-hidden className="mx-auto mb-2 block h-1.5 w-12 rounded-full bg-emerald-100" />
-
+      <span aria-hidden className="absolute -bottom-5 left-1/2 h-6 w-[78%] -translate-x-1/2 rounded-[50%] bg-black/10 blur-md" />
+      <div className="relative rounded-[2.4rem] bg-white p-2.5 text-gray-900 shadow-[0_30px_60px_-24px_rgba(15,23,42,.35)] ring-1 ring-black/5">
         <div
           aria-hidden
-          className="relative h-[360px] overflow-hidden rounded-[1.8rem] bg-white ring-1 ring-emerald-100 sm:h-[410px] [@media(max-height:700px)]:h-[300px]"
+          className="relative h-[380px] overflow-hidden rounded-[1.9rem] bg-white ring-1 ring-black/5 sm:h-[440px] [@media(max-height:700px)]:h-[320px]"
         >
           {screens.map((screen, i) => (
             <div
@@ -365,21 +359,7 @@ function Device({ txt, active }: { txt: Copy; active: number }) {
             </div>
           ))}
         </div>
-
-        <div className="mt-2.5 px-1 pb-0.5">
-          <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-3.5 py-2.5 ring-1 ring-emerald-100">
-            <span className="font-fredoka text-xs font-semibold text-[#007229]" dir="ltr">
-              {active + 1} / 3
-            </span>
-            <span className="flex flex-1 gap-1">
-              {[0, 1, 2].map((i) => (
-                <span key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-emerald-100">
-                  <span className="block h-full origin-left bg-[#007229] rtl:origin-right" style={segmentFill(i)} />
-                </span>
-              ))}
-            </span>
-          </div>
-        </div>
+        <span aria-hidden className="mx-auto mb-0.5 mt-2 block h-1 w-20 rounded-full bg-gray-300" />
       </div>
     </div>
   );
@@ -388,8 +368,8 @@ function Device({ txt, active }: { txt: Copy; active: number }) {
 function ScreenHeader() {
   return (
     <div className="flex items-center gap-1.5 border-b border-gray-100 px-4 py-3">
-      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#D21034]">
-        <span className="h-2.5 w-2.5 rounded-full bg-white" />
+      <span className="block h-7 w-7">
+        <SudanFlagToAmalOwl markOnly animated={false} showReplay={false} className="h-full w-full" />
       </span>
       <span className="font-fredoka text-sm font-semibold text-[#007229]">amal school</span>
     </div>
@@ -409,23 +389,23 @@ function WelcomeScreen({ txt }: { txt: Copy }) {
             <Play className="h-3.5 w-3.5 fill-current rtl:-scale-x-100" />
           </span>
         </div>
-        <p className="mt-4 text-[11px] font-bold uppercase tracking-wider text-gray-500">{txt.welcome.pick}</p>
+        <p className="mt-4 text-sm font-semibold text-gray-900">{txt.welcome.pick}</p>
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <div className="rounded-2xl bg-emerald-50 p-3 ring-1 ring-emerald-100">
+          <div className="rounded-2xl border border-gray-200 p-3">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#007229] text-white">
               <Calculator className="h-5 w-5" />
             </span>
             <span className="mt-2 block text-sm font-bold">{txt.welcome.maths}</span>
-            <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-white">
-              <span className="block h-full w-2/3 rounded-full bg-[#00913D]" />
+            <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-gray-100">
+              <span className="block h-full w-2/3 rounded-full bg-[#007229]" />
             </span>
           </div>
-          <div className="rounded-2xl bg-amber-50 p-3 ring-1 ring-amber-100">
+          <div className="rounded-2xl border border-gray-200 p-3">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400 text-amber-950">
               <BookOpen className="h-5 w-5" />
             </span>
             <span className="mt-2 block text-sm font-bold">{txt.welcome.english}</span>
-            <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-white">
+            <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-gray-100">
               <span className="block h-full w-1/3 rounded-full bg-amber-400" />
             </span>
           </div>
@@ -497,8 +477,7 @@ function PracticeScreen({ txt }: { txt: Copy }) {
         </div>
       </div>
       <div className="flex flex-1 flex-col items-center px-4 pt-3 text-center sm:pt-6">
-        <span aria-hidden className="text-3xl sm:text-4xl">🎉</span>
-        <p className="mt-1 font-fredoka text-lg font-semibold sm:mt-2 sm:text-xl">{txt.practice.title}</p>
+        <p className="font-fredoka text-lg font-semibold sm:text-xl">{txt.practice.title}</p>
         <div className="relative mt-3 flex h-24 w-24 items-center justify-center sm:mt-4 sm:h-28 sm:w-28">
           <svg viewBox="0 0 120 120" className="absolute inset-0 -rotate-90" aria-hidden>
             <circle cx="60" cy="60" r="50" stroke="#EEF2EE" strokeWidth="12" fill="none" />
@@ -506,7 +485,7 @@ function PracticeScreen({ txt }: { txt: Copy }) {
           </svg>
           <span className="font-fredoka text-2xl font-semibold sm:text-3xl" dir="ltr">9/10</span>
         </div>
-        <span className="mt-2.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-[#007229]">
+        <span className="mt-2.5 inline-flex items-center gap-1 text-sm font-bold text-[#007229]">
           <Check className="h-3.5 w-3.5" strokeWidth={3} />
           {txt.practice.passed}
         </span>

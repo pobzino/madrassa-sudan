@@ -445,10 +445,6 @@ html {
   from { opacity: 0; transform: scale(0.6); }
   to { opacity: 1; transform: none; }
 }
-@keyframes stat-flash {
-  from { opacity: 0.85; }
-  to { opacity: 0; }
-}
 
 /* "How it works" meadow celebration bursts. */
 @keyframes hiw-burst {
@@ -461,4 +457,8 @@ html {
 @keyframes subject-float {
   0%, 100% { transform: translateY(0) rotate(var(--tilt, 0deg)); }
   50% { transform: translateY(-12px) rotate(var(--tilt, 0deg)); }
+}
+@keyframes stat-tick {
+  from { color: #00913d; }
+  to { color: #111827; }
 }

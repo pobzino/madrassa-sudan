@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ArrowUpRight, BookOpenCheck, CircleCheckBig, Users } from "lucide-react";
 import type { Language } from "@/contexts/LanguageContext";
 import { isHomeStats, roundDownStat, statNumberFormat, type HomeStats } from "@/lib/home-stats";
 import { PARTNERS } from "@/lib/partners";
@@ -17,8 +16,6 @@ const copy = {
       practiceAttempts: "Practice sets completed",
     },
     partnersLabel: "In partnership with",
-    partnersSubtitle: "Working together for Sudan's children.",
-    visit: "Visit website",
   },
   ar: {
     title: "أطفال السودان يتعلمون مع آمال",
@@ -29,8 +26,6 @@ const copy = {
       practiceAttempts: "تدريب مكتمل",
     },
     partnersLabel: "بالشراكة مع",
-    partnersSubtitle: "نعمل معاً من أجل أطفال السودان.",
-    visit: "زيارة الموقع",
   },
 };
 
@@ -158,70 +153,26 @@ function useAnimatedNumber(target: number) {
   return { ref, value, bumps };
 }
 
-function StatTile({
-  value,
-  live,
-  label,
-  icon,
-  tone,
-  formatter,
-}: {
-  value: number;
-  live: boolean;
-  label: string;
-  icon: React.ReactNode;
-  tone: "green" | "amber" | "red";
-  formatter: Intl.NumberFormat;
-}) {
+// One figure in the stats row: the number, then what it counts.
+function Stat({ value, live, label, formatter }: { value: number; live: boolean; label: string; formatter: Intl.NumberFormat }) {
   // Live counts are shown exactly; fallback minimums are rounded with a "+".
   const target = live ? value : roundDownStat(value);
   const { ref, value: shown, bumps } = useAnimatedNumber(target);
-  const featured = tone === "green";
-  const toneClasses = {
-    green: "bg-[#007229] text-white shadow-xl shadow-[#007229]/25",
-    amber: "bg-[#fdf4e1] text-gray-900 ring-1 ring-amber-200/70",
-    red: "bg-[#fdeef0] text-gray-900 ring-1 ring-red-200/70",
-  }[tone];
-  const iconClasses = {
-    green: "bg-white/15 text-white",
-    amber: "bg-amber-400/20 text-amber-600",
-    red: "bg-[#D21034]/10 text-[#D21034]",
-  }[tone];
 
   return (
-    <li
-      className={`relative overflow-hidden rounded-2xl p-4 sm:rounded-3xl sm:p-6 ${featured ? "col-span-2 sm:col-span-1" : ""} ${toneClasses}`}
-    >
-      {bumps > 0 && (
-        <span
-          key={bumps}
-          aria-hidden
-          className={`pointer-events-none absolute inset-0 animate-[stat-flash_1.4s_ease-out_both] rounded-[inherit] ${featured ? "bg-white/25" : "bg-white"}`}
-        />
-      )}
-      {featured && (
-        <svg aria-hidden className="pointer-events-none absolute -bottom-2 left-0 h-10 w-full" viewBox="0 0 300 40" preserveAspectRatio="none" fill="#00913D">
-          <path d="M0 22c60-18 110-9 160 4s90 7 140-9v23H0z" />
-        </svg>
-      )}
-      <div className="relative flex h-full flex-col">
-        <span className={`mb-4 flex h-9 w-9 items-center justify-center rounded-xl sm:mb-6 sm:h-11 sm:w-11 ${iconClasses}`}>
-          {icon}
+    <li className="px-3 py-5 first:ps-0 last:pe-0 sm:px-6 sm:py-6">
+      <p ref={ref} className="font-fredoka text-3xl font-semibold leading-none tabular-nums text-gray-900 sm:text-5xl">
+        {/* Re-keyed on each new count so the number briefly glows green. */}
+        <span aria-hidden key={bumps} className={bumps > 0 ? "animate-[stat-tick_1.4s_ease-out]" : undefined}>
+          {formatter.format(shown)}
+          {!live && <span className="text-[#007229]">+</span>}
         </span>
-        <p className={`order-last mt-2 text-xs font-semibold leading-snug sm:text-sm ${featured ? "text-white/90" : "text-gray-600"}`}>
-          {label}
-        </p>
-        <p ref={ref} className="font-fredoka text-4xl font-semibold leading-none tabular-nums sm:text-5xl">
-          <span aria-hidden>
-            {formatter.format(shown)}
-            {!live && <span className={featured ? "text-amber-300" : "text-[#007229]"}>+</span>}
-          </span>
-          <span className="sr-only">
-            {formatter.format(target)}
-            {live ? "" : "+"}
-          </span>
-        </p>
-      </div>
+        <span className="sr-only">
+          {formatter.format(target)}
+          {live ? "" : "+"}
+        </span>
+      </p>
+      <p className="mt-2 text-xs leading-snug text-gray-500 sm:text-sm">{label}</p>
     </li>
   );
 }
@@ -245,82 +196,39 @@ export function SocialProof({ stats: initialStats, language }: { stats: HomeStat
             <p className="mx-auto mt-4 max-w-xl text-base text-gray-600 sm:text-lg lg:mx-0">{txt.subtitle}</p>
           </div>
 
-          <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-4">
-            <StatTile
-              value={stats.signups}
-              live={stats.live}
-              label={txt.stats.signups}
-              tone="green"
-              formatter={formatter}
-              icon={<Users className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2.2} />}
-            />
-            <StatTile
-              value={stats.lessonsCompleted}
-              live={stats.live}
-              label={txt.stats.lessonsCompleted}
-              tone="amber"
-              formatter={formatter}
-              icon={<BookOpenCheck className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2.2} />}
-            />
-            <StatTile
-              value={stats.practiceAttempts}
-              live={stats.live}
-              label={txt.stats.practiceAttempts}
-              tone="red"
-              formatter={formatter}
-              icon={<CircleCheckBig className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2.2} />}
-            />
+          <ul className="grid grid-cols-3 divide-x divide-gray-200 border-y border-gray-200 rtl:divide-x-reverse">
+            <Stat value={stats.signups} live={stats.live} label={txt.stats.signups} formatter={formatter} />
+            <Stat value={stats.lessonsCompleted} live={stats.live} label={txt.stats.lessonsCompleted} formatter={formatter} />
+            <Stat value={stats.practiceAttempts} live={stats.live} label={txt.stats.practiceAttempts} formatter={formatter} />
           </ul>
         </div>
 
-        <div id="partners" className="mt-12 scroll-mt-20 rounded-3xl bg-gray-50 p-5 ring-1 ring-gray-100 sm:mt-16 sm:p-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:gap-10">
-            <div className="text-center lg:w-56 lg:shrink-0 lg:text-start">
-              <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-gray-500">{txt.partnersLabel}</h3>
-              <p className="mt-1.5 text-sm text-gray-600">{txt.partnersSubtitle}</p>
-            </div>
-
-            <ul className="grid flex-1 gap-3 sm:grid-cols-2 sm:gap-4">
-              {PARTNERS.map((partner) => (
+        <div id="partners" className="mt-14 scroll-mt-20 sm:mt-20">
+          <p className="text-center text-sm text-gray-500">{txt.partnersLabel}</p>
+          <ul className="mt-6 flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
+            {PARTNERS.map((partner) => {
+              const name = language === "ar" ? partner.nameAr : partner.name;
+              return (
                 <li key={partner.id}>
                   <a
                     href={partner.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group flex h-full flex-col overflow-hidden rounded-2xl bg-white ring-1 ring-gray-200/80 transition-all hover:-translate-y-0.5 hover:shadow-lg hover:ring-gray-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007229]"
+                    title={name}
+                    className="block rounded-md transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#007229]"
                   >
-                    <span
-                      className="flex h-24 items-center justify-center px-6 sm:h-28"
-                      style={{ backgroundColor: partner.logoBackground }}
-                    >
-                      <Image
-                        src={partner.logo.src}
-                        alt={`${partner.name} logo`}
-                        width={partner.logo.width}
-                        height={partner.logo.height}
-                        className={partner.logo.className}
-                      />
-                    </span>
-                    <span className="flex flex-1 items-start justify-between gap-3 border-t border-gray-100 p-4">
-                      <span className="min-w-0">
-                        <span className="block text-sm font-bold text-gray-900">
-                          {language === "ar" ? partner.nameAr : partner.name}
-                        </span>
-                        <span className="mt-1 block text-xs leading-relaxed text-gray-500 sm:text-sm">
-                          {language === "ar" ? partner.descriptionAr : partner.description}
-                        </span>
-                      </span>
-                      <span className="sr-only">{txt.visit}</span>
-                      <ArrowUpRight
-                        aria-hidden
-                        className="mt-0.5 h-4 w-4 shrink-0 text-gray-400 transition-colors group-hover:text-[#007229] rtl:-scale-x-100"
-                      />
-                    </span>
+                    <Image
+                      src={partner.logo.src}
+                      alt={name}
+                      width={partner.logo.width}
+                      height={partner.logo.height}
+                      className={partner.logo.className}
+                    />
                   </a>
                 </li>
-              ))}
-            </ul>
-          </div>
+              );
+            })}
+          </ul>
         </div>
       </div>
     </section>
