@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useLearnerContext } from "@/contexts/LearnerContext";
 import { OwlCelebrating, OwlEncouraging, OwlCorrect, OwlPointing, Confetti } from "@/components/illustrations";
 import type { HomeworkAssignment, HomeworkQuestion, HomeworkSubmission, HomeworkResponse, Subject } from "@/lib/database.types";
 import { getCachedUser, getLastAuthStatus } from "@/lib/supabase/auth-cache";
@@ -198,6 +199,7 @@ export default function HomeworkAssignmentPage() {
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
+  const { activeLearner, fetchWithLearner } = useLearnerContext();
   const t = translations[language];
   const isRtl = language === "ar";
 
@@ -305,7 +307,8 @@ export default function HomeworkAssignmentPage() {
         if (getLastAuthStatus() === "signed_out") router.push("/auth/login");
         return;
       }
-      setUserId(user.id);
+      const learnerId = activeLearner?.id || user.id;
+      setUserId(learnerId);
 
       // Fetch assignment
       const { data: assignmentData } = await supabase
@@ -343,7 +346,7 @@ export default function HomeworkAssignmentPage() {
         .from("homework_submissions")
         .select("*")
         .eq("assignment_id", assignmentId)
-        .eq("student_id", user.id)
+        .eq("student_id", learnerId)
         .single();
 
       if (submissionData) {
@@ -383,7 +386,7 @@ export default function HomeworkAssignmentPage() {
       setLoading(false);
     }
     loadData();
-  }, [assignmentId, buildFileDisplays, router, supabase]);
+  }, [activeLearner?.id, assignmentId, buildFileDisplays, router, supabase]);
 
   const saveDraftAnswer = useCallback(async (questionId: string) => {
     if (!assignmentId) return;
@@ -391,7 +394,7 @@ export default function HomeworkAssignmentPage() {
     setSaving(true);
 
     try {
-      await fetch(`/api/homework/${assignmentId}/submit`, {
+      await fetchWithLearner(`/api/homework/${assignmentId}/submit`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -405,7 +408,7 @@ export default function HomeworkAssignmentPage() {
     } finally {
       setSaving(false);
     }
-  }, [assignmentId]);
+  }, [assignmentId, fetchWithLearner]);
 
   const scheduleDraftSave = useCallback((questionId: string) => {
     const existingTimer = saveTimersRef.current[questionId];
@@ -526,7 +529,7 @@ export default function HomeworkAssignmentPage() {
         response_file_urls: fileAnswersRef.current[question.id] || null,
       }));
 
-      const response = await fetch(`/api/homework/${assignmentId}/submit`, {
+      const response = await fetchWithLearner(`/api/homework/${assignmentId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers: payload }),
@@ -661,7 +664,7 @@ export default function HomeworkAssignmentPage() {
   const handleRetry = async () => {
     setRetaking(true);
     try {
-      const res = await fetch(`/api/homework/${assignmentId}/retake`, { method: "POST" });
+      const res = await fetchWithLearner(`/api/homework/${assignmentId}/retake`, { method: "POST" });
       if (res.ok) {
         // Reload so the page re-enters the taking flow with a fresh attempt.
         window.location.reload();

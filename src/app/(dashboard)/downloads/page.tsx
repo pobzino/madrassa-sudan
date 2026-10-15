@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import Link from "next/link";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useLearnerContext } from "@/contexts/LearnerContext";
 import { useOffline, type DownloadResult } from "@/contexts/OfflineContext";
 import { getCachedSimAudio, hasCachedSimAudio, type DownloadState, type OfflineLesson } from "@/lib/offline/db";
 import { getOwnedOfflineLessons } from "@/lib/offline/identity";
@@ -233,6 +234,7 @@ function DownloadRow({
 
 export default function DownloadsPage() {
   const { language } = useLanguage();
+  const { activeLearner } = useLearnerContext();
   const t = translations[language];
   const isRtl = language === "ar";
   const {
@@ -316,7 +318,7 @@ export default function DownloadsPage() {
   };
 
   const handleSave = async (lessonId: string) => {
-    reportResult(await downloadLesson(lessonId));
+    reportResult(await downloadLesson(lessonId, { learnerId: activeLearner?.id }));
     await loadLessons();
   };
 

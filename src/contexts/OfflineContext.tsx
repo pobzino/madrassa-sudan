@@ -74,7 +74,7 @@ interface OfflineContextValue {
   storageUsed: number;
   storageQuota: number;
   /** Never rejects: the result says whether the lesson was saved. */
-  downloadLesson: (lessonId: string, options?: { origin?: OfflineOrigin }) => Promise<DownloadResult>;
+  downloadLesson: (lessonId: string, options?: { origin?: OfflineOrigin; learnerId?: string }) => Promise<DownloadResult>;
   cancelDownload: (lessonId: string) => void;
   deleteLesson: (lessonId: string) => Promise<void>;
   isLessonDownloaded: (lessonId: string) => boolean;
@@ -297,7 +297,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   );
 
   const downloadLesson = useCallback(
-    async (lessonId: string, options: { origin?: OfflineOrigin } = {}): Promise<DownloadResult> => {
+    async (lessonId: string, options: { origin?: OfflineOrigin; learnerId?: string } = {}): Promise<DownloadResult> => {
       const manual = options.origin !== "auto";
       if (manual) setManualSaves((count) => count + 1);
       try {
@@ -305,7 +305,9 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
           lessonId,
           createClient(),
           (state) => setDownloads((prev) => new Map(prev).set(lessonId, state)),
-          { origin: options.origin }
+          // The saved lesson/media remains family-owned; the learner ID only
+          // scopes the progress and answer snapshot seeded by the downloader.
+          { origin: options.origin, learnerId: options.learnerId } as { origin?: OfflineOrigin; learnerId?: string }
         );
         setDownloadedIds((prev) => new Set(prev).add(lessonId));
         setUpdateIds((prev) => withoutItem(prev, lessonId));

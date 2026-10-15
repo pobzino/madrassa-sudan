@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useLearnerContext } from "@/contexts/LearnerContext";
 import { OwlThinking, OwlSad } from "@/components/illustrations";
 import type { Lesson, Subject, LessonProgress } from "@/lib/database.types";
 import { getCachedUser, getLastAuthStatus } from "@/lib/supabase/auth-cache";
@@ -96,6 +97,7 @@ export default function LessonsPage() {
   const searchParams = useSearchParams();
   const supabase = createClient();
   const { language } = useLanguage();
+  const { activeLearner } = useLearnerContext();
   const t = translations[language];
   const isRtl = language === "ar";
   const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
@@ -118,7 +120,8 @@ export default function LessonsPage() {
         if (getLastAuthStatus() === "signed_out") router.push("/auth/login");
         return;
       }
-      setUserId(user.id);
+      const learnerId = activeLearner?.id || user.id;
+      setUserId(learnerId);
 
       const [{ data: subjectsData }, { data: profile }] = await Promise.all([
         supabase.from("subjects").select("*").order("display_order"),
@@ -143,7 +146,7 @@ export default function LessonsPage() {
             // One sim per lesson, so the embed is a row or null.
             has_recording: Boolean(lesson.lesson_sims?.audio_path),
             progress: Array.isArray(lesson.progress)
-              ? lesson.progress.find((p: LessonProgress) => p.student_id === user.id) || null
+              ? lesson.progress.find((p: LessonProgress) => p.student_id === learnerId) || null
               : lesson.progress,
           };
         });
@@ -153,7 +156,7 @@ export default function LessonsPage() {
       setLoading(false);
     }
     loadData();
-  }, [router, supabase]);
+  }, [router, supabase, activeLearner?.id]);
 
   // Load each core subject's published learning-path tree (Track B). Subjects
   // without a published path stay null and fall back to the flat lesson list.

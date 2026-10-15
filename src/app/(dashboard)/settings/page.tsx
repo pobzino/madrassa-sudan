@@ -34,6 +34,8 @@ const translations = {
   ar: {
     settings: "الإعدادات",
     profile: "الملف الشخصي",
+    myChildren: "أطفالي",
+    manageChildren: "إضافة الأطفال وتعديل ملفاتهم",
     fullName: "الاسم الكامل",
     email: "البريد الإلكتروني",
     phone: "رقم الهاتف",
@@ -89,6 +91,8 @@ const translations = {
   en: {
     settings: "Settings",
     profile: "Profile",
+    myChildren: "My children",
+    manageChildren: "Add children and manage their profiles",
     fullName: "Full Name",
     email: "Email",
     phone: "Phone Number",
@@ -552,6 +556,17 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+
+          {profile?.role === "parent" && (
+            <Link href="/settings/children" className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:border-[#007229]/30 hover:bg-[#007229]/[0.02]">
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-2xl" aria-hidden="true">👨‍👩‍👧</span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-bold text-gray-900">{t.myChildren}</span>
+                <span className="block text-sm text-gray-500">{t.manageChildren}</span>
+              </span>
+              <span className="text-xl text-[#007229]" aria-hidden="true">{language === "ar" ? "←" : "→"}</span>
+            </Link>
+          )}
 
           {/* Preferences Section */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

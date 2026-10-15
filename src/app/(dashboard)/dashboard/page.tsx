@@ -18,6 +18,7 @@ import {
 } from "@/components/illustrations";
 import { HeroScene, SubjectScene } from "@/components/dashboard/DashboardScenes";
 import { DashboardInstallNudge } from "@/components/pwa/InstallNudges";
+import { useLearnerContext, LearnerSwitcher } from "@/contexts/LearnerContext";
 
 const translations = {
   ar: {
@@ -108,6 +109,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
+  const { activeLearner } = useLearnerContext();
   const t = translations[language];
   const isRtl = language === "ar";
 
@@ -135,7 +137,7 @@ export default function DashboardPage() {
       const { data: streakData } = await supabase
         .from("student_streaks")
         .select("*")
-        .eq("student_id", user.id)
+        .eq("student_id", activeLearner?.id || user.id)
         .maybeSingle();
       if (streakData) {
         setStats({
@@ -148,7 +150,7 @@ export default function DashboardPage() {
       setLoading(false);
     }
     loadData();
-  }, [router, supabase]);
+  }, [router, supabase, activeLearner?.id]);
 
   if (loading) {
     return (
@@ -161,13 +163,15 @@ export default function DashboardPage() {
     );
   }
 
-  const firstName = (profile?.full_name?.split(" ")[0] || "Student").trim();
+  const firstName = (activeLearner?.name?.split(" ")[0] || profile?.full_name?.split(" ")[0] || "Student").trim();
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8" dir={isRtl ? "rtl" : "ltr"}>
           {/* Welcome Banner — illustrated "learning world" hero */}
           <div className="relative mb-8 rounded-3xl overflow-hidden shadow-sm min-h-[230px] sm:min-h-[260px]">
             <HeroScene mirrored={isRtl} />
+
+            <LearnerSwitcher className={`absolute top-4 z-20 ${isRtl ? "left-4" : "right-4"}`} />
 
             {/* Owl mascot */}
             <div className={`absolute -bottom-1 z-10 ${isRtl ? "left-1 sm:left-10" : "right-1 sm:right-10"}`}>
