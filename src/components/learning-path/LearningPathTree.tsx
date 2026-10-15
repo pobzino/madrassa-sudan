@@ -104,7 +104,18 @@ function WatchedRing({ percent }: { percent: number }) {
   );
 }
 
-function NodeDisc({ node, isCurrent }: { node: TreeNode; isCurrent: boolean }) {
+/** Marks a lesson saved for offline: it plays on this phone without internet. */
+function SavedBadge() {
+  return (
+    <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-[#007229] text-white shadow-sm">
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16.5v1.75A1.75 1.75 0 005.75 20h12.5A1.75 1.75 0 0020 18.25V16.5M16 11.5l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+    </span>
+  );
+}
+
+function NodeDisc({ node, isCurrent, saved = false }: { node: TreeNode; isCurrent: boolean; saved?: boolean }) {
   if (node.kind === "lesson") {
     const { state } = node.step;
     const completed = state === "completed";
@@ -124,6 +135,7 @@ function NodeDisc({ node, isCurrent }: { node: TreeNode; isCurrent: boolean }) {
           {completed ? <CheckIcon /> : locked ? <LockIcon /> : <PlayIcon className="w-7 h-7 ml-0.5" />}
         </div>
         {completed && <Sparkle />}
+        {saved && <SavedBadge />}
       </div>
     );
   }
@@ -381,10 +393,10 @@ export default function LearningPathTree({
                     }}
                     aria-label={saved ? `${label.title} — ${t.savedOnPhone}` : label.title}
                   >
-                    <NodeDisc node={node} isCurrent={isSelected} />
+                    <NodeDisc node={node} isCurrent={isSelected} saved={saved} />
                   </button>
                 ) : (
-                  <NodeDisc node={node} isCurrent={isSelected} />
+                  <NodeDisc node={node} isCurrent={isSelected} saved={saved} />
                 )}
               </div>
               {/* Label below (+ Open CTA on the selected node) */}
