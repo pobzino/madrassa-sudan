@@ -223,6 +223,17 @@ export class StorageClearedError extends Error {
   }
 }
 
+/**
+ * The database didn't open in time. Almost always another Amal tab or window
+ * from an older version still holds it; closing that one lets the open finish.
+ */
+export class OfflineDbBusyError extends Error {
+  constructor() {
+    super("The offline database is busy in another tab.");
+    this.name = "OfflineDbBusyError";
+  }
+}
+
 // ── Keys ─────────────────────────────────────────────────────────────────────
 
 export const OWNER_META_KEY = "owner";
@@ -425,7 +436,9 @@ export function assetUrlFromMetaKey(key: string): string | null {
 
 const DB_NAME = OFFLINE_DB_NAME;
 const DB_VERSION = OFFLINE_DB_VERSION;
-const OPEN_BLOCKED_TIMEOUT_MS = 10_000;
+// Long enough for a slow first open on a cheap phone; an open still waiting
+// after this is held up by another tab.
+const OPEN_TIMEOUT_MS = 10_000;
 const DELETE_TIMEOUT_MS = 5_000;
 // Emptying the stores never waits on other tabs, so this only catches a
 // browser that doesn't answer at all.
@@ -435,7 +448,15 @@ const WIPE_PENDING_KEY = "amal-offline-wipe-pending";
 const ALL_STORES = Object.values(OFFLINE_STORES) as OfflineStoreName[];
 
 let dbInstance: IDBDatabase | null = null;
-let dbPromise: Promise<IDBDatabase> | null = null;
+// The open request in flight. IndexedDB can't cancel one and queues every
+// later open behind it, so callers share this one (each with its own time
+// limit), and its connection is used whenever it finally opens.
+let pendingOpen: Promise<IDBDatabase> | null = null;
+// pendingOpen already outlasted OPEN_TIMEOUT_MS: callers get OfflineDbBusyError
+// right away instead of each waiting again.
+let pendingOpenStuck = false;
+// Logout's delete request, which later opens queue behind just the same.
+let pendingDelete: Promise<boolean> | null = null;
 
 // Bumped by every logout. Writers that started before it must not write
 // (they would recreate the database with the previous account's data).
@@ -468,7 +489,6 @@ function forgetConnection() {
     }
   }
   dbInstance = null;
-  dbPromise = null;
 }
 
 function markCleared(fromOtherTab = false) {
@@ -537,33 +557,19 @@ function hasAllStores(db: IDBDatabase) {
 /** Opens at `version` (or whatever version exists, when omitted), creating any missing store. */
 function openAtVersion(version: number | undefined, repairAttempt: boolean): Promise<IDBDatabase> {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    let settled = false;
-    let blockedTimer: ReturnType<typeof setTimeout> | null = null;
     const request = version === undefined ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, version);
 
     request.onupgradeneeded = () => {
       createMissingStores(request.result, request.transaction);
     };
 
-    request.onblocked = () => {
-      // Another tab still holds an old connection (one without our
-      // versionchange handler). Give it a moment, then report rather than
-      // leaving every caller waiting forever.
-      blockedTimer ??= setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        reject(new Error("The offline database is busy in another tab."));
-      }, OPEN_BLOCKED_TIMEOUT_MS);
-    };
+    // While another tab holds an old connection (one without our
+    // versionchange handler) the request is "blocked" and simply waits. It is
+    // not given up on: openDB's callers stop waiting after OPEN_TIMEOUT_MS,
+    // and once that tab lets go this opens and becomes the connection.
 
     request.onsuccess = () => {
-      if (blockedTimer) clearTimeout(blockedTimer);
       const db = request.result;
-      if (settled) {
-        db.close();
-        return;
-      }
-      settled = true;
       // A database at this version without every store (for example one an
       // old page created) gets one version bump to add what's missing.
       if (!hasAllStores(db) && !repairAttempt) {
@@ -575,12 +581,7 @@ function openAtVersion(version: number | undefined, repairAttempt: boolean): Pro
       resolve(db);
     };
 
-    request.onerror = () => {
-      if (blockedTimer) clearTimeout(blockedTimer);
-      if (settled) return;
-      settled = true;
-      reject(request.error);
-    };
+    request.onerror = () => reject(request.error);
   });
 }
 
@@ -615,56 +616,94 @@ async function startTransaction(
   }
 }
 
+/** Issues the open (after any unfinished delete) and keeps its connection whenever it succeeds. */
+function startOpen(): Promise<IDBDatabase> {
+  const epochAtOpen = storageEpoch;
+  const finished = (open: Promise<IDBDatabase>) => {
+    if (pendingOpen !== open) return;
+    pendingOpen = null;
+    pendingOpenStuck = false;
+  };
+  // A delete still in progress would hold this request in the queue anyway;
+  // wait for it here rather than stack a request behind it.
+  const opened = pendingDelete ? pendingDelete.then(() => openExisting()) : openExisting();
+
+  const open: Promise<IDBDatabase> = opened.then(
+    async (db) => {
+      try {
+        if (wipeIsPending()) {
+          // The last logout couldn't empty the database (another tab held it):
+          // empty it now, before anything reads the previous account's data.
+          try {
+            await emptyAllStores(db);
+          } catch (error) {
+            db.close();
+            throw error;
+          }
+          setWipePending(false);
+        }
+      } finally {
+        finished(open);
+      }
+      if (epochAtOpen !== storageEpoch) {
+        // Logout ran while this was opening; this connection would block the
+        // deletion. Reopen, which waits for the deletion to finish.
+        db.close();
+        return openDB();
+      }
+      const forget = () => {
+        if (dbInstance === db) dbInstance = null;
+      };
+      // Another tab deleting or upgrading the database: let go so it isn't blocked.
+      db.onversionchange = () => {
+        db.close();
+        forget();
+      };
+      db.onclose = forget;
+      dbInstance = db;
+      return db;
+    },
+    (error: unknown) => {
+      finished(open);
+      throw error;
+    }
+  );
+  return open;
+}
+
+/** The shared open's connection, or OfflineDbBusyError when it takes longer than OPEN_TIMEOUT_MS. */
+function waitForOpen(open: Promise<IDBDatabase>): Promise<IDBDatabase> {
+  if (pendingOpenStuck) return Promise.reject(new OfflineDbBusyError());
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (pendingOpen === open) pendingOpenStuck = true;
+      reject(new OfflineDbBusyError());
+    }, OPEN_TIMEOUT_MS);
+    open.then(
+      (db) => {
+        clearTimeout(timer);
+        resolve(db);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
 export function openDB(): Promise<IDBDatabase> {
   if (dbInstance) return Promise.resolve(dbInstance);
-  if (dbPromise) return dbPromise;
   if (typeof indexedDB === "undefined") {
     return Promise.reject(new Error("IndexedDB is not available"));
   }
 
   listenForClearsFromOtherTabs();
-  const epochAtOpen = storageEpoch;
-
-  const promise: Promise<IDBDatabase> = openExisting().then(async (db) => {
-    if (wipeIsPending()) {
-      // The last logout couldn't empty the database (another tab held it):
-      // empty it now, before anything reads the previous account's data.
-      try {
-        await emptyAllStores(db);
-      } catch (error) {
-        db.close();
-        throw error;
-      }
-      setWipePending(false);
-    }
-    if (epochAtOpen !== storageEpoch) {
-      // Logout ran while this was opening; this connection would block the
-      // deletion. Reopen, which waits for the deletion to finish.
-      db.close();
-      if (dbPromise === promise) dbPromise = null;
-      return openDB();
-    }
-    const forget = () => {
-      if (dbInstance === db) {
-        dbInstance = null;
-        dbPromise = null;
-      }
-    };
-    // Another tab deleting or upgrading the database: let go so it isn't blocked.
-    db.onversionchange = () => {
-      db.close();
-      forget();
-    };
-    db.onclose = forget;
-    dbInstance = db;
-    return db;
-  });
-
-  dbPromise = promise;
-  promise.catch(() => {
-    if (dbPromise === promise) dbPromise = null;
-  });
-  return promise;
+  if (!pendingOpen) {
+    pendingOpenStuck = false;
+    pendingOpen = startOpen();
+  }
+  return waitForOpen(pendingOpen);
 }
 
 // ── Transaction helpers ──────────────────────────────────────────────────────
@@ -1429,24 +1468,33 @@ function setWipePending(pending: boolean) {
 
 function deleteDatabase(): Promise<boolean> {
   if (typeof indexedDB === "undefined") return Promise.resolve(true);
+  // Like an open, a delete can't be cancelled and later requests queue
+  // behind it: a second logout waits on this same one, and openDB waits for
+  // it before opening.
+  if (!pendingDelete) {
+    const started: Promise<boolean> = new Promise<boolean>((resolve) => {
+      try {
+        const request = indexedDB.deleteDatabase(DB_NAME);
+        request.onsuccess = () => resolve(true);
+        request.onerror = () => resolve(false);
+      } catch {
+        resolve(false);
+      }
+    }).then((ok) => {
+      if (pendingDelete === started) pendingDelete = null;
+      return ok;
+    });
+    pendingDelete = started;
+  }
+  const deletion = pendingDelete;
   return new Promise<boolean>((resolve) => {
-    let settled = false;
-    const finish = (ok: boolean) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(ok);
-    };
     // Blocked means another tab still has it open; our versionchange handler
     // closes those, so keep waiting for success up to the timeout.
-    const timer = setTimeout(() => finish(false), DELETE_TIMEOUT_MS);
-    try {
-      const request = indexedDB.deleteDatabase(DB_NAME);
-      request.onsuccess = () => finish(true);
-      request.onerror = () => finish(false);
-    } catch {
-      finish(false);
-    }
+    const timer = setTimeout(() => resolve(false), DELETE_TIMEOUT_MS);
+    void deletion.then((ok) => {
+      clearTimeout(timer);
+      resolve(ok);
+    });
   });
 }
 
