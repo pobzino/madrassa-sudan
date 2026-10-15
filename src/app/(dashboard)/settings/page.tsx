@@ -9,7 +9,26 @@ import { RemindersSetting } from "@/components/pwa/RemindersSetting";
 import { AccountActions } from "@/components/settings/AccountActions";
 import type { Profile } from "@/lib/database.types";
 import { getCachedProfile, getCachedUser, getLastAuthStatus, primeCachedProfile } from "@/lib/supabase/auth-cache";
-import { clearPrivateOfflineData } from "@/lib/offline/db";
+import { logOut } from "@/lib/auth/logout";
+
+// Deleting an account can take a while on the server; past this the answer counts as lost.
+const DELETE_ACCOUNT_TIMEOUT_MS = 30_000;
+
+/** Asks the server to delete the signed-in account. "unknown" when no answer came (it may still have been done). */
+async function requestAccountDeletion(): Promise<"deleted" | "not_deleted" | "unknown"> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), DELETE_ACCOUNT_TIMEOUT_MS);
+  try {
+    const res = await fetch("/api/account/delete", { method: "DELETE", signal: controller.signal });
+    // 401: no account or session any more — most likely an earlier attempt
+    // worked but its answer was lost.
+    return res.ok || res.status === 401 ? "deleted" : "not_deleted";
+  } catch {
+    return "unknown";
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 const translations = {
   ar: {
@@ -57,6 +76,8 @@ const translations = {
     deleteConfirmWord: "حذف",
     cancel: "إلغاء",
     deleting: "جاري الحذف...",
+    deleteNeedsInternet: "حذف الحساب يحتاج إلى اتصال بالإنترنت.",
+    deleteUnconfirmed: "تعذّر التأكد من حذف الحساب. حاول مرة أخرى عندما تكون متصلاً بالإنترنت.",
     privacyPolicy: "سياسة الخصوصية",
     termsOfService: "الشروط والأحكام",
     featureFlags: "إدارة الميزات",
@@ -110,6 +131,8 @@ const translations = {
     deleteConfirmWord: "delete",
     cancel: "Cancel",
     deleting: "Deleting...",
+    deleteNeedsInternet: "Deleting your account needs an internet connection.",
+    deleteUnconfirmed: "We couldn't confirm that your account was deleted. Try again when you're connected.",
     privacyPolicy: "Privacy Policy",
     termsOfService: "Terms and Conditions",
     featureFlags: "Feature Flags",
@@ -315,17 +338,27 @@ export default function SettingsPage() {
     setExporting(false);
   };
 
+  // Once the account is gone, nothing of it may stay on the phone: the shared
+  // log-out (forced, as its unsent items can never be sent now) clears the
+  // session, downloads, queue and analytics identity and reloads the page.
+  // Without an answer (lie-fi) nothing is cleared blindly.
   const handleDeleteAccount = async () => {
-    setDeleting(true);
-    try {
-      const res = await fetch("/api/account/delete", { method: "DELETE" });
-      if (!res.ok) throw new Error("Delete failed");
-      await clearPrivateOfflineData();
-      router.push("/");
-    } catch {
-      setSaveMessage({ type: "error", text: t.error });
-      setDeleting(false);
+    if (!navigator.onLine) {
+      setSaveMessage({ type: "error", text: t.deleteNeedsInternet });
+      return;
     }
+    setDeleting(true);
+    let outcome = await requestAccountDeletion();
+    // The request may have reached the server with only the answer lost.
+    // Asking again settles it: the account is deleted now, or it's already
+    // gone (401).
+    if (outcome === "unknown") outcome = await requestAccountDeletion();
+    if (outcome === "deleted") {
+      await logOut({ force: true });
+      return;
+    }
+    setSaveMessage({ type: "error", text: outcome === "unknown" ? t.deleteUnconfirmed : t.error });
+    setDeleting(false);
   };
 
   const handleToggleSimAccess = async (userId: string, currentValue: boolean) => {

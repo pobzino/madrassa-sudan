@@ -427,6 +427,11 @@ const DB_NAME = OFFLINE_DB_NAME;
 const DB_VERSION = OFFLINE_DB_VERSION;
 const OPEN_BLOCKED_TIMEOUT_MS = 10_000;
 const DELETE_TIMEOUT_MS = 5_000;
+// Emptying the stores never waits on other tabs, so this only catches a
+// browser that doesn't answer at all.
+const EMPTY_TIMEOUT_MS = 3_000;
+/** Set when logout couldn't empty the database; the next open empties it before anything reads it. */
+const WIPE_PENDING_KEY = "amal-offline-wipe-pending";
 const ALL_STORES = Object.values(OFFLINE_STORES) as OfflineStoreName[];
 
 let dbInstance: IDBDatabase | null = null;
@@ -435,7 +440,13 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 // Bumped by every logout. Writers that started before it must not write
 // (they would recreate the database with the previous account's data).
 let storageEpoch = 0;
-const clearListeners = new Set<() => void>();
+
+export interface PrivateDataClearedEvent {
+  /** The clear came from another tab (its logout or account switch), not this one. */
+  fromOtherTab: boolean;
+}
+
+const clearListeners = new Set<(event: PrivateDataClearedEvent) => void>();
 let broadcast: BroadcastChannel | null = null;
 
 export function getStorageEpoch(): number {
@@ -443,7 +454,7 @@ export function getStorageEpoch(): number {
 }
 
 /** Runs `listener` whenever private data is cleared, in this tab or another. Returns an unsubscribe. */
-export function onPrivateDataCleared(listener: () => void): () => void {
+export function onPrivateDataCleared(listener: (event: PrivateDataClearedEvent) => void): () => void {
   clearListeners.add(listener);
   return () => clearListeners.delete(listener);
 }
@@ -460,11 +471,11 @@ function forgetConnection() {
   dbPromise = null;
 }
 
-function markCleared() {
+function markCleared(fromOtherTab = false) {
   storageEpoch += 1;
   for (const listener of clearListeners) {
     try {
-      listener();
+      listener({ fromOtherTab });
     } catch {
       // A listener must not stop the others (or the logout).
     }
@@ -472,12 +483,16 @@ function markCleared() {
   forgetConnection();
 }
 
-function listenForClearsFromOtherTabs() {
+/**
+ * Starts hearing other tabs' clears. openDB() does this itself; a page that
+ * may never open the database (but shows the account) calls it directly.
+ */
+export function listenForClearsFromOtherTabs() {
   if (broadcast || typeof BroadcastChannel === "undefined") return;
   try {
     broadcast = new BroadcastChannel(OFFLINE_BROADCAST_CHANNEL);
     broadcast.onmessage = (event: MessageEvent) => {
-      if ((event.data as { type?: string } | null)?.type === "cleared") markCleared();
+      if ((event.data as { type?: string } | null)?.type === "cleared") markCleared(true);
     };
   } catch {
     broadcast = null;
@@ -610,7 +625,18 @@ export function openDB(): Promise<IDBDatabase> {
   listenForClearsFromOtherTabs();
   const epochAtOpen = storageEpoch;
 
-  const promise: Promise<IDBDatabase> = openExisting().then((db) => {
+  const promise: Promise<IDBDatabase> = openExisting().then(async (db) => {
+    if (wipeIsPending()) {
+      // The last logout couldn't empty the database (another tab held it):
+      // empty it now, before anything reads the previous account's data.
+      try {
+        await emptyAllStores(db);
+      } catch (error) {
+        db.close();
+        throw error;
+      }
+      setWipePending(false);
+    }
     if (epochAtOpen !== storageEpoch) {
       // Logout ran while this was opening; this connection would block the
       // deletion. Reopen, which waits for the deletion to finish.
@@ -887,7 +913,8 @@ export async function addQueueItem(item: Omit<ProgressQueueItem, "id">, epoch?: 
  */
 export async function saveLocalProgressAndQueue(
   progress: LocalLessonProgress,
-  queueData: Record<string, unknown>
+  queueData: Record<string, unknown>,
+  epoch?: number
 ): Promise<void> {
   await writeTransaction([OFFLINE_STORES.meta, OFFLINE_STORES.queue], (tx) => {
     tx.objectStore(OFFLINE_STORES.meta).put(progress);
@@ -909,7 +936,7 @@ export async function saveLocalProgressAndQueue(
         queue.add(next);
       }
     };
-  });
+  }, epoch);
 }
 
 export async function getQueuedUpdates(): Promise<ProgressQueueItem[]> {
@@ -1182,7 +1209,8 @@ export async function updateLocalSlideResponse(
   ownerId: string,
   lessonId: string,
   slideId: string,
-  update: (current: LocalSlideResponse | undefined) => LocalSlideResponse | undefined
+  update: (current: LocalSlideResponse | undefined) => LocalSlideResponse | undefined,
+  epoch?: number
 ): Promise<boolean> {
   const key = responsesKey(ownerId, lessonId);
   let written = false;
@@ -1197,7 +1225,7 @@ export async function updateLocalSlideResponse(
       store.put(record);
       written = true;
     };
-  });
+  }, epoch);
   return written;
 }
 
@@ -1309,6 +1337,96 @@ export interface ClearOfflineDataResult {
   failures: string[];
 }
 
+type KeepQueued = (item: ProgressQueueItem) => boolean;
+
+/** Empties every store of `db` in one transaction, keeping only the queue items `keepQueued` accepts. */
+async function emptyAllStores(db: IDBDatabase, keepQueued?: KeepQueued): Promise<void> {
+  const names = Array.from(db.objectStoreNames);
+  if (names.length === 0) return;
+  const tx = db.transaction(names, "readwrite");
+  const done = transactionDone(tx);
+  for (const name of names) {
+    const store = tx.objectStore(name);
+    if (keepQueued && name === OFFLINE_STORES.queue) {
+      const request = store.openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        if (!keepQueued(cursor.value as ProgressQueueItem)) cursor.delete();
+        cursor.continue();
+      };
+    } else {
+      store.clear();
+    }
+  }
+  await done;
+}
+
+/**
+ * Empties the database without deleting it. Another tab's connection can
+ * block a deletion indefinitely (an old build, or a suspended iPhone tab),
+ * and Safari drops a blocked deletion when the page navigates away — the
+ * previous account's lessons would survive the logout. An open with no
+ * version and a readwrite transaction are never blocked by other tabs. A
+ * database that doesn't exist isn't created. Resolves whether it worked.
+ */
+function emptyDatabase(keepQueued?: KeepQueued): Promise<boolean> {
+  if (typeof indexedDB === "undefined") return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(false), EMPTY_TIMEOUT_MS);
+    let nothingStored = false;
+    try {
+      const request = indexedDB.open(DB_NAME);
+      request.onupgradeneeded = () => {
+        // No database, so nothing to clear: don't create one.
+        nothingStored = true;
+        request.transaction?.abort();
+      };
+      request.onerror = () => finish(nothingStored);
+      request.onsuccess = () => {
+        const db = request.result;
+        db.onversionchange = () => db.close();
+        emptyAllStores(db, keepQueued).then(
+          () => {
+            db.close();
+            finish(true);
+          },
+          () => {
+            db.close();
+            finish(false);
+          }
+        );
+      };
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+function wipeIsPending(): boolean {
+  try {
+    return window.localStorage.getItem(WIPE_PENDING_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function setWipePending(pending: boolean) {
+  try {
+    if (pending) window.localStorage.setItem(WIPE_PENDING_KEY, "1");
+    else window.localStorage.removeItem(WIPE_PENDING_KEY);
+  } catch {
+    // Storage unavailable.
+  }
+}
+
 function deleteDatabase(): Promise<boolean> {
   if (typeof indexedDB === "undefined") return Promise.resolve(true);
   return new Promise<boolean>((resolve) => {
@@ -1365,12 +1483,20 @@ function clearPrivateLocalStorage(): boolean {
 
 /**
  * Remove account-scoped offline data when a user signs out or deletes an
- * account: stops downloads, deletes the database, the audio and image caches,
- * the v1 catch-all cache and per-account localStorage keys. Page shells and
- * build files (not personal) are left for the service worker.
- * Waits for the database deletion (up to a timeout) and reports what failed.
+ * account: stops downloads, empties the database, deletes the audio and image
+ * caches, the v1 catch-all cache and per-account localStorage keys. Page
+ * shells and build files (not personal) are left for the service worker.
+ *
+ * The stores are emptied (the database is deleted only if that fails).
+ * "database" is reported as a failure only when the data itself couldn't be
+ * removed; after a logout, the next open then empties the database before
+ * anything reads it.
+ *
+ * `keepQueued` (an account switch) keeps the queue items it accepts.
  */
-export async function clearPrivateOfflineData(): Promise<ClearOfflineDataResult> {
+export async function clearPrivateOfflineData({
+  keepQueued,
+}: { keepQueued?: KeepQueued } = {}): Promise<ClearOfflineDataResult> {
   markCleared();
   try {
     broadcast?.postMessage({ type: "cleared" });
@@ -1379,17 +1505,25 @@ export async function clearPrivateOfflineData(): Promise<ClearOfflineDataResult>
   }
 
   const cacheNames = [...ACCOUNT_CACHES, ...LEGACY_PRIVATE_CACHES];
-  const [databaseDeleted, ...cachesDeleted] = await Promise.all([
-    deleteDatabase(),
+  const [databaseEmptied, ...cachesDeleted] = await Promise.all([
+    emptyDatabase(keepQueued),
     ...cacheNames.map((name) => deleteCache(name)),
   ]);
 
+  // Once emptied, the database itself stays: deleting it gains nothing, and
+  // a deletion another tab blocks makes every later open wait until that tab
+  // lets go (in Chrome even on the next page). Only when emptying failed is
+  // deleting the remaining way to remove the data.
+  let databaseCleared = databaseEmptied;
+  if (!databaseEmptied && !keepQueued) databaseCleared = await deleteDatabase();
+
   const failures: string[] = [];
-  if (!databaseDeleted) failures.push("database");
+  if (!databaseCleared) failures.push("database");
   cachesDeleted.forEach((deleted, index) => {
     if (!deleted) failures.push(cacheNames[index]);
   });
   if (!clearPrivateLocalStorage()) failures.push("localStorage");
+  if (!databaseCleared && !keepQueued) setWipePending(true);
 
   return { ok: failures.length === 0, failures };
 }

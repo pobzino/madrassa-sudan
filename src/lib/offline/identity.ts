@@ -11,6 +11,7 @@
 import {
   OWNER_META_KEY,
   clearPrivateOfflineData,
+  clearQueuedUpdates,
   getAllOfflineLessons,
   getMeta,
   getOfflineLesson,
@@ -125,6 +126,25 @@ export async function getOwner(): Promise<OfflineOwner | null> {
 
 let claim: { userId: string; promise: Promise<OfflineOwner | null> } | null = null;
 
+/** Queue items an account switch keeps: anything sync can still send for its owner. */
+export function keptAcrossAccountSwitch(item: ProgressQueueItem): boolean {
+  return normalizeQueueItem(item) !== null;
+}
+
+/**
+ * Clears the previous account's lessons, answers, caches and owner record
+ * for an account switch. Its unsent progress and answers stay queued: that
+ * account's session can end without logOut (a password change, a logout on
+ * another phone), and they are sent when it signs in here again — sync never
+ * sends them for anyone else. Empties without deleting the database, so the
+ * new account's reads and writes on this page can't wait behind a deletion
+ * another tab blocks. Throws when the data couldn't be removed.
+ */
+async function clearForAccountSwitch(): Promise<void> {
+  const result = await clearPrivateOfflineData({ keepQueued: keptAcrossAccountSwitch });
+  if (result.failures.includes("database")) throw new Error("The previous account's offline data couldn't be cleared.");
+}
+
 /**
  * Makes `userId` the owner of offline storage, clearing anything saved by a
  * different account first. Returns the existing owner record when it is
@@ -136,7 +156,7 @@ async function claimStorage(userId: string): Promise<OfflineOwner | null> {
   const existing = await readOwnerStrict();
   if (existing) {
     if (!needsAccountSwitch(existing, userId)) return existing;
-    await clearPrivateOfflineData();
+    await clearForAccountSwitch();
     return null;
   }
 
@@ -144,7 +164,7 @@ async function claimStorage(userId: string): Promise<OfflineOwner | null> {
   // or a phone that never saved anything.
   const legacyOwner = readLegacyOwner();
   if (legacyOwner && legacyOwner !== userId) {
-    await clearPrivateOfflineData();
+    await clearForAccountSwitch();
     return null;
   }
   if (legacyOwner === userId) {
@@ -154,7 +174,7 @@ async function claimStorage(userId: string): Promise<OfflineOwner | null> {
   }
 
   const [lessons, queue] = await Promise.all([getAllOfflineLessons(), getQueuedUpdates()]);
-  if (!storedDataBelongsTo(userId, lessons, queue)) await clearPrivateOfflineData();
+  if (!storedDataBelongsTo(userId, lessons, queue)) await clearForAccountSwitch();
   return null;
 }
 
@@ -170,7 +190,8 @@ function claimOnce(userId: string): Promise<OfflineOwner | null> {
 /**
  * Records the verified user as the owner of this phone's downloads. Call only
  * after a network-verified getUser and profile load. On an account switch,
- * the previous account's downloads, queue and caches are cleared first.
+ * the previous account's downloads, answers and caches are cleared first
+ * (its unsent queue stays for it; see clearForAccountSwitch).
  * Rejects if offline storage can't be read (callers should catch and move on).
  */
 export async function saveOwner(profile: OwnerProfile): Promise<OfflineOwner> {
@@ -219,6 +240,30 @@ export async function adoptOwnerIfUnclaimed(profile: OwnerProfile): Promise<Offl
   }
   removeLegacyOwner();
   return record;
+}
+
+function otherAccountsItemIds(items: ProgressQueueItem[], userId: string): number[] {
+  return items
+    .filter((item) => {
+      const normalized = normalizeQueueItem(item);
+      return normalized !== null && normalized.ownerId !== userId;
+    })
+    .map((item) => item.id)
+    .filter((id): id is number => typeof id === "number");
+}
+
+/** Unsent items another account left on this phone (kept across an account switch for it to send). 0 when storage can't be read. */
+export async function countOtherAccountsItems(userId: string): Promise<number> {
+  try {
+    return otherAccountsItemIds(await getQueuedUpdates(), userId).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Deletes the unsent items other accounts left on this phone (they can't be sent by `userId`). */
+export async function deleteOtherAccountsItems(userId: string): Promise<void> {
+  await clearQueuedUpdates(otherAccountsItemIds(await getQueuedUpdates(), userId));
 }
 
 /** A saved lesson, only if it belongs to the current owner (otherwise treated as not downloaded). */

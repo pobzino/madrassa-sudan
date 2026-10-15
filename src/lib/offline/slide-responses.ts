@@ -20,6 +20,7 @@ import type { InteractionAnswer } from "@/lib/interactions/types";
 import type { Slide } from "@/lib/slides.types";
 import {
   getLocalSlideResponses,
+  getStorageEpoch,
   queueSlideResponseItem,
   removeQueuedSlideResponses,
   updateLocalSlideResponse,
@@ -121,10 +122,15 @@ export async function applyServerGrade(
   lessonId: string,
   slideId: string,
   sent: { answer?: unknown; answeredAt?: unknown; answerId?: unknown },
-  isCorrect: boolean
+  isCorrect: boolean,
+  epoch?: number
 ): Promise<void> {
-  await updateLocalSlideResponse(ownerId, lessonId, slideId, (entry) =>
-    entry && entry.isCorrect !== isCorrect && isSameAnswer(entry, sent) ? { ...entry, isCorrect } : undefined
+  await updateLocalSlideResponse(
+    ownerId,
+    lessonId,
+    slideId,
+    (entry) => (entry && entry.isCorrect !== isCorrect && isSameAnswer(entry, sent) ? { ...entry, isCorrect } : undefined),
+    epoch
   );
 }
 
@@ -200,8 +206,13 @@ export async function postSlideResponse(
 /**
  * Queues one answer for syncOfflineQueue to send: at most one per slide,
  * the one the server should end up with (see queueSlideResponseItem).
+ * `epoch` (read when the answer was given) refuses the write if a logout
+ * cleared storage since.
  */
-export async function queueSlideResponse(input: Omit<SlideResponseInput, "isCorrect">): Promise<void> {
+export async function queueSlideResponse(
+  input: Omit<SlideResponseInput, "isCorrect">,
+  epoch = getStorageEpoch()
+): Promise<void> {
   const { ownerId, lessonId, slideId, answer, timeSpentSeconds, answeredAt, answerId } = stamp(input);
   await queueSlideResponseItem({
     lessonId,
@@ -215,22 +226,31 @@ export async function queueSlideResponse(input: Omit<SlideResponseInput, "isCorr
       answerId,
       ...(typeof timeSpentSeconds === "number" ? { timeSpentSeconds } : {}),
     },
-  });
+  }, epoch);
 }
 
-async function saveLocally({ ownerId, lessonId, slideId, answer, isCorrect, answeredAt, answerId }: StampedInput<SlideResponseInput>) {
-  await updateLocalSlideResponse(ownerId, lessonId, slideId, (current) =>
-    // A skip never hides an answer this phone already shows.
-    !isRealAnswer(answer) && current && isRealAnswer(current.answer)
-      ? undefined
-      : { answer: answer ?? null, isCorrect, answeredAt, answerId }
+async function saveLocally(
+  { ownerId, lessonId, slideId, answer, isCorrect, answeredAt, answerId }: StampedInput<SlideResponseInput>,
+  epoch: number
+) {
+  await updateLocalSlideResponse(
+    ownerId,
+    lessonId,
+    slideId,
+    (current) =>
+      // A skip never hides an answer this phone already shows.
+      !isRealAnswer(answer) && current && isRealAnswer(current.answer)
+        ? undefined
+        : { answer: answer ?? null, isCorrect, answeredAt, answerId },
+    epoch
   );
 }
 
 /** Offline player: keep the answer on the phone and queue it. */
 export async function saveSlideResponseOffline(input: SlideResponseInput): Promise<void> {
+  const epoch = getStorageEpoch();
   const answer = stamp(input);
-  await Promise.all([saveLocally(answer), queueSlideResponse(answer)]);
+  await Promise.all([saveLocally(answer, epoch), queueSlideResponse(answer, epoch)]);
 }
 
 /**
@@ -239,9 +259,12 @@ export async function saveSlideResponseOffline(input: SlideResponseInput): Promi
  * the local one when it answers.
  */
 export async function submitSlideResponse(input: SlideResponseInput): Promise<SlideResponsePostResult> {
+  // A logout during the POST (e.g. in another tab) must not get this
+  // account's answer written back into the wiped storage.
+  const epoch = getStorageEpoch();
   const answer = stamp(input);
   const { ownerId, lessonId, slideId, answeredAt, answerId } = answer;
-  await saveLocally(answer).catch(() => undefined);
+  await saveLocally(answer, epoch).catch(() => undefined);
   const result = await postSlideResponse(lessonId, slideId, answer.answer, {
     timeSpentSeconds: answer.timeSpentSeconds,
     answeredAt,
@@ -255,12 +278,12 @@ export async function submitSlideResponse(input: SlideResponseInput): Promise<Sl
       time: Date.parse(answeredAt),
     }).catch(() => undefined);
     if (result.isCorrect !== null && result.isCorrect !== input.isCorrect) {
-      await applyServerGrade(ownerId, lessonId, slideId, answer, result.isCorrect).catch(() => undefined);
+      await applyServerGrade(ownerId, lessonId, slideId, answer, result.isCorrect, epoch).catch(() => undefined);
     }
   } else if (result.outcome === "retry") {
     // Not queued when a newer answer to the slide was given meanwhile (it is
     // sent or queued on its own).
-    await queueSlideResponse(answer).catch(() => undefined);
+    await queueSlideResponse(answer, epoch).catch(() => undefined);
   }
   return result;
 }

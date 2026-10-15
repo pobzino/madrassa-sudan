@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { CloudUpload, LogOut, Play, RefreshCw, Smartphone, Trash2, TriangleAlert } from "lucide-react";
 import { MadrassaLogo, OwlReading, OwlSad } from "@/components/illustrations";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { logOut } from "@/lib/auth/logout";
+import { LOG_OUT_BUSY_LABELS, logOutWithUnsentCheck, type LogOutPhase } from "@/lib/auth/logout";
 import { offlinePlayerUrl } from "@/lib/offline/cache-names";
 import { getAllOfflineLessons, hasCachedSimAudio, onPrivateDataCleared, type OfflineLesson } from "@/lib/offline/db";
 import { deleteDownloadedLesson, getStorageEstimate } from "@/lib/offline/download-manager";
@@ -71,7 +71,6 @@ const COPY = {
     tryLoadAgain: "Try again",
     tryInternet: "Try the internet again",
     logOut: "Switch account / log out",
-    loggingOut: "Logging out…",
     confirmLogOut: "Log out? The lessons saved on this phone will be removed.",
     confirmLogOutUnsynced: (count: number) =>
       `Some progress and answers haven't been sent yet (${count}). Logging out without internet loses them and removes the lessons saved on this phone. Log out anyway?`,
@@ -108,7 +107,6 @@ const COPY = {
     tryLoadAgain: "حاول مرة أخرى",
     tryInternet: "جرّب الإنترنت مرة أخرى",
     logOut: "تبديل الحساب / تسجيل الخروج",
-    loggingOut: "جارٍ تسجيل الخروج…",
     confirmLogOut: "تسجيل الخروج؟ ستُحذف الدروس المحفوظة على هذا الهاتف.",
     confirmLogOutUnsynced: (count: number) =>
       `لم يُرسل بعد بعض التقدّم والإجابات (${count}). تسجيل الخروج بدون إنترنت سيحذفها، وسيحذف الدروس المحفوظة على هذا الهاتف. هل تريد تسجيل الخروج؟`,
@@ -165,7 +163,8 @@ export default function OfflineHub() {
   const [storage, setStorage] = useState<{ used: number; quota: number } | null>(null);
   const [unsynced, setUnsynced] = useState(0);
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [loggingOut, setLoggingOut] = useState(false);
+  const [logOutPhase, setLogOutPhase] = useState<LogOutPhase | null>(null);
+  const loggingOut = logOutPhase !== null;
   // Bumped when storage is cleared, so a read that started before can't
   // put the previous account's lessons back on screen.
   const clearGenerationRef = useRef(0);
@@ -242,14 +241,16 @@ export default function OfflineHub() {
   };
 
   const handleLogOut = async () => {
-    const owner = state.status === "ready" ? state.owner : null;
-    const waiting = await countUnsyncedItems(owner?.userId);
-    const message = waiting > 0 && !navigator.onLine ? t.confirmLogOutUnsynced(waiting) : t.confirmLogOut;
-    if (!window.confirm(message)) return;
-    setLoggingOut(true);
-    // Syncs first when online, ends the session even offline, wipes this
-    // phone's downloads and reloads the home page.
-    await logOut();
+    if (loggingOut) return;
+    // Every account's unsent items: logging out deletes them all.
+    const waiting = await countUnsyncedItems();
+    // Offline nothing can be sent first, so one question covers both.
+    const offlineWithUnsent = waiting > 0 && !navigator.onLine;
+    if (!window.confirm(offlineWithUnsent ? t.confirmLogOutUnsynced(waiting) : t.confirmLogOut)) return;
+    // Sends first when it can (and asks again if something still couldn't
+    // be sent), ends the session even offline, wipes this phone's downloads
+    // and reloads the home page.
+    await logOutWithUnsentCheck({ language, force: offlineWithUnsent, onPhase: setLogOutPhase });
   };
 
   const owner = state.status === "ready" ? state.owner : null;
@@ -375,7 +376,7 @@ export default function OfflineHub() {
             className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-6 py-3 font-fredoka text-base font-bold text-gray-700 transition-colors hover:border-red-200 hover:text-red-700 disabled:opacity-60"
           >
             <LogOut className={`h-5 w-5 ${isRtl ? "rotate-180" : ""}`} aria-hidden="true" />
-            {loggingOut ? t.loggingOut : t.logOut}
+            {logOutPhase ? LOG_OUT_BUSY_LABELS[language][logOutPhase] : t.logOut}
           </button>
         </div>
       </div>

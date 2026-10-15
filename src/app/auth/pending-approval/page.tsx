@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { clearAuthCache, isOfflineLike } from "@/lib/supabase/auth-cache";
-import { logOut } from "@/lib/auth/logout";
+import { LOG_OUT_BUSY_LABELS, logOutWithUnsentCheck, type LogOutPhase } from "@/lib/auth/logout";
 
 const translations = {
   ar: {
@@ -15,7 +15,6 @@ const translations = {
     checkAgain: "تحقق مرة أخرى",
     checking: "جاري التحقق...",
     logout: "تسجيل الخروج",
-    loggingOut: "جارٍ تسجيل الخروج…",
     approved: "تمت الموافقة! جاري التحويل...",
   },
   en: {
@@ -25,7 +24,6 @@ const translations = {
     checkAgain: "Check Again",
     checking: "Checking...",
     logout: "Log Out",
-    loggingOut: "Logging out…",
     approved: "Approved! Redirecting...",
   },
 };
@@ -33,7 +31,7 @@ const translations = {
 export default function PendingApprovalPage() {
   const [checking, setChecking] = useState(false);
   const [approved, setApproved] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
+  const [logOutPhase, setLogOutPhase] = useState<LogOutPhase | null>(null);
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
@@ -71,11 +69,11 @@ export default function PendingApprovalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // The shared log-out ends with a full page load, so the busy state stays.
+  // The shared log-out ends with a full page load, so the busy state stays
+  // (unless something unsent made the family choose to stay signed in).
   const handleLogout = async () => {
-    if (loggingOut) return;
-    setLoggingOut(true);
-    await logOut();
+    if (logOutPhase) return;
+    await logOutWithUnsentCheck({ language, onPhase: setLogOutPhase });
   };
 
   return (
@@ -126,10 +124,10 @@ export default function PendingApprovalPage() {
 
               <button
                 onClick={() => void handleLogout()}
-                disabled={loggingOut}
+                disabled={logOutPhase !== null}
                 className="w-full py-3 px-4 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-60"
               >
-                {loggingOut ? t.loggingOut : t.logout}
+                {logOutPhase ? LOG_OUT_BUSY_LABELS[language][logOutPhase] : t.logout}
               </button>
             </div>
           </>
