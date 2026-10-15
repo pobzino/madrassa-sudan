@@ -140,11 +140,14 @@ async function testRecipients(db: UntypedClient) {
 async function deliver(db: UntypedClient, kind: EmailKind, periodKey: string, prepared: Prepared[]) {
   const redirectTo = await testRecipients(db);
   const testMode = redirectTo.length > 0;
+  // One email per test inbox, so recipients don't see each other's addresses.
   const queue = testMode
-    ? prepared.slice(0, TEST_RECIPIENT_LIMIT).map((item) => ({
-        ...item,
-        email: { ...item.email, to: redirectTo, subject: `[Test, for ${item.email.to}] ${item.email.subject}` },
-      }))
+    ? prepared.slice(0, TEST_RECIPIENT_LIMIT).flatMap((item) =>
+        redirectTo.map((to) => ({
+          ...item,
+          email: { ...item.email, to, subject: `[Test, for ${item.email.to}] ${item.email.subject}` },
+        })),
+      )
     : prepared;
   let sent = 0;
   let failed = 0;
