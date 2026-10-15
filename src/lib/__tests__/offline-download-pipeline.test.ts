@@ -323,6 +323,7 @@ function fakeSupabase(handler: Handler = defaultHandler) {
       return builder;
     };
     for (const method of ["in", "order", "not", "limit", "neq", "is"]) builder[method] = () => builder;
+    builder.setHeader = () => builder;
     builder.abortSignal = (value: AbortSignal) => ((signal = value), builder);
     builder.maybeSingle = () => settle(true);
     builder.single = () => settle(true);

@@ -65,12 +65,19 @@ const never = () => new Promise<never>(() => undefined);
 function query(result: unknown) {
   const builder: Record<string, unknown> = {};
   for (const method of ["select", "eq", "not", "limit", "in", "order"]) builder[method] = () => builder;
+  builder.setHeader = () => builder;
   builder.abortSignal = () => builder;
   builder.maybeSingle = async () => {
     if (network === "hang") await never();
     return { data: result, error: null };
   };
   builder.upsert = () => ({
+    setHeader: () => ({
+      abortSignal: async () => {
+        if (network === "hang") await never();
+        return { error: null };
+      },
+    }),
     abortSignal: async () => {
       if (network === "hang") await never();
       return { error: null };
@@ -95,9 +102,10 @@ const supabase = {
 };
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => supabase }));
 
-const fetchMock = vi.fn(async (_url: string, init: { body: string }) => {
+const fetchMock = vi.fn(async (_url: string, init: { body?: string }) => {
+  if (_url === "/api/learners") return Response.json({ accountId: OWNER, learners: [{ id: OWNER, isSelf: true }] });
   if (network !== "fast") await never();
-  calls.push(`sent ${JSON.parse(init.body).slide_id}`);
+  calls.push(`sent ${JSON.parse(init.body ?? "{}").slide_id}`);
   return new Response(JSON.stringify({ is_correct: true }), { status: 200 });
 });
 

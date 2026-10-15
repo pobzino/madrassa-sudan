@@ -13,17 +13,19 @@ const state = vi.hoisted(() => ({
   // Phone (IndexedDB stand-in)
   queue: new Map<number, Record<string, unknown>>(),
   meta: new Map<string, Record<string, unknown>>(),
-  responses: new Map<string, { key: string; ownerId: string; lessonId: string; bySlide: Record<string, Record<string, unknown>> }>(),
+  responses: new Map<string, { key: string; ownerId: string; learnerId: string; lessonId: string; bySlide: Record<string, Record<string, unknown>> }>(),
   nextQueueId: 1,
   // Server
   tables: {} as Record<string, Record<string, unknown>[]>,
   userId: "u1",
+  ownedLearnerIds: ["u1"] as string[],
   hiddenLessons: new Set<string>(),
   allowedTypes: null as Set<string> | null,
   writeError: null as { code: string; message: string } | null,
   progressWriteError: null as { code: string; message: string } | null,
   lessonLookupError: null as { code: string; message: string } | null,
   upserts: [] as Row[],
+  learnerHeaders: [] as string[],
   nextRowId: 1,
 }));
 
@@ -87,6 +89,10 @@ function query(table: string, { asService = false }: { asService?: boolean } = {
     not: () => api,
     limit: () => api,
     order: () => api,
+    setHeader: (name: string, value: string) => {
+      if (name === "x-amal-learner") state.learnerHeaders.push(value);
+      return api;
+    },
     abortSignal: () => api,
     insert: (row: Row) => ((op = "insert"), (values = row), api),
     update: (row: Row) => ((op = "update"), (values = row), api),
@@ -122,7 +128,7 @@ vi.mock("@/lib/offline/db", async (importOriginal) => {
     ...actual,
     addQueueItem: async (item: Record<string, unknown>) => {
       const id = state.nextQueueId++;
-      state.queue.set(id, { ...clone(item), id });
+      state.queue.set(id, { ...clone(item), learnerId: item.learnerId ?? item.ownerId, id });
     },
     getQueuedUpdates: async () => items(),
     countQueuedUpdates: async () => state.queue.size,
@@ -137,12 +143,12 @@ vi.mock("@/lib/offline/db", async (importOriginal) => {
       }
     },
     queueSlideResponseItem: async (item: import("@/lib/offline/db").OfflineQueueItem) => {
-      const local = state.responses.get(actual.responsesKey(item.ownerId, item.lessonId))?.bySlide[String(item.data.slideId)];
+      const local = state.responses.get(actual.responsesKey(item.ownerId, item.lessonId, item.learnerId))?.bySlide[String(item.data.slideId)];
       const queued = items().filter((candidate) => candidate.lessonId === item.lessonId) as never[];
       const plan = actual.planSlideAnswerQueue(local as never, queued, item);
       if (plan.action === "skip") return false;
       const id = plan.action === "replace" ? plan.id : state.nextQueueId++;
-      state.queue.set(id, { lessonId: item.lessonId, ownerId: item.ownerId, kind: "slide_response", data: clone(item.data), timestamp: item.timestamp, id });
+      state.queue.set(id, { lessonId: item.lessonId, ownerId: item.ownerId, learnerId: item.learnerId, kind: "slide_response", data: clone(item.data), timestamp: item.timestamp, id });
       return true;
     },
     removeQueuedSlideResponses: async (ownerId: string, lessonId: string, slideId: string, sent: import("@/lib/offline/db").AnswerVersion) => {
@@ -155,23 +161,26 @@ vi.mock("@/lib/offline/db", async (importOriginal) => {
       ownerId: string,
       lessonId: string,
       slideId: string,
-      update: (current: import("@/lib/offline/db").LocalSlideResponse | undefined) => import("@/lib/offline/db").LocalSlideResponse | undefined
+      update: (current: import("@/lib/offline/db").LocalSlideResponse | undefined) => import("@/lib/offline/db").LocalSlideResponse | undefined,
+      _epoch?: number,
+      learnerId = ownerId
     ) => {
-      const key = actual.responsesKey(ownerId, lessonId);
-      const record = state.responses.get(key) ?? { key, ownerId, lessonId, bySlide: {} };
+      const scopedKey = actual.responsesKey(ownerId, lessonId, learnerId);
+      const record: { key: string; ownerId: string; learnerId: string; lessonId: string; bySlide: Record<string, Record<string, unknown>> } = state.responses.get(scopedKey) ?? { key: scopedKey, ownerId, learnerId: learnerId ?? ownerId, lessonId, bySlide: {} };
       const next = update(clone(record.bySlide[slideId]) as never);
       if (!next) return false;
-      state.responses.set(key, { ...record, bySlide: { ...record.bySlide, [slideId]: clone(next) as never } });
+      state.responses.set(scopedKey, { ...record, bySlide: { ...record.bySlide, [slideId]: clone(next) as never } });
       return true;
     },
     saveLocalProgressAndQueue: async (progress: Record<string, unknown>, queueData: Record<string, unknown>) => {
       state.meta.set(String(progress.key), clone(progress));
       const existing = items().find(
-        (item) => item.lessonId === progress.lessonId && item.kind === "progress" && item.ownerId === progress.ownerId
+        (item) => item.lessonId === progress.lessonId && item.kind === "progress" && item.ownerId === progress.ownerId && item.learnerId === progress.learnerId
       );
       const next = {
         lessonId: progress.lessonId,
         ownerId: progress.ownerId,
+        learnerId: progress.learnerId,
         kind: "progress",
         data: actual.nextProgressQueueData(existing as never, queueData),
         timestamp: progress.updatedAt,
@@ -179,8 +188,8 @@ vi.mock("@/lib/offline/db", async (importOriginal) => {
       const id = (existing?.id as number | undefined) ?? state.nextQueueId++;
       state.queue.set(id, { ...clone(next), id });
     },
-    getLocalProgress: async (ownerId: string, lessonId: string) =>
-      clone(state.meta.get(actual.localProgressKey(ownerId, lessonId)) ?? null),
+    getLocalProgress: async (ownerId: string, lessonId: string, learnerId = ownerId) =>
+      clone(state.meta.get(actual.localProgressKey(ownerId, lessonId, learnerId)) ?? null),
     putMeta: async (record: { key: string }) => void state.meta.set(record.key, clone(record)),
     getOfflineLesson: async (id: string) => ({ id, practice: null }),
   };
@@ -215,6 +224,50 @@ const owner = { ownerId: "u1", lessonId: LESSON };
 const wrong = { type: "choose_correct", selected_index: 0 };
 const right = { type: "choose_correct", selected_index: 2 };
 
+describe("learner-scoped offline writes", () => {
+  it("sends the explicit learner header with an online answer", async () => {
+    let seenHeader: string | null = null;
+    fetchHook = (_call, run, init) => {
+      seenHeader = new Headers(init.headers).get("x-amal-learner");
+      return run();
+    };
+    await postSlideResponse(LESSON, "s1", right, { learnerId: "child-a" });
+    expect(seenHeader).toBe("child-a");
+  });
+
+  it("syncs a queued child's progress only while the fresh learner list owns that child", async () => {
+    state.ownedLearnerIds = ["u1", "child-a"];
+    await queueLessonProgress({
+      ownerId: "u1",
+      learnerId: "child-a",
+      lessonId: LESSON,
+      positionSec: 20,
+      watchSec: 20,
+      completedCandidate: false,
+      practiceGated: false,
+    });
+    const result = await syncOfflineQueue();
+    expect(result).toMatchObject({ synced: 1, remaining: 0 });
+    expect(state.upserts[0]).toMatchObject({ student_id: "child-a", lesson_id: LESSON });
+    expect(state.learnerHeaders).toContain("child-a");
+  });
+
+  it("drops a deleted learner's queue without sending it under the account identity", async () => {
+    await queueLessonProgress({
+      ownerId: "u1",
+      learnerId: "deleted-child",
+      lessonId: LESSON,
+      positionSec: 20,
+      watchSec: 20,
+      completedCandidate: false,
+      practiceGated: false,
+    });
+    const result = await syncOfflineQueue();
+    expect(result).toMatchObject({ dropped: 1, learnerDataDropped: 1, remaining: 0 });
+    expect(state.upserts).toHaveLength(0);
+  });
+});
+
 function seedServer() {
   state.tables = {
     lessons: [
@@ -242,7 +295,7 @@ function serverAnswer(slideId = "s1", lessonId = LESSON) {
 }
 
 const localEntry = (slideId = "s1", lessonId = LESSON) =>
-  state.responses.get(`u1:${lessonId}`)?.bySlide[slideId] as Record<string, unknown> | undefined;
+  state.responses.get(`u1:u1:${lessonId}`)?.bySlide[slideId] as Record<string, unknown> | undefined;
 const queued = () => [...state.queue.values()] as unknown as import("@/lib/offline/db").ProgressQueueItem[];
 
 beforeEach(() => {
@@ -256,10 +309,16 @@ beforeEach(() => {
   state.progressWriteError = null;
   state.lessonLookupError = null;
   state.upserts = [];
+  state.learnerHeaders = [];
   seedServer();
+  state.ownedLearnerIds = [state.userId];
   fetchHook = null;
   fetchCalls = 0;
-  vi.stubGlobal("fetch", (url: string, init?: RequestInit) => routeFetch(url, init));
+  vi.stubGlobal("fetch", (url: string, init?: RequestInit) =>
+    url === "/api/learners"
+      ? Promise.resolve(Response.json({ accountId: state.userId, learners: state.ownedLearnerIds.map((id) => ({ id, isSelf: id === state.userId })) }))
+      : routeFetch(url, init)
+  );
 });
 
 afterEach(() => {
@@ -455,7 +514,11 @@ describe("answers the server can't take (OFF-07)", () => {
     expect(queued()[0].retry?.serverFailures).toBe(failuresBefore);
 
     // The server failing it again, now weeks after the first failure: given up.
-    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => routeFetch(url, init));
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) =>
+    url === "/api/learners"
+      ? Promise.resolve(Response.json({ accountId: state.userId, learners: [{ id: state.userId, isSelf: true }] }))
+      : routeFetch(url, init)
+  );
     const result = await syncOfflineQueue();
     expect(result.dropped).toBe(1);
     expect(queued()).toHaveLength(0);

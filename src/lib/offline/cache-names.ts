@@ -8,7 +8,7 @@
 // ── IndexedDB ────────────────────────────────────────────────────────────────
 
 export const OFFLINE_DB_NAME = "amal-offline";
-export const OFFLINE_DB_VERSION = 2;
+export const OFFLINE_DB_VERSION = 3;
 
 export const OFFLINE_STORES = {
   lessons: "lessons",
@@ -50,8 +50,9 @@ export function offlineAudioKey(lessonId: string): string {
 export const OFFLINE_HUB_PATH = "/offline";
 export const OFFLINE_PLAYER_PATH = "/offline/play";
 
-export function offlinePlayerUrl(lessonId: string): string {
-  return `${OFFLINE_PLAYER_PATH}?id=${encodeURIComponent(lessonId)}`;
+export function offlinePlayerUrl(lessonId: string, learnerId?: string): string {
+  const learnerQuery = learnerId ? `&learnerId=${encodeURIComponent(learnerId)}` : "";
+  return `${OFFLINE_PLAYER_PATH}?id=${encodeURIComponent(lessonId)}${learnerQuery}`;
 }
 
 // ── Browser storage keys ─────────────────────────────────────────────────────
@@ -61,6 +62,8 @@ export const LEGACY_OWNER_KEY = "amal-offline-owner";
 export const AUTO_DOWNLOAD_SETTING_KEY = "amal-auto-download";
 /** v1 list of automatic downloads; the record's `origin` replaces it. */
 export const LEGACY_AUTO_DOWNLOADED_KEY = "amal-auto-downloaded";
+/** A parent's locally selected learner; values are checked against /api/learners online. */
+export const ACTIVE_LEARNER_STORAGE_PREFIX = "amal-active-learner:";
 
 /** Exact localStorage keys removed on logout. */
 export const PRIVATE_LOCAL_STORAGE_KEYS = [
@@ -70,7 +73,7 @@ export const PRIVATE_LOCAL_STORAGE_KEYS = [
 ] as const;
 
 /** localStorage key prefixes removed on logout (resume positions, saved answers). */
-export const PRIVATE_LOCAL_STORAGE_PREFIXES = ["sim-resume:", "lesson-slide-interactions:"] as const;
+export const PRIVATE_LOCAL_STORAGE_PREFIXES = ["sim-resume:", "lesson-slide-interactions:", ACTIVE_LEARNER_STORAGE_PREFIX] as const;
 
 /** Other tabs of this origin hear about logout here, so they stop writing old-account data. */
 export const OFFLINE_BROADCAST_CHANNEL = "amal-offline";

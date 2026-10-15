@@ -181,6 +181,7 @@ describe("queue items", () => {
       id: 7,
       lessonId: "lesson-1",
       ownerId: "user-a",
+      learnerId: "user-a",
       kind: "progress",
       timestamp: "2026-10-01T00:00:00.000Z",
       data: { last_position_seconds: 30, total_watch_time_seconds: 40, completed: false },
@@ -209,10 +210,10 @@ describe("queue items", () => {
 
   it("summarizes progress and complete items, ignoring answers", () => {
     const items: OfflineQueueItem[] = [
-      { lessonId: "l", ownerId: "u", kind: "progress", timestamp: "2026-10-10T00:00:00Z", data: { last_position_seconds: 50, total_watch_time_seconds: 60, completed: false } },
-      { lessonId: "l", ownerId: "u", kind: "complete", timestamp: "2026-10-12T00:00:00Z", data: { completed_at: "2026-10-12T00:00:00Z", last_position_seconds: 80, total_watch_time_seconds: 80 } },
-      { lessonId: "l", ownerId: "u", kind: "progress", timestamp: "2026-10-11T00:00:00Z", data: { last_position_seconds: 70, total_watch_time_seconds: 90, completed: true } },
-      { lessonId: "l", ownerId: "u", kind: "slide_response", timestamp: "2026-10-13T00:00:00Z", data: { last_position_seconds: 999 } },
+      { lessonId: "l", ownerId: "u", learnerId: "u", kind: "progress", timestamp: "2026-10-10T00:00:00Z", data: { last_position_seconds: 50, total_watch_time_seconds: 60, completed: false } },
+      { lessonId: "l", ownerId: "u", learnerId: "u", kind: "complete", timestamp: "2026-10-12T00:00:00Z", data: { completed_at: "2026-10-12T00:00:00Z", last_position_seconds: 80, total_watch_time_seconds: 80 } },
+      { lessonId: "l", ownerId: "u", learnerId: "u", kind: "progress", timestamp: "2026-10-11T00:00:00Z", data: { last_position_seconds: 70, total_watch_time_seconds: 90, completed: true } },
+      { lessonId: "l", ownerId: "u", learnerId: "u", kind: "slide_response", timestamp: "2026-10-13T00:00:00Z", data: { last_position_seconds: 999 } },
     ];
     expect(summarizeProgressItems(items)).toEqual({
       last_position_seconds: 80,
@@ -289,6 +290,7 @@ describe("sync order", () => {
       id,
       lessonId: "l",
       ownerId: "u",
+      learnerId: "u",
       kind: "slide_response",
       timestamp: answeredAt,
       data: { slideId, answer: value, answeredAt },

@@ -30,6 +30,11 @@ const COPY = {
   ar: "تم حفظ تقدّمكم في حسابكم.",
 };
 
+const LEARNER_SYNC_FAILURE_COPY = {
+  en: "Some offline learning data could not sync because its learner profile was deleted.",
+  ar: "تعذّر مزامنة بعض بيانات التعلّم المحفوظة دون اتصال لأن ملف المتعلّم حُذف.",
+};
+
 // The Supabase session cookie (sb-<project ref>-auth-token, or its .0/.1
 // chunks); mirrors the pattern in src/lib/auth/logout.ts.
 const SESSION_COOKIE_PATTERN = /(?:^|;\s*)sb-[^=;\s]+-auth-token(?:\.\d+)?=/;
@@ -76,6 +81,9 @@ export default function OfflineSyncRunner() {
       if (disposed) return;
       if (result.synced > 0 || result.dropped > 0) {
         window.dispatchEvent(new CustomEvent(OFFLINE_SYNCED_EVENT, { detail: result }));
+      }
+      if (result.learnerDataDropped && result.learnerDataDropped > 0) {
+        toast.error(LEARNER_SYNC_FAILURE_COPY[languageRef.current]);
       }
       if (result.synced > 0) {
         toast.success(COPY[languageRef.current]);

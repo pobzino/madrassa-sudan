@@ -33,6 +33,7 @@ import {
 } from "@/lib/offline/db";
 import { AUDIO_FORMAT_WARNING } from "@/lib/offline/download-manager";
 import { getOwnedOfflineLesson, getOwner } from "@/lib/offline/identity";
+import { getCachedActiveLearnerId, selectCachedLearner } from "@/lib/offline/learner";
 import {
   getSavedSlideResponses,
   queueSlideResponse,
@@ -122,6 +123,7 @@ type PlayerState =
   | {
       status: "ready";
       ownerId: string;
+      learnerId: string;
       lesson: OfflineLesson;
       payload: SimPayload;
       savedResponses: SavedSlideResponses;
@@ -136,13 +138,25 @@ type PlayerState =
  * then the lesson starts over). The entry is in SimPlayer's units, which
  * differ from the stored position on a trimmed lesson (see resumeVirtualMs).
  */
-function seedResumePosition(resumeKey: string, progress: ProgressValues | null, lesson: OfflineLesson) {
-  if (!progress || progress.completed) return;
-  const virtualMs = resumeVirtualMs(lesson, progress.last_position_seconds);
-  if (virtualMs === null) return;
+function seedResumePosition(
+  resumeKey: string,
+  progress: ProgressValues | null,
+  lesson: OfflineLesson,
+  legacySelfResumeKey?: string
+) {
   try {
     const key = `sim-resume:${resumeKey}`;
     if (window.localStorage.getItem(key)) return;
+    // v2 keyed the offline resume position by account + lesson. Copy it only
+    // into self's v3 key; child profiles must never inherit family progress.
+    const legacy = legacySelfResumeKey ? window.localStorage.getItem(`sim-resume:${legacySelfResumeKey}`) : null;
+    if (legacy !== null) {
+      window.localStorage.setItem(key, legacy);
+      return;
+    }
+    if (!progress || progress.completed) return;
+    const virtualMs = resumeVirtualMs(lesson, progress.last_position_seconds);
+    if (virtualMs === null) return;
     window.localStorage.setItem(key, String(virtualMs));
   } catch {
     // Storage blocked: the lesson starts from the beginning.
@@ -174,8 +188,9 @@ class PlayerErrorBoundary extends Component<{ fallback: ReactNode; children: Rea
 export function OfflinePlayerFromSearchParams() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id")?.trim() || null;
+  const learnerId = searchParams.get("learnerId")?.trim() || null;
   // Keyed so a different lesson starts from a clean state.
-  return <OfflineLessonPlayer key={id ?? ""} lessonId={id} />;
+  return <OfflineLessonPlayer key={`${id ?? ""}:${learnerId ?? ""}`} lessonId={id} learnerId={learnerId} />;
 }
 
 /** Static placeholder while the player's client code starts (also the page's prerendered HTML). */
@@ -234,7 +249,7 @@ const primaryButton =
 const secondaryLink =
   "flex min-h-11 items-center justify-center rounded-2xl px-4 py-2 font-fredoka font-bold text-[#007229] hover:bg-white/70";
 
-export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | null }) {
+export default function OfflineLessonPlayer({ lessonId, learnerId: requestedLearnerId }: { lessonId: string | null; learnerId?: string | null }) {
   const { language, isRtl } = useLanguage();
   const t = COPY[language];
   const isOnline = useOnlineStatus();
@@ -276,20 +291,30 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
           return;
         }
 
+        const cachedLearnerId = owner ? getCachedActiveLearnerId(owner.userId) : "";
+        const learnerId = owner && requestedLearnerId && selectCachedLearner(owner.userId, requestedLearnerId)
+          ? requestedLearnerId
+          : cachedLearnerId;
         const nextNeighbor = lesson.neighbors?.next ?? null;
         const [savedResponses, progress, nextSaved] = await Promise.all([
-          getSavedSlideResponses(owner.userId, lessonId),
-          getEffectiveLessonProgress(owner.userId, lessonId).catch(() => null),
+          getSavedSlideResponses(owner.userId, lessonId, learnerId),
+          getEffectiveLessonProgress(owner.userId, lessonId, learnerId).catch(() => null),
           nextNeighbor ? getOwnedOfflineLesson(nextNeighbor.id).catch(() => null) : Promise.resolve(null),
         ]);
         if (disposed || clearedRef.current) return;
 
         objectUrl = URL.createObjectURL(audio);
-        seedResumePosition(`${owner.userId}:${lessonId}`, progress, lesson);
+        seedResumePosition(
+          `${owner.userId}:${learnerId}:${lessonId}`,
+          progress,
+          lesson,
+          learnerId === owner.userId ? `${owner.userId}:${lessonId}` : undefined
+        );
         finishedRef.current = progress?.completed === true;
         setState({
           status: "ready",
           ownerId: owner.userId,
+          learnerId,
           lesson,
           // The stored sim has audio_url null; play the phone's copy.
           payload: { ...lesson.sim, audio_url: objectUrl },
@@ -308,7 +333,7 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
       disposed = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [lessonId, reloadKey]);
+  }, [lessonId, requestedLearnerId, reloadKey]);
 
   // Logout in any tab removes the downloads: stop showing this one.
   useEffect(
@@ -340,6 +365,7 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
   // ── Progress ─────────────────────────────────────────────────────────────
   const ready = state.status === "ready" ? state : null;
   const ownerId = ready?.ownerId ?? null;
+  const learnerId = ready?.learnerId ?? null;
   const durationSec = ready ? lessonDurationSec(ready.lesson) : 0;
 
   // Furthest point reached this visit, and the last one saved.
@@ -357,6 +383,7 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
           if (clearedRef.current) return;
           const saved = await queueLessonProgress({
             ownerId,
+            learnerId: learnerId ?? ownerId,
             lessonId,
             positionSec: checkpoint.positionSec,
             watchSec: checkpoint.positionSec,
@@ -377,7 +404,7 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
           setStorageProblem(true);
         });
     },
-    [lessonId, ownerId]
+    [lessonId, learnerId, ownerId]
   );
 
   const flushProgress = useCallback(() => {
@@ -424,7 +451,7 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
       if (answer === null || answer === undefined) {
         // A skipped activity: queue it (teachers see skips) without
         // replacing an answer this phone already shows for the slide.
-        void queueSlideResponse({ ownerId, lessonId, slideId, answer: null }).catch(onSaveFailed);
+        void queueSlideResponse({ ownerId, learnerId: learnerId ?? ownerId, lessonId, slideId, answer: null }).catch(onSaveFailed);
         return;
       }
       // Keep SimPlayer's restore-on-seek in step with what was just answered.
@@ -436,9 +463,9 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
             }
           : current
       );
-      void saveSlideResponseOffline({ ownerId, lessonId, slideId, answer, isCorrect }).catch(onSaveFailed);
+      void saveSlideResponseOffline({ ownerId, learnerId: learnerId ?? ownerId, lessonId, slideId, answer, isCorrect }).catch(onSaveFailed);
     },
-    [lessonId, ownerId]
+    [learnerId, lessonId, ownerId]
   );
 
   // iOS can drop the blob: URL the narration plays from (when it restarts its
@@ -568,7 +595,7 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
               <p className="font-fredoka text-xl font-bold text-gray-900">{t.crashTitle}</p>
               <p className="text-sm text-gray-600">{t.crashBody}</p>
               {/* A fresh page load gets a clean player (and a fresh audio URL). */}
-              <a href={offlinePlayerUrl(lesson.id)} className="inline-flex min-h-11 items-center rounded-2xl bg-[#007229] px-5 py-2 font-fredoka font-bold text-white shadow-[0_4px_0_#005C22]">
+              <a href={offlinePlayerUrl(lesson.id, ready.learnerId)} className="inline-flex min-h-11 items-center rounded-2xl bg-[#007229] px-5 py-2 font-fredoka font-bold text-white shadow-[0_4px_0_#005C22]">
                 {t.openAgain}
               </a>
             </div>
@@ -584,8 +611,8 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
             onSlideResponse={handleSlideResponse}
             playingFromDevice
             reloadDeviceAudio={reloadDeviceAudio}
-            reopenHref={offlinePlayerUrl(lesson.id)}
-            resumeKey={`${ready.ownerId}:${lesson.id}`}
+            reopenHref={offlinePlayerUrl(lesson.id, ready.learnerId)}
+            resumeKey={`${ready.ownerId}:${ready.learnerId}:${lesson.id}`}
             mediaTitle={title}
           />
         </PlayerErrorBoundary>
@@ -642,7 +669,7 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
 
         {next && (
           <a
-            href={offlinePlayerUrl(next.id)}
+            href={offlinePlayerUrl(next.id, ready.learnerId)}
             className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 transition-shadow hover:ring-emerald-300"
           >
             <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#007229] text-white shadow-[0_3px_0_#005C22]">

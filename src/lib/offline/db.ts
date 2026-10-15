@@ -137,6 +137,8 @@ export interface ProgressQueueItem {
   id?: number; // auto-increment
   lessonId: string;
   ownerId?: string;
+  /** Learner profile that owns this write. V2 records migrate to ownerId (self). */
+  learnerId?: string;
   kind?: QueueItemKind;
   /** v1 items only, e.g. "lesson_progress". */
   table?: string;
@@ -148,6 +150,7 @@ export interface ProgressQueueItem {
 /** A queue item in the current shape. */
 export interface OfflineQueueItem extends ProgressQueueItem {
   ownerId: string;
+  learnerId: string;
   kind: QueueItemKind;
 }
 
@@ -183,6 +186,7 @@ export interface DownloadState {
 export interface LocalLessonProgress {
   key: string;
   ownerId: string;
+  learnerId: string;
   lessonId: string;
   last_position_seconds: number;
   total_watch_time_seconds: number;
@@ -201,6 +205,7 @@ export interface LocalSlideResponse {
 export interface LocalSlideResponses {
   key: string;
   ownerId: string;
+  learnerId: string;
   lessonId: string;
   bySlide: Record<string, LocalSlideResponse>;
 }
@@ -246,17 +251,34 @@ export function assetMetaKey(url: string): string {
   return `${ASSET_META_PREFIX}${url}`;
 }
 
-export function localProgressKey(ownerId: string, lessonId: string): string {
-  return `${PROGRESS_META_PREFIX}${ownerId}:${lessonId}`;
+export function localProgressKey(ownerId: string, lessonId: string, learnerId = ownerId): string {
+  return `${ownerId}:${learnerId}:${lessonId}`;
 }
 
-export function responsesKey(ownerId: string, lessonId: string): string {
-  return `${ownerId}:${lessonId}`;
+export function responsesKey(ownerId: string, lessonId: string, learnerId = ownerId): string {
+  return `${ownerId}:${learnerId}:${lessonId}`;
+}
+
+/** Lossless v2 progress conversion: before child profiles every row was self work. */
+export function migrateLegacyProgressRecord(
+  record: Pick<LocalLessonProgress, "key" | "ownerId" | "lessonId" | "last_position_seconds" | "total_watch_time_seconds" | "completed" | "updatedAt"> & { learnerId?: string }
+): LocalLessonProgress {
+  return { ...record, key: localProgressKey(record.ownerId, record.lessonId), learnerId: record.ownerId };
+}
+
+/** Lossless v2 response conversion, preserving answer object and insertion order. */
+export function migrateLegacyResponsesRecord(
+  record: Pick<LocalSlideResponses, "key" | "ownerId" | "lessonId" | "bySlide"> & { learnerId?: string }
+): LocalSlideResponses {
+  return { ...record, key: responsesKey(record.ownerId, record.lessonId), learnerId: record.ownerId };
 }
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────
 
 const QUEUE_KINDS: readonly QueueItemKind[] = ["progress", "slide_response", "complete"];
+
+/** Capability marker used by the app shell to avoid child writes with pre-v3 offline bundles. */
+export const OFFLINE_LEARNER_PARTITIONING = true as const;
 
 function finiteNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -273,9 +295,11 @@ export function normalizeQueueItem(raw: ProgressQueueItem): OfflineQueueItem | n
   const studentId = typeof raw.data.student_id === "string" ? raw.data.student_id : undefined;
   const ownerId = raw.ownerId || studentId;
   if (!ownerId) return null;
+  // Before learner profiles, the account profile was the only learner.
+  const learnerId = raw.learnerId || ownerId;
 
   if (raw.kind && QUEUE_KINDS.includes(raw.kind)) {
-    return { ...raw, ownerId, kind: raw.kind };
+    return { ...raw, ownerId, learnerId, kind: raw.kind };
   }
 
   if (raw.table === "lesson_progress") {
@@ -283,6 +307,7 @@ export function normalizeQueueItem(raw: ProgressQueueItem): OfflineQueueItem | n
       id: raw.id,
       lessonId: raw.lessonId,
       ownerId,
+      learnerId,
       kind: "progress",
       timestamp: raw.timestamp,
       data: {
@@ -334,8 +359,8 @@ export function nextProgressQueueData(
   return typeof completedAt === "string" ? { ...queueData, completed_at: completedAt } : queueData;
 }
 
-function isSlideAnswerFor(item: ProgressQueueItem, ownerId: string, slideId: unknown): boolean {
-  return item.kind === "slide_response" && item.ownerId === ownerId && item.data?.slideId === slideId;
+function isSlideAnswerFor(item: ProgressQueueItem, ownerId: string, learnerId: string, slideId: unknown): boolean {
+  return item.kind === "slide_response" && item.ownerId === ownerId && (item.learnerId || item.ownerId) === learnerId && item.data?.slideId === slideId;
 }
 
 export type SlideAnswerQueuePlan = { action: "skip" } | { action: "add" } | { action: "replace"; id: number };
@@ -355,8 +380,9 @@ export type SlideAnswerQueuePlan = { action: "skip" } | { action: "add" } | { ac
 export function planSlideAnswerQueue(
   local: Pick<LocalSlideResponse, "answer" | "answeredAt" | "answerId"> | null | undefined,
   queued: ProgressQueueItem[],
-  incoming: Pick<OfflineQueueItem, "ownerId" | "data" | "timestamp">
+  incoming: Pick<OfflineQueueItem, "ownerId" | "learnerId" | "data" | "timestamp">
 ): SlideAnswerQueuePlan {
+  const learnerId = incoming.learnerId || incoming.ownerId;
   const version = queuedAnswerVersion(incoming);
   if (
     typeof local?.answerId === "string" &&
@@ -366,7 +392,7 @@ export function planSlideAnswerQueue(
     return { action: "skip" };
   }
   const existing = queued
-    .filter((item) => isSlideAnswerFor(item, incoming.ownerId, incoming.data.slideId))
+    .filter((item) => isSlideAnswerFor(item, incoming.ownerId, learnerId, incoming.data.slideId))
     .reduce<ProgressQueueItem | null>(
       (best, item) => (!best || answerSupersedes(queuedAnswerVersion(item), queuedAnswerVersion(best)) ? item : best),
       null
@@ -381,10 +407,11 @@ export function supersededQueuedAnswerIds(
   queued: ProgressQueueItem[],
   ownerId: string,
   slideId: string,
-  sent: AnswerVersion
+  sent: AnswerVersion,
+  learnerId = ownerId
 ): number[] {
   return queued
-    .filter((item) => item.id !== undefined && isSlideAnswerFor(item, ownerId, slideId))
+    .filter((item) => item.id !== undefined && isSlideAnswerFor(item, ownerId, learnerId, slideId))
     .filter((item) => !answerSupersedes(queuedAnswerVersion(item), sent))
     .map((item) => item.id as number);
 }
@@ -556,13 +583,63 @@ function hasAllStores(db: IDBDatabase) {
   return ALL_STORES.every((name) => db.objectStoreNames.contains(name));
 }
 
+/** Adds the learner dimension without touching family-shared lesson records. */
+function migrateLearnerIsolation(tx: IDBTransaction) {
+  const queueStore = tx.objectStore(OFFLINE_STORES.queue);
+  const queueCursor = queueStore.openCursor();
+  queueCursor.onsuccess = () => {
+    const cursor = queueCursor.result;
+    if (!cursor) return;
+    const item = cursor.value as ProgressQueueItem;
+    const normalized = normalizeQueueItem(item);
+    if (normalized && item.learnerId !== normalized.ownerId) {
+      cursor.update({ ...item, ownerId: normalized.ownerId, learnerId: normalized.ownerId });
+    }
+    cursor.continue();
+  };
+
+  const metaStore = tx.objectStore(OFFLINE_STORES.meta);
+  const metaCursor = metaStore.openCursor();
+  metaCursor.onsuccess = () => {
+    const cursor = metaCursor.result;
+    if (!cursor) return;
+    const record = cursor.value as Partial<LocalLessonProgress> & MetaRecord;
+    if (
+      typeof record.ownerId === "string" &&
+      typeof record.lessonId === "string" &&
+      typeof record.last_position_seconds === "number" &&
+      record.key.startsWith(PROGRESS_META_PREFIX)
+    ) {
+      cursor.delete();
+      metaStore.put(migrateLegacyProgressRecord(record as Pick<LocalLessonProgress, "key" | "ownerId" | "lessonId" | "last_position_seconds" | "total_watch_time_seconds" | "completed" | "updatedAt">));
+    }
+    cursor.continue();
+  };
+
+  const responsesStore = tx.objectStore(OFFLINE_STORES.responses);
+  const responsesCursor = responsesStore.openCursor();
+  responsesCursor.onsuccess = () => {
+    const cursor = responsesCursor.result;
+    if (!cursor) return;
+    const record = cursor.value as Partial<LocalSlideResponses>;
+    if (typeof record.ownerId === "string" && typeof record.lessonId === "string") {
+      cursor.delete();
+      responsesStore.put(migrateLegacyResponsesRecord(record as Pick<LocalSlideResponses, "key" | "ownerId" | "lessonId" | "bySlide">));
+    }
+    cursor.continue();
+  };
+}
+
 /** Opens at `version` (or whatever version exists, when omitted), creating any missing store. */
 function openAtVersion(version: number | undefined, repairAttempt: boolean): Promise<IDBDatabase> {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = version === undefined ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, version);
 
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       createMissingStores(request.result, request.transaction);
+      if (request.transaction && event.oldVersion > 0 && event.oldVersion < 3) {
+        migrateLearnerIsolation(request.transaction);
+      }
     };
 
     // While another tab holds an old connection (one without our
@@ -945,6 +1022,28 @@ export async function addQueueItem(item: Omit<ProgressQueueItem, "id">, epoch?: 
   }, epoch);
 }
 
+/** Keeps one complete item per account + learner + lesson + kind. */
+export async function queueLessonCompleteItem(
+  item: Omit<OfflineQueueItem, "id" | "retry">,
+  epoch?: number
+): Promise<void> {
+  await writeTransaction(OFFLINE_STORES.queue, (tx) => {
+    const queue = tx.objectStore(OFFLINE_STORES.queue);
+    const request = queue.index("lessonId").getAll(item.lessonId);
+    request.onsuccess = () => {
+      const current = (request.result as ProgressQueueItem[]).find(
+        (candidate) =>
+          candidate.kind === "complete" &&
+          candidate.ownerId === item.ownerId &&
+          (candidate.learnerId || candidate.ownerId) === item.learnerId
+      );
+      const next = current ? { ...item, data: nextProgressQueueData(current, item.data) } : item;
+      if (current?.id !== undefined) queue.put({ ...next, id: current.id });
+      else queue.add(next);
+    };
+  }, epoch);
+}
+
 /**
  * Writes the local progress record and keeps a single "progress" queue item
  * per owner + lesson (updated in place), so hours of offline watching don't
@@ -963,10 +1062,11 @@ export async function saveLocalProgressAndQueue(
     const request = queue.index("lessonId").getAll(progress.lessonId);
     request.onsuccess = () => {
       const items = (request.result ?? []) as ProgressQueueItem[];
-      const existing = items.find((item) => item.kind === "progress" && item.ownerId === progress.ownerId);
+      const existing = items.find((item) => item.kind === "progress" && item.ownerId === progress.ownerId && (item.learnerId || item.ownerId) === progress.learnerId);
       const next: ProgressQueueItem = {
         lessonId: progress.lessonId,
         ownerId: progress.ownerId,
+        learnerId: progress.learnerId,
         kind: "progress",
         data: nextProgressQueueData(existing, queueData),
         timestamp: progress.updatedAt,
@@ -1055,7 +1155,7 @@ export async function queueSlideResponseItem(
   await writeTransaction(
     [OFFLINE_STORES.responses, OFFLINE_STORES.queue],
     (tx) => {
-      const localRequest = tx.objectStore(OFFLINE_STORES.responses).get(responsesKey(item.ownerId, item.lessonId));
+      const localRequest = tx.objectStore(OFFLINE_STORES.responses).get(responsesKey(item.ownerId, item.lessonId, item.learnerId));
       localRequest.onsuccess = () => {
         const local =
           typeof slideId === "string"
@@ -1069,6 +1169,7 @@ export async function queueSlideResponseItem(
           const record: ProgressQueueItem = {
             lessonId: item.lessonId,
             ownerId: item.ownerId,
+            learnerId: item.learnerId,
             kind: "slide_response",
             data: item.data,
             timestamp: item.timestamp,
@@ -1095,14 +1196,15 @@ export async function removeQueuedSlideResponses(
   ownerId: string,
   lessonId: string,
   slideId: string,
-  sent: AnswerVersion
+  sent: AnswerVersion,
+  learnerId = ownerId
 ): Promise<void> {
   await writeTransaction(OFFLINE_STORES.queue, (tx) => {
     const store = tx.objectStore(OFFLINE_STORES.queue);
     const request = store.index("lessonId").getAll(lessonId);
     request.onsuccess = () => {
       const queued = (request.result ?? []) as ProgressQueueItem[];
-      for (const id of supersededQueuedAnswerIds(queued, ownerId, slideId, sent)) store.delete(id);
+      for (const id of supersededQueuedAnswerIds(queued, ownerId, slideId, sent, learnerId)) store.delete(id);
     };
   });
 }
@@ -1177,8 +1279,8 @@ export async function getAllAssetRefs(): Promise<AssetRef[]> {
   return getMetaByPrefix<AssetRef>(ASSET_META_PREFIX);
 }
 
-export async function getLocalProgress(ownerId: string, lessonId: string): Promise<LocalLessonProgress | null> {
-  return getMeta<LocalLessonProgress>(localProgressKey(ownerId, lessonId));
+export async function getLocalProgress(ownerId: string, lessonId: string, learnerId = ownerId): Promise<LocalLessonProgress | null> {
+  return getMeta<LocalLessonProgress>(localProgressKey(ownerId, lessonId, learnerId));
 }
 
 /** Writes the owner id onto saved lessons that predate it (v1 downloads adopted by their owner). */
@@ -1209,10 +1311,11 @@ export async function hasStoredPrivateData(): Promise<boolean> {
 
 export async function getLocalSlideResponses(
   ownerId: string,
-  lessonId: string
+  lessonId: string,
+  learnerId = ownerId
 ): Promise<LocalSlideResponses | null> {
   const result = await readStore<LocalSlideResponses | undefined>(OFFLINE_STORES.responses, (store) =>
-    store.get(responsesKey(ownerId, lessonId))
+    store.get(responsesKey(ownerId, lessonId, learnerId))
   );
   return result ?? null;
 }
@@ -1226,16 +1329,16 @@ export async function putLocalSlideResponses(
   ownerId: string,
   lessonId: string,
   entries: Record<string, LocalSlideResponse>,
-  { keepExisting = false, epoch }: { keepExisting?: boolean; epoch?: number } = {}
+  { keepExisting = false, epoch, learnerId = ownerId }: { keepExisting?: boolean; epoch?: number; learnerId?: string } = {}
 ): Promise<void> {
-  const key = responsesKey(ownerId, lessonId);
+  const key = responsesKey(ownerId, lessonId, learnerId);
   await writeTransaction(OFFLINE_STORES.responses, (tx) => {
     const store = tx.objectStore(OFFLINE_STORES.responses);
     const request = store.get(key);
     request.onsuccess = () => {
       const current = (request.result as LocalSlideResponses | undefined)?.bySlide ?? {};
       const bySlide = keepExisting ? { ...entries, ...current } : { ...current, ...entries };
-      const record: LocalSlideResponses = { key, ownerId, lessonId, bySlide };
+      const record: LocalSlideResponses = { key, ownerId, learnerId, lessonId, bySlide };
       store.put(record);
     };
   }, epoch);
@@ -1251,9 +1354,10 @@ export async function updateLocalSlideResponse(
   lessonId: string,
   slideId: string,
   update: (current: LocalSlideResponse | undefined) => LocalSlideResponse | undefined,
-  epoch?: number
+  epoch?: number,
+  learnerId = ownerId
 ): Promise<boolean> {
-  const key = responsesKey(ownerId, lessonId);
+  const key = responsesKey(ownerId, lessonId, learnerId);
   let written = false;
   await writeTransaction(OFFLINE_STORES.responses, (tx) => {
     const store = tx.objectStore(OFFLINE_STORES.responses);
@@ -1262,7 +1366,7 @@ export async function updateLocalSlideResponse(
       const bySlide = (request.result as LocalSlideResponses | undefined)?.bySlide ?? {};
       const next = update(bySlide[slideId]);
       if (!next) return;
-      const record: LocalSlideResponses = { key, ownerId, lessonId, bySlide: { ...bySlide, [slideId]: next } };
+      const record: LocalSlideResponses = { key, ownerId, learnerId, lessonId, bySlide: { ...bySlide, [slideId]: next } };
       store.put(record);
       written = true;
     };

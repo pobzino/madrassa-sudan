@@ -33,9 +33,10 @@ import { queueLessonProgress } from "@/lib/offline/sync";
 const OWNER = "student-1";
 const LESSON = "lesson-1";
 
-function save(positionSec: number, completedCandidate: boolean, practiceGated?: boolean) {
+function save(positionSec: number, completedCandidate: boolean, practiceGated?: boolean, learnerId = OWNER) {
   return queueLessonProgress({
     ownerId: OWNER,
+    learnerId,
     lessonId: LESSON,
     positionSec,
     watchSec: positionSec,
@@ -93,6 +94,18 @@ describe("queueLessonProgress for a copy saved before the practice gate was stor
 });
 
 describe("queueLessonProgress with a known gate keeps today's rules", () => {
+  it("does not seed a child's progress from a v2 family-shared snapshot", async () => {
+    store.record = {
+      id: LESSON,
+      ownerId: OWNER,
+      schema: 2,
+      practice: null,
+      progress: { last_position_seconds: 90, total_watch_time_seconds: 120, completed: true },
+    };
+    const saved = await save(0, false, false, "child-1");
+    expect(saved).toEqual({ last_position_seconds: 0, total_watch_time_seconds: 0, completed: false });
+  });
+
   it("completes a lesson with no gate on the phone and on the server", async () => {
     store.record = { id: LESSON, ownerId: OWNER, schema: 2, practice: null };
     const saved = await save(25, true);

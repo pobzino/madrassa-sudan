@@ -24,6 +24,7 @@ import { offlinePlayerUrl } from "@/lib/offline/cache-names";
 import { getAllOfflineLessons, hasCachedSimAudio, onPrivateDataCleared, type OfflineLesson } from "@/lib/offline/db";
 import { deleteDownloadedLesson } from "@/lib/offline/download-manager";
 import { getOwner, ownsRecord, type OfflineOwner } from "@/lib/offline/identity";
+import { getCachedActiveLearnerId } from "@/lib/offline/learner";
 import { IOS_STORAGE_COPY, iosStorageContext, iosTabNote, type IosStorageContext } from "@/lib/offline/support";
 import { countUnsyncedItems, getEffectiveLessonProgress, type ProgressValues } from "@/lib/offline/sync";
 import { warmOfflinePlayerChunks } from "@/lib/offline/warm";
@@ -121,12 +122,13 @@ interface HubLesson {
 type HubState =
   | { status: "loading" }
   | { status: "error" }
-  | { status: "ready"; owner: OfflineOwner | null; lessons: HubLesson[]; hiddenCount: number };
+  | { status: "ready"; owner: OfflineOwner | null; learnerId: string | null; lessons: HubLesson[]; hiddenCount: number };
 
-const EMPTY_READY: HubState = { status: "ready", owner: null, lessons: [], hiddenCount: 0 };
+const EMPTY_READY: HubState = { status: "ready", owner: null, learnerId: null, lessons: [], hiddenCount: 0 };
 
 async function readSavedLessons(): Promise<HubState> {
   const [owner, all] = await Promise.all([getOwner(), getAllOfflineLessons()]);
+  const learnerId = owner ? getCachedActiveLearnerId(owner.userId) : null;
   const owned = all
     .filter((lesson) => ownsRecord(lesson, owner))
     .sort((left, right) => Date.parse(right.downloadedAt) - Date.parse(left.downloadedAt));
@@ -134,10 +136,10 @@ async function readSavedLessons(): Promise<HubState> {
     owned.map(async (lesson) => ({
       lesson,
       audioReady: await hasCachedSimAudio(lesson.id),
-      progress: owner ? await getEffectiveLessonProgress(owner.userId, lesson.id).catch(() => null) : null,
+      progress: owner && learnerId ? await getEffectiveLessonProgress(owner.userId, lesson.id, learnerId).catch(() => null) : null,
     }))
   );
-  return { status: "ready", owner, lessons, hiddenCount: all.length - owned.length };
+  return { status: "ready", owner, learnerId, lessons, hiddenCount: all.length - owned.length };
 }
 
 const noPlatform = () => null;
@@ -343,6 +345,7 @@ export default function OfflineHub() {
                 <SavedLessonCard
                   key={item.lesson.id}
                   item={item}
+                  learnerId={state.status === "ready" ? state.learnerId ?? undefined : undefined}
                   removing={removingId === item.lesson.id}
                   disabled={loggingOut}
                   onRemove={() => void handleRemove(item.lesson.id)}
@@ -385,11 +388,13 @@ export default function OfflineHub() {
 
 function SavedLessonCard({
   item,
+  learnerId,
   removing,
   disabled,
   onRemove,
 }: {
   item: HubLesson;
+  learnerId?: string;
   removing: boolean;
   disabled: boolean;
   onRemove: () => void;
@@ -416,7 +421,7 @@ function SavedLessonCard({
   return (
     <li className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-black/5">
       <a
-        href={offlinePlayerUrl(lesson.id)}
+        href={offlinePlayerUrl(lesson.id, learnerId)}
         aria-label={t.play(title)}
         className="flex items-center gap-4 p-4 transition-colors hover:bg-emerald-50/50 active:bg-emerald-50"
       >

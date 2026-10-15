@@ -20,9 +20,9 @@
 
 import { isAuthRetryableFetchError, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { LEARNER_HEADER } from "@/lib/learners/types";
 import { createClient } from "@/lib/supabase/client";
 import {
-  addQueueItem,
   answerSupersedes,
   clearQueuedUpdates,
   countQueuedUpdates,
@@ -31,6 +31,7 @@ import {
   getQueuedUpdates,
   getStorageEpoch,
   localProgressKey,
+  queueLessonCompleteItem,
   normalizeQueueItem,
   putMeta,
   queuedAnswerTime,
@@ -393,6 +394,7 @@ export function pickAnswersToSend(items: OfflineQueueItem[]): { send: OfflineQue
 
 export interface QueueLessonProgressInput {
   ownerId: string;
+  learnerId?: string;
   lessonId: string;
   positionSec: number;
   watchSec: number;
@@ -402,8 +404,11 @@ export interface QueueLessonProgressInput {
   practiceGated?: boolean;
 }
 
-function snapshotOf(record: OfflineLesson | null, ownerId: string): OfflineProgressSnapshot | null {
-  return record && record.ownerId === ownerId ? record.progress ?? null : null;
+function snapshotOf(record: OfflineLesson | null, ownerId: string, learnerId = ownerId): OfflineProgressSnapshot | null {
+  // v2 downloads stored the account learner's progress on the shared lesson
+  // record. Preserve that snapshot for self after upgrade, but never seed a
+  // child's progress from a family-shared legacy record.
+  return record && record.ownerId === ownerId && learnerId === ownerId ? record.progress ?? null : null;
 }
 
 /**
@@ -412,14 +417,16 @@ function snapshotOf(record: OfflineLesson | null, ownerId: string): OfflineProgr
  * wasn't ahead of it).
  */
 export async function queueLessonProgress(input: QueueLessonProgressInput): Promise<ProgressValues> {
+  const learnerId = input.learnerId ?? input.ownerId;
+  const scoped = { ...input, learnerId };
   // A logout while this runs must not get the previous account's progress written back.
   const epoch = getStorageEpoch();
   const [record, previous] = await Promise.all([
     getOfflineLesson(input.lessonId).catch(() => null),
-    getLocalProgress(input.ownerId, input.lessonId),
+    getLocalProgress(input.ownerId, input.lessonId, learnerId),
   ]);
   const gated = resolvePracticeGated(record, input.practiceGated);
-  const next = mergeLocalProgress(previous, snapshotOf(record, input.ownerId), input, gated);
+  const next = mergeLocalProgress(previous, snapshotOf(record, input.ownerId, learnerId), scoped, gated);
 
   // A copy saved before the gate was stored: the phone can't know whether
   // Practice must be passed, so it never shows the lesson finished, but it
@@ -430,7 +437,7 @@ export async function queueLessonProgress(input: QueueLessonProgressInput): Prom
   let requestCompletion = next.completed && !gated;
   let changed = progressIncreased(previous, next);
   if (gateUnknown && !next.completed) {
-    const alreadyRequested = await hasQueuedCompletion(input.ownerId, input.lessonId).catch(() => false);
+    const alreadyRequested = await hasQueuedCompletion(input.ownerId, learnerId, input.lessonId).catch(() => false);
     requestCompletion = input.completedCandidate || alreadyRequested;
     if (input.completedCandidate && !alreadyRequested) changed = true;
   }
@@ -438,8 +445,9 @@ export async function queueLessonProgress(input: QueueLessonProgressInput): Prom
 
   const now = new Date().toISOString();
   const local: LocalLessonProgress = {
-    key: localProgressKey(input.ownerId, input.lessonId),
+    key: localProgressKey(input.ownerId, input.lessonId, learnerId),
     ownerId: input.ownerId,
+    learnerId,
     lessonId: input.lessonId,
     ...next,
     updatedAt: now,
@@ -458,11 +466,11 @@ export async function queueLessonProgress(input: QueueLessonProgressInput): Prom
 }
 
 /** Whether a completion request for this lesson is already waiting to sync. */
-async function hasQueuedCompletion(ownerId: string, lessonId: string): Promise<boolean> {
+async function hasQueuedCompletion(ownerId: string, learnerId: string, lessonId: string): Promise<boolean> {
   const items = await getQueuedUpdates();
   return items.some((item) => {
     const normalized = normalizeQueueItem(item);
-    if (!normalized || normalized.ownerId !== ownerId || normalized.lessonId !== lessonId) return false;
+    if (!normalized || normalized.ownerId !== ownerId || normalized.learnerId !== learnerId || normalized.lessonId !== lessonId) return false;
     return normalized.kind === "complete" || (normalized.kind === "progress" && normalized.data.completed === true);
   });
 }
@@ -473,39 +481,44 @@ async function hasQueuedCompletion(ownerId: string, lessonId: string): Promise<b
  */
 export async function queueLessonComplete({
   ownerId,
+  learnerId: requestedLearnerId,
   lessonId,
   positionSec = 0,
   practiceGated,
 }: {
   ownerId: string;
+  learnerId?: string;
   lessonId: string;
   positionSec?: number;
   practiceGated?: boolean;
 }): Promise<boolean> {
+  const learnerId = requestedLearnerId ?? ownerId;
   const epoch = getStorageEpoch();
   const [record, previous] = await Promise.all([
     getOfflineLesson(lessonId).catch(() => null),
-    getLocalProgress(ownerId, lessonId),
+    getLocalProgress(ownerId, lessonId, learnerId),
   ]);
   if (resolvePracticeGated(record, practiceGated)) return false;
 
   const next = mergeLocalProgress(
     previous,
-    snapshotOf(record, ownerId),
+    snapshotOf(record, ownerId, learnerId),
     { positionSec, watchSec: positionSec, completedCandidate: true },
     false
   );
   const now = new Date().toISOString();
   await putMeta({
-    key: localProgressKey(ownerId, lessonId),
+    key: localProgressKey(ownerId, lessonId, learnerId),
     ownerId,
+    learnerId,
     lessonId,
     ...next,
     updatedAt: now,
   } satisfies LocalLessonProgress, epoch);
-  await addQueueItem({
+  await queueLessonCompleteItem({
     lessonId,
     ownerId,
+    learnerId,
     kind: "complete",
     timestamp: now,
     data: {
@@ -521,12 +534,12 @@ export async function queueLessonComplete({
  * Progress to show or resume from: the higher of the download's server
  * snapshot and what was saved on the phone since.
  */
-export async function getEffectiveLessonProgress(ownerId: string, lessonId: string): Promise<ProgressValues> {
+export async function getEffectiveLessonProgress(ownerId: string, lessonId: string, learnerId = ownerId): Promise<ProgressValues> {
   const [record, local] = await Promise.all([
     getOfflineLesson(lessonId).catch(() => null),
-    getLocalProgress(ownerId, lessonId).catch(() => null),
+    getLocalProgress(ownerId, lessonId, learnerId).catch(() => null),
   ]);
-  return mergeLocalProgress(local, snapshotOf(record, ownerId), { positionSec: 0, watchSec: 0, completedCandidate: false }, true);
+  return mergeLocalProgress(local, snapshotOf(record, ownerId, learnerId), { positionSec: 0, watchSec: 0, completedCandidate: false }, true);
 }
 
 /**
@@ -603,8 +616,10 @@ export interface SyncResult {
   answers?: number;
   /** Other accounts' items left queued for them to send when they sign in here (counted in `remaining`). */
   otherAccounts?: number;
+  /** Queued writes discarded because the learner was deleted or no longer belongs to this family. */
+  learnerDataDropped?: number;
   /** Why nothing was attempted, when that happened. */
-  skipped?: "offline" | "signed_out" | "busy";
+  skipped?: "offline" | "signed_out" | "busy" | "learner_validation_failed";
 }
 
 async function remainingCount() {
@@ -625,7 +640,7 @@ async function verifiedUserId(supabase: SupabaseClient<Database>): Promise<strin
 /** Merges a lesson's queued progress into its lesson_progress row. Throws on any failure. */
 async function syncLessonProgress(
   supabase: SupabaseClient<Database>,
-  userId: string,
+  learnerId: string,
   lessonId: string,
   items: OfflineQueueItem[]
 ): Promise<void> {
@@ -634,8 +649,9 @@ async function syncLessonProgress(
   const { data: existing, error: readError } = await supabase
     .from("lesson_progress")
     .select("last_position_seconds, total_watch_time_seconds, completed, completed_at")
-    .eq("student_id", userId)
+    .eq("student_id", learnerId)
     .eq("lesson_id", lessonId)
+    .setHeader(LEARNER_HEADER, learnerId)
     .abortSignal(timeoutSignal(REQUEST_TIMEOUT_MS))
     .maybeSingle();
   if (readError) throw readError;
@@ -649,7 +665,8 @@ async function syncLessonProgress(
   if (!write) return;
   const { error: writeError } = await supabase
     .from("lesson_progress")
-    .upsert({ student_id: userId, lesson_id: lessonId, ...write }, { onConflict: "student_id,lesson_id" })
+    .upsert({ student_id: learnerId, lesson_id: lessonId, ...write }, { onConflict: "student_id,lesson_id" })
+    .setHeader(LEARNER_HEADER, learnerId)
     .abortSignal(timeoutSignal(REQUEST_TIMEOUT_MS));
   if (writeError) throw writeError;
 }
@@ -657,7 +674,20 @@ async function syncLessonProgress(
 /** The server's grade, onto the phone's copy only if that is still the answer that was sent. */
 async function updateLocalGrade(item: OfflineQueueItem, slideId: string, isCorrect: boolean | null) {
   if (isCorrect === null) return;
-  await applyServerGrade(item.ownerId, item.lessonId, slideId, item.data, isCorrect).catch(() => undefined);
+  await applyServerGrade(item.ownerId, item.lessonId, slideId, item.data, isCorrect, undefined, item.learnerId).catch(() => undefined);
+}
+
+async function fetchOwnedLearnerIds(accountId: string): Promise<Set<string> | null> {
+  try {
+    const response = await fetch("/api/learners", { credentials: "same-origin", cache: "no-store" });
+    if (!response.ok) return null;
+    const body = (await response.json()) as { accountId?: unknown; learners?: Array<{ id?: unknown }> };
+    if (body.accountId !== accountId || !Array.isArray(body.learners)) return null;
+    const ids = body.learners.map((learner) => learner.id).filter((id): id is string => typeof id === "string");
+    return ids.includes(accountId) ? new Set(ids) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> {
@@ -673,12 +703,18 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
   if (userId === "offline") return { ...empty, remaining: queued.length, skipped: "offline" };
   if (!userId) return { ...empty, remaining: queued.length, skipped: "signed_out" };
 
+  // Queue ownership is checked on every online sync. A deleted or foreign
+  // child may never receive writes just because this device remembers its ID.
+  const allowedLearners = await fetchOwnedLearnerIds(userId);
+  if (!allowedLearners) return { ...empty, remaining: queued.length, skipped: "learner_validation_failed" };
+
   const { mine, foreign, invalid } = partitionQueueByOwner(queued, userId);
   // Removal compares against the stored item (normalizing rewrites v1 items).
   const storedById = new Map(queued.map((item) => [item.id, item]));
   const stored = (items: OfflineQueueItem[]) =>
     items.map((item) => storedById.get(item.id) ?? item);
   let dropped = 0;
+  let learnerDataDropped = 0;
   // Another account's items stay for that account (its session may have
   // ended without logOut, e.g. a logout or password change on another
   // phone) unless they have waited 30 days. Unreadable ones never sync.
@@ -690,6 +726,14 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
     dropped += unusable.length;
   }
 
+  const noLongerOwned = mine.filter((item) => !allowedLearners.has(item.learnerId));
+  const noLongerOwnedIds = noLongerOwned.map((item) => item.id).filter((id): id is number => typeof id === "number");
+  if (noLongerOwnedIds.length > 0) {
+    await clearQueuedUpdates(noLongerOwnedIds).catch(() => undefined);
+    dropped += noLongerOwnedIds.length;
+    learnerDataDropped += noLongerOwnedIds.length;
+  }
+
   let synced = 0;
   const syncedLessons = new Set<string>();
   let syncedAnswers = 0;
@@ -698,13 +742,19 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
   const now = new Date();
 
   const byLesson = new Map<string, OfflineQueueItem[]>();
-  for (const item of mine) {
-    const list = byLesson.get(item.lessonId) ?? [];
+  for (const item of mine.filter((candidate) => allowedLearners.has(candidate.learnerId))) {
+    const key = `${item.learnerId}\u0000${item.lessonId}`;
+    const list = byLesson.get(key) ?? [];
     list.push(item);
-    byLesson.set(item.lessonId, list);
+    byLesson.set(key, list);
   }
   const lessons = orderLessonsForSync(
-    [...byLesson].map(([lessonId, items]) => ({ lessonId, items, completedAt: summarizeProgressItems(items).completedAt }))
+    [...byLesson].map(([key, items]) => ({
+      learnerId: items[0].learnerId,
+      lessonId: key.slice(key.indexOf("\u0000") + 1),
+      items,
+      completedAt: summarizeProgressItems(items).completedAt,
+    }))
   );
 
   const park = (items: OfflineQueueItem[]) =>
@@ -712,7 +762,7 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
       () => undefined
     );
 
-  for (const { lessonId, items: lessonItems } of lessons) {
+  for (const { learnerId, lessonId, items: lessonItems } of lessons) {
     if (networkDown) {
       failed += lessonItems.length;
       continue;
@@ -736,7 +786,7 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
         lessonParked = true;
       } else {
         try {
-          await syncLessonProgress(supabase, userId, lessonId, progressItems);
+          await syncLessonProgress(supabase, learnerId, lessonId, progressItems);
           await removeQueueItemsIfUnchanged(stored(progressItems));
           synced += progressItems.length;
           syncedLessons.add(lessonId);
@@ -782,6 +832,7 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
         timeSpentSeconds: typeof item.data.timeSpentSeconds === "number" ? item.data.timeSpentSeconds : undefined,
         answeredAt: Number.isFinite(answeredAt) ? new Date(answeredAt).toISOString() : undefined,
         answerId: typeof item.data.answerId === "string" ? item.data.answerId : undefined,
+        learnerId: item.learnerId,
       });
       if (result.ok) {
         await removeQueueItemsIfUnchanged(stored([item])).catch(() => undefined);
@@ -828,6 +879,7 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
     lessons: syncedLessons.size,
     answers: syncedAnswers,
     otherAccounts,
+    learnerDataDropped,
     remaining: await remainingCount(),
   };
 }

@@ -14,6 +14,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { SimPayload } from "@/lib/sim.types";
 import type { Slide } from "@/lib/slides.types";
+import { LEARNER_HEADER } from "@/lib/learners/types";
 import { loadLessonNavigation } from "@/lib/lessons/path-navigation";
 import {
   AssetDownloadError,
@@ -36,16 +37,20 @@ import {
   getAllOfflineLessons,
   getCachedSimAudioSize,
   getOfflineLesson,
+  getLocalProgress,
   getStorageEpoch,
+  localProgressKey,
   newOfflineAudioKey,
   onPrivateDataCleared,
   putLocalSlideResponses,
+  putMeta,
   removeOfflineLessonRecord,
   setDownloadState,
   updateOfflineLesson,
   type DownloadErrorCode,
   type DownloadState,
   type LocalSlideResponse,
+  type LocalLessonProgress,
   type OfflineLesson,
   type OfflineNeighbor,
   type OfflineOrigin,
@@ -62,6 +67,8 @@ export type ProgressCallback = (state: DownloadState) => void;
 export interface DownloadOptions {
   /** "auto" for Wi-Fi background downloads; a manual save of the same lesson always wins. */
   origin?: OfflineOrigin;
+  /** Learner context for progress/answer snapshots. Lesson content stays family-shared. */
+  learnerId?: string;
 }
 
 // ── Messages ─────────────────────────────────────────────────────────────────
@@ -503,8 +510,12 @@ function childSignal(parent: AbortSignal, timeoutMs?: number) {
   };
 }
 
-async function fetchJson<T>(url: string, signal: AbortSignal): Promise<T> {
-  const response = await fetch(url, { signal, credentials: "same-origin" });
+async function fetchJson<T>(url: string, signal: AbortSignal, learnerId?: string): Promise<T> {
+  const response = await fetch(url, {
+    signal,
+    credentials: "same-origin",
+    ...(learnerId ? { headers: { [LEARNER_HEADER]: learnerId } } : {}),
+  });
   if (response.status === 401) throw new DownloadError("signed_out");
   if (response.status === 403 || response.status === 404) throw new DownloadError("not_found");
   if (!response.ok) throw new DownloadError("network");
@@ -575,6 +586,7 @@ async function fetchLessonBundle(
   supabase: SupabaseClient<Database>,
   lessonId: string,
   ownerId: string,
+  learnerId: string,
   signal: AbortSignal,
   {
     fallbackNeighbors,
@@ -629,11 +641,12 @@ async function fetchLessonBundle(
       supabase
         .from("lesson_progress")
         .select("last_position_seconds, total_watch_time_seconds, completed")
-        .eq("student_id", ownerId)
+        .eq("student_id", learnerId)
         .eq("lesson_id", lessonId)
+        .setHeader(LEARNER_HEADER, learnerId)
         .abortSignal(signal)
         .maybeSingle(),
-      fetchJson<{ responses?: unknown }>(`/api/lessons/${encodeURIComponent(lessonId)}/slide-responses`, signal),
+      fetchJson<{ responses?: unknown }>(`/api/lessons/${encodeURIComponent(lessonId)}/slide-responses`, signal, learnerId),
     ]);
 
   if (lessonResult.error) throw lessonResult.error;
@@ -865,7 +878,8 @@ async function runDownload(
 
     // 1. Everything except the big files. Any failure fails the download.
     const metadata = childSignal(signal, METADATA_TIMEOUT_MS);
-    const bundle = await fetchLessonBundle(supabase, lessonId, owner.userId, metadata.signal, {
+    const learnerId = options.learnerId ?? owner.userId;
+    const bundle = await fetchLessonBundle(supabase, lessonId, owner.userId, learnerId, metadata.signal, {
       fallbackNeighbors: previous?.neighbors ?? null,
       onLesson: ({ title_ar, title_en }) => reporter.update({ title_ar, title_en }),
     })
@@ -949,10 +963,10 @@ async function runDownload(
       assetUrls: assetUrls.filter((url) => !missing.has(url)),
       assetBytes: assets.totalBytes,
       missingAssetUrls: missing.size > 0 ? [...missing] : undefined,
-      practice: bundle.practiceAssignmentId
-        ? { assignmentId: bundle.practiceAssignmentId, passed: bundle.progress?.completed === true }
-        : null,
-      progress: bundle.progress,
+      // Progress and Practice result belong to learnerId and are kept below
+      // in learner-keyed stores; the lesson/media record is family-shared.
+      practice: bundle.practiceAssignmentId ? { assignmentId: bundle.practiceAssignmentId, passed: false } : null,
+      progress: null,
       neighbors: bundle.neighbors,
       origin,
       updateAvailable: false,
@@ -970,7 +984,21 @@ async function runDownload(
     };
 
     // Answers given on this phone are newer than the server's; keep them.
-    await putLocalSlideResponses(owner.userId, lessonId, bundle.responses, { keepExisting: true, epoch });
+    await putLocalSlideResponses(owner.userId, lessonId, bundle.responses, { keepExisting: true, epoch, learnerId });
+    if (bundle.progress) {
+      const previousProgress = await getLocalProgress(owner.userId, lessonId, learnerId).catch(() => null);
+      const local: LocalLessonProgress = {
+        key: localProgressKey(owner.userId, lessonId, learnerId),
+        ownerId: owner.userId,
+        learnerId,
+        lessonId,
+        last_position_seconds: Math.max(previousProgress?.last_position_seconds ?? 0, bundle.progress.last_position_seconds),
+        total_watch_time_seconds: Math.max(previousProgress?.total_watch_time_seconds ?? 0, bundle.progress.total_watch_time_seconds),
+        completed: previousProgress?.completed === true || bundle.progress.completed,
+        updatedAt: new Date().toISOString(),
+      };
+      await putMeta(local, epoch);
+    }
     const { unreferencedUrls, replacedAudioKey } = await commitOfflineLesson(record, {
       assetBytes: assets.bytesByUrl,
       previousAssetUrls: previous?.assetUrls ?? [],
