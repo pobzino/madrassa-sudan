@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useLearnerContext } from "@/contexts/LearnerContext";
 import { OwlThinking, OwlStreak } from "@/components/illustrations";
 import { MeadowBackdrop, StudyOwl } from "@/components/dashboard/DashboardScenes";
 import { StudentHomeworkList } from "@/components/homework/HomeworkList";
@@ -60,6 +61,7 @@ export default function HomeworkPage() {
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
+  const { activeLearner } = useLearnerContext();
   const t = translations[language];
 
   useEffect(() => {
@@ -71,12 +73,13 @@ export default function HomeworkPage() {
         if (getLastAuthStatus() === "signed_out") router.push("/auth/login");
         return;
       }
+      const learnerId = activeLearner?.id || user.id;
 
       // Get streak
       const { data: streakData } = await supabase
         .from("student_streaks")
         .select("current_streak_days")
-        .eq("student_id", user.id)
+        .eq("student_id", learnerId)
         .single();
       if (streakData?.current_streak_days) setStreakDays(streakData.current_streak_days);
 
@@ -84,7 +87,7 @@ export default function HomeworkPage() {
       const { data: cohortStudents } = await supabase
         .from("cohort_students")
         .select("cohort_id")
-        .eq("student_id", user.id)
+        .eq("student_id", learnerId)
         .eq("is_active", true);
 
       const cohortIds = cohortStudents?.map((cs) => cs.cohort_id) || [];
@@ -115,7 +118,7 @@ export default function HomeworkPage() {
           const mapped = assignmentsData.map((a) => ({
             ...a,
             submission: Array.isArray(a.submission)
-              ? a.submission.find((s: HomeworkSubmission) => s.student_id === user.id) || null
+              ? a.submission.find((s: HomeworkSubmission) => s.student_id === learnerId) || null
               : a.submission,
           }));
           setAssignments(mapped);
@@ -125,7 +128,7 @@ export default function HomeworkPage() {
       setLoading(false);
     }
     loadData();
-  }, [router, supabase]);
+  }, [router, supabase, activeLearner?.id]);
 
   // Filter assignments
   const filteredAssignments = useMemo(() => {

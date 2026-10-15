@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useLearnerContext } from "@/contexts/LearnerContext";
 import { useSimAccess } from "@/lib/hooks/useSimAccess";
 import type {
   Lesson,
@@ -25,6 +26,7 @@ import { toast } from "sonner";
 import { Confetti } from "@/components/illustrations";
 import { getAuthState, getLastVerifiedUser } from "@/lib/supabase/auth-cache";
 import { getCachedSimAudio } from "@/lib/offline/db";
+import * as offlineDb from "@/lib/offline/db";
 import { getOwnedOfflineLesson } from "@/lib/offline/identity";
 import { OFFLINE_HUB_PATH, offlinePlayerUrl } from "@/lib/offline/cache-names";
 import { queueLessonComplete, queueLessonProgress } from "@/lib/offline/sync";
@@ -245,12 +247,17 @@ function pickLocalizedText(
     : englishText || arabicText || "";
 }
 
+function supportsLearnerPartitionedOffline(): boolean {
+  return (offlineDb as unknown as { OFFLINE_LEARNER_PARTITIONING?: boolean }).OFFLINE_LEARNER_PARTITIONING === true;
+}
+
 export default function LessonPlayerPage() {
   const params = useParams();
   const lessonId = params.id as string;
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
+  const { activeLearner, accountId, fetchWithLearner } = useLearnerContext();
   const { canAccessSims } = useSimAccess();
   const t = translations[language];
   const isRtl = language === "ar";
@@ -508,7 +515,8 @@ export default function LessonPlayerPage() {
       // falls back to the saved copy.
       if (!auth.user) throw new Error("Auth check did not reach the server");
       const user = auth.user;
-      setUserId(user.id);
+      const learnerId = activeLearner?.id || user.id;
+      setUserId(learnerId);
 
       // Fetch lesson
       const { data: lessonData, error: lessonError } = await supabase
@@ -529,15 +537,20 @@ export default function LessonPlayerPage() {
       setQuizSettings(resolveQuizSettings(lessonData.quiz_settings));
 
       // Started now so a stalled read overlaps the requests below.
-      const fromPhoneRead = readLocal(getSavedSlideResponses(user.id, lessonId), {});
+      // The legacy local response adapter is family-scoped; in the v3 adapter
+      // this includes the learner ID so sibling answers remain independent.
+      const hasLearnerOffline = supportsLearnerPartitionedOffline();
+      const fromPhoneRead = activeLearner?.isSelf || hasLearnerOffline
+        ? readLocal((getSavedSlideResponses as unknown as (account: string, lesson: string, learner: string) => Promise<SavedSlideResponses>)(accountId || user.id, lessonId, learnerId), {})
+        : Promise.resolve({});
       const [slidesRes, slideResponsesRes, simRes] = await Promise.all([
-        fetch(`/api/lessons/${lessonId}/slides`, { signal })
+        fetchWithLearner(`/api/lessons/${lessonId}/slides`, { signal })
           .then((response) => (response.ok ? response.json() : null))
           .catch(() => null),
-        fetch(`/api/lessons/${lessonId}/slide-responses`, { signal })
+        fetchWithLearner(`/api/lessons/${lessonId}/slide-responses`, { signal })
           .then((response) => (response.ok ? response.json() : null))
           .catch(() => null),
-        fetch(`/api/lessons/${lessonId}/sim`, { signal })
+        fetchWithLearner(`/api/lessons/${lessonId}/sim`, { signal })
           .then((response) => {
             if (!response.ok) throw new Error("Recording could not be loaded");
             return response.json();
@@ -636,7 +649,7 @@ export default function LessonPlayerPage() {
           .from("lesson_progress")
           .select("*")
           .eq("lesson_id", lessonId)
-          .eq("student_id", user.id)
+          .eq("student_id", learnerId)
           .abortSignal(signal)
           .maybeSingle(),
       ]);
@@ -649,7 +662,7 @@ export default function LessonPlayerPage() {
           const { data: responseData } = await supabase
             .from("lesson_question_responses")
             .select("question_id, is_correct")
-            .eq("student_id", user.id)
+            .eq("student_id", learnerId)
             .abortSignal(signal)
             .in("question_id", questionsData.map((question) => question.id));
 
@@ -712,7 +725,7 @@ export default function LessonPlayerPage() {
       controller.abort();
       if (audioObjectUrl) URL.revokeObjectURL(audioObjectUrl);
     };
-  }, [lessonId, router, supabase, loadAttempt]);
+  }, [lessonId, router, supabase, loadAttempt, activeLearner?.id, activeLearner?.isSelf, accountId, fetchWithLearner]);
 
   // On Wi-Fi, download the next lesson in the background so it plays later
   // without mobile data. Waits a little so this lesson gets the connection first.
@@ -727,14 +740,14 @@ export default function LessonPlayerPage() {
     const timer = window.setTimeout(() => {
       const { downloadLesson, deleteLesson, isLessonDownloaded } = offlineRef.current;
       void autoDownloadLesson(nextLessonId, {
-        download: downloadLesson,
+        download: (id, options) => downloadLesson(id, { ...options, learnerId: activeLearner?.id }),
         remove: deleteLesson,
         isDownloaded: isLessonDownloaded,
         keepId: lessonId,
       });
     }, 15_000);
     return () => window.clearTimeout(timer);
-  }, [nextLessonId, lessonId]);
+  }, [nextLessonId, lessonId, activeLearner?.id]);
 
   // Activity answers from SimPlayer (a typed answer, or null for a skipped
   // activity). Kept on this phone, sent to the server (which grades it), and
@@ -745,9 +758,29 @@ export default function LessonPlayerPage() {
         void postSlideResponse(lessonId, slideId, answer);
         return;
       }
-      void submitSlideResponse({ ownerId: userId, lessonId, slideId, answer, isCorrect });
+      if (activeLearner && !activeLearner.isSelf && !supportsLearnerPartitionedOffline()) {
+        // The legacy local answer store is family-scoped. Keep child answers
+        // online-only until the learner-partitioned adapter is integrated.
+        void fetchWithLearner(`/api/lessons/${lessonId}/slide-responses`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slide_id: slideId, answer }),
+        }).then(async (response) => {
+          if (!response.ok) throw new Error("Answer was not saved");
+          const result = await response.json().catch(() => ({}));
+          setSlideInteractionResponses((current) => ({
+            ...current,
+            [slideId]: { answer, isCorrect: typeof result.is_correct === "boolean" ? result.is_correct : Boolean(isCorrect) },
+          }));
+        }).catch(() => toast.error(t.notSaved));
+        return;
+      }
+      const learnerId = activeLearner?.id || userId;
+      // The offline helper is gaining an explicit learner dimension; the cast
+      // keeps this worktree typecheckable until its branch is integrated.
+      void submitSlideResponse({ ownerId: accountId || userId, learnerId, lessonId, slideId, answer, isCorrect } as Parameters<typeof submitSlideResponse>[0]);
     },
-    [lessonId, userId]
+    [accountId, activeLearner, fetchWithLearner, lessonId, t.notSaved, userId]
   );
 
   // Sim progress tracking — debounced upsert on playback percentage changes.
@@ -881,17 +914,22 @@ export default function LessonPlayerPage() {
     // No connection (or the write failed): keep it on the phone; the sync
     // merges it into the server row later and never lowers anything.
     const saveOnPhone = () =>
+      activeLearner && !activeLearner.isSelf && !supportsLearnerPartitionedOffline()
+        ? Promise.resolve()
+        :
       queueLessonProgress({
-        ownerId: userId,
+        ownerId: accountId || userId,
+        learnerId: activeLearner?.id || userId,
         lessonId,
         positionSec: furthestSec,
         watchSec: watchTimeSec,
         completedCandidate: isCompleted,
         practiceGated: practiceGateKnown ? Boolean(practiceAssignmentId) : undefined,
-      }).catch(() => undefined);
+      } as Parameters<typeof queueLessonProgress>[0] & { learnerId: string }).catch(() => undefined);
 
     if (!navigator.onLine) {
-      await saveOnPhone();
+      if (activeLearner && !activeLearner.isSelf && !supportsLearnerPartitionedOffline()) toast.error(t.notSaved);
+      else await saveOnPhone();
     } else {
       const { data: updatedProgress, error } = await supabase
         .from("lesson_progress")
@@ -900,7 +938,8 @@ export default function LessonPlayerPage() {
         .abortSignal(timeoutSignal(PROGRESS_WRITE_TIMEOUT_MS))
         .single();
       if (error || !updatedProgress) {
-        await saveOnPhone();
+        if (activeLearner && !activeLearner.isSelf && !supportsLearnerPartitionedOffline()) toast.error(t.notSaved);
+        else await saveOnPhone();
       } else {
         setProgress(updatedProgress);
         progressCompletedRef.current = updatedProgress.completed === true;
@@ -915,7 +954,7 @@ export default function LessonPlayerPage() {
     if (pct >= 99 && practiceAssignmentId && !practicePassed) {
       router.push(`/practice/${practiceAssignmentId}?from=lesson`);
     }
-  }, [userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practiceGateKnown, practicePassed, router, trackCanonicalLessonCompletion, trackVideoPlayback]);
+  }, [accountId, activeLearner, userId, lessonId, supabase, simDurationSec, answeredQuestions.size, correctQuestions.size, practiceAssignmentId, practiceGateKnown, practicePassed, router, t.notSaved, trackCanonicalLessonCompletion, trackVideoPlayback]);
 
   // Close progress gate and let sim handle replay
   const handleRewatchQuiz = useCallback(() => {
@@ -958,12 +997,17 @@ export default function LessonPlayerPage() {
     // No connection: keep the completion on the phone for the next sync
     // (never for a practice-gated lesson, which passing the Practice completes).
     if (!saved) {
+      if (activeLearner && !activeLearner.isSelf && !supportsLearnerPartitionedOffline()) {
+        toast.error(t.notSaved);
+        return;
+      }
       const queued = await queueLessonComplete({
-        ownerId: userId,
+        ownerId: accountId || userId,
+        learnerId: activeLearner?.id || userId,
         lessonId,
         positionSec: simDurationSec,
         practiceGated: practiceGateKnown ? Boolean(practiceAssignmentId) : undefined,
-      }).catch(() => false);
+      } as Parameters<typeof queueLessonComplete>[0] & { learnerId: string }).catch(() => false);
       if (!queued) {
         toast.error(t.notSaved);
         return;
@@ -1151,7 +1195,7 @@ export default function LessonPlayerPage() {
             onSlideResponse={handleSlideResponse}
             playingFromDevice={playingFromDevice}
             reloadDeviceAudio={playingFromDevice ? reloadSavedAudio : undefined}
-            resumeKey={userId ? `${userId}:${lessonId}` : undefined}
+            resumeKey={userId ? `${accountId || userId}:${activeLearner?.id || userId}:${lessonId}` : undefined}
             mediaTitle={pickLocalizedText(lessonContentLanguage, lesson.title_ar, lesson.title_en)}
             onProgress={handleSimProgress}
             onPlayStateChange={handleSimPlaybackState}

@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useLearnerContext } from "@/contexts/LearnerContext";
 import { OwlThinking, OwlCelebrating } from "@/components/illustrations";
 import type { Subject } from "@/lib/database.types";
 import { getCachedUser, getLastAuthStatus } from "@/lib/supabase/auth-cache";
@@ -154,6 +155,7 @@ export default function ProgressPage() {
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
+  const { activeLearner } = useLearnerContext();
   const t = translations[language];
   const isRtl = language === "ar";
 
@@ -171,7 +173,7 @@ export default function ProgressPage() {
       const { data: streakData } = await supabase
         .from("student_streaks")
         .select("*")
-        .eq("student_id", user.id)
+        .eq("student_id", activeLearner?.id || user.id)
         .maybeSingle();
 
       if (streakData) {
@@ -210,7 +212,7 @@ export default function ProgressPage() {
             const { data: completedLessons } = await supabase
               .from("lesson_progress")
               .select("lesson_id, lessons!inner(subject_id)")
-              .eq("student_id", user.id)
+              .eq("student_id", activeLearner?.id || user.id)
               .eq("completed", true);
 
             const completedLessonRows = (completedLessons || []) as Array<{
@@ -248,7 +250,7 @@ export default function ProgressPage() {
       const { data: recentProgress } = await supabase
         .from("lesson_progress")
         .select("updated_at")
-        .eq("student_id", user.id)
+        .eq("student_id", activeLearner?.id || user.id)
         .gte("updated_at", weekAgo.toISOString());
 
       if (recentProgress) {
@@ -265,7 +267,7 @@ export default function ProgressPage() {
       setLoading(false);
     }
     loadData();
-  }, [router, supabase]);
+  }, [router, supabase, activeLearner?.id]);
 
   // Calculate unlocked achievements
   const unlockedAchievements = useMemo(() => {

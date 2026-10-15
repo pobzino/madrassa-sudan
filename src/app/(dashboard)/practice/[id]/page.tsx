@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useLearnerContext } from "@/contexts/LearnerContext";
 import { createClient } from "@/lib/supabase/client";
 import PracticePlayer, {
   type PracticeAnswer,
@@ -70,6 +71,7 @@ export default function PracticePage() {
   const searchParams = useSearchParams();
   const replayRequested = searchParams.get("replay") === "1";
   const { language, isRtl } = useLanguage();
+  const { fetchWithLearner } = useLearnerContext();
   const t = STR[language];
 
   const supabase = useMemo(() => createClient(), []);
@@ -94,7 +96,7 @@ export default function PracticePage() {
     setNextLessonId(null);
     nextLessonPromiseRef.current = null;
     try {
-      const res = await fetch(`/api/homework/${assignmentId}`);
+      const res = await fetchWithLearner(`/api/homework/${assignmentId}`);
       if (res.status === 404 || res.status === 403) {
         setStatus("not_found");
         return;
@@ -256,7 +258,7 @@ export default function PracticePage() {
             alreadyPassed = !replayRequested;
             setIsReplayMode(replayRequested);
           } else {
-            const retryResponse = await fetch(`/api/homework/${assignmentId}/retake`, { method: "POST" });
+            const retryResponse = await fetchWithLearner(`/api/homework/${assignmentId}/retake`, { method: "POST" });
             if (retryResponse.ok) {
               trackAnalyticsEvent("practice_retry", {
                 assignment_id: assignmentId,
@@ -289,7 +291,7 @@ export default function PracticePage() {
       console.error("Failed to load practice:", err);
       setStatus("error");
     }
-  }, [assignmentId, language, replayRequested, router, supabase]);
+  }, [assignmentId, fetchWithLearner, language, replayRequested, router, supabase]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void load(), 0);
@@ -336,7 +338,7 @@ export default function PracticePage() {
       }
 
       try {
-        const res = await fetch(`/api/homework/${assignmentId}/submit`, {
+            const res = await fetchWithLearner(`/api/homework/${assignmentId}/submit`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -403,13 +405,13 @@ export default function PracticePage() {
         return false;
       }
     },
-    [assignmentId, isReplayMode, practice, round, submissionValueByQuestion]
+    [assignmentId, fetchWithLearner, isReplayMode, practice, round, submissionValueByQuestion]
   );
 
   const requestQuestionAudio = useCallback(
     async (questionId: string) => {
       try {
-        const response = await fetch(`/api/practice/questions/${questionId}/audio`, {
+      const response = await fetchWithLearner(`/api/practice/questions/${questionId}/audio`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ language }),
@@ -421,7 +423,7 @@ export default function PracticePage() {
         return null;
       }
     },
-    [language]
+    [fetchWithLearner, language]
   );
 
   const handleRetry = useCallback(() => {
@@ -437,10 +439,10 @@ export default function PracticePage() {
       setRound((r) => r + 1);
       return;
     }
-    void fetch(`/api/homework/${assignmentId}/retake`, { method: "POST" }).finally(() =>
+    void fetchWithLearner(`/api/homework/${assignmentId}/retake`, { method: "POST" }).finally(() =>
       setRound((r) => r + 1)
     );
-  }, [assignmentId, isReplayMode, practice, round]);
+  }, [assignmentId, fetchWithLearner, isReplayMode, practice, round]);
 
   const returnToLessons = useCallback(() => {
     router.push("/lessons");

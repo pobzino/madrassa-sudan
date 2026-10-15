@@ -4,6 +4,7 @@ import { useCallback, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { useInstallPlatform } from "@/components/pwa/AddToPhone";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useLearnerContext } from "@/contexts/LearnerContext";
 import { useOffline } from "@/contexts/OfflineContext";
 import {
   AUDIO_FORMAT_WARNING,
@@ -167,6 +168,7 @@ export default function DownloadButton({
   hideWhenSaved = false,
 }: DownloadButtonProps) {
   const { language } = useLanguage();
+  const { activeLearner } = useLearnerContext();
   const t = COPY[language];
   const {
     ready,
@@ -208,7 +210,7 @@ export default function DownloadButton({
 
       // A locked or closed app stops the save, and it starts over from zero.
       toast(KEEP_OPEN_WHILE_SAVING[language], { duration: 8000 });
-      const result = await downloadLesson(lessonId);
+      const result = await downloadLesson(lessonId, { learnerId: activeLearner?.id });
       if (result.status === "saved") setResaved(true);
       if (result.status === "failed") {
         toast.error(downloadErrorMessage(result.code, language));
@@ -224,7 +226,7 @@ export default function DownloadButton({
         showIosSaveNoteOnce(iosContext === "safari" ? t.firstSaveSafari : t.firstSaveBrowser);
       }
     },
-    [cancelDownload, downloadLesson, iosContext, isDownloading, isOnline, language, lessonId, t]
+    [activeLearner?.id, cancelDownload, downloadLesson, iosContext, isDownloading, isOnline, language, lessonId, t]
   );
 
   // Saved and current: a status, not a button.

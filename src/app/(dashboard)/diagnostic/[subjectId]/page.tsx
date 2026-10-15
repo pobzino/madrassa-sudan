@@ -9,6 +9,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { QuestionDisplay } from '@/components/diagnostic/QuestionDisplay';
 import { createClient } from '@/lib/supabase/client';
+import { useLearnerContext } from '@/contexts/LearnerContext';
 
 // Icons
 const ChevronLeftIcon = () => (
@@ -44,6 +45,7 @@ export default function DiagnosticAssessmentPage() {
   const subjectId = params.subjectId as string;
   const isRetake = searchParams.get('retake') === 'true';
   const supabase = createClient();
+  const { fetchWithLearner } = useLearnerContext();
 
   const [loading, setLoading] = useState(true);
   const [question, setQuestion] = useState<Question | null>(null);
@@ -55,7 +57,7 @@ export default function DiagnosticAssessmentPage() {
 
   const startAssessment = useCallback(async () => {
     try {
-      const response = await fetch('/api/diagnostic/start', {
+      const response = await fetchWithLearner('/api/diagnostic/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -78,7 +80,7 @@ export default function DiagnosticAssessmentPage() {
     } finally {
       setLoading(false);
     }
-  }, [isRetake, subjectId]);
+  }, [fetchWithLearner, isRetake, subjectId]);
 
   useEffect(() => {
     async function loadSubjectName() {
@@ -99,7 +101,7 @@ export default function DiagnosticAssessmentPage() {
     if (!attemptId || !question) return;
 
     try {
-      const response = await fetch('/api/diagnostic/submit', {
+      const response = await fetchWithLearner('/api/diagnostic/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -137,7 +139,7 @@ export default function DiagnosticAssessmentPage() {
     if (!attemptId) return;
 
     try {
-      const response = await fetch('/api/diagnostic/complete', {
+      const response = await fetchWithLearner('/api/diagnostic/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attemptId }),

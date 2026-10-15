@@ -5,9 +5,10 @@
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DiagnosticCard } from '@/components/diagnostic/DiagnosticCard';
+import { useLearnerContext } from '@/contexts/LearnerContext';
 
 // Icons
 const ClipboardListIcon = () => (
@@ -51,14 +52,11 @@ export default function DiagnosticPage() {
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [incompleteAttempts, setIncompleteAttempts] = useState<IncompleteAttempt[]>([]);
   const [loading, setLoading] = useState(true);
+  const { fetchWithLearner } = useLearnerContext();
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const response = await fetch('/api/diagnostic/results');
+      const response = await fetchWithLearner('/api/diagnostic/results');
       if (response.ok) {
         const data = await response.json();
         setPlacements(data.placements || []);
@@ -70,7 +68,11 @@ export default function DiagnosticPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchWithLearner]);
+
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
 
   const handleStart = (subjectId: string) => {
     router.push(`/diagnostic/${subjectId}`);
