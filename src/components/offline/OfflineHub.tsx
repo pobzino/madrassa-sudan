@@ -22,11 +22,12 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { LOG_OUT_BUSY_LABELS, logOutWithUnsentCheck, type LogOutPhase } from "@/lib/auth/logout";
 import { offlinePlayerUrl } from "@/lib/offline/cache-names";
 import { getAllOfflineLessons, hasCachedSimAudio, onPrivateDataCleared, type OfflineLesson } from "@/lib/offline/db";
-import { deleteDownloadedLesson, getStorageEstimate } from "@/lib/offline/download-manager";
+import { deleteDownloadedLesson } from "@/lib/offline/download-manager";
 import { getOwner, ownsRecord, type OfflineOwner } from "@/lib/offline/identity";
+import { IOS_STORAGE_COPY, iosStorageContext, iosTabNote, type IosStorageContext } from "@/lib/offline/support";
 import { countUnsyncedItems, getEffectiveLessonProgress, type ProgressValues } from "@/lib/offline/sync";
 import { warmOfflinePlayerChunks } from "@/lib/offline/warm";
-import { currentInstallPlatform, subscribeToInstallPlatform } from "@/lib/pwa-install";
+import { currentInstallPlatform, isIosDevice, subscribeToInstallPlatform } from "@/lib/pwa-install";
 import { LanguageToggle } from "./LanguageToggle";
 import { OFFLINE_SYNCED_EVENT } from "./OfflineSyncRunner";
 import { useOnlineStatus } from "./useOnlineStatus";
@@ -46,9 +47,7 @@ const COPY = {
     savedFor: (name: string) => `Saved for ${name}`,
     lessonCount: (count: number) => (count === 1 ? "1 lesson" : `${count} lessons`),
     used: (size: string) => `${size} used`,
-    free: (size: string) => `${size} free on this phone`,
     waitingToSend: (count: number) => `Progress waiting to be sent (${count})`,
-    online: "Online",
     offline: "No internet",
     ready: "Ready",
     needsRedownload: "Needs re-download",
@@ -65,7 +64,6 @@ const COPY = {
     removeFailed: "Couldn't remove the lesson. Try again.",
     emptyTitle: "No saved lessons yet",
     emptyBody: "Save lessons while online to watch them here without internet.",
-    iosNote: "On iPhone, save lessons inside the installed Amal app — Safari can clear them.",
     hiddenNote: "Some lessons saved earlier will show here after you open Amal once while online.",
     loadFailed: "Saved lessons couldn't be opened on this phone.",
     tryLoadAgain: "Try again",
@@ -82,9 +80,7 @@ const COPY = {
       count === 1 ? "درس واحد" : count === 2 ? "درسان" : count >= 3 && count <= 10 ? `${count} دروس` : `${count} درسًا`,
     // Sizes ("188 KB") are isolated left-to-right, or the bidi algorithm shows "KB 188".
     used: (size: string) => `\u2066${size}\u2069 مستخدمة`,
-    free: (size: string) => `\u2066${size}\u2069 متاحة على هذا الهاتف`,
     waitingToSend: (count: number) => `تقدّم بانتظار الإرسال (${count})`,
-    online: "متصل",
     offline: "بدون إنترنت",
     ready: "جاهز",
     needsRedownload: "يحتاج إلى إعادة التنزيل",
@@ -101,7 +97,6 @@ const COPY = {
     removeFailed: "تعذّر حذف الدرس. حاول مرة أخرى.",
     emptyTitle: "لا توجد دروس محفوظة بعد",
     emptyBody: "احفظ الدروس وأنت متصل بالإنترنت لتشاهدها هنا بدون إنترنت.",
-    iosNote: "على iPhone، احفظ الدروس داخل تطبيق آمال المثبّت، فقد يحذفها Safari.",
     hiddenNote: "ستظهر هنا بعض الدروس المحفوظة سابقًا بعد أن تفتح آمال مرة واحدة وأنت متصل بالإنترنت.",
     loadFailed: "تعذّر فتح الدروس المحفوظة على هذا الهاتف.",
     tryLoadAgain: "حاول مرة أخرى",
@@ -145,22 +140,24 @@ async function readSavedLessons(): Promise<HubState> {
   return { status: "ready", owner, lessons, hiddenCount: all.length - owned.length };
 }
 
-const IOS_TAB_PLATFORMS = new Set(["ios-safari", "ios-browser", "ios-in-app"]);
 const noPlatform = () => null;
 
-/** True in an iPhone/iPad browser tab, where storage can be cleared and isn't shared with the installed app. */
-function useIsIosBrowserTab(): boolean {
+/**
+ * Which iPhone storage this page uses (each browser and the home-screen app
+ * keep their own, and a browser tab's can be cleared), or null elsewhere.
+ */
+function useIosStorageContext(): IosStorageContext | null {
   const platform = useSyncExternalStore(subscribeToInstallPlatform, currentInstallPlatform, noPlatform);
-  return platform !== null && IOS_TAB_PLATFORMS.has(platform);
+  return iosStorageContext(platform, platform !== null && isIosDevice());
 }
 
 export default function OfflineHub() {
   const { language, isRtl } = useLanguage();
   const t = COPY[language];
   const isOnline = useOnlineStatus();
-  const iosBrowserTab = useIsIosBrowserTab();
+  const iosContext = useIosStorageContext();
+  const iosNote = iosTabNote(iosContext, language);
   const [state, setState] = useState<HubState>({ status: "loading" });
-  const [storage, setStorage] = useState<{ used: number; quota: number } | null>(null);
   const [unsynced, setUnsynced] = useState(0);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [logOutPhase, setLogOutPhase] = useState<LogOutPhase | null>(null);
@@ -176,9 +173,8 @@ export default function OfflineHub() {
       if (generation !== clearGenerationRef.current) return;
       setState(next);
       const ownerId = next.status === "ready" ? next.owner?.userId : undefined;
-      const [estimate, waiting] = await Promise.all([getStorageEstimate(), countUnsyncedItems(ownerId)]);
+      const waiting = await countUnsyncedItems(ownerId);
       if (generation !== clearGenerationRef.current) return;
-      setStorage(estimate);
       setUnsynced(waiting);
     } catch {
       if (generation === clearGenerationRef.current) setState({ status: "error" });
@@ -256,7 +252,6 @@ export default function OfflineHub() {
   const owner = state.status === "ready" ? state.owner : null;
   const lessons = state.status === "ready" ? state.lessons : [];
   const savedBytes = lessons.reduce((total, item) => total + savedLessonBytes(item.lesson), 0);
-  const freeBytes = storage && storage.quota > 0 ? Math.max(0, storage.quota - storage.used) : 0;
 
   return (
     <main dir={isRtl ? "rtl" : "ltr"} className="min-h-svh" style={{ background: BRAND_BACKGROUND }}>
@@ -279,22 +274,21 @@ export default function OfflineHub() {
         </section>
 
         <div className="mt-4 flex flex-wrap gap-2 text-sm font-semibold">
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 ${
-              isOnline ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
-            }`}
-          >
-            <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-emerald-500" : "bg-amber-500"}`} aria-hidden="true" />
-            {isOnline ? t.online : t.offline}
-          </span>
+          {/* Only a sure "no internet": navigator.onLine stays true on Wi-Fi
+              without internet, so it can't promise a working connection. */}
+          {!isOnline && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-amber-800">
+              <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
+              {t.offline}
+            </span>
+          )}
+          {/* Lessons and the space they use. No "free" figure: browsers only
+              report their allowance for the site, never what's left on the phone. */}
           {lessons.length > 0 && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-gray-700">
               <Smartphone className="h-4 w-4 text-[#007229]" aria-hidden="true" />
               {t.lessonCount(lessons.length)} · {t.used(formatBytes(savedBytes))}
             </span>
-          )}
-          {lessons.length > 0 && freeBytes > 0 && (
-            <span className="rounded-full bg-white/60 px-3 py-1 text-gray-600">{t.free(formatBytes(freeBytes))}</span>
           )}
           {unsynced > 0 && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-amber-800">
@@ -303,6 +297,14 @@ export default function OfflineHub() {
             </span>
           )}
         </div>
+
+        {/* Above the list, where it's seen with lessons saved too. */}
+        {iosNote && (
+          <p className="mt-4 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            {iosNote}
+          </p>
+        )}
 
         <div className="mt-6">
           {state.status === "loading" ? (
@@ -330,6 +332,10 @@ export default function OfflineHub() {
             <div className="rounded-[28px] bg-[#f5faf5]/90 p-6 text-center shadow-xl ring-1 ring-white">
               <h2 className="font-fredoka text-2xl font-bold text-gray-900">{t.emptyTitle}</h2>
               <p className="mx-auto mt-2 max-w-sm text-base text-gray-600">{t.emptyBody}</p>
+              {/* The home-screen app can't see lessons saved in Safari. */}
+              {iosContext === "installed" && (
+                <p className="mx-auto mt-3 max-w-sm text-sm font-medium text-amber-900">{IOS_STORAGE_COPY[language].appEmpty}</p>
+              )}
             </div>
           ) : (
             <ul className="space-y-3">
@@ -348,13 +354,6 @@ export default function OfflineHub() {
 
         {state.status === "ready" && state.hiddenCount > 0 && (
           <p className="mt-4 rounded-2xl bg-white/70 px-4 py-3 text-sm text-gray-600">{t.hiddenNote}</p>
-        )}
-
-        {iosBrowserTab && (
-          <p className="mt-4 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
-            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            {t.iosNote}
-          </p>
         )}
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">

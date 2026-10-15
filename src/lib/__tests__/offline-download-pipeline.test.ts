@@ -76,6 +76,11 @@ vi.mock("@/lib/offline/sync", () => ({
 }));
 
 vi.mock("@/lib/offline/warm", () => ({ warmOfflinePlayerChunks: async () => undefined }));
+// This test browser has no service worker; a real phone that can save does.
+vi.mock("@/lib/offline/support", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/offline/support")>()),
+  canSaveOfflineHere: () => true,
+}));
 
 vi.mock("@/lib/offline/slide-responses", () => ({ serverResponsesToLocal: () => ({}) }));
 

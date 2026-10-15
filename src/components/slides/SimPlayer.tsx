@@ -56,6 +56,42 @@ import { RotateCcw, RotateCw } from 'lucide-react';
 const LASER_FADE_MS = 300;
 const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2] as const;
 
+const BUFFERING_TIMEOUT_MS = 20_000;
+// A copy on the phone loads at once: stalling this long means its blob: URL
+// died (see refreshAudioUrl), so it's read again before giving up.
+const DEVICE_AUDIO_STALL_MS = 5_000;
+// At most one automatic re-read per this long, so audio that keeps stalling
+// ends in the "taking too long" message instead of re-reading forever.
+const DEVICE_AUDIO_RELOAD_INTERVAL_MS = 30_000;
+// Reading the saved copy again can hang after that crash; give up after this.
+const DEVICE_AUDIO_READ_TIMEOUT_MS = 8_000;
+
+/** `promise`'s value, or undefined if it fails or takes longer than `ms`. */
+function settleWithin<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(undefined), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(undefined);
+      }
+    );
+  });
+}
+
+const MEDIA_SESSION_ACTIONS: MediaSessionAction[] = ['play', 'pause', 'seekbackward', 'seekforward', 'seekto'];
+// navigator.mediaSession is one per page: the player that last started
+// playing owns it, and only the owner clears it.
+let mediaSessionOwner: object | null = null;
+
+function hasMediaSession() {
+  return typeof navigator !== 'undefined' && 'mediaSession' in navigator;
+}
+
 function subscribeToNetworkStatus(onStoreChange: () => void) {
   window.addEventListener('online', onStoreChange);
   window.addEventListener('offline', onStoreChange);
@@ -135,11 +171,26 @@ interface SimPlayerProps {
    */
   playingFromDevice?: boolean;
   /**
+   * With `playingFromDevice`: makes a fresh blob: URL from the saved copy, or
+   * null when it's gone. iOS can kill the URL in use (when it restarts its
+   * networking process) while the saved copy is fine. SimPlayer revokes the
+   * URLs it gets from here.
+   */
+  reloadDeviceAudio?: () => Promise<string | null>;
+  /**
+   * With `playingFromDevice`: opens the lesson afresh (a full page load),
+   * offered next to "Retry audio". A reload also recovers what an in-place
+   * retry can't, such as a page that stopped updating after that same crash.
+   */
+  reopenHref?: string;
+  /**
    * Scopes the saved resume position to `sim-resume:<resumeKey>` (e.g.
    * `${userId}:${lessonId}`, so accounts on a shared phone don't share it).
    * Without it the key is `sim-resume:<lessonId>`.
    */
   resumeKey?: string;
+  /** The lesson's title, for the lock screen and the phone's media controls. */
+  mediaTitle?: string;
 }
 
 /**
@@ -430,7 +481,10 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     onActivitySubmit,
     onSlideResponse,
     playingFromDevice = false,
+    reloadDeviceAudio,
+    reopenHref,
     resumeKey,
+    mediaTitle,
   },
   ref
 ) {
@@ -523,11 +577,32 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const triggeredExplorationSlidesRef = useRef<Set<string>>(new Set());
   // Whether an auto-pause exploration slide overlay is active.
   const [activeExplorationSlide, setActiveExplorationSlide] = useState<string | null>(null);
+  // For the media event handlers, which run outside React's render.
+  const activeExplorationRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeExplorationRef.current = activeExplorationSlide;
+  }, [activeExplorationSlide]);
+  const playbackMsRef = useRef(0);
+  useEffect(() => {
+    playbackMsRef.current = playbackMs;
+  }, [playbackMs]);
+  // True while handlePlay's own play() is starting. Any other `play` event
+  // came from outside the page: the lock screen, Control Center, headphones,
+  // the Android media notification, or the browser resuming after a call.
+  const appPlayRef = useRef(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const pendingSeekRef = useRef<number | null>(null);
   const [audioSrc, setAudioSrc] = useState(audio_url);
   const audioRefreshAttemptRef = useRef(0);
+  // Saved-copy re-reads (see refreshAudioUrl): the URLs made for them (ours
+  // to revoke), when the last automatic one ran, whether the copy was gone,
+  // and whether to carry on playing once the fresh copy has loaded.
+  const ownedAudioUrlsRef = useRef<Set<string>>(new Set());
+  const lastDeviceReloadRef = useRef(0);
+  const deviceAudioMissingRef = useRef(false);
+  const resumeAfterReloadRef = useRef(false);
+  const reopenTimerRef = useRef(0);
   const rafRef = useRef<number>(0);
   const tickRef = useRef<() => void>(() => undefined);
   // Timer-driven playback for audio-less sims
@@ -588,6 +663,14 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     setAudioSrc(audio_url);
   }, [audio_url]);
 
+  // A re-read copy's URL is revoked once the player moves off it, or unmounts.
+  useEffect(() => {
+    const owned = ownedAudioUrlsRef.current;
+    return () => {
+      if (audioSrc && owned.delete(audioSrc)) URL.revokeObjectURL(audioSrc);
+    };
+  }, [audioSrc]);
+
   useEffect(() => {
     if (!audioSrc) return;
     // Readiness belongs to the current external audio resource.
@@ -617,9 +700,29 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   // Proactively refresh the signed audio URL before it expires (every 5h).
   // Also retries on audio error to handle already-expired URLs.
   const refreshAudioUrl = useCallback(async (): Promise<boolean> => {
-    // A saved copy has no signed URL to refresh, and offline the request
-    // would only fail (or swap the phone's copy for a stream).
-    if (!lessonId || playingFromDevice) return false;
+    if (playingFromDevice) {
+      // A saved copy has no signed URL to refresh. But on iPhone its blob:
+      // URL can die (WebKit restarted its networking process) while the
+      // copy itself is fine, so read it again.
+      const fresh = reloadDeviceAudio
+        ? await settleWithin(reloadDeviceAudio(), DEVICE_AUDIO_READ_TIMEOUT_MS)
+        : undefined;
+      if (fresh) {
+        deviceAudioMissingRef.current = false;
+        ownedAudioUrlsRef.current.add(fresh);
+        // A failed load resets currentTime to 0: resume from the player's clock.
+        pendingSeekRef.current = virtualToRealMs(playbackMsRef.current, effectiveClips) / 1000;
+        setAudioSrc(fresh);
+        setReady(false);
+        return true;
+      }
+      // null: the copy is gone (a failed or hung read says nothing either way).
+      deviceAudioMissingRef.current = fresh === null;
+      // Offline the request would only fail. Online (the lesson page) the
+      // copy is gone or unreadable, so stream it instead.
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
+    }
+    if (!lessonId) return false;
     const endpoints = [`/api/lessons/${lessonId}/sim`];
     if (sim.id) {
       endpoints.push(`/api/teacher/lessons/${lessonId}/sims/${sim.id}`);
@@ -636,7 +739,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         if (!freshUrl) continue;
 
         const audio = audioRef.current;
-        const currentTime = audio?.currentTime ?? 0;
+        const currentTime = playingFromDevice
+          ? virtualToRealMs(playbackMsRef.current, effectiveClips) / 1000
+          : audio?.currentTime ?? 0;
         pendingSeekRef.current = currentTime;
         setAudioSrc(freshUrl);
         setReady(false);
@@ -646,7 +751,28 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       }
     }
     return false;
-  }, [lessonId, playingFromDevice, sim.id]);
+  }, [effectiveClips, lessonId, playingFromDevice, reloadDeviceAudio, sim.id]);
+
+  // After a re-read the fresh copy is on the <audio> within moments. If it
+  // isn't, the page has stopped updating: seen in WebKit after its networking
+  // process restarts, when React's scheduled renders never run again. Only a
+  // page load recovers that, so open the lesson afresh.
+  const reopenIfStuck = useCallback(() => {
+    if (!reopenHref) return;
+    window.clearTimeout(reopenTimerRef.current);
+    reopenTimerRef.current = window.setTimeout(() => {
+      const audio = audioRef.current;
+      if (!audio?.src || ownedAudioUrlsRef.current.has(audio.src)) return;
+      // Resume where the audio got to: the audio may have played on while
+      // the screen stood still.
+      const reachedMs = Math.max(playbackMsRef.current, realToVirtualMs(audio.currentTime * 1000, effectiveClips));
+      try {
+        if (resumeStorageKey) localStorage.setItem(resumeStorageKey, String(reachedMs));
+      } catch { /* the lesson starts where it last saved */ }
+      window.location.assign(reopenHref);
+    }, 3_000);
+  }, [effectiveClips, reopenHref, resumeStorageKey]);
+  useEffect(() => () => window.clearTimeout(reopenTimerRef.current), []);
 
   const handleAudioError = useCallback(
     async (event: SyntheticEvent<HTMLAudioElement, Event>) => {
@@ -665,20 +791,28 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       if (audioRefreshAttemptRef.current < 2) {
         audioRefreshAttemptRef.current += 1;
         const refreshed = await refreshAudioUrl();
-        if (refreshed) return;
+        if (refreshed) {
+          if (playingFromDevice) reopenIfStuck();
+          return;
+        }
       }
 
+      // Only advise saving again when the saved copy really is gone.
       setError(
         playingFromDevice
-          ? language === 'ar'
-            ? 'تعذر تشغيل الصوت المحفوظ على هذا الهاتف. اتصل بالإنترنت واحفظ الدرس مرة أخرى.'
-            : "The audio saved on this phone couldn't play. Connect to the internet and save the lesson again."
+          ? deviceAudioMissingRef.current
+            ? language === 'ar'
+              ? 'الصوت المحفوظ على هذا الهاتف غير موجود. اتصل بالإنترنت واحفظ الدرس مرة أخرى.'
+              : "The audio saved on this phone is missing. Connect to the internet and save the lesson again."
+            : language === 'ar'
+              ? 'تعذر تشغيل الصوت المحفوظ على هذا الهاتف. اضغط «إعادة المحاولة».'
+              : "The audio saved on this phone couldn't play. Tap Retry audio to try again."
           : language === 'ar'
             ? 'تعذر تشغيل الصوت. تحقق من اتصالك وحاول مرة أخرى.'
             : 'Audio could not play. Check your connection and try again.'
       );
     },
-    [language, onPlayStateChange, playingFromDevice, refreshAudioUrl]
+    [language, onPlayStateChange, playingFromDevice, refreshAudioUrl, reopenIfStuck]
   );
 
   useEffect(() => {
@@ -727,17 +861,24 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     [deck, projectedEvents, effectiveClips, eventsAtMs, onRealTimeChange, virtualTotalMs, onProgress]
   );
 
-  // ── Resume position effects (must be after applyAt) ───────────────────
-  // Restoring the saved position is further down, after resetGatesForTime.
-
-  // Periodically save the playback position (every 5 seconds)
+  // ── Resume position (restored further down, after the re-project effect) ──
+  // Periodically save the playback position (every 5 seconds). Read through
+  // a ref: with playbackMs as a dependency the interval restarted on every
+  // frame and never fired while the page was on screen.
+  const resumeWrittenRef = useRef(false);
   useEffect(() => {
     if (!resumeStorageKey || !isPlaying) return;
     const timer = setInterval(() => {
-      try { localStorage.setItem(resumeStorageKey, String(playbackMs)); } catch { /* quota */ }
+      try {
+        // Gone after this player wrote it: logout cleared it, and the page
+        // is on its way out. Don't put it back.
+        if (resumeWrittenRef.current && localStorage.getItem(resumeStorageKey) === null) return;
+        localStorage.setItem(resumeStorageKey, String(playbackMsRef.current));
+        resumeWrittenRef.current = true;
+      } catch { /* quota */ }
     }, 5000);
     return () => clearInterval(timer);
-  }, [resumeStorageKey, isPlaying, playbackMs]);
+  }, [resumeStorageKey, isPlaying]);
 
   // Rebuild the triggered-gates set so every gate strictly before `realMs`
   // is marked triggered. Called on seeks and whenever the gate list changes
@@ -880,7 +1021,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   useEffect(() => {
     const audio = audioRef.current;
     if (audio && !audio.paused) return;
-    const realMs = audio ? audio.currentTime * 1000 : 0;
+    // A sim without audio keeps its position in the timer offset.
+    const realMs = audio ? audio.currentTime * 1000 : timerOffsetRef.current;
     appliedEventCountRef.current = eventsAtMs(realMs);
     // Re-project the event-sourced surface when the external deck changes.
 
@@ -889,6 +1031,32 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     lastEmitWallMsRef.current = 0;
     resetGatesForTime(realMs);
   }, [deck, projectedEvents, effectiveClips, eventsAtMs, resetGatesForTime]);
+
+  // Restore the saved position once the audio is ready. After the effect
+  // above, which on mount puts everything at the start.
+  useEffect(() => {
+    if (!resumeStorageKey || resumeAppliedRef.current || !ready) return;
+    resumeAppliedRef.current = true;
+    try {
+      const saved = localStorage.getItem(resumeStorageKey);
+      if (!saved) return;
+      const savedMs = Number(saved);
+      if (!savedMs || savedMs <= 0 || savedMs >= virtualTotalMs - 1000) return;
+      const realMs = virtualToRealMs(savedMs, effectiveClips);
+      const audio = audioRef.current;
+      if (audio) audio.currentTime = realMs / 1000;
+      else {
+        timerOffsetRef.current = realMs;
+        timerStartRef.current = performance.now();
+      }
+      // Restore the externally persisted media position after metadata loads.
+
+      applyAt(realMs, true);
+      // Like a seek: activities before the saved position were done then
+      // (otherwise Play jumps back to the first one); one exactly at it fires.
+      resetGatesForTime(realMs);
+    } catch { /* ignore */ }
+  }, [resumeStorageKey, ready, virtualTotalMs, effectiveClips, applyAt, resetGatesForTime]);
 
   // Get current real-time ms from audio element or timer fallback.
   const getCurrentRealMs = useCallback((): number => {
@@ -912,6 +1080,40 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       rafRef.current = 0;
     }
   }, [getCurrentRealMs, onPlayStateChange]);
+
+  // tick's stop at an activity, for audio events while tick isn't running:
+  // animation frames stop with the screen locked, but the audio plays on.
+  // Returns whether it stopped.
+  const stopAtDueActivity = useCallback(
+    (realMs: number, { explorations }: { explorations: boolean }): boolean => {
+      const due = findDueGate(realMs);
+      const dueExplSlide = due || !explorations ? null : findDueExplorationSlide(realMs);
+      if (!due && !dueExplSlide) return false;
+      const audio = audioRef.current;
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
+      if (due) {
+        triggeredGatesRef.current.add(due.idx);
+        if (audio) {
+          audio.pause();
+          audio.currentTime = due.gate.t / 1000;
+        }
+        applyAt(due.gate.t, true);
+        setActiveGateState(due.idx, due.gate);
+      } else if (dueExplSlide) {
+        triggeredExplorationSlidesRef.current.add(dueExplSlide);
+        audio?.pause();
+        applyAt(realMs, true);
+        setActiveExplorationSlide(dueExplSlide);
+      }
+      setIsPlaying(false);
+      onPlayStateChange?.(false);
+      return true;
+    },
+    [applyAt, findDueExplorationSlide, findDueGate, onPlayStateChange, setActiveGateState]
+  );
 
   // rAF loop: sample currentTime (audio or timer), skip cuts,
   // rebuild surface, schedule next frame.
@@ -1030,8 +1232,11 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     setBuffering(true);
     // Call play in the tap handler even when mobile Safari has deferred preload.
     if (audio.error) audio.load();
+    // The `play` event this fires (before the promise settles) is ours.
+    appPlayRef.current = true;
     audio.play().then(
       () => {
+        appPlayRef.current = false;
         setBuffering(false);
         setIsPlaying(true);
         clearActiveGateState();
@@ -1040,6 +1245,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         if (!rafRef.current) rafRef.current = requestAnimationFrame(tick);
       },
       (err: unknown) => {
+        appPlayRef.current = false;
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setBuffering(false);
         setIsPlaying(false);
@@ -1065,12 +1271,34 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
   useEffect(() => {
     if (!buffering) return;
-    const timeout = window.setTimeout(() => {
+    const giveUp = () => {
       handlePause();
       setError(language === 'ar' ? 'يستغرق تحميل الصوت وقتاً طويلاً. حاول مرة أخرى.' : 'Audio is taking too long to load. Please try again.');
-    }, 20_000);
-    return () => window.clearTimeout(timeout);
-  }, [buffering, handlePause, language]);
+    };
+    // A dead blob: URL never reports an error while playing, it only waits.
+    const reloadFirst =
+      playingFromDevice && Date.now() - lastDeviceReloadRef.current > DEVICE_AUDIO_RELOAD_INTERVAL_MS;
+    let cancelled = false;
+    let timeout = window.setTimeout(async () => {
+      if (reloadFirst) {
+        lastDeviceReloadRef.current = Date.now();
+        resumeAfterReloadRef.current = true;
+        if (await refreshAudioUrl()) {
+          reopenIfStuck();
+          // Carries on once the fresh copy has loaded, unless that stalls too.
+          if (!cancelled) timeout = window.setTimeout(giveUp, BUFFERING_TIMEOUT_MS);
+          return;
+        }
+        resumeAfterReloadRef.current = false;
+        if (cancelled) return;
+      }
+      giveUp();
+    }, reloadFirst ? DEVICE_AUDIO_STALL_MS : BUFFERING_TIMEOUT_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [buffering, handlePause, language, playingFromDevice, refreshAudioUrl, reopenIfStuck]);
 
   // Scrubber hands us virtual ms; translate to real audio ms before seeking.
   const handleSeek = useCallback(
@@ -1142,6 +1370,132 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     }),
     [handlePlay, handlePause, seekRealSec]
   );
+
+  // After a saved-copy re-read that interrupted playback (see
+  // refreshAudioUrl), carry on from the same place once it has loaded.
+  useEffect(() => {
+    if (!ready || !resumeAfterReloadRef.current) return;
+    resumeAfterReloadRef.current = false;
+    const audio = audioRef.current;
+    if (audio && pendingSeekRef.current !== null) {
+      audio.currentTime = pendingSeekRef.current;
+      pendingSeekRef.current = null;
+    }
+    handlePlay();
+  }, [ready, handlePlay]);
+
+  const retryAudio = useCallback(async () => {
+    // A saved copy: read it again (its blob: URL may have died) instead of
+    // reloading the same URL.
+    if (playingFromDevice) {
+      audioRefreshAttemptRef.current = 0;
+      setError(null);
+      resumeAfterReloadRef.current = true;
+      if (await refreshAudioUrl()) {
+        reopenIfStuck();
+        return;
+      }
+      resumeAfterReloadRef.current = false;
+    }
+    pendingSeekRef.current ??= audioRef.current?.currentTime ?? 0;
+    audioRef.current?.load();
+    handlePlay();
+  }, [handlePlay, playingFromDevice, refreshAudioUrl, reopenIfStuck]);
+
+  // ── Lock screen and media controls ────────────────────────────────────
+  // The lock screen, Control Center, headphones and the Android media
+  // notification act through these. Without them they play the <audio>
+  // directly, behind the player's back: slides freeze, activities pass.
+  const [mediaSessionToken] = useState(() => ({}));
+  const mediaActionsRef = useRef<{
+    play: () => void;
+    pause: () => void;
+    skip: (seconds: number) => void;
+    seekToRealSec: (realSec: number) => void;
+  } | null>(null);
+  useEffect(() => {
+    mediaActionsRef.current = {
+      play: handlePlay,
+      pause: handlePause,
+      skip: skipBy,
+      // The lock screen's scrubber is on the audio's own (real) timeline.
+      seekToRealSec: (realSec) => handleSeek(realToVirtualMs(realSec * 1000, effectiveClips)),
+    };
+  });
+
+  const syncMediaPosition = useCallback(() => {
+    if (!hasMediaSession() || mediaSessionOwner !== mediaSessionToken) return;
+    const audio = audioRef.current;
+    const { mediaSession } = navigator;
+    if (!audio || typeof mediaSession.setPositionState !== 'function') return;
+    const duration = audio.duration;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    try {
+      mediaSession.setPositionState({
+        duration,
+        position: Math.min(Math.max(audio.currentTime, 0), duration),
+        playbackRate: audio.playbackRate > 0 ? audio.playbackRate : 1,
+      });
+    } catch {
+      // Out-of-range values throw; the lock screen just shows no position.
+    }
+  }, [mediaSessionToken]);
+
+  useEffect(() => {
+    if (!hasMediaSession()) return;
+    const { mediaSession } = navigator;
+    if (isPlaying && mediaSessionOwner !== mediaSessionToken) {
+      mediaSessionOwner = mediaSessionToken;
+      const handlers: Partial<Record<MediaSessionAction, MediaSessionActionHandler>> = {
+        // An activity waits for the child to answer: don't play over it.
+        play: () => {
+          if (activeGateIdxRef.current === null && !activeExplorationRef.current) mediaActionsRef.current?.play();
+        },
+        pause: () => mediaActionsRef.current?.pause(),
+        seekbackward: () => mediaActionsRef.current?.skip(-10),
+        seekforward: () => mediaActionsRef.current?.skip(10),
+        seekto: (details) => {
+          if (typeof details.seekTime === 'number') mediaActionsRef.current?.seekToRealSec(details.seekTime);
+        },
+      };
+      for (const action of MEDIA_SESSION_ACTIONS) {
+        try {
+          mediaSession.setActionHandler(action, handlers[action] ?? null);
+        } catch {
+          // This browser doesn't offer that control.
+        }
+      }
+    }
+    if (mediaSessionOwner !== mediaSessionToken) return;
+    const artist = language === 'ar' ? 'مدرسة آمال' : 'Amal School';
+    if (mediaTitle && typeof MediaMetadata !== 'undefined'
+      && (mediaSession.metadata?.title !== mediaTitle || mediaSession.metadata?.artist !== artist)) {
+      // The app icon is on this site, so it shows offline too once cached.
+      mediaSession.metadata = new MediaMetadata({
+        title: mediaTitle,
+        artist,
+        artwork: [{ src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' }],
+      });
+    }
+    mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    syncMediaPosition();
+  }, [isPlaying, playbackRate, mediaTitle, language, mediaSessionToken, syncMediaPosition]);
+
+  // navigator.mediaSession outlives this player: clear what it set.
+  useEffect(() => () => {
+    if (!hasMediaSession() || mediaSessionOwner !== mediaSessionToken) return;
+    mediaSessionOwner = null;
+    const { mediaSession } = navigator;
+    for (const action of MEDIA_SESSION_ACTIONS) {
+      try {
+        mediaSession.setActionHandler(action, null);
+      } catch {
+        // Not offered here.
+      }
+    }
+    mediaSession.metadata = null;
+    mediaSession.playbackState = 'none';
+  }, [mediaSessionToken]);
 
   const currentSlide = useMemo(
     () => deck.find((s) => s.id === surface.current_slide_id) ?? deck[0] ?? null,
@@ -1480,6 +1834,17 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   const canHideControls = fullscreen && isPlaying && !buffering && !isScrubbing
     && !showChapters && !activeGate && !activeExplorationSlide && !error && !showOfflineWarning;
   const controlsVisible = !canHideControls || !controlsIdle;
+  // Fullscreen covers the whole screen (viewport-fit=cover): full-width bars
+  // keep their ends clear of a landscape notch or a corner camera. Physical
+  // sides, as the insets are. Not the root, whose white would show beside
+  // the slide's black letterbox.
+  const fullscreenBarInsets = (minPx: number): CSSProperties | undefined =>
+    fullscreen
+      ? {
+          paddingLeft: `max(${minPx}px, env(safe-area-inset-left))`,
+          paddingRight: `max(${minPx}px, env(safe-area-inset-right))`,
+        }
+      : undefined;
 
   useEffect(() => {
     if (!canHideControls) return;
@@ -1584,7 +1949,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
             : answerFeedback === 'submitted'
               ? 'bg-blue-600'
               : 'bg-[#007229]'
-      }`}>
+      }`} style={phoneActivity ? undefined : fullscreenBarInsets(16)}>
         <span className="text-sm font-semibold text-white flex items-center gap-2">
           {answerFeedback === 'correct' ? (
             <>
@@ -1763,11 +2128,51 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
           preload="metadata"
           onWaiting={() => setBuffering(true)}
           onPlaying={() => setBuffering(false)}
-          onSeeked={() => setBuffering(false)}
+          onSeeked={() => {
+            setBuffering(false);
+            syncMediaPosition();
+          }}
           onLoadedMetadata={markAudioReady}
           onLoadedData={markAudioReady}
           onCanPlay={markAudioReady}
-          onEnded={() => {
+          onPlay={(event) => {
+            // Our own play() is handled in handlePlay.
+            if (appPlayRef.current) return;
+            const audio = event.currentTarget;
+            // Started from outside the page while an activity waits for the
+            // child (lock screen, headphones, a resumed call): keep it waiting.
+            if (activeGateIdxRef.current !== null || activeExplorationRef.current) {
+              audio.pause();
+              return;
+            }
+            // Otherwise follow along: the button, the slides and the
+            // activity stops all need tick running.
+            audio.playbackRate = playbackRate;
+            setIsPlaying(true);
+            onPlayStateChange?.(true);
+            if (!rafRef.current) rafRef.current = requestAnimationFrame(() => tickRef.current());
+          }}
+          onTimeUpdate={(event) => {
+            const audio = event.currentTarget;
+            // tick does this while animation frames run. With the screen
+            // locked they stop but the audio plays on, so skip cuts, keep
+            // progress and stop at activities from here.
+            if (audio.paused || (!document.hidden && rafRef.current)) return;
+            const realMs = audio.currentTime * 1000;
+            const jumpTo = cutEndIfInside(realMs, effectiveClips);
+            if (jumpTo !== null) {
+              // Past the end of the track, onEnded takes over.
+              audio.currentTime = Math.min(jumpTo, rawTotalMs) / 1000;
+              return;
+            }
+            applyAt(realMs);
+            stopAtDueActivity(realMs, { explorations: true });
+          }}
+          onEnded={(event) => {
+            // Ran to the end with the screen locked: go back to the first
+            // activity it played past instead of finishing the lesson. (Not
+            // one at the very end: play() there would restart the track.)
+            if (stopAtDueActivity(event.currentTarget.currentTime * 1000 - 1, { explorations: false })) return;
             setIsPlaying(false);
             onPlayStateChange?.(false);
             applyAt(rawTotalMs, true);
@@ -1784,7 +2189,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       )}
 
       {isOffline && playingFromDevice && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-t border-emerald-100 text-emerald-800 text-xs font-medium">
+        <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-t border-emerald-100 text-emerald-800 text-xs font-medium" style={fullscreenBarInsets(16)}>
           <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <rect x="5" y="2" width="14" height="20" rx="2" ry="2" /><line x1="12" y1="18" x2="12.01" y2="18" />
           </svg>
@@ -1793,7 +2198,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       )}
 
       {showOfflineWarning && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-t border-amber-200 text-amber-700 text-xs font-medium">
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-t border-amber-200 text-amber-700 text-xs font-medium" style={fullscreenBarInsets(16)}>
           <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.56 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" />
           </svg>
@@ -1802,9 +2207,15 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       )}
 
       {error && (
-        <div role="alert" className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm text-red-700">
+        <div role="alert" className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm text-red-700" style={fullscreenBarInsets(16)}>
           <span>{error}</span>
-          <button type="button" onClick={() => { pendingSeekRef.current ??= audioRef.current?.currentTime ?? 0; audioRef.current?.load(); handlePlay(); }} className="min-h-11 rounded-lg border border-red-200 px-3 font-semibold hover:bg-red-50">{language === 'ar' ? 'إعادة المحاولة' : 'Retry audio'}</button>
+          <span className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => { void retryAudio(); }} className="min-h-11 rounded-lg border border-red-200 px-3 font-semibold hover:bg-red-50">{language === 'ar' ? 'إعادة المحاولة' : 'Retry audio'}</button>
+            {playingFromDevice && reopenHref && (
+              // A full page load, which works offline too.
+              <a href={reopenHref} className="inline-flex min-h-11 items-center rounded-lg px-3 font-semibold hover:bg-red-50">{language === 'ar' ? 'افتح الدرس مرة أخرى' : 'Open again'}</a>
+            )}
+          </span>
         </div>
       )}
 
@@ -1812,7 +2223,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
       {!hideControls && (
         <div className={`grid shrink-0 transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${controlsVisible ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`} inert={!controlsVisible} aria-hidden={!controlsVisible}>
         <div className={`min-h-0 ${controlsVisible ? '' : 'overflow-hidden'}`}>
-        <div ref={controlsRef} dir="ltr" className="sim-controls flex flex-wrap items-center gap-x-1 px-3 py-1 bg-white border-t border-gray-200">
+        <div ref={controlsRef} dir="ltr" className="sim-controls flex flex-wrap items-center gap-x-1 px-3 py-1 bg-white border-t border-gray-200" style={fullscreenBarInsets(12)}>
           {/* Play / Pause */}
           <button
             type="button"

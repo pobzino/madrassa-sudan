@@ -45,13 +45,25 @@ const OTHER_ANDROID_BROWSER = /OPR\/|MiuiBrowser|UCBrowser|YaBrowser|HuaweiBrows
 
 const IN_APP_BROWSER = /FBAN|FBAV|FB_IAB|Instagram|Line\/|Snapchat|TikTok|musical_ly|Twitter|LinkedInApp|GSA\/|WhatsApp|; wv\)/i;
 
+/** iPhone, iPod or iPad. iPads report a Mac user agent, but have touch. */
+export function isIosUserAgent(userAgent: string, touchPoints = 0): boolean {
+  return /iPhone|iPad|iPod/i.test(userAgent) || (/Macintosh/i.test(userAgent) && touchPoints > 1);
+}
+
+/**
+ * True on an iPhone or iPad, in a browser tab or the home-screen app (where
+ * `currentInstallPlatform()` only says "installed"). False on the server.
+ */
+export function isIosDevice(): boolean {
+  return typeof navigator !== "undefined" && isIosUserAgent(navigator.userAgent, navigator.maxTouchPoints);
+}
+
 export function classifyBrowser(
   userAgent: string,
   { standalone, canPrompt, touchPoints = 0 }: { standalone: boolean; canPrompt: boolean; touchPoints?: number },
 ): InstallPlatform {
   if (standalone) return "installed";
-  // iPads report a Mac user agent, but have touch.
-  const ios = /iPhone|iPad|iPod/i.test(userAgent) || (/Macintosh/i.test(userAgent) && touchPoints > 1);
+  const ios = isIosUserAgent(userAgent, touchPoints);
   const android = /Android/i.test(userAgent);
   if (IN_APP_BROWSER.test(userAgent) && (ios || android)) return ios ? "ios-in-app" : "android-in-app";
   if (android && /SamsungBrowser/i.test(userAgent)) return "android-samsung";

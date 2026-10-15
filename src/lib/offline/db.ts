@@ -161,6 +161,8 @@ export type DownloadErrorCode =
   | "network"
   | "storage_full"
   | "interrupted"
+  /** This browser can't open saved lessons offline (an iPhone in-app browser). */
+  | "unsupported"
   | "unknown";
 
 export interface DownloadState {
@@ -1297,6 +1299,7 @@ export async function cacheSimAudio(
   audioBlob: Blob,
   key: string = offlineAudioKey(lessonId)
 ): Promise<void> {
+  if (!cacheStorageAvailable()) throw new Error("Cache Storage isn't available in this browser");
   const cache = await caches.open(SIM_AUDIO_CACHE);
   const response = new Response(audioBlob, {
     headers: {

@@ -19,6 +19,8 @@ import {
 import LessonComputerDownloadButton from "@/components/lessons/LessonComputerDownloadButton";
 import { useInstallPlatform } from "@/components/pwa/AddToPhone";
 import { canDetectWifi, isAutoDownloadEnabled, setAutoDownloadEnabled } from "@/lib/offline/auto-download";
+import { IOS_STORAGE_COPY, iosStorageContext, iosTabNote } from "@/lib/offline/support";
+import { isIosDevice } from "@/lib/pwa-install";
 
 const translations = {
   ar: {
@@ -33,7 +35,6 @@ const translations = {
     needsAttention: "يحتاج إلى انتباه",
     noDownloads: "لا توجد دروس محفوظة بعد",
     noDownloadsHint: "احفظ الدروس وأنت متصل بالإنترنت لتشاهدها هنا بدون إنترنت.",
-    iosNote: "على الآيفون، احفظ الدروس داخل تطبيق أمل المثبّت — قد يحذفها متصفح سفاري.",
     browseLessons: "تصفح الدروس",
     play: "شاهد",
     remove: "حذف",
@@ -56,7 +57,7 @@ const translations = {
     persisted: "الدروس المحفوظة محمية على هذا الهاتف.",
     bestEffort: "قد يحذف هذا الهاتف الدروس المحفوظة إذا امتلأت مساحته.",
     keepSafe: "احمِ دروسي",
-    notGranted: "لم يسمح المتصفح بذلك. تثبيت أمل على هاتفك يساعد.",
+    notGranted: "لم يسمح المتصفح بذلك. تثبيت آمال على هاتفك يساعد.",
     autoDownload: "تحميل الدرس التالي عبر الواي فاي",
     autoDownloadHint: "أثناء التعلّم على الواي فاي، يُحفظ الدرس التالي على هذا الهاتف ليعمل لاحقاً بدون إنترنت. إذا كان الواي فاي من هاتف آخر (نقطة اتصال)، فقد يستهلك ذلك بياناته.",
   },
@@ -72,7 +73,6 @@ const translations = {
     needsAttention: "Needs attention",
     noDownloads: "No saved lessons yet",
     noDownloadsHint: "Save lessons while online to watch them here without internet.",
-    iosNote: "On iPhone, save lessons inside the installed Amal app — Safari can clear them.",
     browseLessons: "Browse lessons",
     play: "Play",
     remove: "Remove",
@@ -256,8 +256,10 @@ export default function DownloadsPage() {
   // Only Android browsers can tell Wi-Fi from mobile data, so only they get the switch.
   const wifiAware = useSyncExternalStore(noSubscription, canDetectWifi, () => false);
   const platform = useInstallPlatform();
-  // iPhone storage in a Safari tab is separate from the installed app and can be cleared.
-  const inIosBrowser = platform === "ios-safari" || platform === "ios-browser";
+  // iPhone storage in a browser tab (Safari, another browser, another app's
+  // browser) is separate from the installed app's and can be cleared.
+  const iosContext = iosStorageContext(platform, platform !== null && isIosDevice());
+  const iosNote = iosTabNote(iosContext, language);
 
   const applySaved = useCallback((result: Awaited<ReturnType<typeof readSavedLessons>> | null) => {
     setLessons(result?.lessons ?? []);
@@ -352,8 +354,8 @@ export default function DownloadsPage() {
         </div>
       </div>
 
-      {inIosBrowser && (
-        <p className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">{t.iosNote}</p>
+      {iosNote && (
+        <p className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">{iosNote}</p>
       )}
 
       {wifiAware && <AutoDownloadSetting label={t.autoDownload} hint={t.autoDownloadHint} />}
@@ -454,6 +456,10 @@ export default function DownloadsPage() {
             </div>
             <h3 className="text-lg font-bold text-gray-900">{t.noDownloads}</h3>
             <p className="text-sm text-gray-500 mt-1 max-w-sm">{t.noDownloadsHint}</p>
+            {/* The home-screen app can't see lessons saved in Safari. */}
+            {iosContext === "installed" && (
+              <p className="mt-3 max-w-sm text-sm font-medium text-amber-800">{IOS_STORAGE_COPY[language].appEmpty}</p>
+            )}
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -53,6 +53,7 @@ import {
 } from "./db";
 import { adoptOwnerIfUnclaimed, getOwner, type OfflineOwner } from "./identity";
 import { serverResponsesToLocal } from "./slide-responses";
+import { canSaveOfflineHere } from "./support";
 import { fetchPracticeGate, withTimeout } from "./sync";
 import { warmOfflinePlayerChunks } from "./warm";
 
@@ -72,7 +73,7 @@ export const DOWNLOAD_ERROR_MESSAGES: Record<DownloadErrorCode, { en: string; ar
   },
   signed_out: {
     en: "Open Amal while online and signed in, then try again.",
-    ar: "افتح أمل وأنت متصل بالإنترنت ومسجّل الدخول، ثم حاول مرة أخرى.",
+    ar: "افتح آمال وأنت متصل بالإنترنت ومسجّل الدخول، ثم حاول مرة أخرى.",
   },
   not_found: {
     en: "This lesson isn't available right now.",
@@ -86,13 +87,18 @@ export const DOWNLOAD_ERROR_MESSAGES: Record<DownloadErrorCode, { en: string; ar
     en: "The download stopped. Check your connection and try again.",
     ar: "توقف التنزيل. تحقق من اتصالك وحاول مرة أخرى.",
   },
+  // "May": browsers can't tell how full the phone is, only that a write failed.
   storage_full: {
-    en: "Not enough space on this phone. Remove a saved lesson and try again.",
-    ar: "لا توجد مساحة كافية على هذا الهاتف. احذف درسًا محفوظًا وحاول مرة أخرى.",
+    en: "This phone may be full. Free some space or remove a saved lesson, then try again.",
+    ar: "قد تكون مساحة هذا الهاتف ممتلئة. أفرغ بعض المساحة أو احذف درسًا محفوظًا، ثم حاول مرة أخرى.",
   },
   interrupted: {
     en: "Saving stopped because Amal was closed or the screen locked. Keep Amal open and try again.",
-    ar: "توقف الحفظ لأن أمل أُغلق أو أُقفلت الشاشة. أبقِ أمل مفتوحًا وحاول مرة أخرى.",
+    ar: "توقف الحفظ لأن آمال أُغلق أو أُقفلت الشاشة. أبقِ آمال مفتوحًا وحاول مرة أخرى.",
+  },
+  unsupported: {
+    en: "This browser can't keep lessons for offline. Open Amal in Safari, Chrome or the installed app.",
+    ar: "لا يستطيع هذا المتصفح حفظ الدروس للمشاهدة بدون إنترنت. افتح آمال في Safari أو Chrome أو التطبيق المثبّت.",
   },
   unknown: {
     en: "Could not save this lesson. Try again.",
@@ -115,7 +121,7 @@ export const MISSING_IMAGES_WARNING = {
 /** Shown while a save runs: a locked or closed app stops it, and it starts again from the beginning. */
 export const KEEP_OPEN_WHILE_SAVING = {
   en: "Keep Amal open and the screen on until saving finishes.",
-  ar: "أبقِ أمل مفتوحًا والشاشة مضاءة حتى ينتهي الحفظ.",
+  ar: "أبقِ آمال مفتوحًا والشاشة مضاءة حتى ينتهي الحفظ.",
 };
 
 export function downloadErrorMessage(
@@ -200,13 +206,21 @@ function isQuotaError(error: unknown): boolean {
   return name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED" || code === 22;
 }
 
-function toDownloadError(error: unknown): DownloadError {
+/**
+ * The reason to show for a failed download. `writing`: it failed while saving
+ * to the phone (from the images on), where an error that isn't the network
+ * means storage: on a full phone Chrome often reports UnknownError or
+ * InvalidStateError rather than QuotaExceededError. Exported for tests.
+ */
+export function toDownloadError(error: unknown, writing = false): DownloadError {
   if (error instanceof DownloadError) return error;
   if (isQuotaError(error)) return new DownloadError("storage_full");
   if (typeof navigator !== "undefined" && navigator.onLine === false) return new DownloadError("offline");
   if (error instanceof AssetDownloadError) return new DownloadError("network");
   const name = (error as { name?: unknown } | null)?.name;
   if (name === "TypeError" || name === "TimeoutError" || name === "AbortError") return new DownloadError("network");
+  // Before the Supabase check: IndexedDB's DOMExceptions have a `code` too.
+  if (writing) return new DownloadError("storage_full");
   // Supabase reports failures as plain { message, code } objects.
   if (error && typeof error === "object" && "message" in error && "code" in error) return new DownloadError("network");
   return new DownloadError("unknown");
@@ -397,7 +411,13 @@ export async function getStorageEstimate(): Promise<{
 
 const STORAGE_SAFETY_MARGIN = 5 * 1024 * 1024;
 
-// The images are already stored when this runs, so `used` counts them.
+/**
+ * Fails early when the browser's own allowance for this site would run out
+ * (small on old iPhones and in-app browsers). It can't catch a full phone: no
+ * browser reports free disk space (Chrome says usage + 10 GB whatever the
+ * disk), so a full phone only shows when a write fails (see toDownloadError).
+ * The images are already stored when this runs, so `used` counts them.
+ */
 async function ensureRoomFor(audioBytes: number) {
   const { used, quota } = await getStorageEstimate();
   if (!quota) return; // Unknown: let the writes find out.
@@ -820,6 +840,8 @@ async function runDownload(
 
   let assets: CachedAssets | null = null;
   let assetUrls: string[] = [];
+  // From the images on, failures can come from saving to the phone.
+  let writing = false;
   let previous: OfflineLesson | null = null;
   // Each attempt writes its audio under its own key, so the copy that plays
   // is never overwritten: it is deleted only after the new record commits.
@@ -832,6 +854,8 @@ async function runDownload(
     checkCancelled();
     reporter.update({ progress: 1 }, true);
     if (typeof navigator !== "undefined" && navigator.onLine === false) throw new DownloadError("offline");
+    // Saved here, the lesson could never open offline (and would use up mobile data).
+    if (!canSaveOfflineHere()) throw new DownloadError("unsupported");
 
     const owner = await resolveDownloadOwner(supabase);
     checkCancelled();
@@ -860,6 +884,7 @@ async function runDownload(
     // caching a new image can't break the old copy of this lesson). A
     // failure here then costs only the images, never the audio.
     assetUrls = collectSimAssetUrls(bundle.sim);
+    writing = true;
     assets = await cacheLessonAssets(assetUrls, {
       signal,
       confirmOnline: () => canReachServer(supabase, lessonId, signal),
@@ -985,7 +1010,7 @@ async function runDownload(
       throw new DownloadCancelledError();
     }
 
-    let failure = toDownloadError(error);
+    let failure = toDownloadError(error, writing);
     // Cut off while the screen was locked or the app was in the background:
     // say so, rather than blaming the connection.
     if (failure.code === "network" && visibility.hidden()) failure = new DownloadError("interrupted");
