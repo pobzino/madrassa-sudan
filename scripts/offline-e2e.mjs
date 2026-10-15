@@ -89,9 +89,17 @@ await context.addInitScript(() => {
 const page = await context.newPage();
 const pageErrors = [];
 page.on('pageerror', (error) => {
-  // With the server stopped, WebKit also reports requests the app catches
-  // (warming the offline pages, the worker's update check) as page errors.
-  if (serverStopped && engine === 'webkit' && /due to access control checks/.test(error.message)) return;
+  // With the server stopped, WebKit also reports requests the app catches as
+  // page errors: warming the offline pages, the worker's update check, and
+  // the in-app request the worker deliberately fails on lie-fi so the router
+  // falls back to a page load (which then opens the saved lesson).
+  if (
+    serverStopped &&
+    engine === 'webkit' &&
+    /due to access control checks|Response served by service worker is an error/.test(error.message)
+  ) {
+    return;
+  }
   pageErrors.push(error.message);
 });
 
@@ -340,13 +348,28 @@ try {
   await page.getByText('دروسك المحفوظة').waitFor({ timeout: 15000 });
   check('hub renders in Arabic, right-to-left', (await page.locator('main[dir=rtl]').count()) === 1);
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/${engine}-hub-ar.png`, fullPage: true });
-  page.once('dialog', (dialog) => dialog.accept());
+  // Accept every question: "Log out?" and, when the phone believes it's
+  // online but nothing gets through (WebKit runs), "not sent yet, log out
+  // anyway?" after the send attempt fails.
+  const logoutDialogs = [];
+  const acceptDialog = (dialog) => {
+    logoutDialogs.push(dialog.message());
+    void dialog.accept();
+  };
+  page.on('dialog', acceptDialog);
   await page.getByRole('button', { name: 'تبديل الحساب / تسجيل الخروج' }).click();
   const logoutStarted = Date.now();
   const navigated = page.waitForEvent('framenavigated', { timeout: 30000 }).catch(() => null);
   await navigated;
   await page.waitForLoadState('load').catch(() => undefined);
+  page.off('dialog', acceptDialog);
   check('offline logout finishes with a page load', true, `${Date.now() - logoutStarted} ms, now at ${page.url()}`);
+  check(
+    'logout asks before deleting unsent progress',
+    // Both unsent warnings (hub and logout) show the count in brackets.
+    logoutDialogs.some((message) => /\(\d+\)/.test(message)),
+    JSON.stringify(logoutDialogs.map((message) => message.slice(0, 40)))
+  );
   const after = await page.evaluate(async () => ({
     caches: await caches.keys(),
     databases: indexedDB.databases ? (await indexedDB.databases()).map((d) => d.name) : null,
