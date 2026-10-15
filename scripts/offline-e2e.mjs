@@ -8,12 +8,17 @@
 //
 //   AMAL_SITE_URL=http://localhost:3907 node scripts/offline-e2e.mjs
 //
-// Optional: PLAYWRIGHT_CHANNEL (default "chrome", the installed Chrome),
+// Optional: BROWSER=webkit (Safari's engine; uses Playwright's WebKit build,
+// WEBKIT_PATH overrides its location). Playwright's offline switch in WebKit
+// also blocks the service worker, so WebKit runs need AMAL_SERVER_STOP_CMD and
+// test "no connection" as "the server can't be reached" (navigator.onLine
+// stays true). PLAYWRIGHT_CHANNEL (default "chrome", the installed Chrome),
 // AMAL_SERVER_STOP_CMD (a shell command that stops the server, to also test
 // "connected but the server can't be reached"), SHOTS (a directory for
 // screenshots). Use a fresh server: the worker must install from this build.
 import { execSync } from 'node:child_process';
-import { chromium } from 'playwright';
+import { homedir } from 'node:os';
+import { chromium, webkit } from 'playwright';
 
 const baseURL = process.env.AMAL_SITE_URL || 'http://localhost:3001';
 const killCmd = process.env.AMAL_SERVER_STOP_CMD || '';
@@ -28,7 +33,27 @@ function check(name, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  — ${detail}` : ''}`);
 }
 
-const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome' });
+const engine = process.env.BROWSER === 'webkit' ? 'webkit' : 'chromium';
+const browser =
+  engine === 'webkit'
+    ? await webkit.launch({
+        executablePath: process.env.WEBKIT_PATH || `${homedir()}/Library/Caches/ms-playwright/webkit-2359/pw_run.sh`,
+      })
+    : await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome' });
+console.log(`Engine: ${engine}`);
+if (engine === 'webkit' && !killCmd) {
+  console.error('WebKit runs need AMAL_SERVER_STOP_CMD (see the note at the top).');
+  process.exit(2);
+}
+let serverStopped = false;
+/** No connection: Chrome's offline switch, or (WebKit) the server stopped for good. */
+async function goOffline() {
+  if (engine !== 'webkit') return context.setOffline(true);
+  if (!serverStopped) {
+    execSync(killCmd);
+    serverStopped = true;
+  }
+}
 const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
 await context.addInitScript(() => {
   localStorage.setItem('amal-school-has-selected-language', 'true');
@@ -137,7 +162,7 @@ try {
   check('hub created the v2 database with every store', seeded.version >= 2 && ['lessons', 'progress-queue', 'downloads', 'meta', 'responses'].every((s) => seeded.stores.includes(s)), JSON.stringify(seeded));
 
   // 3. Go offline (navigator.onLine false + no network).
-  await context.setOffline(true);
+  await goOffline();
 
   // Cold-start style: the installed app's start_url.
   await page.goto(`${baseURL}/dashboard`, { waitUntil: 'load' }).catch((e) => e);
@@ -147,7 +172,7 @@ try {
   check('hub hides another account’s lesson', (await page.getByText('Other family lesson').count()) === 0);
   check('hub shows the hidden-lessons note', (await page.getByText('Some lessons saved earlier').count()) === 1);
   check('hub shows owner name', (await page.getByText('Saved for Amina Test').count()) === 1);
-  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/hub-en.png`, fullPage: true });
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/${engine}-hub-en.png`, fullPage: true });
 
   // Tap the card: full navigation to the player.
   await page.getByRole('link', { name: /Play Seeded offline lesson/ }).click();
@@ -165,7 +190,7 @@ try {
     IMAGE_URL,
     { timeout: 15000 }
   ).then((h) => h.jsonValue()).catch(() => null);
-  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/player-en.png`, fullPage: true });
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/${engine}-player-en.png`, fullPage: true });
   check('slide image loads from the asset cache offline', image && image.natural > 0, JSON.stringify(image));
 
   // Play with the player's own button: audio time advances from the blob URL.
@@ -208,8 +233,11 @@ try {
 
   // 4. Lie-fi: browser says online but the server is gone.
   if (killCmd) {
-    await context.setOffline(false);
-    execSync(killCmd);
+    if (engine !== 'webkit') {
+      await context.setOffline(false);
+      execSync(killCmd);
+      serverStopped = true;
+    }
     await page.waitForTimeout(500);
     const started = Date.now();
     await page.goto(`${baseURL}/lessons/${LESSON_ID}`, { waitUntil: 'load' }).catch((e) => e);
@@ -222,7 +250,7 @@ try {
   }
 
   // 5. Arabic hub, then log out with no connection at all.
-  await context.setOffline(true);
+  await goOffline();
   await page.evaluate(() => {
     localStorage.setItem('amal-school-language', 'ar');
     document.cookie = 'sb-e2etest-auth-token.0=base64-abc; path=/';
@@ -232,7 +260,7 @@ try {
   await page.goto(`${baseURL}/offline`, { waitUntil: 'load' });
   await page.getByText('دروسك المحفوظة').waitFor({ timeout: 15000 });
   check('hub renders in Arabic, right-to-left', (await page.locator('main[dir=rtl]').count()) === 1);
-  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/hub-ar.png`, fullPage: true });
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/${engine}-hub-ar.png`, fullPage: true });
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'تبديل الحساب / تسجيل الخروج' }).click();
   const logoutStarted = Date.now();
