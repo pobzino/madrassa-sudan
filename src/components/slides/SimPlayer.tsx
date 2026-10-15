@@ -221,6 +221,24 @@ function subscribeToPhoneWidth(onChange: () => void) {
 }
 const isPhoneWidth = () => window.matchMedia(PHONE_QUERY).matches;
 
+// A phone held upright. Full screen there turns the player sideways so the
+// slide fills the screen's width, like a video app.
+const UPRIGHT_PHONE_QUERY = '(max-width: 639px) and (orientation: portrait)';
+function subscribeToUprightPhone(onChange: () => void) {
+  const query = window.matchMedia(UPRIGHT_PHONE_QUERY);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+const isUprightPhone = () => window.matchMedia(UPRIGHT_PHONE_QUERY).matches;
+
+/** Android Chrome can lock a full-screen page to landscape; other browsers refuse. */
+async function lockLandscape() {
+  const orientation = (typeof screen !== 'undefined' ? screen.orientation : undefined) as
+    | (ScreenOrientation & { lock?: (orientation: string) => Promise<void> })
+    | undefined;
+  await orientation?.lock?.('landscape').catch(() => undefined);
+}
+
 function SimSlideViewport({ children }: { children: ReactNode }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
@@ -1763,6 +1781,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     if (typeof el.requestFullscreen === 'function') {
       try {
         await el.requestFullscreen();
+        await lockLandscape();
         return;
       } catch {
         // iPhone and embedded browsers can reject element fullscreen.
@@ -1839,6 +1858,10 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   }, [canHideControls, controlsActivity]);
 
   const isPhone = useSyncExternalStore(subscribeToPhoneWidth, isPhoneWidth, () => false);
+  const uprightPhone = useSyncExternalStore(subscribeToUprightPhone, isUprightPhone, () => false);
+  // Full screen on a phone that is still upright (iPhone can't lock the
+  // orientation): turn the player 90° so it fills the screen sideways.
+  const sideways = fullscreen && uprightPhone;
   const activityOpen = Boolean(
     (activeGate && (activeGate.type === 'activity_gate' || activeGate.type === 'exploration_gate'))
       || (activeExplorationSlide && currentSlide?.type === 'exploration')
@@ -1964,7 +1987,12 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   ) : null;
 
   return (
-    <div ref={containerRef} data-sim-player data-controls-visible={controlsVisible} onPointerDownCapture={wakeControls} onPointerMove={(event) => { if (event.pointerType === 'mouse' && fullscreen) wakeControls(); }} onKeyDownCapture={wakeControls} className={`relative overflow-hidden bg-white border border-gray-200 rounded-lg ${className} ${fullscreen ? 'flex flex-col !border-0 !rounded-none !shadow-none' : ''}`} style={fullscreen ? { position: expanded ? 'fixed' : undefined, inset: 0, zIndex: 9999, width: '100%', height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : { scrollMarginTop: '4.5rem' }}>
+    <div ref={containerRef} data-sim-player data-controls-visible={controlsVisible} onPointerDownCapture={wakeControls} onPointerMove={(event) => { if (event.pointerType === 'mouse' && fullscreen) wakeControls(); }} onKeyDownCapture={wakeControls} className={`relative overflow-hidden bg-white border border-gray-200 rounded-lg ${className} ${fullscreen ? 'flex flex-col !border-0 !rounded-none !shadow-none' : ''}`} style={sideways ? {
+      position: 'fixed', top: 0, left: 0, zIndex: 9999, width: '100dvh', height: '100vw',
+      // Rotated about its top-left corner, then shifted back on screen.
+      transform: 'rotate(90deg) translateY(-100%)', transformOrigin: 'top left',
+      paddingLeft: 'env(safe-area-inset-top)', paddingRight: 'env(safe-area-inset-bottom)',
+    } : fullscreen ? { position: expanded ? 'fixed' : undefined, inset: 0, zIndex: 9999, width: '100%', height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : { scrollMarginTop: '4.5rem' }}>
       {/* Slide area */}
       <div className={fullscreen ? 'flex flex-1 min-h-0 items-center justify-center overflow-hidden bg-black' : ''} style={fullscreen ? { containerType: 'size' } : undefined}>
       <div className="relative w-full" style={fullscreen ? { width: 'min(100cqw, calc(100cqh * 16 / 9))' } : undefined}>
@@ -2049,7 +2077,8 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
           aria-modal="true"
           aria-label={language === 'ar' ? 'نشاط' : 'Activity'}
           className="fixed inset-0 z-[10000] flex flex-col bg-white"
-          style={{ height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+          // Inside the turned player it fills the player, not the window.
+          style={sideways ? { height: '100%' } : { height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
           <div className="relative min-h-0 flex-1 overflow-hidden">
             {activeGate?.type === 'activity_gate' && (
@@ -2156,7 +2185,9 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
         />
       )}
 
-      {isOffline && playingFromDevice && (
+      {/* Whenever the saved copy plays, connected or not: a phone on Wi-Fi with
+          no internet still reports itself online. */}
+      {playingFromDevice && (
         <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-t border-emerald-100 text-emerald-800 text-xs font-medium" style={fullscreenBarInsets(16)}>
           <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <rect x="5" y="2" width="14" height="20" rx="2" ry="2" /><line x1="12" y1="18" x2="12.01" y2="18" />
