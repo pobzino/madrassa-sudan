@@ -5,6 +5,8 @@ const UA = {
   androidChrome: "Mozilla/5.0 (Linux; Android 14; SM-A145F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36",
   androidFacebook:
     "Mozilla/5.0 (Linux; Android 13; TECNO KI5) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/128.0.0.0 Mobile Safari/537.36 [FB_IAB/FB4A;FBAV/480.0.0.0;]",
+  samsungInternet:
+    "Mozilla/5.0 (Linux; Android 14; SAMSUNG SM-A546E) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36",
   androidWebView: "Mozilla/5.0 (Linux; Android 12; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/127.0.0.0 Mobile Safari/537.36",
   iphoneSafari: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
   iphoneChrome: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/129.0.0.0 Mobile/15E148 Safari/604.1",
@@ -19,6 +21,11 @@ describe("install route for each phone", () => {
   it("uses one tap where the browser offers it", () => {
     expect(classifyBrowser(UA.androidChrome, { ...browser, canPrompt: true })).toBe("one-tap");
     expect(classifyBrowser(UA.desktopChrome, { ...browser, canPrompt: true })).toBe("one-tap");
+  });
+
+  it("sends Samsung Internet to Chrome, since Play Protect blocks Samsung's installs", () => {
+    expect(classifyBrowser(UA.samsungInternet, { ...browser, canPrompt: true })).toBe("android-samsung");
+    expect(classifyBrowser(UA.samsungInternet, browser)).toBe("android-samsung");
   });
 
   it("falls back to the ⋮ menu on Android before the browser offers one tap", () => {

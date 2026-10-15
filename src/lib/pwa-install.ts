@@ -24,6 +24,11 @@ export type InstallPlatform =
   | "ios-browser"
   /** Inside WhatsApp, Facebook, Instagram and the like, which can't install: open in Chrome. */
   | "android-in-app"
+  /**
+   * Samsung Internet. It installs apps in an old Android format that Google
+   * Play Protect blocks as unsafe, so families are sent to Chrome instead.
+   */
+  | "android-samsung"
   /** The same on iPhone: open in Safari. */
   | "ios-in-app"
   | "desktop";
@@ -39,6 +44,7 @@ export function classifyBrowser(
   const ios = /iPhone|iPad|iPod/i.test(userAgent) || (/Macintosh/i.test(userAgent) && touchPoints > 1);
   const android = /Android/i.test(userAgent);
   if (IN_APP_BROWSER.test(userAgent) && (ios || android)) return ios ? "ios-in-app" : "android-in-app";
+  if (android && /SamsungBrowser/i.test(userAgent)) return "android-samsung";
   if (canPrompt) return "one-tap";
   if (ios) return /CriOS|FxiOS|EdgiOS|OPiOS/i.test(userAgent) ? "ios-browser" : "ios-safari";
   if (android) return "android-menu";

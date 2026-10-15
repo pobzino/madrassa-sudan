@@ -30,6 +30,7 @@ const COPY = {
     iosBrowser: ["Tap the Share button next to the address bar.", "Tap Add to Home Screen.", "Tap Add."],
     android: ["Tap the menu ⋮ at the top of the screen.", "Tap Add to Home screen or Install app.", "Tap Add or Install."],
     androidInApp: "This page is open inside another app, which can't add Amal to your phone. Open it in Chrome first.",
+    samsung: "Samsung's browser adds apps in an old format that Google Play Protect blocks. Open Amal in Chrome to add it safely.",
     openInChrome: "Open in Chrome",
     iosInApp: "This page is open inside another app. Tap ⋯ or the compass icon, choose Open in Safari, then add Amal from there.",
     copyLink: "Copy link",
@@ -49,6 +50,7 @@ const COPY = {
     iosBrowser: ["اضغط زر المشاركة بجانب شريط العنوان.", "اضغط «إضافة إلى الشاشة الرئيسية».", "اضغط «إضافة»."],
     android: ["اضغط على القائمة ⋮ في أعلى الشاشة.", "اضغط «إضافة إلى الشاشة الرئيسية» أو «تثبيت التطبيق».", "اضغط «إضافة» أو «تثبيت»."],
     androidInApp: "هذه الصفحة مفتوحة داخل تطبيق آخر لا يمكنه إضافة آمال إلى هاتفك. افتحها في Chrome أولاً.",
+    samsung: "متصفح سامسونج يضيف التطبيقات بصيغة قديمة يحظرها Google Play Protect. افتح آمال في Chrome لإضافته بأمان.",
     openInChrome: "افتح في Chrome",
     iosInApp: "هذه الصفحة مفتوحة داخل تطبيق آخر. اضغط ⋯ أو أيقونة البوصلة، واختر «فتح في Safari»، ثم أضف آمال من هناك.",
     copyLink: "انسخ الرابط",
@@ -176,11 +178,12 @@ export function AddToPhone({ source, onInstalled }: { source: InstallSource; onI
     );
   }
 
-  if (platform === "android-in-app" || platform === "ios-in-app") {
+  if (platform === "android-in-app" || platform === "android-samsung" || platform === "ios-in-app") {
+    const message = { "android-in-app": t.androidInApp, "android-samsung": t.samsung, "ios-in-app": t.iosInApp }[platform];
     return (
       <div className="space-y-3 text-center">
-        <p className="text-[15px] leading-relaxed text-gray-700">{platform === "android-in-app" ? t.androidInApp : t.iosInApp}</p>
-        {platform === "android-in-app" && (
+        <p className="text-[15px] leading-relaxed text-gray-700">{message}</p>
+        {platform !== "ios-in-app" && (
           <a
             href={openInChromeUrl(window.location.origin, `/app?lang=${language}`)}
             onClick={() => trackAnalyticsEvent("app_install_click", { source, platform })}
