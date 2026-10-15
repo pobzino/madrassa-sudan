@@ -325,7 +325,8 @@ export function LivingOwl({ mood = "idle", restGaze = { x: 0.6, y: 0 }, onActEnd
         </clipPath>
       </defs>
 
-      {shadow && <ellipse cx="320" cy="534" rx="128" ry="14" fill="#000" opacity="0.14" />}
+      {/* Fades rather than popping, so an owl that lands or takes off looks grounded. */}
+      <ellipse cx="320" cy="534" rx="128" ry="14" fill="#000" opacity={shadow ? 0.14 : 0} style={{ transition: "opacity 0.2s ease" }} />
 
       <g data-owl-confetti>
         {Array.from({ length: 22 }, (_, i) => (

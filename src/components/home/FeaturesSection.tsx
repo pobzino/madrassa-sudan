@@ -38,6 +38,8 @@ export function FeaturesSection({
   isRtl: boolean;
 }) {
   const [mood, setMood] = useState<OwlMood>("flying");
+  // The owl only has a shadow while it is standing on a card.
+  const [perched, setPerched] = useState(false);
   const [inView, setInView] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -109,7 +111,10 @@ export function FeaturesSection({
       const exit = rtlRef.current ? -ow - 40 : w + ow;
 
       const tl = gsap.timeline();
-      tl.set(owl, { ...at(from, skim), scale: s, rotation: 0, opacity: 1, transformOrigin: "50% 50%" }).call(() => setMood("flying"));
+      tl.set(owl, { ...at(from, skim), scale: s, rotation: 0, opacity: 1, transformOrigin: "50% 50%" }).call(() => {
+        setMood("flying");
+        setPerched(false);
+      });
 
       // A loop-the-loop in the open sky beside the heading, when there's room.
       const radius = Math.min(48, head.height * 0.9);
@@ -153,6 +158,7 @@ export function FeaturesSection({
           .call(() => {
             visit(card, true);
             setMood(act.mood);
+            setPerched(true);
           })
           .to(owl, { scaleY: s * 0.88, duration: 0.1, ease: "power2.out" })
           .to(owl, { scaleY: s, duration: 0.35, ease: "elastic.out(1, 0.5)" })
@@ -160,6 +166,7 @@ export function FeaturesSection({
           .call(() => {
             visit(card, false);
             setMood("flying");
+            setPerched(false);
           })
           .to(owl, { ...at(fx, skim), duration: 0.22, ease: "power2.out" });
       });
@@ -211,7 +218,10 @@ export function FeaturesSection({
 
       const tl = gsap.timeline();
       tl.set(owl, { ...at(rtl ? -ow : w + ow, skim), scale: s, rotation: 0, opacity: 1, transformOrigin: "50% 50%" })
-        .call(() => setMood("flying"))
+        .call(() => {
+          setMood("flying");
+          setPerched(false);
+        })
         .to(owl, { ...at(first.x, skim), rotation: rtl ? 360 : -360, duration: 0.9, ease: "sine.inOut" })
         .set(owl, { rotation: 0 });
 
@@ -234,6 +244,7 @@ export function FeaturesSection({
           .call(() => {
             visit(card, true);
             setMood(act.mood);
+            setPerched(true);
           })
           .to(owl, { scaleY: s * 0.88, duration: 0.1, ease: "power2.out" })
           .to(owl, { scaleY: s, duration: 0.35, ease: "elastic.out(1, 0.5)" })
@@ -241,6 +252,7 @@ export function FeaturesSection({
           .call(() => {
             visit(card, false);
             setMood("flying");
+            setPerched(false);
           });
         previous = spot;
       });
@@ -312,7 +324,7 @@ export function FeaturesSection({
         </div>
 
         <div ref={owlRef} aria-hidden className="pointer-events-none absolute left-0 top-0 z-20 w-14 opacity-0 sm:w-20">
-          <LivingOwl mood={mood} restGaze={{ x: 0, y: 0.4 }} shadow={false} className="w-full" />
+          <LivingOwl mood={mood} restGaze={{ x: 0, y: 0.4 }} shadow={perched} className="w-full" />
         </div>
       </div>
     </section>
