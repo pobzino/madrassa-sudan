@@ -114,6 +114,8 @@ interface DownloadButtonProps {
    * a "Save" that can only fail.
    */
   canSave?: boolean;
+  /** Show nothing once saved (the caller marks saved lessons itself, e.g. the path's badge). */
+  hideWhenSaved?: boolean;
 }
 
 const DownloadIcon = ({ className }: { className: string }) => (
@@ -162,6 +164,7 @@ export default function DownloadButton({
   className = "",
   updateAvailable = false,
   canSave = true,
+  hideWhenSaved = false,
 }: DownloadButtonProps) {
   const { language } = useLanguage();
   const t = COPY[language];
@@ -231,6 +234,8 @@ export default function DownloadButton({
   const almostReady = showSaved && !offlineReady;
   // Until the phone's downloads were read, "Save" could flash on a saved lesson.
   if (!ready) return null;
+  // "Almost ready" still shows: it asks the family to stay online.
+  if (hideWhenSaved && showSaved && !almostReady) return null;
   // Saved here, a lesson could never open offline (no service worker, often
   // an app's built-in browser): point to where it can.
   if ((!canSaveHere || !serviceWorkerSupported) && !isDownloading) {

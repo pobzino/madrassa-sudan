@@ -453,6 +453,7 @@ export default function LearningPathTree({
                         lessonId={node.step.lessonId}
                         variant="compact"
                         canSave={node.step.hasRecording === true}
+                        hideWhenSaved
                       />
                     )}
                   </EdgeSafeRow>
