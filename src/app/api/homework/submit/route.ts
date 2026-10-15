@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getLearnerContextResult } from "@/lib/server/learner-context";
 import { POST as submitHomeworkById } from "@/app/api/homework/[id]/submit/route";
 
 // POST - Submit homework (legacy body shape: { assignment_id, responses }).
@@ -20,9 +21,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "responses array is required" }, { status: 400 });
     }
 
+    const forwardedHeaders = new Headers(request.headers);
+    forwardedHeaders.set("Content-Type", "application/json");
     const forwarded = new NextRequest(request.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: forwardedHeaders,
       body: JSON.stringify({
         answers: responses,
         ...(typeof body.time_spent_seconds === "number" ? { time_spent_seconds: body.time_spent_seconds } : {}),
@@ -45,6 +48,9 @@ export async function GET(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
 
     const { searchParams } = new URL(request.url);
     const assignmentId = searchParams.get("assignment_id");
@@ -67,7 +73,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq("assignment_id", assignmentId)
-      .eq("student_id", user.id)
+      .eq("student_id", learnerId)
       .single();
 
     if (error && error.code !== "PGRST116") {

@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getLearnerContextResult } from '@/lib/server/learner-context';
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,6 +15,9 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
 
     const body = await request.json();
     const { attemptId, questionId, selectedAnswer } = body;
@@ -27,7 +31,7 @@ export async function POST(request: NextRequest) {
       .from('diagnostic_attempts')
       .select('*')
       .eq('id', attemptId)
-      .eq('student_id', user.id)
+      .eq('student_id', learnerId)
       .single();
 
     if (!attempt) {
@@ -64,6 +68,7 @@ export async function POST(request: NextRequest) {
         questions_correct: (attempt.questions_correct ?? 0) + (isCorrect ? 1 : 0),
       })
       .eq('id', attemptId)
+      .eq('student_id', learnerId)
       .select()
       .single();
 

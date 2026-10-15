@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
 import { submitHomeworkSchema, saveDraftSchema } from "@/lib/homework.validation";
+import { getLearnerContextResult } from "@/lib/server/learner-context";
 import {
   countsAsNewHomeworkCompletion,
   gradeHomeworkAnswers,
@@ -53,6 +54,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
 
     // Parse and validate request body
     const body = await request.json();
@@ -103,7 +107,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .from("cohort_students")
         .select("id")
         .eq("cohort_id", assignment.cohort_id)
-        .eq("student_id", user.id)
+        .eq("student_id", learnerId)
         .eq("is_active", true)
         .eq("status", "approved")
         .single();
@@ -131,7 +135,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .from("homework_submissions")
       .select("*")
       .eq("assignment_id", assignmentId)
-      .eq("student_id", user.id)
+      .eq("student_id", learnerId)
       .maybeSingle();
 
     if (existingSubmission && !isOpenSubmissionStatus(existingSubmission.status)) {
@@ -175,7 +179,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           updated_at: nowIso,
         })
         .eq("id", existingSubmission.id)
-        .eq("student_id", user.id)
+        .eq("student_id", learnerId)
         .in("status", [...OPEN_SUBMISSION_STATUSES])
         .select("id");
 
@@ -200,7 +204,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .from("homework_submissions")
         .insert({
           assignment_id: assignmentId,
-          student_id: user.id,
+          student_id: learnerId,
           status: "submitted",
           submitted_at: nowIso,
           started_at: nowIso,
@@ -306,14 +310,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         const { data: existingLessonProgress } = await supabase
           .from("lesson_progress")
           .select("completed")
-          .eq("student_id", user.id)
+          .eq("student_id", learnerId)
           .eq("lesson_id", assignment.lesson_id)
           .maybeSingle();
 
         if (!existingLessonProgress?.completed) {
           const { error: lessonProgressError } = await admin.from("lesson_progress").upsert(
             {
-              student_id: user.id,
+              student_id: learnerId,
               lesson_id: assignment.lesson_id,
               completed: true,
               completed_at: nowIso,
@@ -328,7 +332,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             const { count } = await supabase
               .from("lesson_progress")
               .select("id", { count: "exact", head: true })
-              .eq("student_id", user.id)
+              .eq("student_id", learnerId)
               .eq("completed", true);
             firstLessonCompletion = count === 1;
           }
@@ -354,7 +358,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .from("homework_attempts")
       .select("id", { count: "exact", head: true })
       .eq("assignment_id", assignmentId)
-      .eq("student_id", user.id);
+      .eq("student_id", learnerId);
 
     const attemptNumber = (priorAttempts ?? 0) + 1;
 
@@ -366,7 +370,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .from("homework_attempts")
         .select("id", { count: "exact", head: true })
         .eq("assignment_id", assignmentId)
-        .eq("student_id", user.id)
+        .eq("student_id", learnerId)
         .gte("score", passMarkPoints(assignment.total_points ?? 0, assignment.passing_score));
       passedBefore = (priorPasses ?? 0) > 0;
     }
@@ -380,7 +384,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const { error: attemptError } = await admin.from("homework_attempts").insert({
       assignment_id: assignmentId,
-      student_id: user.id,
+      student_id: learnerId,
       submission_id: submissionId,
       attempt_number: attemptNumber,
       score: fullyAutoGraded || autoGradablePoints > 0 ? autoGradedScore : null,
@@ -400,7 +404,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Update student streak (every submission is activity for the day; the
     // homework total counts each assignment once, not every retake).
-    const streakDays = await updateStudentStreak(admin, user.id, countsAsNewHomework);
+    const streakDays = await updateStudentStreak(admin, learnerId, countsAsNewHomework);
 
     return NextResponse.json({
       success: true,
@@ -445,6 +449,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
 
     // Parse and validate request body
     const body = await request.json();
@@ -480,7 +487,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         .from("cohort_students")
         .select("id")
         .eq("cohort_id", assignment.cohort_id)
-        .eq("student_id", user.id)
+        .eq("student_id", learnerId)
         .eq("is_active", true)
         .eq("status", "approved")
         .single();
@@ -508,7 +515,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       .from("homework_submissions")
       .select("*")
       .eq("assignment_id", assignmentId)
-      .eq("student_id", user.id)
+      .eq("student_id", learnerId)
       .maybeSingle();
 
     if (existingSubmission) {
@@ -538,7 +545,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         .from("homework_submissions")
         .insert({
           assignment_id: assignmentId,
-          student_id: user.id,
+          student_id: learnerId,
           status: "in_progress",
           started_at: now.toISOString(),
           time_spent_seconds: timeSpent,

@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getLearnerContextResult } from '@/lib/server/learner-context';
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,9 +15,13 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
 
     const body = await request.json();
-    const { subjectId, studentGrade } = body;
+    const { subjectId } = body;
+    const studentGrade = resolved.context.learnerProfile.grade_level ?? 1;
 
     if (!subjectId) {
       return NextResponse.json({ error: 'Subject ID is required' }, { status: 400 });
@@ -26,7 +31,7 @@ export async function POST(request: NextRequest) {
     const { data: existingAttempt } = await supabase
       .from('diagnostic_attempts')
       .select('*')
-      .eq('student_id', user.id)
+      .eq('student_id', learnerId)
       .eq('subject_id', subjectId)
       .eq('is_complete', false)
       .single();
@@ -45,7 +50,7 @@ export async function POST(request: NextRequest) {
         .from('diagnostic_questions')
         .select('*')
         .eq('subject_id', subjectId)
-        .eq('grade_level', studentGrade || 1)
+        .eq('grade_level', studentGrade)
         .not('id', 'in', `(${answeredQuestionIds.join(',')})`)
         .order('difficulty')
         .limit(1)
@@ -65,7 +70,7 @@ export async function POST(request: NextRequest) {
     const { data: attempt, error: attemptError } = await supabase
       .from('diagnostic_attempts')
       .insert({
-        student_id: user.id,
+        student_id: learnerId,
         subject_id: subjectId,
         started_at: new Date().toISOString(),
       })
@@ -78,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get first question at student's grade level (or grade 1 if not specified)
-    const startGrade = studentGrade || 1;
+    const startGrade = studentGrade;
     const { data: question, error: questionError } = await supabase
       .from('diagnostic_questions')
       .select('*')

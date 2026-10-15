@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getLearnerContextResult } from '@/lib/server/learner-context'
 import type { QuizSettings } from '@/lib/database.types'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -6,7 +7,8 @@ import { z } from 'zod'
 const ResponseSchema = z.object({
   question_id: z.string().uuid(),
   answer: z.string().min(1),
-  is_correct: z.boolean()
+  // Older clients still send this value; it is intentionally ignored.
+  is_correct: z.boolean().optional(),
 })
 
 const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
@@ -45,6 +47,9 @@ export async function POST(
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const resolved = await getLearnerContextResult(request, supabase)
+  if (resolved.response) return resolved.response
+  const learnerId = resolved.context.learnerId
 
   const body = await request.json()
   const validation = ResponseSchema.safeParse(body)
@@ -56,11 +61,11 @@ export async function POST(
     )
   }
 
-  const { question_id, answer, is_correct } = validation.data
+  const { question_id, answer } = validation.data
 
   const { data: question, error: questionError } = await supabase
     .from('lesson_questions')
-    .select('allow_retry, lesson_id')
+    .select('allow_retry, lesson_id, correct_answer')
     .eq('id', question_id)
     .single()
 
@@ -71,6 +76,7 @@ export async function POST(
   if (question.lesson_id !== lessonId) {
     return NextResponse.json({ error: 'Question does not belong to this lesson' }, { status: 400 })
   }
+  const is_correct = answer === question.correct_answer
 
   const { data: lesson } = await supabase
     .from('lessons')
@@ -83,7 +89,7 @@ export async function POST(
   const { data: existingResponse, error: fetchError } = await supabase
     .from('lesson_question_responses')
     .select('*')
-    .eq('student_id', user.id)
+    .eq('student_id', learnerId)
     .eq('question_id', question_id)
     .maybeSingle()
 
@@ -142,7 +148,7 @@ export async function POST(
     const { data: newResponse, error: insertError } = await supabase
       .from('lesson_question_responses')
       .insert({
-        student_id: user.id,
+        student_id: learnerId,
         question_id,
         answer,
         is_correct,
@@ -160,7 +166,7 @@ export async function POST(
     responseData = newResponse
   }
 
-  const progressSummary = await updateLessonProgress(supabase, user.id, lessonId)
+  const progressSummary = await updateLessonProgress(supabase, learnerId, lessonId)
   const canRetry =
     question.allow_retry &&
     quizSettings.allow_retries &&

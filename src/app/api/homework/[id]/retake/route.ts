@@ -18,12 +18,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
 import { decideRetake } from "@/lib/homework-grading";
+import { getLearnerContextResult } from "@/lib/server/learner-context";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function POST(_request: NextRequest, { params }: RouteParams) {
+export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const supabase = await createClient();
     const { id: assignmentId } = await params;
@@ -35,6 +36,9 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
 
     const { data: assignment } = await supabase
       .from("homework_assignments")
@@ -50,7 +54,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       .from("homework_submissions")
       .select("id, status, score, attempt_count")
       .eq("assignment_id", assignmentId)
-      .eq("student_id", user.id)
+      .eq("student_id", learnerId)
       .single();
 
     if (!submission) {
@@ -97,7 +101,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", submission.id)
-      .eq("student_id", user.id)
+      .eq("student_id", learnerId)
       .eq("status", submission.status)
       .select("id");
 

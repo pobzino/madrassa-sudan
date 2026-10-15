@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { updateAssignmentSchema, practicePublicationError } from "@/lib/homework.validation";
+import { getLearnerContextResult } from "@/lib/server/learner-context";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -22,6 +23,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
 
     // Fetch independent data together. Practice players need the viewer's
     // submission and lesson metadata, so returning both here avoids several
@@ -47,7 +51,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .from("homework_submissions")
         .select("status, score, attempt_count")
         .eq("assignment_id", id)
-        .eq("student_id", user.id)
+        .eq("student_id", learnerId)
         .maybeSingle(),
     ]);
 
@@ -87,7 +91,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             .from("cohort_students")
             .select("id")
             .eq("cohort_id", assignment.cohort_id)
-            .eq("student_id", user.id)
+            .eq("student_id", learnerId)
             .eq("is_active", true)
             .eq("status", "approved")
             .single();

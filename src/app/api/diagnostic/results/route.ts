@@ -3,10 +3,11 @@
  * Get student's placement results for all subjects
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getLearnerContextResult } from '@/lib/server/learner-context';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -14,6 +15,9 @@ export async function GET() {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
 
     // Get all placements with subject details
     const { data: placements } = await supabase
@@ -22,7 +26,7 @@ export async function GET() {
         *,
         subject:subjects(*)
       `)
-      .eq('student_id', user.id)
+      .eq('student_id', learnerId)
       .order('placed_at', { ascending: false });
 
     // Get incomplete attempts
@@ -32,7 +36,7 @@ export async function GET() {
         *,
         subject:subjects(*)
       `)
-      .eq('student_id', user.id)
+      .eq('student_id', learnerId)
       .eq('is_complete', false);
 
     // Get all subjects for reference

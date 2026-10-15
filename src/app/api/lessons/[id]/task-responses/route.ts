@@ -11,6 +11,7 @@ import {
 } from '@/lib/lesson-activities'
 import type { Database } from '@/lib/database.types'
 import { recalculateLessonTaskProgress } from '@/lib/server/lesson-task-progress'
+import { getLearnerContextResult } from '@/lib/server/learner-context'
 
 const TaskResponseSchema = z.object({
   task_id: z.string().uuid(),
@@ -55,6 +56,9 @@ export async function POST(
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const resolved = await getLearnerContextResult(request, supabase)
+  if (resolved.response) return resolved.response
+  const learnerId = resolved.context.learnerId
 
   const body = await request.json()
   const validation = TaskResponseSchema.safeParse(body)
@@ -72,7 +76,7 @@ export async function POST(
   // write a teacher review or a score themselves). That skips RLS, so check
   // the lesson access the old student policy enforced.
   const { data: canAccessLesson } = await supabase.rpc('can_user_access_published_lesson', {
-    p_user_id: user.id,
+    p_user_id: resolved.context.accountId,
     p_lesson_id: lessonId,
   })
   if (canAccessLesson !== true) {
@@ -119,7 +123,7 @@ export async function POST(
     .from('lesson_task_responses')
     .select('id, attempts')
     .eq('task_id', task_id)
-    .eq('student_id', user.id)
+    .eq('student_id', learnerId)
     .maybeSingle()
 
   let responseRow: Database['public']['Tables']['lesson_task_responses']['Row'] | null = null
@@ -136,7 +140,7 @@ export async function POST(
         attempts: existing.attempts + 1,
       })
       .eq('id', existing.id)
-      .eq('student_id', user.id)
+      .eq('student_id', learnerId)
       .select()
       .single()
 
@@ -149,7 +153,7 @@ export async function POST(
       .from('lesson_task_responses')
       .insert({
         task_id,
-        student_id: user.id,
+        student_id: learnerId,
         response_data: responseData,
         completion_score: completionScore,
         is_completed: status === 'completed',
@@ -168,7 +172,7 @@ export async function POST(
 
   // Recalculate progress in the background — don't fail the response if this errors
   try {
-    await recalculateLessonTaskProgress(admin, lessonId, user.id)
+    await recalculateLessonTaskProgress(admin, lessonId, learnerId)
   } catch (progressError) {
     console.error('Update task progress error:', progressError)
   }

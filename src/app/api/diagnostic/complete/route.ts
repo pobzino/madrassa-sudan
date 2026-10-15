@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getLearnerContextResult } from '@/lib/server/learner-context';
 
 type DiagnosticResponseRow = {
   is_correct: boolean;
@@ -21,6 +22,9 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
 
     const body = await request.json();
     const { attemptId } = body;
@@ -34,7 +38,7 @@ export async function POST(request: NextRequest) {
       .from('diagnostic_attempts')
       .select('*')
       .eq('id', attemptId)
-      .eq('student_id', user.id)
+      .eq('student_id', learnerId)
       .single();
 
     if (!attempt) {
@@ -105,13 +109,14 @@ export async function POST(request: NextRequest) {
         completed_at: new Date().toISOString(),
         recommended_grade: recommendedGrade,
       })
-      .eq('id', attemptId);
+      .eq('id', attemptId)
+      .eq('student_id', learnerId);
 
     // Save placement result
     const { data: placement, error: placementError } = await supabase
       .from('student_placements')
       .upsert({
-        student_id: user.id,
+        student_id: learnerId,
         subject_id: attempt.subject_id,
         placed_grade: recommendedGrade,
         confidence,

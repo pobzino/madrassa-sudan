@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getLearnerContextResult } from "@/lib/server/learner-context";
 
 // POST - Save/update lesson progress
 export async function POST(request: NextRequest) {
@@ -10,15 +11,16 @@ export async function POST(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
 
     const body = await request.json();
     const {
       lesson_id,
       position_seconds,
       watch_time_delta = 0,
-      completed = false,
-      questions_answered,
-      questions_correct
+      completed = false
     } = body;
 
     if (!lesson_id) {
@@ -29,7 +31,7 @@ export async function POST(request: NextRequest) {
     const { data: existingProgress } = await supabase
       .from("lesson_progress")
       .select("*")
-      .eq("student_id", user.id)
+      .eq("student_id", learnerId)
       .eq("lesson_id", lesson_id)
       .single();
 
@@ -50,14 +52,6 @@ export async function POST(request: NextRequest) {
       if (completed && !existingProgress.completed) {
         updates.completed = true;
         updates.completed_at = new Date().toISOString();
-      }
-
-      if (questions_answered !== undefined) {
-        updates.questions_answered = questions_answered;
-      }
-
-      if (questions_correct !== undefined) {
-        updates.questions_correct = questions_correct;
       }
 
       const { data: updatedProgress, error: updateError } = await supabase
@@ -82,14 +76,14 @@ export async function POST(request: NextRequest) {
       const { data: newProgress, error: insertError } = await supabase
         .from("lesson_progress")
         .insert({
-          student_id: user.id,
+          student_id: learnerId,
           lesson_id,
           last_position_seconds: position_seconds || 0,
           total_watch_time_seconds: watch_time_delta || 0,
           completed: completed || false,
           completed_at: completed ? new Date().toISOString() : null,
-          questions_answered: questions_answered || 0,
-          questions_correct: questions_correct || 0,
+          questions_answered: 0,
+          questions_correct: 0,
         })
         .select()
         .single();
@@ -119,6 +113,9 @@ export async function GET(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const resolved = await getLearnerContextResult(request, supabase);
+    if (resolved.response) return resolved.response;
+    const learnerId = resolved.context.learnerId;
 
     const { searchParams } = new URL(request.url);
     const lessonId = searchParams.get("lesson_id");
@@ -128,7 +125,7 @@ export async function GET(request: NextRequest) {
       const { data: progress, error } = await supabase
         .from("lesson_progress")
         .select("*")
-        .eq("student_id", user.id)
+        .eq("student_id", learnerId)
         .eq("lesson_id", lessonId)
         .single();
 
@@ -152,7 +149,7 @@ export async function GET(request: NextRequest) {
             video_duration_seconds
           )
         `)
-        .eq("student_id", user.id)
+        .eq("student_id", learnerId)
         .order("updated_at", { ascending: false });
 
       if (error) {
@@ -166,4 +163,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "An error occurred" }, { status: 500 });
   }
 }
-

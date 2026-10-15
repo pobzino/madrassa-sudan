@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { getLearnerContextResult } from '@/lib/server/learner-context';
 import { createServiceClient, hasServiceRoleConfig } from '@/lib/supabase/service';
 import type { Database, Json } from '@/lib/database.types';
 import type { Slide } from '@/lib/slides.types';
@@ -156,7 +157,7 @@ async function updateSlideInteractionProgress(
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: lessonId } = await params;
@@ -170,6 +171,9 @@ export async function GET(
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const resolved = await getLearnerContextResult(request, supabase);
+  if (resolved.response) return resolved.response;
+  const learnerId = resolved.context.learnerId;
 
   const { lesson, error, code, status } = await loadLessonAndDeck(supabase, lessonId);
 
@@ -185,7 +189,7 @@ export async function GET(
     .from('lesson_slide_responses')
     .select('*')
     .eq('lesson_id', lessonId)
-    .eq('student_id', user.id)
+    .eq('student_id', learnerId)
     .order('updated_at', { ascending: false });
 
   if (responsesError) {
@@ -210,6 +214,9 @@ export async function POST(
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const resolved = await getLearnerContextResult(request, supabase);
+  if (resolved.response) return resolved.response;
+  const learnerId = resolved.context.learnerId;
 
   const body = await request.json().catch(() => null);
   const validation = SlideResponseSchema.safeParse(body);
@@ -268,7 +275,7 @@ export async function POST(
     .select('*')
     .eq('lesson_id', lessonId)
     .eq('slide_id', slide_id)
-    .eq('student_id', user.id)
+    .eq('student_id', learnerId)
     .maybeSingle();
 
   if (existingError) {
@@ -325,7 +332,7 @@ export async function POST(
       .insert({
         lesson_id: lessonId,
         slide_id,
-        student_id: user.id,
+        student_id: learnerId,
         interaction_type: interactionType,
         response_data: responseData,
         completion_score: isCorrect ? 1 : 0,
@@ -344,7 +351,7 @@ export async function POST(
     responseRow = inserted;
   }
 
-  await updateSlideInteractionProgress(supabase, user.id, lessonId);
+  await updateSlideInteractionProgress(supabase, learnerId, lessonId);
 
   return NextResponse.json({
     response: responseRow,
