@@ -8,9 +8,11 @@
 
 import { AUTO_DOWNLOAD_SETTING_KEY, LEGACY_AUTO_DOWNLOADED_KEY } from "./cache-names";
 import type { OfflineLesson, OfflineOrigin } from "./db";
+import { canSaveOfflineHere } from "./support";
 
 const KEEP_AUTO_DOWNLOADS = 3;
-// Leave room on the phone: skip when less than this is free.
+// Skip when less than this is left of the browser's allowance for the site.
+// (That allowance isn't the phone's free space, which browsers don't report.)
 const MIN_FREE_BYTES = 200 * 1024 * 1024;
 
 type NetworkInformation = { type?: string; saveData?: boolean };
@@ -109,7 +111,7 @@ export async function autoDownloadLesson(
     keepId?: string;
   },
 ) {
-  if (!isAutoDownloadEnabled() || !navigator.onLine || !onUnmeteredConnection()) return;
+  if (!isAutoDownloadEnabled() || !navigator.onLine || !onUnmeteredConnection() || !canSaveOfflineHere()) return;
   if (isDownloaded(lessonId) || !(await hasRoom())) return;
 
   try {

@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
+import { useInstallPlatform } from "@/components/pwa/AddToPhone";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOffline } from "@/contexts/OfflineContext";
 import { AUDIO_FORMAT_WARNING, downloadErrorMessage } from "@/lib/offline/download-manager";
+import { canSaveOfflineHere, iosStorageContext } from "@/lib/offline/support";
+import { isIosDevice, subscribeToInstallPlatform } from "@/lib/pwa-install";
 
 /**
  * "Save for offline": downloads a lesson so it plays later without internet.
@@ -16,7 +19,14 @@ import { AUDIO_FORMAT_WARNING, downloadErrorMessage } from "@/lib/offline/downlo
  * Once saved it only shows that it's saved (or offers an update when the
  * teacher re-recorded the lesson). Removing a saved lesson happens on the
  * Downloads page, never from a stray tap here.
+ *
+ * On iPhone each browser and the home-screen app keep their own storage, so
+ * in a browser tab the label says where the lesson went. Where saved lessons
+ * could never open offline (iPhone in-app browsers) nothing is offered.
  */
+
+// Set once the "saved in Safari, not in the app" note was shown on this browser.
+const IOS_SAVE_NOTE_KEY = "amal-ios-save-note-shown";
 
 const COPY = {
   en: {
@@ -24,26 +34,56 @@ const COPY = {
     saveShort: "Save",
     saving: "Saving",
     saved: "Saved on this phone",
+    savedSafari: "Saved in Safari on this phone",
+    savedBrowser: "Saved in this browser",
     savedShort: "Saved",
     update: "Update saved copy",
     updateShort: "Update",
     retry: "Try saving again",
     retryShort: "Retry",
     needsInternet: "Connect to the internet to save this lesson",
+    unsupportedIos: "To save lessons for offline, open Amal in Safari or the installed app",
+    unsupported: "This browser can't save lessons for offline",
+    firstSaveSafari:
+      "Saved in Safari. The home-screen Amal app can't see these — if you add Amal to your home screen, open it there and save your lessons again.",
+    firstSaveBrowser:
+      "Saved in this browser. The home-screen Amal app can't see these — if you add Amal to your home screen, open it there and save your lessons again.",
   },
   ar: {
     save: "احفظ للمشاهدة بدون إنترنت",
     saveShort: "احفظ",
     saving: "جارٍ الحفظ",
     saved: "محفوظ على هذا الهاتف",
+    savedSafari: "محفوظ في Safari على هذا الهاتف",
+    savedBrowser: "محفوظ في هذا المتصفح",
     savedShort: "محفوظ",
     update: "حدّث النسخة المحفوظة",
     updateShort: "حدّث",
     retry: "حاول الحفظ مرة أخرى",
     retryShort: "أعد المحاولة",
     needsInternet: "اتصل بالإنترنت لحفظ هذا الدرس",
+    unsupportedIos: "لحفظ الدروس للمشاهدة بدون إنترنت، افتح آمال في Safari أو في التطبيق المثبّت",
+    unsupported: "لا يستطيع هذا المتصفح حفظ الدروس للمشاهدة بدون إنترنت",
+    firstSaveSafari:
+      "حُفظ في Safari. تطبيق آمال على الشاشة الرئيسية لا يرى هذه الدروس — إذا أضفت آمال إلى الشاشة الرئيسية، افتحه من هناك واحفظ دروسك مرة أخرى.",
+    firstSaveBrowser:
+      "حُفظ في هذا المتصفح. تطبيق آمال على الشاشة الرئيسية لا يرى هذه الدروس — إذا أضفت آمال إلى الشاشة الرئيسية، افتحه من هناك واحفظ دروسك مرة أخرى.",
   },
 };
+
+/** Shows the iPhone "saved in this browser only" note once per browser. */
+function showIosSaveNoteOnce(message: string) {
+  try {
+    if (localStorage.getItem(IOS_SAVE_NOTE_KEY)) return;
+    localStorage.setItem(IOS_SAVE_NOTE_KEY, String(Date.now()));
+  } catch {
+    // Storage blocked: skip the note rather than show it on every save.
+    return;
+  }
+  toast.info(message, { duration: 12_000 });
+}
+
+const noPlatformSupport = () => false;
 
 interface DownloadButtonProps {
   lessonId: string;
@@ -106,6 +146,11 @@ export default function DownloadButton({
   const { ready, downloads, downloadedLessonIds, updateAvailableIds, downloadLesson, isOnline } = useOffline();
   // Re-saved from here: the page's "outdated" hint no longer applies.
   const [resaved, setResaved] = useState(false);
+  // Both are null/false until hydrated; nothing renders before `ready` anyway.
+  const platform = useInstallPlatform();
+  const canSaveHere = useSyncExternalStore(subscribeToInstallPlatform, canSaveOfflineHere, noPlatformSupport);
+  const ios = platform !== null && isIosDevice();
+  const iosContext = iosStorageContext(platform, ios);
 
   const download = downloads.get(lessonId);
   const isDownloaded = downloadedLessonIds.has(lessonId);
@@ -129,14 +174,28 @@ export default function DownloadButton({
       } else if (result.status === "saved" && result.lesson.audioMayNotPlay) {
         toast.warning(AUDIO_FORMAT_WARNING[language]);
       }
+      // Families are nudged to add Amal to the home screen, where these
+      // lessons won't be: say so once, after the first save in a tab.
+      if (result.status === "saved" && (iosContext === "safari" || iosContext === "browser")) {
+        showIosSaveNoteOnce(iosContext === "safari" ? t.firstSaveSafari : t.firstSaveBrowser);
+      }
     },
-    [downloadLesson, isDownloading, isOnline, language, lessonId]
+    [downloadLesson, iosContext, isDownloading, isOnline, language, lessonId, t]
   );
 
   // Saved and current: a status, not a button.
   const showSaved = isDownloaded && !canUpdate && !isDownloading;
   // Until the phone's downloads were read, "Save" could flash on a saved lesson.
   if (!ready) return null;
+  // Saved here, a lesson could never open offline: point to where it can.
+  if (!canSaveHere && !isDownloading) {
+    return variant === "full" ? (
+      <span className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium text-gray-400 ${className}`}>
+        <DownloadIcon className="h-4 w-4 shrink-0" />
+        {ios ? t.unsupportedIos : t.unsupported}
+      </span>
+    ) : null;
+  }
   // Offline, nothing can be saved; keep showing what already is.
   if (!isOnline && !isDownloaded && !isDownloading) {
     return variant === "full" ? (
@@ -147,10 +206,11 @@ export default function DownloadButton({
     ) : null;
   }
 
+  const savedLabel = iosContext === "safari" ? t.savedSafari : iosContext === "browser" ? t.savedBrowser : t.saved;
   const label = isDownloading
     ? `${t.saving} ${progress}%`
     : showSaved
-      ? t.saved
+      ? savedLabel
       : canUpdate
         ? t.update
         : hasError

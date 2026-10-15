@@ -784,6 +784,13 @@ export default function LessonPlayerPage() {
     pauseActivePlayback();
   }, [pauseActivePlayback, startActivePlayback]);
 
+  // iOS can kill the blob: URL the saved copy plays from; SimPlayer asks for
+  // a fresh one from the copy in Cache Storage (and revokes it).
+  const reloadSavedAudio = useCallback(async () => {
+    const audioBlob = await getCachedSimAudio(lessonId).catch(() => null);
+    return audioBlob ? URL.createObjectURL(audioBlob) : null;
+  }, [lessonId]);
+
   const handleSimProgress = useCallback(async (pct: number) => {
     trackVideoPlayback(pct);
     if (!userId || !lessonId) return;
@@ -1088,7 +1095,9 @@ export default function LessonPlayerPage() {
             savedResponses={slideInteractionResponses}
             onSlideResponse={handleSlideResponse}
             playingFromDevice={playingFromDevice}
+            reloadDeviceAudio={playingFromDevice ? reloadSavedAudio : undefined}
             resumeKey={userId ? `${userId}:${lessonId}` : undefined}
+            mediaTitle={pickLocalizedText(lessonContentLanguage, lesson.title_ar, lesson.title_en)}
             onProgress={handleSimProgress}
             onPlayStateChange={handleSimPlaybackState}
             onActivitySubmit={trackLessonActivity}

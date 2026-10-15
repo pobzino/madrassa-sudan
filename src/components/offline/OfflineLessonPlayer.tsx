@@ -420,6 +420,18 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
     [lessonId, ownerId]
   );
 
+  // iOS can drop the blob: URL the narration plays from (when it restarts its
+  // networking process) while the copy in Cache Storage is fine: SimPlayer
+  // asks for a fresh URL from it. Never after logout or an account switch
+  // (both clear storage and set clearedRef). No database read: the same
+  // event can leave the open IndexedDB connection hanging.
+  const reloadDeviceAudio = useCallback(async () => {
+    if (!lessonId || clearedRef.current) return null;
+    const audio = await getCachedSimAudio(lessonId);
+    if (!audio || clearedRef.current) return null;
+    return URL.createObjectURL(audio);
+  }, [lessonId]);
+
   const retry = () => {
     setState({ status: "loading" });
     setReloadKey((key) => key + 1);
@@ -507,18 +519,19 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
                   {t.grade} {lesson.grade_level}
                 </span>
               ) : null}
+              {/* Always shown, on phones too: on Wi-Fi without internet the
+                  player's own offline notice stays hidden (navigator.onLine is true). */}
+              <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
+                <Smartphone className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                {t.savedOnPhone}
+              </span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {progress?.completed ? (
+            {progress?.completed && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#007229]/10 px-3 py-1.5 text-sm font-medium text-[#007229]">
                 <Check className="h-4 w-4" aria-hidden="true" />
                 <span className="max-sm:sr-only">{t.finished}</span>
-              </span>
-            ) : (
-              <span className="hidden items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800 sm:inline-flex">
-                <Smartphone className="h-4 w-4" aria-hidden="true" />
-                {t.savedOnPhone}
               </span>
             )}
             <LanguageToggle className="max-sm:px-2.5" />
@@ -549,7 +562,10 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
             onPlayStateChange={handlePlayState}
             onSlideResponse={handleSlideResponse}
             playingFromDevice
+            reloadDeviceAudio={reloadDeviceAudio}
+            reopenHref={offlinePlayerUrl(lesson.id)}
             resumeKey={`${ready.ownerId}:${lesson.id}`}
+            mediaTitle={title}
           />
         </PlayerErrorBoundary>
       </div>

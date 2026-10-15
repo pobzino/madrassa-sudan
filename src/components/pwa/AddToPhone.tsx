@@ -28,6 +28,8 @@ const COPY = {
     iosSafari: ["Tap the Share button at the bottom of Safari.", "Scroll down and tap Add to Home Screen.", "Tap Add."],
     iosSafariNote: "On newer iPhones, tap ⋯ first, then Share.",
     iosBrowser: ["Tap the Share button next to the address bar.", "Tap Add to Home Screen.", "Tap Add."],
+    iosSafariAfter: "Then open Amal from your home screen. Lessons saved in Safari need saving again inside the app.",
+    iosBrowserAfter: "Then open Amal from your home screen. Lessons saved in this browser need saving again inside the app.",
     android: ["Tap the menu ⋮ at the top of the screen.", "Tap Add to Home screen or Install app.", "Tap Add or Install."],
     androidInApp: "This page is open inside another app, which can't add Amal to your phone. Open it in Chrome first.",
     samsung: "Samsung's browser adds apps in an old format that Google Play Protect blocks. Open Amal in Chrome to add it safely.",
@@ -48,6 +50,8 @@ const COPY = {
     iosSafari: ["اضغط زر المشاركة أسفل Safari.", "مرّر للأسفل واضغط «إضافة إلى الشاشة الرئيسية».", "اضغط «إضافة»."],
     iosSafariNote: "في أجهزة iPhone الأحدث، اضغط ⋯ أولاً ثم «مشاركة».",
     iosBrowser: ["اضغط زر المشاركة بجانب شريط العنوان.", "اضغط «إضافة إلى الشاشة الرئيسية».", "اضغط «إضافة»."],
+    iosSafariAfter: "ثم افتح آمال من الشاشة الرئيسية. الدروس المحفوظة في Safari تحتاج إلى حفظها مرة أخرى داخل التطبيق.",
+    iosBrowserAfter: "ثم افتح آمال من الشاشة الرئيسية. الدروس المحفوظة في هذا المتصفح تحتاج إلى حفظها مرة أخرى داخل التطبيق.",
     android: ["اضغط على القائمة ⋮ في أعلى الشاشة.", "اضغط «إضافة إلى الشاشة الرئيسية» أو «تثبيت التطبيق».", "اضغط «إضافة» أو «تثبيت»."],
     androidInApp: "هذه الصفحة مفتوحة داخل تطبيق آخر لا يمكنه إضافة آمال إلى هاتفك. افتحها في Chrome أولاً.",
     samsung: "متصفح سامسونج يضيف التطبيقات بصيغة قديمة يحظرها Google Play Protect. افتح آمال في Chrome لإضافته بأمان.",
@@ -229,14 +233,20 @@ export function AddToPhone({ source, onInstalled }: { source: InstallSource; onI
   }
 
   return (
-    <Steps
-      steps={platform === "ios-browser" ? t.iosBrowser : t.iosSafari}
-      note={platform === "ios-safari" ? t.iosSafariNote : undefined}
-      chips={[
-        <Chip key="share"><ShareIcon /></Chip>,
-        <Chip key="add"><AddSquareIcon /></Chip>,
-        <Chip key="confirm"><span className="text-sm font-bold">{t.add}</span></Chip>,
-      ]}
-    />
+    <div className="space-y-3">
+      <Steps
+        steps={platform === "ios-browser" ? t.iosBrowser : t.iosSafari}
+        note={platform === "ios-safari" ? t.iosSafariNote : undefined}
+        chips={[
+          <Chip key="share"><ShareIcon /></Chip>,
+          <Chip key="add"><AddSquareIcon /></Chip>,
+          <Chip key="confirm"><span className="text-sm font-bold">{t.add}</span></Chip>,
+        ]}
+      />
+      {/* On iPhone the home-screen app has its own storage: lessons saved in the browser stay there. */}
+      <p className="px-1 text-sm leading-snug text-gray-600">
+        {platform === "ios-browser" ? t.iosBrowserAfter : t.iosSafariAfter}
+      </p>
+    </div>
   );
 }
