@@ -9,6 +9,7 @@ import {
   summariseWeek,
   weekLabel,
   type LessonActivity,
+  type PeriodWindow,
   type PracticeAttempt,
   type ProgressActivity,
   type StreakState,
@@ -17,6 +18,7 @@ import type { EmailLanguage } from "@/lib/email/render";
 import { emailAutomationConfig, RESEND_BATCH_LIMIT, sendEmails, type OutgoingEmail } from "@/lib/email/send";
 import {
   hadActivity,
+  type WeeklySummary,
   volunteerImpactEmail,
   weeklyProgressEmail,
   welcomeParentEmail,
@@ -63,7 +65,7 @@ type Prepared = { userId: string; email: OutgoingEmail };
 
 type AssignmentRules = { passing_score: number | null; total_points: number | null };
 
-function languageOf(value: string | null | undefined): EmailLanguage {
+export function languageOf(value: string | null | undefined): EmailLanguage {
   return value === "en" ? "en" : "ar";
 }
 
@@ -248,27 +250,23 @@ export async function sendWelcomeEmail(userId: string) {
   return result.sent ? ("sent" as const) : result.failed ? ("failed" as const) : ("skipped" as const);
 }
 
-/** Sunday's summary of the past week for each family, or a nudge if they've lapsed recently. */
-export async function runWeeklyProgressEmails({ now = new Date(), dryRun = false } = {}): Promise<RunReport> {
-  const window = previousWeek(now);
-  const report: RunReport = { kind: "weekly_progress", period: window.key, status: "sent", candidates: 0, eligible: 0, sent: 0, failed: 0, breakdown: {} };
-  const blocked = blockedReason(dryRun);
-  if (blocked) return { ...report, status: blocked };
+export type WeeklyFamily = {
+  id: string;
+  full_name: string | null;
+  preferred_language: string | null;
+  email_updates_opt_in: boolean;
+  summary: WeeklySummary;
+  /** Learned in the four weeks before this one, so a quiet week counts as lapsing. */
+  learnedBefore: boolean;
+};
 
-  const secret = process.env.EMAIL_AUTOMATION_SECRET!.trim();
+/** Each parent account's week. Loaded once and shared by the Sunday email and push runs. */
+export async function loadWeeklyFamilies(window: PeriodWindow): Promise<WeeklyFamily[]> {
   const client = createServiceClient();
   const db = client as unknown as UntypedClient;
-  const siteUrl = getCanonicalSiteUrl();
-
   const parents = await fetchAll((from, to) =>
     client.from("profiles").select("id, full_name, preferred_language, email_updates_opt_in").eq("role", "parent").order("id").range(from, to),
   );
-  const [emails, suppressed, done] = await Promise.all([
-    deliverableEmails(client),
-    userIdsIn(db, "email_suppressions", "weekly_progress"),
-    userIdsIn(db, "email_log", "weekly_progress", window.key),
-  ]);
-  report.candidates = parents.length;
 
   const nudgeFrom = new Date(window.start.getTime() - NUDGE_FOR_DAYS * DAY);
   const [progress, attempts, streaks] = await Promise.all([
@@ -322,6 +320,40 @@ export async function runWeeklyProgressEmails({ now = new Date(), dryRun = false
   );
   const streakBy = new Map<string, StreakState>(streaks.map((row) => [row.student_id, row]));
 
+  return parents.map((parent) => {
+    const rows = progressBy.get(parent.id) ?? [];
+    return {
+      ...parent,
+      summary: summariseWeek(window, rows, attemptsBy.get(parent.id) ?? [], streakBy.get(parent.id) ?? null),
+      learnedBefore: rows.some((row) => Date.parse(row.updated_at) < window.start.getTime()),
+    };
+  });
+}
+
+/** Sunday's summary of the past week for each family, or a nudge if they've lapsed recently. */
+export async function runWeeklyProgressEmails({
+  now = new Date(),
+  dryRun = false,
+  families,
+}: { now?: Date; dryRun?: boolean; families?: WeeklyFamily[] } = {}): Promise<RunReport> {
+  const window = previousWeek(now);
+  const report: RunReport = { kind: "weekly_progress", period: window.key, status: "sent", candidates: 0, eligible: 0, sent: 0, failed: 0, breakdown: {} };
+  const blocked = blockedReason(dryRun);
+  if (blocked) return { ...report, status: blocked };
+
+  const secret = process.env.EMAIL_AUTOMATION_SECRET!.trim();
+  const client = createServiceClient();
+  const db = client as unknown as UntypedClient;
+  const siteUrl = getCanonicalSiteUrl();
+
+  const [parents, emails, suppressed, done] = await Promise.all([
+    families ?? loadWeeklyFamilies(window),
+    deliverableEmails(client),
+    userIdsIn(db, "email_suppressions", "weekly_progress"),
+    userIdsIn(db, "email_log", "weekly_progress", window.key),
+  ]);
+  report.candidates = parents.length;
+
   const count = (key: string) => (report.breakdown[key] = (report.breakdown[key] ?? 0) + 1);
   const prepared: Prepared[] = [];
   for (const parent of parents) {
@@ -339,12 +371,10 @@ export async function runWeeklyProgressEmails({ now = new Date(), dryRun = false
       continue;
     }
 
-    const rows = progressBy.get(parent.id) ?? [];
-    const summary = summariseWeek(window, rows, attemptsBy.get(parent.id) ?? [], streakBy.get(parent.id) ?? null);
+    const { summary } = parent;
     const active = hadActivity(summary);
-    const learnedBefore = rows.some((row) => Date.parse(row.updated_at) < window.start.getTime());
     // The nudge encourages a return visit, so it only goes to families who said yes to email updates.
-    if (!active && !(learnedBefore && parent.email_updates_opt_in)) {
+    if (!active && !(parent.learnedBefore && parent.email_updates_opt_in)) {
       count("quiet");
       continue;
     }

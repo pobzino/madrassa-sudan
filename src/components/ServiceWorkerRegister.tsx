@@ -14,6 +14,17 @@ function canUseServiceWorker() {
 export default function ServiceWorkerRegister() {
   useEffect(() => {
     trackAppLaunch();
+    // A reminder puts a dot on the app icon; opening Amal clears it.
+    const clearBadge = () => {
+      if (document.visibilityState !== "visible") return;
+      (navigator as Navigator & { clearAppBadge?: () => Promise<void> }).clearAppBadge?.().catch(() => undefined);
+    };
+    clearBadge();
+    document.addEventListener("visibilitychange", clearBadge);
+    return () => document.removeEventListener("visibilitychange", clearBadge);
+  }, []);
+
+  useEffect(() => {
     if (!canUseServiceWorker()) return;
 
     // Development chunks are not content-hashed like production bundles. A

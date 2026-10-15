@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOffline } from "@/contexts/OfflineContext";
 import { getAllOfflineLessons, getCachedSimAudio, type OfflineLesson } from "@/lib/offline/db";
 import LessonComputerDownloadButton from "@/components/lessons/LessonComputerDownloadButton";
+import { canDetectWifi, isAutoDownloadEnabled, setAutoDownloadEnabled } from "@/lib/offline/auto-download";
 
 const translations = {
   ar: {
@@ -33,6 +34,8 @@ const translations = {
     confirmRemove: "حذف هذا الدرس من التحميلات؟",
     unknownLesson: "درس",
     audio: "الصوت",
+    autoDownload: "تحميل الدرس التالي عبر الواي فاي",
+    autoDownloadHint: "أثناء التعلّم على الواي فاي، يُحفظ الدرس التالي على هذا الهاتف ليعمل لاحقاً بدون بيانات الجوال.",
   },
   en: {
     title: "Downloads",
@@ -59,8 +62,35 @@ const translations = {
     confirmRemove: "Remove this lesson from downloads?",
     unknownLesson: "Lesson",
     audio: "Audio",
+    autoDownload: "Download the next lesson on Wi-Fi",
+    autoDownloadHint: "While you learn on Wi-Fi, the next lesson saves to this phone so it plays later without mobile data.",
   },
 };
+
+const noSubscription = () => () => {};
+
+/** The Wi-Fi auto-download switch. Mounted only in the browser, after hydration. */
+function AutoDownloadSetting({ label, hint }: { label: string; hint: string }) {
+  const [enabled, setEnabled] = useState(() => isAutoDownloadEnabled());
+  return (
+    <label className="mb-6 flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <span>
+        <span className="block text-sm font-bold text-gray-800">{label}</span>
+        <span className="mt-0.5 block text-xs text-gray-500">{hint}</span>
+      </span>
+      <input
+        type="checkbox"
+        role="switch"
+        checked={enabled}
+        onChange={(event) => {
+          setAutoDownloadEnabled(event.target.checked);
+          setEnabled(event.target.checked);
+        }}
+        className="h-6 w-6 shrink-0 cursor-pointer accent-[#007229]"
+      />
+    </label>
+  );
+}
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 MB";
@@ -102,6 +132,8 @@ export default function DownloadsPage() {
   const [lessons, setLessons] = useState<OfflineLesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  // Only Android browsers can tell Wi-Fi from mobile data, so only they get the switch.
+  const wifiAware = useSyncExternalStore(noSubscription, canDetectWifi, () => false);
 
   const loadLessons = useCallback(async () => {
     setLoading(true);
@@ -163,6 +195,8 @@ export default function DownloadsPage() {
           {isOnline ? t.online : t.offline}
         </div>
       </div>
+
+      {wifiAware && <AutoDownloadSetting label={t.autoDownload} hint={t.autoDownloadHint} />}
 
       <div className="grid gap-4 md:grid-cols-[1.15fr_0.85fr] mb-6">
         <section className={`bg-white border border-gray-100 rounded-2xl p-4 shadow-sm ${activeDownloads.length === 0 ? "md:col-span-2" : ""}`}>

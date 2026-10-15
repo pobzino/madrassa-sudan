@@ -1,0 +1,99 @@
+// Lesson reminders in the browser: asks permission, subscribes this device
+// with the service worker, and tells the server. iPhones only allow this
+// once Amal is on the home screen.
+
+export type ReminderState =
+  /** The browser can't do push notifications. */
+  | "unsupported"
+  /** iPhone in Safari: add Amal to the home screen first. */
+  | "needs-install"
+  | "default"
+  | "granted"
+  | "denied";
+
+const SERVICE_WORKER_TIMEOUT_MS = 8000;
+
+export function reminderState(): ReminderState {
+  const hasWorker = "serviceWorker" in navigator;
+  const hasPush = "PushManager" in window && "Notification" in window;
+  if (!hasWorker || !hasPush) {
+    const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const standalone = (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    return ios && !standalone ? "needs-install" : "unsupported";
+  }
+  if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) return "unsupported";
+  return Notification.permission;
+}
+
+function vapidKey() {
+  const base64 = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!.replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4));
+  return Uint8Array.from(raw, (char) => char.charCodeAt(0));
+}
+
+async function readyWorker() {
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((resolve) => window.setTimeout(() => resolve(null), SERVICE_WORKER_TIMEOUT_MS)),
+  ]);
+}
+
+async function saveSubscription(subscription: PushSubscription, extra: Record<string, unknown> = {}) {
+  const response = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...subscription.toJSON(), ...extra }),
+  });
+  return response.ok;
+}
+
+/** Asks for permission (call it from a tap), subscribes and sends a "reminders are on" push. */
+export async function enableReminders(language: "ar" | "en"): Promise<"on" | "denied" | "dismissed" | "error"> {
+  const permission = await Notification.requestPermission();
+  if (permission === "denied") return "denied";
+  if (permission !== "granted") return "dismissed";
+  try {
+    const registration = await readyWorker();
+    if (!registration) return "error";
+    const subscription =
+      (await registration.pushManager.getSubscription()) ??
+      (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey() }));
+    return (await saveSubscription(subscription, { confirm: true, language })) ? "on" : "error";
+  } catch {
+    return "error";
+  }
+}
+
+/**
+ * Re-sends an existing subscription once per visit, so the server keeps it
+ * linked to whoever is signed in and picks up any change the browser made.
+ */
+export async function refreshReminders() {
+  try {
+    if (reminderState() !== "granted" || sessionStorage.getItem("amal-push-refreshed")) return;
+    sessionStorage.setItem("amal-push-refreshed", "1");
+    const registration = await readyWorker();
+    const subscription = await registration?.pushManager.getSubscription();
+    if (subscription) await saveSubscription(subscription);
+  } catch {
+    // Reminders are a bonus; never interrupt learning over them.
+  }
+}
+
+const REMINDERS_CARD_HIDDEN_KEY = "amal-reminders-card-hidden-until";
+
+export function isRemindersCardHidden() {
+  try {
+    return Number(localStorage.getItem(REMINDERS_CARD_HIDDEN_KEY) ?? 0) > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+export function hideRemindersCard(days = 30) {
+  try {
+    localStorage.setItem(REMINDERS_CARD_HIDDEN_KEY, String(Date.now() + days * 24 * 60 * 60 * 1000));
+  } catch {
+    // Storage can be unavailable in private or locked-down browsers.
+  }
+}

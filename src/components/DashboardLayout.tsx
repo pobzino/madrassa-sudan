@@ -35,6 +35,7 @@ const translations = {
     progress: "التقدم",
     diagnostic: "اختبار المستوى",
     downloads: "التحميلات",
+    home: "الرئيسية",
     // Teacher nav
     teacherDashboard: "لوحة المعلم",
     manageLessons: "إدارة الدروس",
@@ -62,6 +63,7 @@ const translations = {
     progress: "Progress",
     diagnostic: "Level Test",
     downloads: "Downloads",
+    home: "Home",
     // Teacher nav
     teacherDashboard: "Teacher Dashboard",
     manageLessons: "Manage Lessons",
@@ -467,9 +469,49 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       {/* Main Content */}
-      <div className={`${isRtl ? "lg:mr-64" : "lg:ml-64"} pt-16 lg:pt-0`}>
+      <div
+        className={`${isRtl ? "lg:mr-64" : "lg:ml-64"} pt-16 lg:pt-0 ${
+          isInTeacherView ? "" : "standalone:pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:standalone:pb-0"
+        }`}
+      >
         {children}
       </div>
+
+      {/* In the installed app on phones, a bottom tab bar like a native app. */}
+      {!isInTeacherView && (
+        <nav
+          aria-label={t.home}
+          className="fixed inset-x-0 bottom-0 z-40 hidden border-t border-gray-100 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg standalone:flex lg:standalone:hidden"
+        >
+          {[
+            { href: "/dashboard", label: t.home, icon: <HomeNavIcon className="h-6 w-6" /> },
+            { href: "/lessons", label: t.lessons, icon: <BookNavIcon className="h-6 w-6" /> },
+            {
+              href: "/downloads",
+              label: t.downloads,
+              icon: (
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" />
+                </svg>
+              ),
+            },
+            { href: "/progress", label: t.progress, icon: <ChartNavIcon className="h-6 w-6" /> },
+          ].map((tab) => {
+            const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                aria-current={active ? "page" : undefined}
+                className={`flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold font-fredoka ${active ? "text-[#007229]" : "text-gray-500"}`}
+              >
+                <span className={`flex h-8 w-14 items-center justify-center rounded-full ${active ? "bg-[#007229]/10" : ""}`}>{tab.icon}</span>
+                {tab.label}
+              </Link>
+            );
+          })}
+        </nav>
+      )}
 
       {/* Feedback Modal */}
       <FeedbackModal open={showFeedback} onClose={() => setShowFeedback(false)} />

@@ -6,10 +6,11 @@ const SIM_AUDIO_CACHE = 'sim-audio-downloads';
 const OFFLINE_URL = '/offline';
 const PUBLIC_PAGE_PATHS = new Set(['/', '/sample-lesson', '/privacy', '/terms', OFFLINE_URL]);
 
-// Install — pre-cache offline fallback page
+// Install — pre-cache offline fallback page, and take over straight away so
+// new handlers (like lesson reminders) work without closing every tab first.
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(PAGE_CACHE).then((cache) => cache.add(OFFLINE_URL))
+    caches.open(PAGE_CACHE).then((cache) => cache.add(OFFLINE_URL)).then(() => self.skipWaiting())
   );
 });
 
@@ -137,4 +138,41 @@ self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+});
+
+// Lesson reminders — show the notification and put a dot on the app icon.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : '' };
+  }
+  const lang = data.lang === 'ar' ? 'ar' : 'en';
+  const shown = self.registration.showNotification(data.title || 'Amal School', {
+    body: data.body || '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/badge-96.png',
+    tag: data.tag,
+    lang,
+    dir: lang === 'ar' ? 'rtl' : 'ltr',
+    data: { url: data.url || '/dashboard' },
+  });
+  const badged = self.navigator.setAppBadge ? self.navigator.setAppBadge().catch(() => undefined) : Promise.resolve();
+  event.waitUntil(Promise.all([shown, badged]));
+});
+
+// Tapping a reminder opens Amal on the right page, reusing an open window.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || '/dashboard', self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
+      if (open) {
+        return open.focus().then((client) => (client && 'navigate' in client ? client.navigate(target) : undefined));
+      }
+      return self.clients.openWindow(target);
+    })
+  );
 });

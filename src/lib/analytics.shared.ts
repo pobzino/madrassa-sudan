@@ -26,6 +26,7 @@ export const ANALYTICS_EVENT_NAMES = [
   "practice_retry",
   "practice_start",
   "practice_submit",
+  "reminders_result",
   "sample_practice_complete",
   "sample_practice_start",
   "sample_question_answered",

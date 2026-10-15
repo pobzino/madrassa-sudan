@@ -207,7 +207,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <DashboardInstallNudge />
+          <DashboardInstallNudge allowReminders={profile?.role === "parent"} />
 
           {/* Stats Grid */}
           <div className="mb-8">

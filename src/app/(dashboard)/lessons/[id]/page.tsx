@@ -25,6 +25,9 @@ const SimPlayer = dynamic(() => import("@/components/slides/SimPlayer"), {
 import { Confetti } from "@/components/illustrations";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { getOfflineLesson, getCachedSimAudio, queueProgressUpdate } from "@/lib/offline/db";
+import { autoDownloadLesson } from "@/lib/offline/auto-download";
+import { useOffline } from "@/contexts/OfflineContext";
+import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import ProgressGateModal from "@/components/lessons/ProgressGateModal";
 import SimVideoExportButton from "@/components/lessons/SimVideoExportButton";
 import {
@@ -206,6 +209,9 @@ export default function LessonPlayerPage() {
   const [practiceAssignmentId, setPracticeAssignmentId] = useState<string | null>(null);
   const [practicePassed, setPracticePassed] = useState(false);
   const [adjacentLessons, setAdjacentLessons] = useState<{ prev: Lesson | null; next: Lesson | null }>({ prev: null, next: null });
+  // True while the lesson is playing, to keep the phone's screen on.
+  const [screenAwake, setScreenAwake] = useState(false);
+  useScreenWakeLock(screenAwake);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -384,6 +390,10 @@ export default function LessonPlayerPage() {
           const offlineLesson = await getOfflineLesson(lessonId);
           if (offlineLesson) {
             setIsOfflineMode(true);
+            // The saved session works without a connection, so progress made
+            // offline is queued for this learner and synced later.
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) setUserId(session.user.id);
             setLesson({
               id: offlineLesson.id,
               title_ar: offlineLesson.title_ar,
@@ -506,6 +516,15 @@ export default function LessonPlayerPage() {
       }
 
       const sim = (simRes?.sim as SimPayload | null) ?? null;
+      // If this exact recording is downloaded, play it from the phone to save mobile data.
+      if (sim) {
+        const saved = await getOfflineLesson(lessonId).catch(() => null);
+        if (saved?.sim?.sim.id === sim.sim.id && saved.sim.sim.updated_at === sim.sim.updated_at) {
+          const audioBlob = await getCachedSimAudio(lessonId).catch(() => null);
+          if (audioBlob) sim.audio_url = URL.createObjectURL(audioBlob);
+        }
+      }
+      if (signal.aborted) return;
       setLessonSim(sim);
 
       // No sim recorded? Probe for a legacy mp4 in the lesson-videos bucket.
@@ -617,6 +636,28 @@ export default function LessonPlayerPage() {
     };
   }, [lessonId, router, supabase, loadAttempt]);
 
+  // On Wi-Fi, download the next lesson in the background so it plays later
+  // without mobile data. Waits a little so this lesson gets the connection first.
+  const offline = useOffline();
+  const offlineRef = useRef(offline);
+  useEffect(() => {
+    offlineRef.current = offline;
+  });
+  const nextLessonId = adjacentLessons.next?.id ?? null;
+  useEffect(() => {
+    if (!nextLessonId) return;
+    const timer = window.setTimeout(() => {
+      const { downloadLesson, deleteLesson, isLessonDownloaded } = offlineRef.current;
+      void autoDownloadLesson(nextLessonId, {
+        download: downloadLesson,
+        remove: deleteLesson,
+        isDownloaded: isLessonDownloaded,
+        keepId: lessonId,
+      });
+    }, 15_000);
+    return () => window.clearTimeout(timer);
+  }, [nextLessonId, lessonId]);
+
   const persistSlideInteractionResponse = useCallback(
     async (slideId: string, result: SlideInteractionResult) => {
       if (!userId) {
@@ -669,6 +710,7 @@ export default function LessonPlayerPage() {
   const simDurationSec = lessonSim?.sim?.duration_ms ? Math.ceil(lessonSim.sim.duration_ms / 1000) : lesson?.video_duration_seconds || 0;
 
   const startActivePlayback = useCallback((source: "sim_player" | "legacy_video") => {
+    setScreenAwake(true);
     playbackSourceRef.current = source;
     if (activePlaybackStartedAtRef.current === null) {
       activePlaybackStartedAtRef.current = Date.now();
@@ -676,6 +718,7 @@ export default function LessonPlayerPage() {
   }, []);
 
   const pauseActivePlayback = useCallback(() => {
+    setScreenAwake(false);
     if (activePlaybackStartedAtRef.current === null) return;
     activePlaybackSecondsRef.current += (Date.now() - activePlaybackStartedAtRef.current) / 1000;
     activePlaybackStartedAtRef.current = null;

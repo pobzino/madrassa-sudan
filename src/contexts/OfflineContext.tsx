@@ -87,14 +87,15 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
 
       for (const item of items) {
         try {
-          if (item.table === "lesson_progress") {
-            await supabase.from("lesson_progress").upsert(item.data as never, {
-              onConflict: "student_id,lesson_id",
-            });
-          } else {
-            await supabase.from(item.table as "lesson_question_responses").insert(item.data as never);
-          }
-          if (item.id) synced.push(item.id);
+          // Supabase reports failures in `error` rather than throwing, so only
+          // clear an item once the server has actually saved it.
+          const { error } =
+            item.table === "lesson_progress"
+              ? await supabase.from("lesson_progress").upsert(item.data as never, {
+                  onConflict: "student_id,lesson_id",
+                })
+              : await supabase.from(item.table as "lesson_question_responses").insert(item.data as never);
+          if (!error && item.id) synced.push(item.id);
         } catch {
           // Skip failed items, will retry next time
         }
@@ -122,13 +123,15 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) await prepareOfflineStorageForUser(user.id);
       await loadState();
+      // Progress saved offline in an earlier visit syncs as soon as the app opens online.
+      if (user && navigator.onLine) await syncProgressQueue();
     });
 
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [loadState]);
+  }, [loadState, syncProgressQueue]);
 
   // Auto-sync when coming back online
   useEffect(() => {

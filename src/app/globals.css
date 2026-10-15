@@ -1,5 +1,8 @@
 @import "tailwindcss" source("..");
 
+/* When Amal is opened from the home screen as an installed app. */
+@custom-variant standalone (@media (display-mode: standalone));
+
 .sim-seek::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 3px;
