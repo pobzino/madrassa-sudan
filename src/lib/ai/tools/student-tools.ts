@@ -101,7 +101,8 @@ export async function getStudentProfile(
         )
       `)
       .eq("student_id", studentContext.id)
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .eq("status", "approved");
 
     if (cohortsError) throw cohortsError;
 

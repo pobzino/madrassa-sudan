@@ -89,6 +89,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             .eq("cohort_id", assignment.cohort_id)
             .eq("student_id", user.id)
             .eq("is_active", true)
+            .eq("status", "approved")
             .single();
           studentAccess = !!cohortStudent;
         } else {
@@ -353,7 +354,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         .from("cohort_students")
         .select("student_id")
         .eq("cohort_id", existingAssignment.cohort_id)
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .eq("status", "approved");
 
       if (cohortStudents && cohortStudents.length > 0) {
         const submissionsToInsert = cohortStudents.map((cs) => ({

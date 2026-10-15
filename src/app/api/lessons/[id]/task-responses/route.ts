@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient, hasServiceRoleConfig } from '@/lib/supabase/service'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
@@ -66,6 +67,23 @@ export async function POST(
 
   const { task_id, status, time_spent_seconds } = validation.data
 
+  // Answers, scores and the lesson's task counters are written with the
+  // service role (students can only read their task responses, so they cannot
+  // write a teacher review or a score themselves). That skips RLS, so check
+  // the lesson access the old student policy enforced.
+  const { data: canAccessLesson } = await supabase.rpc('can_user_access_published_lesson', {
+    p_user_id: user.id,
+    p_lesson_id: lessonId,
+  })
+  if (canAccessLesson !== true) {
+    return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
+  }
+  if (!hasServiceRoleConfig()) {
+    console.error('Task responses: service role is not configured; answers are saved server-side.')
+    return NextResponse.json({ error: 'Saving answers is temporarily unavailable' }, { status: 503 })
+  }
+  const admin = createServiceClient()
+
   const { data: taskRow, error: taskError } = await supabase
     .from('lesson_tasks')
     .select('*')
@@ -97,7 +115,7 @@ export async function POST(
     }
   }
 
-  const { data: existing } = await supabase
+  const { data: existing } = await admin
     .from('lesson_task_responses')
     .select('id, attempts')
     .eq('task_id', task_id)
@@ -107,7 +125,7 @@ export async function POST(
   let responseRow: Database['public']['Tables']['lesson_task_responses']['Row'] | null = null
 
   if (existing) {
-    const { data: updated, error: updateError } = await supabase
+    const { data: updated, error: updateError } = await admin
       .from('lesson_task_responses')
       .update({
         response_data: responseData,
@@ -118,6 +136,7 @@ export async function POST(
         attempts: existing.attempts + 1,
       })
       .eq('id', existing.id)
+      .eq('student_id', user.id)
       .select()
       .single()
 
@@ -126,7 +145,7 @@ export async function POST(
     }
     responseRow = updated
   } else {
-    const { data: inserted, error: insertError } = await supabase
+    const { data: inserted, error: insertError } = await admin
       .from('lesson_task_responses')
       .insert({
         task_id,
@@ -149,7 +168,7 @@ export async function POST(
 
   // Recalculate progress in the background — don't fail the response if this errors
   try {
-    await recalculateLessonTaskProgress(supabase, lessonId, user.id)
+    await recalculateLessonTaskProgress(admin, lessonId, user.id)
   } catch (progressError) {
     console.error('Update task progress error:', progressError)
   }

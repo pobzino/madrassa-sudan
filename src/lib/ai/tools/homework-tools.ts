@@ -920,6 +920,7 @@ export async function createHomeworkAssignment(
       .select("cohort_id")
       .eq("student_id", studentContext.id)
       .eq("is_active", true)
+      .eq("status", "approved")
       .limit(1)
       .single();
 
