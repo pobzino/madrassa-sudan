@@ -698,23 +698,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
   );
 
   // ── Resume position effects (must be after applyAt) ───────────────────
-  // Restore saved position once audio is ready
-  useEffect(() => {
-    if (!resumeStorageKey || resumeAppliedRef.current || !ready) return;
-    resumeAppliedRef.current = true;
-    try {
-      const saved = localStorage.getItem(resumeStorageKey);
-      if (!saved) return;
-      const savedMs = Number(saved);
-      if (!savedMs || savedMs <= 0 || savedMs >= virtualTotalMs - 1000) return;
-      const realMs = virtualToRealMs(savedMs, effectiveClips);
-      const audio = audioRef.current;
-      if (audio) audio.currentTime = realMs / 1000;
-      // Restore the externally persisted media position after metadata loads.
-
-      applyAt(realMs, true);
-    } catch { /* ignore */ }
-  }, [resumeStorageKey, ready, virtualTotalMs, effectiveClips, applyAt]);
+  // Restoring the saved position is further down, after resetGatesForTime.
 
   // Periodically save the playback position (every 5 seconds)
   useEffect(() => {
@@ -760,6 +744,27 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     },
     [gates, deck, projectedEvents]
   );
+
+  // Restore saved position once audio is ready. Like a seek, the activities
+  // before it count as passed; otherwise the first Play would jump back to
+  // the lesson's first activity.
+  useEffect(() => {
+    if (!resumeStorageKey || resumeAppliedRef.current || !ready) return;
+    resumeAppliedRef.current = true;
+    try {
+      const saved = localStorage.getItem(resumeStorageKey);
+      if (!saved) return;
+      const savedMs = Number(saved);
+      if (!savedMs || savedMs <= 0 || savedMs >= virtualTotalMs - 1000) return;
+      const realMs = virtualToRealMs(savedMs, effectiveClips);
+      const audio = audioRef.current;
+      if (audio) audio.currentTime = realMs / 1000;
+      // Restore the externally persisted media position after metadata loads.
+
+      applyAt(realMs, true);
+      resetGatesForTime(realMs);
+    } catch { /* ignore */ }
+  }, [resumeStorageKey, ready, virtualTotalMs, effectiveClips, applyAt, resetGatesForTime]);
 
   // Find the first gate whose time has been crossed since the last check
   // and hasn't been shown yet. Returns `null` when nothing is due.
@@ -1297,13 +1302,17 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
     if (initialGateResultsApplied.current) return;
     const saved = savedResponsesRef.current;
     if (!saved || gates.length === 0) return;
-    const initial: Record<number, 'correct' | 'incorrect' | 'skipped'> = {};
+    const initial: Record<number, 'correct' | 'incorrect' | 'skipped' | 'submitted'> = {};
     for (let i = 0; i < gates.length; i++) {
       const slideId = slideIdAtMs(gates[i].t);
       const resp = slideId ? saved[slideId] : null;
-      if (resp) {
-        initial[i] = resp.isCorrect ? 'correct' : 'incorrect';
-      }
+      if (!resp) continue;
+      // Teacher-reviewed answers (drawings, free text) have no grade of their
+      // own yet: show them as submitted, as when they were given, not as wrong.
+      const slide = deck.find((s) => s.id === slideId);
+      const interaction = slide ? slideToInteraction(slide) : null;
+      const teacherReviewed = interaction?.type === 'free_response' || interaction?.type === 'draw_answer';
+      initial[i] = teacherReviewed ? 'submitted' : resp.isCorrect ? 'correct' : 'incorrect';
     }
     if (Object.keys(initial).length > 0) {
       initialGateResultsApplied.current = true;
@@ -1311,7 +1320,7 @@ const SimPlayer = memo(forwardRef<SimPlayerHandle, SimPlayerProps>(function SimP
 
       setGateResults(initial);
     }
-  }, [gates, slideIdAtMs]);
+  }, [gates, slideIdAtMs, deck]);
 
   /** Seek to a gate marker AND immediately activate it. */
   const handleGateMarkerClick = useCallback(

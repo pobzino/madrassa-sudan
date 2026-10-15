@@ -51,6 +51,7 @@ import {
   lessonDurationSec,
   pickLocalized,
   positionForPercent,
+  resumeVirtualMs,
   shouldSaveProgress,
   type ProgressCheckpoint,
 } from "./helpers";
@@ -75,6 +76,8 @@ const COPY = {
     startPractice: "Start Practice",
     nextLesson: "Next lesson",
     storageProblem: "Your progress couldn't be saved on this phone. It may be full.",
+    finishedNote: "Lesson finished. Saved on this phone.",
+    oldCopyNote: "This lesson was saved by an older version of Amal. Save it again while online to get its pictures and see when it's finished.",
     crashTitle: "This lesson stopped playing",
     crashBody: "Something went wrong on this phone. Open it again.",
     openAgain: "Open it again",
@@ -98,6 +101,8 @@ const COPY = {
     startPractice: "ابدأ التدريب",
     nextLesson: "الدرس التالي",
     storageProblem: "تعذّر حفظ تقدّمك على هذا الهاتف. ربما امتلأت مساحته.",
+    finishedNote: "اكتمل الدرس. حُفظ على هذا الهاتف.",
+    oldCopyNote: "حُفظ هذا الدرس بإصدار أقدم من آمال. احفظه مرة أخرى وأنت متصل بالإنترنت لتظهر صوره ويظهر إكماله.",
     crashTitle: "توقّف تشغيل هذا الدرس",
     crashBody: "حدث خطأ على هذا الهاتف. افتحه مرة أخرى.",
     openAgain: "افتحه مرة أخرى",
@@ -128,16 +133,17 @@ type PlayerState =
  * SimPlayer resumes from `sim-resume:<key>` in localStorage. The first time
  * this account plays the lesson on this phone there's no entry yet, so start
  * from where the saved progress says they got to (not when it's finished —
- * then the lesson starts over).
+ * then the lesson starts over). The entry is in SimPlayer's units, which
+ * differ from the stored position on a trimmed lesson (see resumeVirtualMs).
  */
-function seedResumePosition(resumeKey: string, progress: ProgressValues | null, durationSec: number) {
+function seedResumePosition(resumeKey: string, progress: ProgressValues | null, lesson: OfflineLesson) {
   if (!progress || progress.completed) return;
-  const positionSec = progress.last_position_seconds;
-  if (!(positionSec > 0) || (durationSec > 0 && positionSec >= durationSec - 1)) return;
+  const virtualMs = resumeVirtualMs(lesson, progress.last_position_seconds);
+  if (virtualMs === null) return;
   try {
     const key = `sim-resume:${resumeKey}`;
     if (window.localStorage.getItem(key)) return;
-    window.localStorage.setItem(key, String(positionSec * 1000));
+    window.localStorage.setItem(key, String(virtualMs));
   } catch {
     // Storage blocked: the lesson starts from the beginning.
   }
@@ -236,11 +242,15 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
   const [reloadKey, setReloadKey] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [storageProblem, setStorageProblem] = useState(false);
+  // The lesson was finished during this visit (phones only see the header's check icon).
+  const [justFinished, setJustFinished] = useState(false);
   useScreenWakeLock(playing);
 
   // Set once another tab (or this one) logs out: nothing more may be written
   // for the previous account.
   const clearedRef = useRef(false);
+  // Whether the lesson already counts as finished (when it opened, or since).
+  const finishedRef = useRef(false);
 
   // ── Load the saved lesson ────────────────────────────────────────────────
   useEffect(() => {
@@ -275,7 +285,8 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
         if (disposed || clearedRef.current) return;
 
         objectUrl = URL.createObjectURL(audio);
-        seedResumePosition(`${owner.userId}:${lessonId}`, progress, lessonDurationSec(lesson));
+        seedResumePosition(`${owner.userId}:${lessonId}`, progress, lesson);
+        finishedRef.current = progress?.completed === true;
         setState({
           status: "ready",
           ownerId: owner.userId,
@@ -344,13 +355,23 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
       saveChainRef.current = saveChainRef.current
         .then(async () => {
           if (clearedRef.current) return;
-          await queueLessonProgress({
+          const saved = await queueLessonProgress({
             ownerId,
             lessonId,
             positionSec: checkpoint.positionSec,
             watchSec: checkpoint.positionSec,
             completedCandidate: checkpoint.completedCandidate,
           });
+          // Finished during this visit: show it now. Only on that change, so
+          // the player isn't re-rendered on every save; payload and answers
+          // keep their references, so SimPlayer carries on undisturbed.
+          if (saved.completed && !finishedRef.current && !clearedRef.current) {
+            finishedRef.current = true;
+            setState((current) =>
+              current.status === "ready" && !current.progress?.completed ? { ...current, progress: saved } : current
+            );
+            setJustFinished(true);
+          }
         })
         .catch(() => {
           setStorageProblem(true);
@@ -555,6 +576,21 @@ export default function OfflineLessonPlayer({ lessonId }: { lessonId: string | n
       </div>
 
       <div className="mx-auto max-w-6xl space-y-3 px-4 py-4 sm:px-3">
+        {justFinished && (
+          <p role="status" className="flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+            <Check className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            {t.finishedNote}
+          </p>
+        )}
+
+        {/* Saved before schema 2: no pictures, and the phone can't show it as finished. */}
+        {lesson.schema !== 2 && (
+          <p role="note" className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            {t.oldCopyNote}
+          </p>
+        )}
+
         {lesson.audioMayNotPlay && (
           <p role="note" className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />

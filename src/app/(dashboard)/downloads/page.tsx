@@ -39,6 +39,8 @@ const translations = {
     cancel: "إلغاء",
     saving: "جارٍ الحفظ",
     ready: "جاهز",
+    almostReady: "شبه جاهز",
+    almostReadyHint: "أبقِ آمال مفتوحًا وأنت متصل بالإنترنت لإكمال حفظه.",
     needsRedownload: "يحتاج إلى إعادة التنزيل",
     saveAgain: "احفظ مرة أخرى",
     updateAvailable: "يتوفر تحديث",
@@ -76,6 +78,8 @@ const translations = {
     cancel: "Cancel",
     saving: "Saving",
     ready: "Ready",
+    almostReady: "Almost ready",
+    almostReadyHint: "Keep Amal open on the internet to finish saving it.",
     needsRedownload: "Needs re-download",
     saveAgain: "Save again",
     updateAvailable: "Update available",
@@ -233,6 +237,7 @@ export default function DownloadsPage() {
     downloads,
     downloadedLessonIds,
     updateAvailableIds,
+    offlineReady,
     storageUsed,
     storageQuota,
     downloadLesson,
@@ -453,15 +458,21 @@ export default function DownloadsPage() {
               const saving = state?.status === "downloading";
               const failed = state?.status === "error";
               const noAudio = missingAudio.has(lesson.id);
-              const outdated = updateAvailableIds.has(lesson.id) || lesson.updateAvailable === true;
+              // Saved before schema 2 (no pictures, no practice gate): offer the update too.
+              const outdated =
+                updateAvailableIds.has(lesson.id) || lesson.updateAvailable === true || lesson.schema !== 2;
               const percent = Math.round(state?.progress ?? 0);
+              // Saved, but the pages that open it offline aren't cached yet.
+              const almostReady = !saving && !noAudio && !outdated && !offlineReady;
               const badge = saving
                 ? { text: `${t.saving} ${percent}%`, tone: "bg-[#007229]/10 text-[#007229]" }
                 : noAudio
                   ? { text: t.needsRedownload, tone: "bg-red-50 text-red-700" }
                   : outdated
                     ? { text: t.updateAvailable, tone: "bg-amber-50 text-amber-800" }
-                    : { text: t.ready, tone: "bg-emerald-50 text-emerald-700" };
+                    : almostReady
+                      ? { text: t.almostReady, tone: "bg-amber-50 text-amber-800" }
+                      : { text: t.ready, tone: "bg-emerald-50 text-emerald-700" };
               // Missing audio or a newer recording: save it again (online only).
               const refreshLabel = noAudio ? t.saveAgain : outdated ? t.update : failed ? t.retry : null;
               return (
@@ -494,6 +505,9 @@ export default function DownloadsPage() {
                       </div>
                     </dl>
                     {saving && <ProgressBar percent={percent} />}
+                    {almostReady && (
+                      <p className="mt-3 text-xs font-medium text-amber-700">{t.almostReadyHint}</p>
+                    )}
                     {failed && !saving && (
                       <p className="mt-3 text-xs font-medium text-red-600">{downloadErrorMessage(state?.errorCode, language)}</p>
                     )}

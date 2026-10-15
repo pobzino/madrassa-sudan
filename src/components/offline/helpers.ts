@@ -4,6 +4,7 @@
  */
 
 import type { OfflineLesson } from "@/lib/offline/db";
+import { clipDurationMs, normalizeClips } from "@/lib/sim.types";
 
 export type UiLanguage = "ar" | "en";
 
@@ -77,6 +78,30 @@ export function watchedPercent(positionSec: number, durationSec: number, complet
 export function positionForPercent(pct: number, durationSec: number): number {
   if (!(durationSec > 0) || !Number.isFinite(pct)) return 0;
   return Math.max(0, Math.min(durationSec, Math.floor((Math.min(100, Math.max(0, pct)) / 100) * durationSec)));
+}
+
+/**
+ * Where SimPlayer should resume a saved `last_position_seconds`, in its own
+ * units: milliseconds of the visible lesson (after the teacher's cuts). Null
+ * means start from the beginning.
+ *
+ * The lesson page and the offline player both store the position as the
+ * share of the visible lesson watched times the full recording length, so it
+ * converts by that share. Read as audio time, a trimmed lesson would resume
+ * too far on, and the seek's progress report could even mark it finished.
+ * Near the end it returns null, like SimPlayer's own resume rule.
+ */
+export function resumeVirtualMs(lesson: Pick<OfflineLesson, "sim">, positionSec: number): number | null {
+  const sim = lesson.sim?.sim;
+  const rawMs = sim?.duration_ms || sim?.audio_duration_ms || 0;
+  // The same length the position was measured against.
+  const rawSec = lessonDurationSec(lesson);
+  if (!sim || !(rawMs > 0) || !(rawSec > 0) || !(positionSec > 0)) return null;
+  const virtualTotalMs = Math.max(0, rawMs - clipDurationMs(normalizeClips(sim.clip_segments)));
+  // Multiply first: the share as a decimal can floor a millisecond short.
+  const virtualMs = Math.floor((Math.min(positionSec, rawSec) * virtualTotalMs) / rawSec);
+  if (virtualMs <= 0 || virtualMs >= virtualTotalMs - 1000) return null;
+  return virtualMs;
 }
 
 /** Watching this far (percent) counts as finishing the lesson, as on the online lesson page. */
