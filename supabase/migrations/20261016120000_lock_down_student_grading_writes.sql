@@ -63,14 +63,19 @@
 --     streaks (account deletion uses the service role / FK cascades), nor
 --     answers on a submitted homework.
 --   * A teacher or admin account has no row access at all until it is
---     approved (RESTRICTIVE policies, section 7). Teachers may add themselves
---     only to a class that has no teacher yet (the one they just created), and
---     nobody but an approved admin can move an enrolment or a teaching
---     assignment to another class, or a graded row to another student.
+--     approved (RESTRICTIVE policies, section 7). A teacher may add themselves
+--     only to a class they created themselves (cohorts.created_by, stamped by
+--     the database) while it has no teacher yet; any other class gets its
+--     teacher from an approved admin. Nobody but an approved admin can move an
+--     enrolment or a teaching assignment to another class, or a graded row to
+--     another student.
 --   * Class membership counts only once a teacher approves it: students may
 --     only ask to join (status 'pending'), leave, or ask again (section 8).
 --   * Guardian links are made only by redeeming a student's invite code through
 --     redeem_guardian_invite(); invites are private to their student (section 9).
+--   * Write privileges no client uses are revoked, the membership rules are
+--     repeated in triggers, and the paste aborts if a policy this file does
+--     not know about would keep any of it open (section 10).
 --
 -- How a "student's own session" is recognised: the guard functions below are
 -- SECURITY INVOKER, so current_user is 'authenticated' (or 'anon') only for
@@ -84,11 +89,33 @@
 -- routes wrote grading fields with the student's session and would fail
 -- against it).
 --
--- Existing data: pending / rejected class requests lose homework and lesson
--- access until a teacher approves them (rows default to 'approved', so current
--- members are unaffected), and guardian links that no redeemed invite backs
--- are set to is_approved=false.
+-- Existing data:
+--   * Approved members are unaffected (cohort_students.status defaults to
+--     'approved').
+--   * A 'Request to join' row (pending, active) used to open the class at
+--     once, so some pending students have been doing its homework, may have
+--     teacher grades, and have progress on its class-only lessons. From the
+--     code deploy (the submit / homework routes check status='approved') and
+--     this migration on, they lose that class's homework list, grades and
+--     class-only lessons until a teacher approves them. Nothing is deleted:
+--     approving brings it all back, and queued offline progress then syncs.
+--     Run the pre-flight query first and ask the class teachers to approve or
+--     reject each pending request.
+--   * Rejected students (rejectStudent left is_active=true) lose access they
+--     should never have had.
+--   * Guardian links that no redeemed invite backs are set to
+--     is_approved=false.
+--
+-- Paste the whole file as ONE script (the SQL editor runs it as a single
+-- transaction): if any statement fails, nothing is applied.
 -- =============================================================================
+
+-- Every CREATE/DROP POLICY or TRIGGER below takes an ACCESS EXCLUSIVE lock on
+-- its table, and on Supabase also on the auth / storage tables (supautils),
+-- held until the end. Without a limit, one slow query on any of them makes
+-- this script wait, and every login and token refresh queues behind it. With
+-- it, the script gives up after 3s and rolls back; just paste it again.
+SET LOCAL lock_timeout = '3s';
 
 
 -- ── 1. lesson_progress ───────────────────────────────────────────────────────
@@ -653,9 +680,45 @@ BEGIN
 END;
 $$;
 
--- Whether a class already has a teacher. SECURITY DEFINER so the policy below
--- sees every teaching row, not only the caller's.
-CREATE OR REPLACE FUNCTION public.cohort_has_teachers(p_cohort_id uuid)
+-- Who created each class. "Has no teacher yet" alone is not "the class I just
+-- created": a class with students also loses its last teacher when that
+-- teacher leaves it or deletes their account, and any approved teacher could
+-- then claim it and see and edit its students' grades. The trigger fills
+-- created_by in itself (the app never sends it), so teacher/cohorts' two-step
+-- "Create class" keeps working; existing classes stay NULL and only an admin
+-- can give them a teacher.
+ALTER TABLE public.cohorts
+  ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+-- SECURITY INVOKER on purpose (see header): current_user identifies the caller.
+CREATE OR REPLACE FUNCTION public.stamp_cohort_creator()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF current_user NOT IN ('authenticated', 'anon') THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    NEW.created_by := auth.uid();
+  ELSIF NEW.created_by IS DISTINCT FROM OLD.created_by AND NOT public.is_approved_admin() THEN
+    NEW.created_by := OLD.created_by;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS stamp_cohort_creator ON public.cohorts;
+CREATE TRIGGER stamp_cohort_creator
+  BEFORE INSERT OR UPDATE ON public.cohorts
+  FOR EACH ROW
+  EXECUTE FUNCTION public.stamp_cohort_creator();
+
+-- Whether the caller created this class and it has no teacher yet. SECURITY
+-- DEFINER so it sees every teaching row, not only the caller's; it says
+-- nothing about classes the caller did not create.
+CREATE OR REPLACE FUNCTION public.can_claim_new_cohort(p_cohort_id uuid)
 RETURNS boolean
 LANGUAGE sql
 STABLE
@@ -663,18 +726,24 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT EXISTS (
-    SELECT 1 FROM public.cohort_teachers WHERE cohort_id = p_cohort_id
+    SELECT 1
+    FROM public.cohorts c
+    WHERE c.id = p_cohort_id
+      AND c.created_by = auth.uid()
+      AND NOT EXISTS (
+        SELECT 1 FROM public.cohort_teachers ct WHERE ct.cohort_id = c.id
+      )
   );
 $$;
 
-REVOKE ALL ON FUNCTION public.cohort_has_teachers(uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.cohort_has_teachers(uuid) FROM anon;
-GRANT EXECUTE ON FUNCTION public.cohort_has_teachers(uuid) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.can_claim_new_cohort(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.can_claim_new_cohort(uuid) FROM anon;
+GRANT EXECUTE ON FUNCTION public.can_claim_new_cohort(uuid) TO authenticated, service_role;
 
 -- A teacher could add themselves to ANY class, and then see and grade its
 -- students' work. Now an approved teacher may add themselves only to a class
--- with no teacher yet, i.e. the one they just created (teacher/cohorts
--- "Create class"); "Admins can manage cohort teachers" covers everything else.
+-- they just created (teacher/cohorts "Create class"); "Admins can manage
+-- cohort teachers" covers everything else.
 DROP POLICY IF EXISTS "Teachers can add themselves to cohorts" ON public.cohort_teachers;
 CREATE POLICY "Teachers can add themselves to cohorts"
   ON public.cohort_teachers
@@ -688,8 +757,12 @@ CREATE POLICY "Teachers can add themselves to cohorts"
         AND profiles.role IN ('teacher', 'admin')
         AND profiles.is_approved = true
     )
-    AND NOT public.cohort_has_teachers(cohort_id)
+    AND public.can_claim_new_cohort(cohort_id)
   );
+
+-- An earlier draft of this file checked "no teacher yet" with this helper,
+-- which also told any signed-in user which classes had no teacher.
+DROP FUNCTION IF EXISTS public.cohort_has_teachers(uuid);
 
 -- "Teachers can update own cohort teacher rows" let a teacher re-point their
 -- own row at another class. Only an approved admin may change who teaches
@@ -840,8 +913,11 @@ CREATE POLICY "Homework questions are viewable by cohort members"
     )
   );
 
--- Submission rows (20260411120000) are created only for approved members, and
--- also when a teacher approves a pending request.
+-- The sync triggers (20260411120000) create submission rows only for approved
+-- members, and also when a teacher approves a pending request. (A student can
+-- still start their own not_started row for an assignment id through
+-- "Students can start their own homework submissions"; the submit and draft
+-- routes check for an approved enrolment before saving or grading anything.)
 CREATE OR REPLACE FUNCTION public.sync_homework_submissions_for_assignment_row(assignment_row public.homework_assignments)
 RETURNS void
 LANGUAGE plpgsql
@@ -882,6 +958,32 @@ BEGIN
   ON CONFLICT (assignment_id, student_id) DO NOTHING;
 END;
 $$;
+
+-- These two are SECURITY DEFINER and take a whole row, and kept the default
+-- EXECUTE for everyone: anyone, anon included, could call them through
+-- /rest/v1/rpc with a made-up row and tie any student to any class's
+-- homework. Only the sync triggers call them (as the owner).
+REVOKE ALL ON FUNCTION public.sync_homework_submissions_for_assignment_row(public.homework_assignments) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.sync_homework_submissions_for_cohort_student_row(public.cohort_students) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.sync_homework_submissions_for_assignment_row(public.homework_assignments) TO service_role;
+GRANT EXECUTE ON FUNCTION public.sync_homework_submissions_for_cohort_student_row(public.cohort_students) TO service_role;
+
+-- Helpers that answer about any id: no anonymous callers (every RLS policy
+-- that uses them is TO authenticated, and the app calls them signed in).
+REVOKE ALL ON FUNCTION public.get_active_student_cohort_ids(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_active_student_cohort_ids(uuid) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.can_user_access_published_lesson(uuid, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.can_user_access_published_lesson(uuid, uuid) TO authenticated, service_role;
+
+-- No app callers: class score statistics and grading counts for any id, and a
+-- quiz-progress writer for any student (it targets a column lesson_progress
+-- does not have, so it only errors today).
+REVOKE ALL ON FUNCTION public.get_assignment_submission_stats(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_teacher_pending_grading_count(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.update_lesson_quiz_progress(uuid, uuid, boolean, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_assignment_submission_stats(uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_teacher_pending_grading_count(uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.update_lesson_quiz_progress(uuid, uuid, boolean, integer) TO service_role;
 
 DROP TRIGGER IF EXISTS sync_homework_submissions_for_cohort_student_trigger ON public.cohort_students;
 CREATE TRIGGER sync_homework_submissions_for_cohort_student_trigger
@@ -1039,3 +1141,165 @@ $$;
 REVOKE ALL ON FUNCTION public.get_guardian_students(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.get_guardian_students(uuid) FROM anon;
 GRANT EXECUTE ON FUNCTION public.get_guardian_students(uuid) TO authenticated, service_role;
+
+
+-- ── 10. Policies this file does not know about ───────────────────────────────
+-- Production was partly built by hand (the base schema file is a
+-- reconstruction, 20260611100000 found production's student_streaks policies
+-- differed from it, feedback was made in the dashboard), and this file drops
+-- policies only by name. Permissive policies are OR'd together, so a single
+-- unknown one (say a dashboard template "Enable insert for authenticated users
+-- only") would keep a hole open while the paste reports success. So:
+--   (a) where no client writes a table, take the privilege away: no policy,
+--       known or not, can reopen it (privileges are checked before RLS);
+--   (b) repeat the membership rules in triggers, which no policy can widen;
+--   (c) abort the whole paste if anything else is still reachable.
+
+-- (a) The writers of these are the service role and SECURITY DEFINER
+-- functions / triggers (bump_lesson_streak_on_completion,
+-- redeem_guardian_invite), which keep their access; FK cascades (account and
+-- assignment deletion) run as the table owner.
+REVOKE INSERT, UPDATE, DELETE ON public.student_streaks FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.homework_attempts FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.lesson_task_responses FROM anon, authenticated;
+REVOKE DELETE ON public.homework_submissions FROM anon, authenticated;
+REVOKE DELETE ON public.lesson_progress FROM anon, authenticated;
+REVOKE UPDATE ON public.guardian_invites FROM authenticated;
+
+-- (b) A caller's own enrolment: only ask to join (pending), leave, or ask
+-- again, whatever the policies say.
+CREATE OR REPLACE FUNCTION public.guard_cohort_student_self_write()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF current_user NOT IN ('authenticated', 'anon') OR public.is_approved_admin() THEN
+    RETURN NEW;
+  END IF;
+  IF NEW.student_id IS NOT DISTINCT FROM auth.uid()
+     AND NEW.status IS DISTINCT FROM 'pending'
+     AND (TG_OP = 'INSERT' OR NEW.is_active IS NOT FALSE) THEN
+    RAISE EXCEPTION 'cohort_students: students can only ask to join a class; a teacher approves it'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS guard_cohort_student_self_write ON public.cohort_students;
+CREATE TRIGGER guard_cohort_student_self_write
+  BEFORE INSERT OR UPDATE ON public.cohort_students
+  FOR EACH ROW
+  EXECUTE FUNCTION public.guard_cohort_student_self_write();
+
+-- An approved teacher adds only themselves, and only to a class they just
+-- created (section 7); approved admins assign everyone else.
+CREATE OR REPLACE FUNCTION public.guard_cohort_teacher_client_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF current_user NOT IN ('authenticated', 'anon') OR public.is_approved_admin() THEN
+    RETURN NEW;
+  END IF;
+  IF NEW.teacher_id IS DISTINCT FROM auth.uid()
+     OR NOT EXISTS (
+       SELECT 1 FROM public.profiles
+       WHERE id = auth.uid() AND role IN ('teacher', 'admin') AND is_approved = true
+     )
+     OR NOT public.can_claim_new_cohort(NEW.cohort_id) THEN
+    RAISE EXCEPTION 'cohort_teachers: a teacher can only add themselves to a class they just created'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS guard_cohort_teacher_client_insert ON public.cohort_teachers;
+CREATE TRIGGER guard_cohort_teacher_client_insert
+  BEFORE INSERT ON public.cohort_teachers
+  FOR EACH ROW
+  EXECUTE FUNCTION public.guard_cohort_teacher_client_insert();
+
+-- (c) Fail closed. Raises, which rolls back everything above, if on these
+-- tables RLS is off, or a PERMISSIVE policy a client can still reach (given
+-- the grants above) is not one of this file's: any write policy on the
+-- grading / membership tables, any policy at all on the guardian tables
+-- (SELECT included: a readable invite code can be redeemed by any parent, and
+-- parents are approved automatically), or any USING / WITH CHECK of plain
+-- "true" (dashboard templates such as "Enable read access for all users").
+-- If it aborts, look at each policy it names, then drop it or add it here.
+DO $$
+DECLARE
+  bad text;
+BEGIN
+  SELECT string_agg(format('%s: RLS is disabled', c.relname), '; ') INTO bad
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+  WHERE c.relname IN ('lesson_progress', 'homework_submissions', 'homework_responses', 'homework_attempts',
+                      'student_streaks', 'lesson_task_responses', 'cohort_students', 'cohort_teachers',
+                      'guardian_students', 'guardian_invites', 'homework_assignments', 'homework_questions')
+    AND NOT c.relrowsecurity;
+  IF bad IS NOT NULL THEN
+    RAISE EXCEPTION 'lockdown aborted: %', bad;
+  END IF;
+
+  WITH pol AS (
+    SELECT p.tablename::text AS t, p.policyname::text AS n, p.cmd::text AS cmd, p.qual, p.with_check,
+      EXISTS (
+        SELECT 1
+        FROM unnest(CASE p.cmd WHEN 'ALL' THEN ARRAY['INSERT', 'UPDATE', 'DELETE']
+                               WHEN 'SELECT' THEN ARRAY[]::text[]
+                               ELSE ARRAY[p.cmd::text] END) AS priv
+        WHERE has_table_privilege('authenticated', format('public.%I', p.tablename), priv)
+           OR has_table_privilege('anon', format('public.%I', p.tablename), priv)
+      ) AS can_write,
+      p.cmd IN ('SELECT', 'ALL')
+        AND (has_table_privilege('authenticated', format('public.%I', p.tablename), 'SELECT')
+             OR has_table_privilege('anon', format('public.%I', p.tablename), 'SELECT')) AS can_read
+    FROM pg_policies p
+    WHERE p.schemaname = 'public'
+      AND p.permissive = 'PERMISSIVE'
+      AND p.tablename IN ('lesson_progress', 'homework_submissions', 'homework_responses', 'homework_attempts',
+                          'student_streaks', 'lesson_task_responses', 'cohort_students', 'cohort_teachers',
+                          'guardian_students', 'guardian_invites', 'homework_assignments', 'homework_questions')
+  )
+  SELECT string_agg(format('%s "%s" (%s)', t, n, cmd), '; ' ORDER BY t, n) INTO bad
+  FROM pol
+  WHERE (can_write OR can_read)
+    AND (
+      pol.qual = 'true' OR pol.with_check = 'true'
+      OR (t IN ('guardian_students', 'guardian_invites')
+          AND (t, n) NOT IN (VALUES
+            ('guardian_students', 'Guardians can view their student links'),
+            ('guardian_students', 'Students can view their guardian links'),
+            ('guardian_invites', 'Students can view their invites'),
+            ('guardian_invites', 'Students can create their invites'),
+            ('guardian_invites', 'Students can delete their invites')))
+      OR (can_write
+          AND t NOT IN ('guardian_students', 'guardian_invites', 'homework_assignments', 'homework_questions')
+          AND (t, n) NOT IN (VALUES
+            ('lesson_progress', 'Students can create their own lesson progress'),
+            ('lesson_progress', 'Students can update their own lesson progress'),
+            ('homework_submissions', 'Students can start their own homework submissions'),
+            ('homework_submissions', 'Students can update their own open homework submissions'),
+            ('homework_submissions', 'Teachers can grade homework submissions'),
+            ('homework_responses', 'Students can add answers to their own submissions'),
+            ('homework_responses', 'Students can edit answers on their own submissions'),
+            ('homework_responses', 'Students can remove answers on their open submissions'),
+            ('homework_responses', 'Teachers can update responses for grading'),
+            ('cohort_students', 'Students can join cohorts'),
+            ('cohort_students', 'Students can leave or re-request own enrollment'),
+            ('cohort_students', 'Teachers and admins can manage cohort students'),
+            ('cohort_teachers', 'Admins can manage cohort teachers'),
+            ('cohort_teachers', 'Teachers can add themselves to cohorts'),
+            ('cohort_teachers', 'Teachers can delete own cohort teacher rows'),
+            ('cohort_teachers', 'Teachers can update own cohort teacher rows')))
+    );
+  IF bad IS NOT NULL THEN
+    RAISE EXCEPTION 'lockdown aborted: policies this migration does not know would keep it open (drop them, or add them here once reviewed): %', bad;
+  END IF;
+END;
+$$;

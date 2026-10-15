@@ -27,48 +27,30 @@ export async function DELETE() {
   // Every delete below is scoped to the verified user's id.
   const admin = createServiceClient();
 
-  // 1. Delete homework responses (via submissions)
-  const { data: subs } = await admin
-    .from("homework_submissions")
-    .select("id")
-    .eq("student_id", userId);
-
-  if (subs && subs.length > 0) {
-    const subIds = subs.map((s) => s.id);
-    await admin.from("homework_responses").delete().in("submission_id", subIds);
+  // The Level Test tables reference the profile with ON DELETE NO ACTION
+  // (until 20261016130000 makes them cascade), which makes deleteUser fail for
+  // anyone who ever started the Level Test. Clear them first (placements point
+  // at attempts; diagnostic_responses cascade from the attempt).
+  for (const table of ["student_placements", "diagnostic_attempts"] as const) {
+    const { error } = await admin.from(table).delete().eq("student_id", userId);
+    if (error) {
+      console.error(`Account deletion: failed to clear ${table}:`, error);
+      return NextResponse.json({ error: "Failed to delete account" }, { status: 500 });
+    }
   }
 
-  // 2. Delete homework submissions
-  await admin.from("homework_submissions").delete().eq("student_id", userId);
-
-  // 3. Delete AI messages (via conversations)
-  const { data: convos } = await admin
-    .from("ai_conversations")
-    .select("id")
-    .eq("student_id", userId);
-
-  if (convos && convos.length > 0) {
-    const convoIds = convos.map((c) => c.id);
-    await admin.from("ai_messages").delete().in("conversation_id", convoIds);
-  }
-
-  // 4. Delete AI conversations
-  await admin.from("ai_conversations").delete().eq("student_id", userId);
-
-  // 5. Delete remaining user data
-  await admin.from("student_streaks").delete().eq("student_id", userId);
-  await admin.from("cohort_students").delete().eq("student_id", userId);
-  await admin.from("lesson_progress").delete().eq("student_id", userId);
-
-  // 6. Delete the auth user; the profile and every remaining row that
-  // references it are removed by the FK cascades.
+  // Deleting the auth user removes the profile and, through the FK cascades,
+  // the user's own homework, AI chats, streak, class enrolments, lesson
+  // progress and task answers, all in one transaction, so a failure leaves
+  // nothing half-deleted. Lessons, learning paths and (from 20261016130000)
+  // homework and Practices a teacher wrote are kept, with no owner.
   const { error: deleteUserError } = await admin.auth.admin.deleteUser(userId);
   if (deleteUserError) {
     console.error("Account deletion: failed to delete auth user:", deleteUserError);
     return NextResponse.json({ error: "Failed to delete account" }, { status: 500 });
   }
 
-  // 7. Sign out
+  // Sign out
   await supabase.auth.signOut();
 
   return NextResponse.json({ success: true });

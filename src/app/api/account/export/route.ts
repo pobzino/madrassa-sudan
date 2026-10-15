@@ -15,9 +15,11 @@ export async function GET() {
   const userId = user.id;
 
   // Collect all user data
-  const [profile, submissions, conversations, messages, progress, streaks] =
+  const [profile, contact, submissions, conversations, messages, progress, streaks] =
     await Promise.all([
       supabase.from("profiles").select("*").eq("id", userId).single(),
+      // The phone number is kept here, not in profiles (20261016140000).
+      supabase.from("profile_contacts").select("phone, updated_at").eq("user_id", userId).maybeSingle(),
       supabase
         .from("homework_submissions")
         .select("*, homework_responses(*)")
@@ -40,6 +42,7 @@ export async function GET() {
     exported_at: new Date().toISOString(),
     user_email: user.email,
     profile: profile.data,
+    contact: contact.data,
     homework_submissions: submissions.data,
     ai_conversations: conversations.data,
     ai_messages: messages.data,
