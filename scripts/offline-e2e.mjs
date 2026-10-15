@@ -4,7 +4,9 @@
 // lessons hub, the lesson plays in the offline player (audio from the phone,
 // slide image from the asset cache), progress is queued under the owner,
 // /lessons/<id> redirects to the player, another account's copy stays hidden,
-// and logging out offline wipes it all. Needs no Supabase.
+// lie-fi (connected, but nothing answers) still opens saved lessons from an
+// in-app tap and a cold start, and logging out offline wipes it all. Needs no
+// Supabase.
 //
 //   AMAL_SITE_URL=http://localhost:3907 node scripts/offline-e2e.mjs
 //
@@ -12,11 +14,36 @@
 // AMAL_SERVER_STOP_CMD (a shell command that stops the server, to also test
 // "connected but the server can't be reached"), SHOTS (a directory for
 // screenshots). Use a fresh server: the worker must install from this build.
+// The browser talks to the site through a small proxy started here, which
+// can stop answering (context.setOffline can't make a request hang).
 import { execSync } from 'node:child_process';
+import http from 'node:http';
 import { chromium } from 'playwright';
 
-const baseURL = process.env.AMAL_SITE_URL || 'http://localhost:3001';
+const siteURL = new URL(process.env.AMAL_SITE_URL || 'http://localhost:3001');
 const killCmd = process.env.AMAL_SERVER_STOP_CMD || '';
+
+// 'up' passes requests through; 'hang' accepts them and never answers.
+let network = 'up';
+const hanging = new Set();
+const proxy = http.createServer((req, res) => {
+  if (network === 'hang') {
+    hanging.add(res);
+    return;
+  }
+  const upstream = http.request(
+    { host: siteURL.hostname, port: siteURL.port, method: req.method, path: req.url, headers: req.headers },
+    (answer) => {
+      res.writeHead(answer.statusCode, answer.headers);
+      answer.pipe(res);
+    }
+  );
+  upstream.on('error', () => res.destroy());
+  req.pipe(upstream);
+});
+await new Promise((resolve) => proxy.listen(0, resolve));
+// localhost counts as a secure origin, so the worker registers.
+const baseURL = `http://localhost:${proxy.address().port}`;
 const LESSON_ID = '4f9c2a8e-1b2c-4d5e-8f90-123456789abc';
 const OTHER_LESSON_ID = '11111111-2222-3333-4444-555555555555';
 const OWNER_ID = 'e2e-owner-1';
@@ -46,16 +73,26 @@ try {
   const swUrl = await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL);
   check('service worker controls the page', swUrl?.endsWith('/sw.js'), swUrl);
 
-  const cacheSummary = await page.evaluate(async () => {
-    const out = {};
-    for (const name of await caches.keys()) out[name] = (await (await caches.open(name)).keys()).map((r) => new URL(r.url).pathname);
-    return out;
-  });
-  const versioned = (prefix) => Object.entries(cacheSummary).find(([name]) => name.startsWith(prefix))?.[1] || [];
-  const shell = versioned('amal-shell-');
-  const statics = versioned('amal-static-');
+  const cacheSummary = () =>
+    page.evaluate(async () => {
+      const out = {};
+      for (const name of await caches.keys()) out[name] = (await (await caches.open(name)).keys()).map((r) => new URL(r.url).pathname);
+      return out;
+    });
+  const versioned = (summary, prefix) => Object.entries(summary).find(([name]) => name.startsWith(prefix))?.[1] || [];
+  // The on-demand chunks are cached just after install: give them a moment.
+  let summary = await cacheSummary();
+  for (let tries = 0, last = -1; tries < 20 && versioned(summary, 'amal-static-').length !== last; tries++) {
+    last = versioned(summary, 'amal-static-').length;
+    await page.waitForTimeout(500);
+    summary = await cacheSummary();
+  }
+  const shell = versioned(summary, 'amal-shell-');
+  const statics = versioned(summary, 'amal-static-');
+  const fonts = statics.filter((path) => /\.(woff2?|ttf)$/.test(path));
   check('shell cache holds /offline and /offline/play', shell.includes('/offline') && shell.includes('/offline/play'), shell.join(', '));
-  check('static cache precached build files (incl. lazy chunks)', statics.length >= 40, `${statics.length} files`);
+  check('static cache precached build files (incl. lazy chunks)', statics.length >= 30, `${statics.length} files`);
+  check('static cache skips font subsets the pages never load', fonts.length > 0 && fonts.length <= 6, fonts.join(', '));
 
   // Hub before seeding: empty state, no crash.
   await page.getByText('No saved lessons yet').waitFor({ timeout: 10000 });
@@ -206,7 +243,37 @@ try {
   await page.getByText("This lesson isn't saved on this phone").waitFor({ timeout: 15000 });
   check('player treats another account’s copy as not saved', true);
 
-  // 4. Lie-fi: browser says online but the server is gone.
+  // 4. Lie-fi: the browser says online and requests go out, but nothing answers.
+  // (Uncached images wait too, so these steps don't wait for the load event.)
+  await context.setOffline(false);
+  await page.goto(`${baseURL}/`, { waitUntil: 'load' });
+  await page.waitForFunction(() => Boolean(window.next?.router?.push), null, { timeout: 15000 });
+  network = 'hang';
+  let started = Date.now();
+  // An in-app tap (next/link uses the same router call).
+  await page.evaluate((id) => window.next.router.push(`/lessons/${id}`), LESSON_ID);
+  const tapped = await page.waitForURL(/\/offline\/play\?id=/, { timeout: 25000, waitUntil: 'commit' }).then(() => true, () => false);
+  check('lie-fi: an in-app tap on a saved lesson opens the player', tapped && page.url().includes(`id=${LESSON_ID}`), `${page.url()} in ${Date.now() - started} ms`);
+  await page.getByText('Seeded slide one').first().waitFor({ timeout: 20000 }).catch(() => undefined);
+  check('lie-fi: the player renders after the tap', (await page.getByText('Seeded slide one').count()) > 0);
+
+  started = Date.now();
+  await page.goto(`${baseURL}/offline`, { waitUntil: 'domcontentloaded' });
+  check('lie-fi: the hub opens from the cache at once', Date.now() - started < 2500, `${Date.now() - started} ms`);
+
+  // Cold start of the installed app (start_url /dashboard).
+  started = Date.now();
+  await page.goto(`${baseURL}/dashboard`, { waitUntil: 'commit', timeout: 30000 }).catch((e) => e);
+  check('lie-fi: /dashboard lands on the hub', new URL(page.url()).pathname === '/offline', `${page.url()} in ${Date.now() - started} ms`);
+
+  // A page with no offline copy keeps waiting rather than being swapped for the hub.
+  const parents = await page.goto(`${baseURL}/parents`, { waitUntil: 'commit', timeout: 10000 }).then(() => 'loaded', () => 'still waiting');
+  check('lie-fi: a page with no offline copy is not replaced by the hub', parents === 'still waiting' && new URL(page.url()).pathname !== '/parents', `${parents}, at ${page.url()}`);
+  network = 'up';
+  for (const res of hanging) res.destroy();
+  hanging.clear();
+
+  // 5. Browser says online but the server is gone.
   if (killCmd) {
     await context.setOffline(false);
     execSync(killCmd);
@@ -221,7 +288,7 @@ try {
     check('server down: /settings lands on the hub with the list', new URL(page.url()).pathname === '/offline', page.url());
   }
 
-  // 5. Arabic hub, then log out with no connection at all.
+  // 6. Arabic hub, then log out with no connection at all.
   await context.setOffline(true);
   await page.evaluate(() => {
     localStorage.setItem('amal-school-language', 'ar');
@@ -270,6 +337,9 @@ try {
 } finally {
   check('no uncaught page errors', pageErrors.length === 0, pageErrors.join(' | '));
   await browser.close();
+  for (const res of hanging) res.destroy();
+  proxy.closeAllConnections();
+  proxy.close();
 }
 
 const failed = results.filter((r) => !r.ok);

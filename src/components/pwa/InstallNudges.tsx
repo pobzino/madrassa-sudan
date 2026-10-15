@@ -21,6 +21,7 @@ import {
   refreshReminders,
   remindersAskCount,
   reminderState,
+  remindersWanted,
   shouldAskForReminders,
   subscribeToReminders,
 } from "@/lib/push-client";
@@ -49,6 +50,7 @@ const COPY = {
     remindersOn: "Reminders are on ✓",
     remindersOnBody: "You'll get a test notification in a moment.",
     remindersError: "Couldn't turn reminders on just now. Please try again later.",
+    remindersPending: "Almost done: we'll finish turning reminders on in a moment.",
   },
   ar: {
     title: {
@@ -71,6 +73,7 @@ const COPY = {
     remindersOn: "تم تفعيل التذكيرات ✓",
     remindersOnBody: "سيصلك إشعار تجريبي بعد لحظات.",
     remindersError: "تعذّر تفعيل التذكيرات الآن. حاول مرة أخرى لاحقاً.",
+    remindersPending: "اقتربنا: سنُكمل تفعيل التذكيرات بعد لحظات.",
   },
 };
 
@@ -203,6 +206,8 @@ export function DashboardInstallNudge({ allowReminders = false }: { allowReminde
   // Live, so turning reminders on in the prompt (or Settings) hides this card at once.
   const permission = useSyncExternalStore(subscribeToReminders, reminderState, () => null);
   const remindersHidden = useSyncExternalStore(subscribeToReminders, isRemindersCardHidden, () => true);
+  // A yes the phone gave that is still being finished (the worker wasn't ready).
+  const wanted = useSyncExternalStore(subscribeToReminders, () => remindersWanted() !== null, () => false);
   const [cardState, setCardState] = useState<"idle" | "busy" | "on" | "error">("idle");
 
   useEffect(() => {
@@ -214,8 +219,12 @@ export function DashboardInstallNudge({ allowReminders = false }: { allowReminde
   if (!platform || platform === "android-chrome-waiting") return null;
   const installed = platform === "installed";
   const showInstallCard = !installed && !cardHidden;
+  // The card also stays while a yes is unfinished: its button finishes it in
+  // one tap (an iPhone may need that tap), and it goes once that's done.
+  const unfinished = permission === "granted" && wanted;
   // "on" stays for a moment so the parent sees it worked from the card itself.
-  const showReminders = allowReminders && !showInstallCard && (cardState !== "idle" || (permission === "default" && !remindersHidden));
+  const showReminders =
+    allowReminders && !showInstallCard && (cardState !== "idle" || ((permission === "default" || unfinished) && !remindersHidden));
 
   const add = async () => {
     if (platform === "one-tap") {
@@ -238,6 +247,8 @@ export function DashboardInstallNudge({ allowReminders = false }: { allowReminde
       setCardState("on");
       window.setTimeout(() => setCardState("idle"), 4000);
     } else if (outcome === "error") setCardState("error");
+    // The card stays up as "unfinished" until the background finish clears it.
+    else if (outcome === "pending") setCardState("idle");
     else {
       hideRemindersCard();
       setCardState("idle");
@@ -262,7 +273,15 @@ export function DashboardInstallNudge({ allowReminders = false }: { allowReminde
         <NudgeCard
           icon={<BellIcon />}
           title={cardState === "on" ? t.remindersOn : t.remindersTitle}
-          body={cardState === "on" ? t.remindersOnBody : cardState === "error" ? t.remindersError : t.remindersBody}
+          body={
+            cardState === "on"
+              ? t.remindersOnBody
+              : cardState === "error"
+                ? t.remindersError
+                : cardState === "idle" && unfinished
+                  ? t.remindersPending
+                  : t.remindersBody
+          }
           action={cardState === "on" ? undefined : { label: cardState === "busy" ? t.remindersBusy : t.remindersButton, onClick: turnOnReminders, disabled: cardState === "busy" }}
           onHide={
             cardState === "on"

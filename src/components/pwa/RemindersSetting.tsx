@@ -7,7 +7,7 @@ import { trackAnalyticsEvent } from "@/lib/analytics";
 import { disableReminders, enableReminders, reminderState, remindersSubscribed } from "@/lib/push-client";
 import { BlockedRemindersHelp } from "./RemindersPrompt";
 
-type Status = "loading" | "on" | "off" | "busy" | "blocked" | "needs-install" | "unsupported" | "error";
+type Status = "loading" | "on" | "off" | "busy" | "blocked" | "needs-install" | "unsupported" | "pending" | "error";
 
 const COPY = {
   en: {
@@ -21,6 +21,7 @@ const COPY = {
     showMe: "Show me how",
     unsupported: "This browser can't show reminders. Use Chrome on Android, or add Amal to your iPhone's home screen.",
     error: "Something went wrong. Please try again in a minute.",
+    pending: "Almost done: we'll finish turning reminders on in a moment.",
   },
   ar: {
     title: "تذكيرات الدروس",
@@ -33,6 +34,7 @@ const COPY = {
     showMe: "أرني كيف",
     unsupported: "هذا المتصفح لا يدعم التذكيرات. استخدم Chrome على أندرويد، أو أضف آمال إلى الشاشة الرئيسية في iPhone.",
     error: "حدث خطأ ما. حاول مرة أخرى بعد دقيقة.",
+    pending: "اقتربنا: سنُكمل تفعيل التذكيرات بعد لحظات.",
   },
 };
 
@@ -57,14 +59,26 @@ export function RemindersSetting() {
     if (turningOn) {
       const outcome = await enableReminders(language);
       trackAnalyticsEvent("reminders_result", { source: "settings", outcome });
-      setStatus(outcome === "on" ? "on" : outcome === "denied" ? "blocked" : outcome === "error" ? "error" : "off");
+      setStatus(
+        outcome === "on" ? "on" : outcome === "denied" ? "blocked" : outcome === "error" || outcome === "pending" ? outcome : "off"
+      );
     } else {
       setStatus((await disableReminders()) ? "off" : "error");
     }
   };
 
   const body =
-    status === "on" ? t.on : status === "needs-install" ? t.needsInstall : status === "unsupported" ? t.unsupported : status === "error" ? t.error : t.off;
+    status === "on"
+      ? t.on
+      : status === "needs-install"
+        ? t.needsInstall
+        : status === "unsupported"
+          ? t.unsupported
+          : status === "error"
+            ? t.error
+            : status === "pending"
+              ? t.pending
+              : t.off;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm" dir={isRtl ? "rtl" : "ltr"}>

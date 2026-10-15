@@ -12,6 +12,16 @@ export type ReminderState =
   | "denied";
 
 const SERVICE_WORKER_TIMEOUT_MS = 8000;
+// Turning reminders on waits longer: on a phone's first visit the worker can
+// still be installing (it caches the offline lesson pages first), and on a
+// slow link that takes a while.
+const SETUP_TIMEOUT_MS = 60000;
+// Set once the phone has said yes and cleared once the server has the
+// subscription, so a yes is never lost when the worker wasn't ready yet.
+const REMINDERS_WANTED_KEY = "amal-reminders-wanted";
+const REFRESHED_KEY = "amal-push-refreshed";
+
+export type ReminderOutcome = "on" | "denied" | "dismissed" | "pending" | "error";
 
 // One live view of "are reminders on?" shared by the prompt, the dashboard
 // card and Settings, so turning them on in one place updates the others.
@@ -55,11 +65,45 @@ function vapidKey() {
   return Uint8Array.from(raw, (char) => char.charCodeAt(0));
 }
 
-async function readyWorker() {
+async function readyWorker(timeoutMs = SERVICE_WORKER_TIMEOUT_MS) {
   return Promise.race([
     navigator.serviceWorker.ready,
-    new Promise<null>((resolve) => window.setTimeout(() => resolve(null), SERVICE_WORKER_TIMEOUT_MS)),
+    new Promise<null>((resolve) => window.setTimeout(() => resolve(null), timeoutMs)),
   ]);
+}
+
+// The worker to subscribe with, waiting out a first install. If that install
+// failed (nothing installing, waiting or active), the browser won't retry
+// until the next page load, so register again here.
+async function setUpWorker() {
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    const hasWorker = Boolean(registration?.active || registration?.installing || registration?.waiting);
+    // Development unregisters the worker on purpose (ServiceWorkerRegister).
+    if (!hasWorker && process.env.NODE_ENV === "production") await navigator.serviceWorker.register("/sw.js");
+  } catch {
+    // `ready` below still decides.
+  }
+  return readyWorker(SETUP_TIMEOUT_MS);
+}
+
+/** The language reminders were turned on in, while that is still being finished. */
+export function remindersWanted(): "ar" | "en" | null {
+  try {
+    const value = localStorage.getItem(REMINDERS_WANTED_KEY);
+    return value === "ar" || value === "en" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function setRemindersWanted(language: "ar" | "en" | null) {
+  try {
+    if (language) localStorage.setItem(REMINDERS_WANTED_KEY, language);
+    else localStorage.removeItem(REMINDERS_WANTED_KEY);
+  } catch {
+    // Storage can be unavailable in private or locked-down browsers.
+  }
 }
 
 async function saveSubscription(subscription: PushSubscription, extra: Record<string, unknown> = {}) {
@@ -71,42 +115,85 @@ async function saveSubscription(subscription: PushSubscription, extra: Record<st
   return response.ok;
 }
 
-/** Asks for permission (call it from a tap), subscribes and sends a "reminders are on" push. */
-export async function enableReminders(language: "ar" | "en"): Promise<"on" | "denied" | "dismissed" | "error"> {
+// Subscribes this phone (or reuses its subscription) and sends a "reminders are on" push.
+async function subscribeAndConfirm(registration: ServiceWorkerRegistration, language: "ar" | "en") {
+  const subscription =
+    (await registration.pushManager.getSubscription()) ??
+    (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey() }));
+  const saved = await saveSubscription(subscription, { confirm: true, language });
+  if (saved) setRemindersWanted(null);
+  return saved;
+}
+
+let turningOn: Promise<ReminderOutcome> | null = null;
+let refreshing: Promise<void> | null = null;
+
+/**
+ * Asks for permission (call it from a tap), subscribes and sends a "reminders
+ * are on" push. "pending": the phone said yes but the worker isn't ready yet;
+ * refreshReminders finishes it later.
+ */
+export async function enableReminders(language: "ar" | "en"): Promise<ReminderOutcome> {
+  const attempt = turnOn(language);
+  turningOn = attempt;
   try {
-    return await turnOn(language);
+    return await attempt;
   } finally {
+    if (turningOn === attempt) turningOn = null;
     notifyReminders();
   }
 }
 
-async function turnOn(language: "ar" | "en"): Promise<"on" | "denied" | "dismissed" | "error"> {
+async function turnOn(language: "ar" | "en"): Promise<ReminderOutcome> {
   const permission = await Notification.requestPermission();
   if (permission === "denied") return "denied";
   if (permission !== "granted") return "dismissed";
+  // Remember the yes before any waiting: the page may be closed meanwhile.
+  setRemindersWanted(language);
   try {
-    const registration = await readyWorker();
-    if (!registration) return "error";
-    const subscription =
-      (await registration.pushManager.getSubscription()) ??
-      (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey() }));
-    return (await saveSubscription(subscription, { confirm: true, language })) ? "on" : "error";
+    const registration = await setUpWorker();
+    if (!registration) {
+      // Finish on this visit if the worker gets there; otherwise on the next.
+      navigator.serviceWorker.ready.then(() => refreshReminders()).catch(() => undefined);
+      return "pending";
+    }
+    return (await subscribeAndConfirm(registration, language)) ? "on" : "error";
   } catch {
     return "error";
   }
 }
 
 /**
- * Re-sends an existing subscription once per visit, so the server keeps it
+ * Once per visit: re-sends an existing subscription, so the server keeps it
  * linked to whoever is signed in and picks up any change the browser made.
+ * Also finishes turning reminders on when an earlier yes couldn't (the worker
+ * wasn't ready), whenever it's called until that works. A failed attempt
+ * tries again on the next call.
  */
-export async function refreshReminders() {
+export function refreshReminders(): Promise<void> {
+  refreshing ??= refresh().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
+async function refresh() {
   try {
-    if (reminderState() !== "granted" || sessionStorage.getItem("amal-push-refreshed")) return;
-    sessionStorage.setItem("amal-push-refreshed", "1");
-    const registration = await readyWorker();
-    const subscription = await registration?.pushManager.getSubscription();
-    if (subscription) await saveSubscription(subscription);
+    // A tap is turning reminders on right now: let it finish (and confirm) first.
+    if (turningOn) await turningOn.catch(() => undefined);
+    if (reminderState() !== "granted") return;
+    const wanted = remindersWanted();
+    if (!wanted && sessionStorage.getItem(REFRESHED_KEY)) return;
+    const registration = await readyWorker(wanted ? SETUP_TIMEOUT_MS : SERVICE_WORKER_TIMEOUT_MS);
+    if (!registration) return;
+    if (wanted) {
+      if (!(await subscribeAndConfirm(registration, wanted))) return;
+      notifyReminders();
+    } else {
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription && !(await saveSubscription(subscription))) return;
+    }
+    sessionStorage.setItem(REFRESHED_KEY, "1");
   } catch {
     // Reminders are a bonus; never interrupt learning over them.
   }
@@ -144,6 +231,8 @@ export async function remindersSubscribed() {
 
 /** Turns reminders off on this device and tells the server to stop sending. */
 export async function disableReminders() {
+  // Also an unfinished "turn on": it must not finish later.
+  setRemindersWanted(null);
   try {
     const registration = await readyWorker();
     const subscription = await registration?.pushManager.getSubscription();
