@@ -22,7 +22,7 @@ function Back({ uid }: { uid: string }) {
   );
 }
 
-function House({ x, y, w, h, wall, trim, door }: { x: number; y: number; w: number; h: number; wall: string; trim: string; door: string }) {
+export function House({ x, y, w, h, wall, trim, door }: { x: number; y: number; w: number; h: number; wall: string; trim: string; door: string }) {
   const band = triangleBand(x + 4, x + w - 4, y + 16, 8, [trim, "#FFFFFF"]);
   return (
     <g>
@@ -44,25 +44,7 @@ function Mid() {
       <path d="M-10 480 H400 V720 H-10Z" fill="#8A5A52" />
       <path d="M-10 540 H400 V720 H-10Z" fill="#9A6A58" />
       <House x={-10} y={400} w={110} h={86} wall="#4E86C7" trim="#F5B324" door="#7A3E12" />
-      {/* the owlet's rooftop */}
-      <path d="M178 330 H396 V470 H178Z" fill="#E7B460" />
-      <path d="M178 412 H396 V470 H178Z" fill="#A8743E" />
-      <path d="M178 456 H396 V470 H178Z" fill="#7E5432" />
-      <path d="M178 330 H396 V350 H178Z" fill="#F3E3BF" />
-      {triangleBand(182, 394, 368, 12, ["#D21034", "#007229", "#1a1a1a"]).map((t) => (
-        <path key={t.fill} d={t.d} fill={t.fill} />
-      ))}
-      <path d="M222 412 V390 a18 18 0 0 1 36 0 V412Z" fill="#2F6FB0" />
-      <path d="M222 390 a18 18 0 0 1 36 0" stroke="#FFFFFF" strokeWidth={3.5} fill="none" />
-      <path d="M318 382 h28 v24 h-28Z" fill="#7A3E12" />
-      <path d="M318 382 h28 v24 h-28Z" stroke="#F3E3BF" strokeWidth={3} fill="none" />
-      <path d="M332 382 V406 M318 394 H346" stroke="#F3E3BF" strokeWidth={2} />
-      <path d="M182 336 C200 330 240 330 270 330" stroke="#FFF4D8" strokeWidth={2.4} strokeLinecap="round" opacity={0.8} />
-      {/* a palm behind the roof */}
-      <path d="M380 330 C376 290 380 250 392 220" stroke="#5E3A28" strokeWidth={8} strokeLinecap="round" fill="none" />
-      <Sway x={392} y={220} seconds={6} degrees={2.5}>
-        <path d={fan(392, 220, 7, 64, 11, -175, -5, 101)} fill="#235A3A" />
-      </Sway>
+      <OwletLedge />
     </>
   );
 }
@@ -109,3 +91,30 @@ export const owletVillage: ArenaDef = {
   anchors: { boss: { x: 287, y: 332 }, owl: { x: 102, y: 642 } },
   motes: { color: "#FFE9B0", glow: "rgba(255, 201, 138, 0.55)" },
 };
+
+/** The owlet's painted rooftop (and its palm), standing on (287, 332). Shared with the landscape arena. */
+export function OwletLedge() {
+  return (
+    <>
+      {/* the owlet's rooftop */}
+      <path d="M178 330 H396 V470 H178Z" fill="#E7B460" />
+      <path d="M178 412 H396 V470 H178Z" fill="#A8743E" />
+      <path d="M178 456 H396 V470 H178Z" fill="#7E5432" />
+      <path d="M178 330 H396 V350 H178Z" fill="#F3E3BF" />
+      {triangleBand(182, 394, 368, 12, ["#D21034", "#007229", "#1a1a1a"]).map((t) => (
+        <path key={t.fill} d={t.d} fill={t.fill} />
+      ))}
+      <path d="M222 412 V390 a18 18 0 0 1 36 0 V412Z" fill="#2F6FB0" />
+      <path d="M222 390 a18 18 0 0 1 36 0" stroke="#FFFFFF" strokeWidth={3.5} fill="none" />
+      <path d="M318 382 h28 v24 h-28Z" fill="#7A3E12" />
+      <path d="M318 382 h28 v24 h-28Z" stroke="#F3E3BF" strokeWidth={3} fill="none" />
+      <path d="M332 382 V406 M318 394 H346" stroke="#F3E3BF" strokeWidth={2} />
+      <path d="M182 336 C200 330 240 330 270 330" stroke="#FFF4D8" strokeWidth={2.4} strokeLinecap="round" opacity={0.8} />
+      {/* a palm behind the roof */}
+      <path d="M380 330 C376 290 380 250 392 220" stroke="#5E3A28" strokeWidth={8} strokeLinecap="round" fill="none" />
+      <Sway x={392} y={220} seconds={6} degrees={2.5}>
+        <path d={fan(392, 220, 7, 64, 11, -175, -5, 101)} fill="#235A3A" />
+      </Sway>
+    </>
+  );
+}

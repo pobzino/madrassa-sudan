@@ -9,7 +9,7 @@ import type { ArenaDef } from "./types";
  */
 
 /** Book spines on a shelf: one path per colour. */
-function spines(x0: number, x1: number, yBase: number, hMin: number, hMax: number, colours: readonly string[], seed: number) {
+export function spines(x0: number, x1: number, yBase: number, hMin: number, hMax: number, colours: readonly string[], seed: number) {
   const r = rng(seed);
   const paths = colours.map(() => "");
   let x = x0;
@@ -25,7 +25,7 @@ function spines(x0: number, x1: number, yBase: number, hMin: number, hMax: numbe
 }
 
 /** Rolled scrolls stacked on a shelf (ends facing us). */
-function scrolls(cx: number, base: number, rows: number, seed: number) {
+export function scrolls(cx: number, base: number, rows: number, seed: number) {
   const r = rng(seed);
   const ends: [number, number, number][] = [];
   for (let row = 0; row < rows; row += 1) {
@@ -85,16 +85,7 @@ function Mid({ uid }: { uid: string }) {
         <path d="M102 106 H118 L122 120 L115 136 H105 L98 120Z" fill="#FFE08A" />
         <path d="M104 142 H116 L110 150Z" fill="#E39A10" />
       </Sway>
-      {/* Harf's pile of great tomes */}
-      <ellipse cx={287} cy={402} rx={100} ry={12} fill="#000000" opacity={0.35} />
-      <path d="M186 362 H392 a6 6 0 0 1 6 6 V392 a6 6 0 0 1 -6 6 H186 a6 6 0 0 1 -6 -6 V368 a6 6 0 0 1 6 -6Z" fill="#0B6B33" />
-      <path d="M380 364 H396 V396 H380Z" fill="#F3E3BF" />
-      <path d="M190 380 H370" stroke="#F5B324" strokeWidth={3} />
-      <path d="M194 336 H384 a6 6 0 0 1 6 6 V362 H188 V342 a6 6 0 0 1 6 -6Z" fill="#B3122E" />
-      <path d="M190 338 H206 V362 H190Z" fill="#F3E3BF" />
-      <path d="M220 350 H372" stroke="#F5B324" strokeWidth={2.6} />
-      <path d="M188 330 C200 322 374 322 390 330 V338 H188Z" fill="#D63A55" />
-      <path d="M194 326 C220 320 260 320 288 320" stroke="#FFE1E7" strokeWidth={2} strokeLinecap="round" opacity={0.8} />
+      <HarfLedge />
     </>
   );
 }
@@ -150,3 +141,21 @@ export const harfLibrary: ArenaDef = {
   anchors: { boss: { x: 287, y: 326 }, owl: { x: 102, y: 644 } },
   motes: { color: "#FFE7B0", glow: "rgba(255, 200, 112, 0.45)" },
 };
+
+/** Harf's pile of great tomes, standing on (287, 326). Shared with the landscape arena. */
+export function HarfLedge() {
+  return (
+    <>
+      {/* Harf's pile of great tomes */}
+      <ellipse cx={287} cy={402} rx={100} ry={12} fill="#000000" opacity={0.35} />
+      <path d="M186 362 H392 a6 6 0 0 1 6 6 V392 a6 6 0 0 1 -6 6 H186 a6 6 0 0 1 -6 -6 V368 a6 6 0 0 1 6 -6Z" fill="#0B6B33" />
+      <path d="M380 364 H396 V396 H380Z" fill="#F3E3BF" />
+      <path d="M190 380 H370" stroke="#F5B324" strokeWidth={3} />
+      <path d="M194 336 H384 a6 6 0 0 1 6 6 V362 H188 V342 a6 6 0 0 1 6 -6Z" fill="#B3122E" />
+      <path d="M190 338 H206 V362 H190Z" fill="#F3E3BF" />
+      <path d="M220 350 H372" stroke="#F5B324" strokeWidth={2.6} />
+      <path d="M188 330 C200 322 374 322 390 330 V338 H188Z" fill="#D63A55" />
+      <path d="M194 326 C220 320 260 320 288 320" stroke="#FFE1E7" strokeWidth={2} strokeLinecap="round" opacity={0.8} />
+    </>
+  );
+}

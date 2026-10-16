@@ -9,7 +9,7 @@ import type { ArenaDef } from "./types";
  */
 
 /** A stack of books as a hill silhouette. */
-function bookHill(x: number, base: number, w: number, layers: number, h: number, seed: number) {
+export function bookHill(x: number, base: number, w: number, layers: number, h: number, seed: number) {
   const r = rng(seed);
   let d = "";
   let y = base;
@@ -55,15 +55,7 @@ function Mid() {
       <path d="M30 520 V440 M372 520 V450" stroke="#4A3A5A" strokeWidth={8} strokeLinecap="round" />
       <path d={blobs([[30, 420, 32], [10, 440, 24], [52, 444, 24], [372, 430, 30], [350, 450, 22], [392, 450, 22]])} fill="#2A8C7A" />
       <path d={blobs([[22, 410, 12], [364, 420, 11]])} fill="#47B39C" opacity={0.6} />
-      {/* Wordy's giant open book */}
-      <ellipse cx={287} cy={404} rx={104} ry={12} fill="#000000" opacity={0.3} />
-      <path d="M178 344 L287 356 L396 344 L396 386 L287 400 L178 386Z" fill="#007229" />
-      <path d="M182 340 C220 328 260 330 287 346 V392 C260 378 220 376 182 384Z" fill="#FFFDF5" />
-      <path d="M392 340 C354 328 314 330 287 346 V392 C314 378 354 376 392 384Z" fill="#F1EADB" />
-      <path d="M182 384 C220 376 260 378 287 392 C314 378 354 376 392 384 L392 390 C354 382 314 384 287 398 C260 384 220 382 182 390Z" fill="#E2D6BE" />
-      <path d="M198 348 L270 352 M198 358 L268 362 M198 368 L262 372 M306 352 L376 348 M308 362 L376 358 M312 372 L376 368" stroke="#A3B1C6" strokeWidth={2} strokeLinecap="round" />
-      <path d="M287 346 V392" stroke="#CDBF9F" strokeWidth={2} />
-      <path d={grass([[180, 388, 14], [394, 386, 14]], 33)} fill="#5BBF7A" />
+      <WordyLedge />
     </>
   );
 }
@@ -112,3 +104,20 @@ export const wordyStoryland: ArenaDef = {
   anchors: { boss: { x: 287, y: 346 }, owl: { x: 102, y: 642 } },
   motes: { color: "#D9F99D", glow: "rgba(190, 242, 100, 0.5)" },
 };
+
+/** Wordy's giant open book, standing on (287, 346). Shared with the landscape arena. */
+export function WordyLedge() {
+  return (
+    <>
+      {/* Wordy's giant open book */}
+      <ellipse cx={287} cy={404} rx={104} ry={12} fill="#000000" opacity={0.3} />
+      <path d="M178 344 L287 356 L396 344 L396 386 L287 400 L178 386Z" fill="#007229" />
+      <path d="M182 340 C220 328 260 330 287 346 V392 C260 378 220 376 182 384Z" fill="#FFFDF5" />
+      <path d="M392 340 C354 328 314 330 287 346 V392 C314 378 354 376 392 384Z" fill="#F1EADB" />
+      <path d="M182 384 C220 376 260 378 287 392 C314 378 354 376 392 384 L392 390 C354 382 314 384 287 398 C260 384 220 382 182 390Z" fill="#E2D6BE" />
+      <path d="M198 348 L270 352 M198 358 L268 362 M198 368 L262 372 M306 352 L376 348 M308 362 L376 358 M312 372 L376 368" stroke="#A3B1C6" strokeWidth={2} strokeLinecap="round" />
+      <path d="M287 346 V392" stroke="#CDBF9F" strokeWidth={2} />
+      <path d={grass([[180, 388, 14], [394, 386, 14]], 33)} fill="#5BBF7A" />
+    </>
+  );
+}

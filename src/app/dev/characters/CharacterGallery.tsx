@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BossCharacter } from "@/components/characters/BossCharacter";
 import { OwlCharacter } from "@/components/characters/OwlCharacter";
-import { ArenaBackdrop } from "@/components/characters/arenas";
+import { ArenaBackdrop, type ArenaOrientation } from "@/components/characters/arenas";
 import { BOSS_FOOT, OWL_FOOT } from "@/components/characters";
 import { BOSSES } from "@/components/characters/bosses";
 import {
@@ -125,16 +125,40 @@ function OwlCard() {
   );
 }
 
-/** An arena at phone size with the cast placed on its anchors. */
-function ArenaFrame({ bossKey, width = 375, height = 812, bossPose = "idle", owlPose = "idle", glow = true }: { bossKey: BossKey; width?: number; height?: number; bossPose?: Pose; owlPose?: OwlPose; glow?: boolean }) {
+/**
+ * Character sizes in arena units. Portrait: about 190 px boss and 162 px owl
+ * on a 375 px phone. Landscape: about 300 px boss and 250 px owl at 1440 × 900.
+ * Multiply by the anchor's `scale` to follow the screen size.
+ */
+const CAST_UNITS: Record<ArenaOrientation, { boss: number; owl: number }> = {
+  portrait: { boss: 181, owl: 154 },
+  landscape: { boss: 278, owl: 232 },
+};
+
+/** An arena with the cast placed on its anchors. */
+function ArenaFrame({
+  bossKey,
+  width = 375,
+  height = 812,
+  bossPose = "idle",
+  owlPose = "idle",
+  glow = true,
+  orientation = "portrait",
+}: {
+  bossKey: BossKey;
+  width?: number | string;
+  height?: number | string;
+  bossPose?: Pose;
+  owlPose?: OwlPose;
+  glow?: boolean;
+  orientation?: ArenaOrientation;
+}) {
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
-  const BOSS = 190;
-  const OWL = 162;
   const boss = useRef<BossHandle>(null);
   const owl = useRef<OwlHandle>(null);
   const [cue, setCue] = useState<CharacterCue | null>(null);
-  useRegister(`arena:${bossKey}:boss`, boss);
-  useRegister(`arena:${bossKey}:owl`, owl);
+  useRegister(`${orientation === "landscape" ? "arenaL" : "arena"}:${bossKey}:boss`, boss);
+  useRegister(`${orientation === "landscape" ? "arenaL" : "arena"}:${bossKey}:owl`, owl);
   return (
     <div
       onPointerMove={(e) => {
@@ -142,11 +166,14 @@ function ArenaFrame({ bossKey, width = 375, height = 812, bossPose = "idle", owl
         setTilt({ x: (e.clientX - box.left) / box.width - 0.5, y: (e.clientY - box.top) / box.height - 0.5 });
       }}
       onPointerLeave={() => setTilt({ x: 0, y: 0 })}
-      style={{ position: "relative", width, height, overflow: "hidden", borderRadius: 20, flexShrink: 0 }}
+      style={{ position: "relative", width, height, overflow: "hidden", borderRadius: typeof width === "number" ? 20 : 0, flexShrink: 0 }}
       data-cue={cue ?? ""}
     >
-      <ArenaBackdrop bossKey={bossKey} parallax={tilt}>
-        {(anchors) => (
+      <ArenaBackdrop bossKey={bossKey} parallax={tilt} orientation={orientation}>
+        {(anchors) => {
+          const BOSS = Math.round(CAST_UNITS[orientation].boss * anchors.boss.scale);
+          const OWL = Math.round(CAST_UNITS[orientation].owl * anchors.owl.scale);
+          return (
           <>
             <div style={{ position: "absolute", left: anchors.boss.x - BOSS * BOSS_FOOT.x, top: anchors.boss.y - BOSS * BOSS_FOOT.y }}>
               <BossCharacter bossKey={bossKey} pose={bossPose} size={BOSS} ref={boss} onCue={setCue} />
@@ -155,13 +182,14 @@ function ArenaFrame({ bossKey, width = 375, height = 812, bossPose = "idle", owl
               <OwlCharacter pose={owlPose} size={OWL} ref={owl} glow={glow} />
             </div>
           </>
-        )}
+          );
+        }}
       </ArenaBackdrop>
     </div>
   );
 }
 
-export default function CharacterGallery({ shot, bossKey, pose }: { shot?: string; bossKey?: string; pose?: string }) {
+export default function CharacterGallery({ shot, bossKey, pose, orient }: { shot?: string; bossKey?: string; pose?: string; orient?: string }) {
   useEffect(() => {
     window.__chars = {
       ids: () => Array.from(registry.keys()),
@@ -192,9 +220,14 @@ export default function CharacterGallery({ shot, bossKey, pose }: { shot?: strin
     );
   }
   if (shot === "arena") {
+    const bossPose = (POSES as readonly string[]).includes(pose ?? "") ? (pose as Pose) : "idle";
     return (
       <main style={{ margin: 0 }}>
-        <ArenaFrame bossKey={key} bossPose={(POSES as readonly string[]).includes(pose ?? "") ? (pose as Pose) : "idle"} />
+        {orient === "landscape" ? (
+          <ArenaFrame bossKey={key} bossPose={bossPose} orientation="landscape" width="100vw" height="100vh" />
+        ) : (
+          <ArenaFrame bossKey={key} bossPose={bossPose} />
+        )}
       </main>
     );
   }
@@ -213,6 +246,13 @@ export default function CharacterGallery({ shot, bossKey, pose }: { shot?: strin
       <div style={{ display: "flex", gap: 16, overflowX: "auto", paddingBottom: 16 }}>
         {BOSS_KEYS.map((k) => (
           <ArenaFrame key={k} bossKey={k} />
+        ))}
+      </div>
+      <h2 style={{ ...h2, marginTop: 32 }}>Landscape arenas (desktop)</h2>
+      <p style={{ color: "#64748B", margin: "0 0 12px" }}>Shown at 1024 × 640. Open ?shot=arena&amp;orient=landscape&amp;key=… for full screen.</p>
+      <div style={{ display: "flex", gap: 16, overflowX: "auto", paddingBottom: 16 }}>
+        {BOSS_KEYS.map((k) => (
+          <ArenaFrame key={`l-${k}`} bossKey={k} orientation="landscape" width={1024} height={640} />
         ))}
       </div>
     </main>

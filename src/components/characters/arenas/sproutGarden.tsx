@@ -9,7 +9,7 @@ import type { ArenaDef } from "./types";
  */
 
 /** Hibiscus blooms: five round petals each. */
-function blooms(at: readonly (readonly [number, number, number])[]) {
+export function blooms(at: readonly (readonly [number, number, number])[]) {
   const petals: [number, number, number][] = [];
   const centres: [number, number, number][] = [];
   for (const [x, y, s] of at) {
@@ -45,7 +45,6 @@ function Back({ uid }: { uid: string }) {
 
 function Mid() {
   const left = blooms([[22, 470, 1.2], [52, 490, 1], [10, 510, 1.1]]);
-  const ledge = blooms([[196, 326, 1], [380, 324, 1.1], [214, 340, 0.8]]);
   return (
     <>
       {/* the near bank meadow, kept calm for the answer band */}
@@ -55,16 +54,7 @@ function Mid() {
       <path d={blobs([[10, 480, 40], [56, 500, 30], [0, 520, 30]])} fill="#2F7A37" />
       <path d={left.petals} fill="#E23D5A" />
       <path d={left.centres} fill="#FFD34D" />
-      {/* Sprouty's raised garden bed */}
-      <ellipse cx={287} cy={402} rx={98} ry={12} fill="#2A3A12" opacity={0.3} />
-      <path d="M180 334 C182 318 222 310 287 310 C352 310 392 318 394 334 L388 376 C366 394 320 400 287 400 C252 400 206 394 186 376Z" fill="#8A5A34" />
-      <path d="M186 358 C214 378 256 384 290 384 C330 384 364 378 390 356 L388 376 C366 394 320 400 287 400 C252 400 206 394 186 376Z" fill="#6E4527" />
-      <path d="M192 346 h12 v6 h-12Z M232 352 h12 v6 h-12Z M330 352 h12 v6 h-12Z M366 344 h12 v6 h-12Z" fill="#5E3A1F" opacity={0.6} />
-      <ellipse cx={287} cy={326} rx={108} ry={19} fill="#7BB847" />
-      <ellipse cx={280} cy={322} rx={90} ry={11} fill="#9BD15C" />
-      <path d={grass([[188, 332, 16], [388, 328, 16], [206, 342, 12], [370, 342, 12]], 55)} fill="#4E9A34" />
-      <path d={ledge.petals} fill="#E23D5A" />
-      <path d={ledge.centres} fill="#FFD34D" />
+      <SproutLedge />
     </>
   );
 }
@@ -116,3 +106,22 @@ export const sproutGarden: ArenaDef = {
   anchors: { boss: { x: 287, y: 328 }, owl: { x: 100, y: 642 } },
   motes: { color: "#FFF7B0", glow: "rgba(253, 230, 138, 0.55)" },
 };
+
+/** Sprouty's raised garden bed, standing on (287, 328). Shared with the landscape arena. */
+export function SproutLedge() {
+  const ledge = blooms([[196, 326, 1], [380, 324, 1.1], [214, 340, 0.8]]);
+  return (
+    <>
+      {/* Sprouty's raised garden bed */}
+      <ellipse cx={287} cy={402} rx={98} ry={12} fill="#2A3A12" opacity={0.3} />
+      <path d="M180 334 C182 318 222 310 287 310 C352 310 392 318 394 334 L388 376 C366 394 320 400 287 400 C252 400 206 394 186 376Z" fill="#8A5A34" />
+      <path d="M186 358 C214 378 256 384 290 384 C330 384 364 378 390 356 L388 376 C366 394 320 400 287 400 C252 400 206 394 186 376Z" fill="#6E4527" />
+      <path d="M192 346 h12 v6 h-12Z M232 352 h12 v6 h-12Z M330 352 h12 v6 h-12Z M366 344 h12 v6 h-12Z" fill="#5E3A1F" opacity={0.6} />
+      <ellipse cx={287} cy={326} rx={108} ry={19} fill="#7BB847" />
+      <ellipse cx={280} cy={322} rx={90} ry={11} fill="#9BD15C" />
+      <path d={grass([[188, 332, 16], [388, 328, 16], [206, 342, 12], [370, 342, 12]], 55)} fill="#4E9A34" />
+      <path d={ledge.petals} fill="#E23D5A" />
+      <path d={ledge.centres} fill="#FFD34D" />
+    </>
+  );
+}

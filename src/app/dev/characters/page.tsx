@@ -8,6 +8,7 @@ import CharacterGallery from "./CharacterGallery";
  *   ?shot=boss&key=number_giant&pose=hit
  *   ?shot=owl&pose=block
  *   ?shot=arena&key=letter_camel
+ *   ?shot=arena&key=letter_camel&orient=landscape   (fills the window)
  *
  * Renders nothing useful in production.
  */
@@ -24,5 +25,5 @@ export default async function CharactersDevPage({
     const value = params[key];
     return Array.isArray(value) ? value[0] : value;
   };
-  return <CharacterGallery shot={one("shot")} bossKey={one("key")} pose={one("pose")} />;
+  return <CharacterGallery shot={one("shot")} bossKey={one("key")} pose={one("pose")} orient={one("orient")} />;
 }

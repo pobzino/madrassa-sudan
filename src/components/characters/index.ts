@@ -4,7 +4,19 @@
  */
 export { BossCharacter, type BossCharacterProps } from "./BossCharacter";
 export { OwlCharacter, type OwlCharacterProps } from "./OwlCharacter";
-export { ArenaBackdrop, ARENAS, ARENA_ANCHORS_PCT, PARALLAX_DEPTH, placeInArena, type ArenaBackdropProps, type ArenaLayer, type PlacedAnchor } from "./arenas";
+export {
+  ArenaBackdrop,
+  ARENAS,
+  ARENAS_LANDSCAPE,
+  ARENA_ANCHORS_PCT,
+  ARENA_ANCHORS_PCT_LANDSCAPE,
+  PARALLAX_DEPTH,
+  placeInArena,
+  type ArenaBackdropProps,
+  type ArenaLayer,
+  type ArenaOrientation,
+  type PlacedAnchor,
+} from "./arenas";
 export * from "./types";
 
 /**
