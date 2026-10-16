@@ -4,6 +4,7 @@ import type { TraceLetterConfig } from './types';
 
 export interface TraceStrokeTemplate {
   kind: 'main' | 'dot' | 'hamza';
+  width?: number;
   points: [number, number][];
 }
 
@@ -85,11 +86,26 @@ function cloudDistance(a: Array<[number, number]>, b: Array<[number, number]>): 
   return (directed(a, b) + directed(b, a)) / 2;
 }
 
-function isCompact(stroke: number[][]): boolean {
-  if (stroke.length === 0) return false;
-  const xs = stroke.map((point) => point[0]);
-  const ys = stroke.map((point) => point[1]);
-  return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) < 0.075;
+function includesRequiredMarks(strokes: number[][][], template: TraceLetterTemplate): boolean {
+  const marks = template.strokes.filter((stroke) => stroke.kind === 'dot' || stroke.kind === 'hamza');
+  return marks.every((mark) => {
+    const mx = mark.points.reduce((sum, point) => sum + point[0], 0) / mark.points.length;
+    const my = mark.points.reduce((sum, point) => sum + point[1], 0) / mark.points.length;
+    const markExtent = Math.max(
+      Math.max(...mark.points.map((point) => point[0])) - Math.min(...mark.points.map((point) => point[0])),
+      Math.max(...mark.points.map((point) => point[1])) - Math.min(...mark.points.map((point) => point[1]))
+    );
+    return strokes.some((stroke) => {
+      if (!stroke.length) return false;
+      const cx = stroke.reduce((sum, point) => sum + point[0], 0) / stroke.length;
+      const cy = stroke.reduce((sum, point) => sum + point[1], 0) / stroke.length;
+      const strokeExtent = Math.max(
+        Math.max(...stroke.map((point) => point[0])) - Math.min(...stroke.map((point) => point[0])),
+        Math.max(...stroke.map((point) => point[1])) - Math.min(...stroke.map((point) => point[1]))
+      );
+      return strokeExtent <= Math.max(0.16, markExtent * 1.5) && Math.hypot(cx - mx, cy - my) <= 0.12;
+    });
+  });
 }
 
 export interface TraceLetterGrade { score: number; is_correct: boolean }
@@ -107,11 +123,9 @@ export function gradeTraceLetter(
   if (strokes.some((stroke) => !Array.isArray(stroke) || stroke.length === 0 || stroke.length > 512 || stroke.some((p) => !Array.isArray(p) || p.length !== 2 || p.some((n) => !Number.isFinite(n) || n < 0 || n > 1)))) {
     return { score: 0, is_correct: false };
   }
-  const expectedDots = template.strokes.filter((stroke) => stroke.kind === 'dot' || stroke.kind === 'hamza').length;
-  const drawnDots = strokes.filter(isCompact).length;
-  // Extra dots change the Arabic letter too (ب / ت / ث), so dot count is part
-  // of identity, not optional decoration.
-  if (drawnDots !== expectedDots) return { score: 0.2, is_correct: false };
+  // A mark must be present in the right place. Merely counting short strokes
+  // mistakes compact body turns for dots in Naskh letters.
+  if (!includesRequiredMarks(strokes, template)) return { score: 0.2, is_correct: false };
   if (strokes.length < Math.max(1, template.strokes.length - 1) || strokes.length > template.strokes.length + 2) {
     return { score: 0.15, is_correct: false };
   }
@@ -121,7 +135,7 @@ export function gradeTraceLetter(
   for (let degrees = -25; degrees <= 25; degrees += 5) {
     best = Math.min(best, cloudDistance(prepareCloud(drawn, degrees * Math.PI / 180), expected));
   }
-  const allowed = Math.max(0.05, Math.min(0.085, tolerance * 0.32));
+  const allowed = Math.max(0.035, Math.min(0.05, tolerance * 0.25));
   const score = Math.max(0, Math.min(1, 1 - best / allowed));
   return { score, is_correct: best <= allowed };
 }

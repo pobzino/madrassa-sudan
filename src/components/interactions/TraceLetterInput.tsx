@@ -105,14 +105,13 @@ export default function TraceLetterInput({ config, language, answer, onAnswerCha
   if (!template) return <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">{copy.invalid}</p>;
 
   const templatePaths = template.strokes.map((stroke) => pathData(stroke.points));
-  const glyphFont = config.script === 'ar' ? 'Noto Naskh Arabic, Amiri, serif' : 'Nunito, Arial, sans-serif';
+  const glyphFont = config.script === 'ar' ? 'Amal Trace Naskh, serif' : 'Amal Trace Print, sans-serif';
 
   return (
     <div className="mx-auto w-full max-w-[520px] select-none" dir={isAr ? 'rtl' : 'ltr'}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-bold text-slate-700">{copy.hint}</p>
-          <p className="text-xs text-slate-500">{config.script === 'ar' ? (config.form ?? 'isolated') : config.case ?? 'upper'}</p>
         </div>
         <div className="flex items-center gap-2">
           {config.audio_url && (
@@ -143,10 +142,10 @@ export default function TraceLetterInput({ config, language, answer, onAnswerCha
           <text x="50" y="69" textAnchor="middle" direction={config.script === 'ar' ? 'rtl' : 'ltr'} style={{ fontFamily: glyphFont, fontSize: config.script === 'ar' ? 78 : 82, fill: '#e8f1eb', fontWeight: 700 }}>{configLetter}</text>
           {template.strokes.map((stroke, index) => (
             <g key={`guide-${index}`} opacity={demoStep === index ? 1 : 0.92}>
-              <path d={templatePaths[index]} fill="none" stroke="#bdd8c7" strokeWidth={stroke.kind === 'dot' ? 2.1 : 1.5} strokeLinecap="round" strokeLinejoin="round" />
+              <path d={templatePaths[index]} fill="none" stroke="#bdd8c7" strokeWidth={Math.max(1.2, (stroke.width ?? 0.025) * 100)} strokeLinecap="round" strokeLinejoin="round" />
               <circle cx={stroke.points[0][0] * 100} cy={stroke.points[0][1] * 100} r="2.15" fill="#118447" />
               <text x={stroke.points[0][0] * 100} y={stroke.points[0][1] * 100 + 1.2} fill="white" textAnchor="middle" fontSize="2.3" fontWeight="700">{index + 1}</text>
-              <path d={pathData(arrowAt(stroke.points))} fill="none" stroke="#1b8a50" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" markerEnd="url(#trace-arrow)" />
+              {stroke.kind !== 'dot' && stroke.kind !== 'hamza' && <path d={pathData(arrowAt(stroke.points))} fill="none" stroke="#1b8a50" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" markerEnd="url(#trace-arrow)" />}
             </g>
           ))}
           {template.strokes.map((stroke, index) => (
@@ -155,20 +154,24 @@ export default function TraceLetterInput({ config, language, answer, onAnswerCha
               d={templatePaths[index]}
               fill="none"
               stroke="#087f3c"
-              strokeWidth="2.8"
+              strokeWidth={Math.max(2.4, (stroke.width ?? 0.025) * 100)}
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeDasharray="2 200"
               strokeDashoffset="0"
               className={demoStep === index ? 'trace-letter-demo-stroke' : ''}
-              style={{ opacity: demoStep > index ? 1 : 0, strokeDasharray: demoStep > index ? '200 0' : '2 200', ...(demoStep === index ? { animation: 'trace-letter-draw 0.75s ease-out forwards' } : {}) }}
+              style={{ opacity: demoStep >= index ? 1 : 0, strokeDasharray: demoStep > index ? '200 0' : '2 200', ...(demoStep === index ? { animation: 'trace-letter-draw 0.75s ease-out forwards' } : {}) }}
             />
           ))}
           {strokes.map((stroke, index) => <polyline key={`answer-${index}`} points={stroke.map(([x, y]) => `${x * 100},${y * 100}`).join(' ')} fill="none" stroke="#154d9b" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />)}
           {current && <polyline points={current.map(([x, y]) => `${x * 100},${y * 100}`).join(' ')} fill="none" stroke="#154d9b" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />}
         </svg>
       </div>
-      <style jsx>{`@keyframes trace-letter-draw { from { stroke-dasharray: 0 200; } to { stroke-dasharray: 200 0; } }`}</style>
+      <style jsx global>{`
+        @font-face { font-family: 'Amal Trace Naskh'; src: url('/trace-letter/AmalTraceNaskh.ttf') format('truetype'); font-display: swap; }
+        @font-face { font-family: 'Amal Trace Print'; src: url('/trace-letter/AmalTracePrint.ttf') format('truetype'); font-display: swap; }
+        @keyframes trace-letter-draw { from { stroke-dasharray: 0 200; } to { stroke-dasharray: 200 0; } }
+      `}</style>
       {!disabled && (
         <div className="mt-3 flex justify-between gap-3">
           <button type="button" onClick={() => announce(strokes.slice(0, -1))} disabled={!strokes.length} className="min-h-11 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-40">{copy.undo}</button>

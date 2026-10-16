@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getTraceLetterTemplate } from "../interactions/trace-letter";
 import {
   countsAsNewHomeworkCompletion,
   decideRetake,
@@ -88,11 +89,10 @@ describe("gradeHomeworkAnswers", () => {
   });
 
   it("grades trace-letter homework from strokes rather than a client pass flag", () => {
-    const config = { script: "en", letter: "A", case: "upper" };
-    const strokes = [
-      [[0.15, 0.85], [0.5, 0.15], [0.85, 0.85]],
-      [[0.29, 0.58], [0.71, 0.58]],
-    ];
+    const config = { script: "en", letter: "A", case: "upper" } as const;
+    const strokes = getTraceLetterTemplate(config)!.strokes.map((stroke) =>
+      stroke.points.map(([x, y]) => [x, y])
+    );
     const question: GradableQuestion = {
       id: "trace",
       question_type: "trace_letter",
