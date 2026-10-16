@@ -420,7 +420,17 @@ export default function LearningPathTree({
               <div key={node.id} className="absolute" style={{ left: x, top: y }}>
                 {/* On this node the owl is the rigged one, facing off with the boss (MilestoneHero). */}
                 <div className="absolute left-1/2 -translate-x-1/2" style={{ top: -(HERO_WINDOW + 14) / 2 }}>
-                  <MilestoneHero milestone={node.milestone} lang={language} isOnline={isOnline} isCurrent={isSelected} href={href} />
+                  <MilestoneHero
+                    milestone={node.milestone}
+                    lang={language}
+                    isOnline={isOnline}
+                    isCurrent={isSelected}
+                    href={href}
+                    onSelect={() => {
+                      setFromId(selId);
+                      setSelectedId(node.id);
+                    }}
+                  />
                 </div>
               </div>
             );

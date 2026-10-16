@@ -109,12 +109,15 @@ export function MilestoneHero({
   isOnline,
   isCurrent,
   href,
+  onSelect,
 }: {
   milestone: TreeMilestone;
   lang: "ar" | "en";
   isOnline: boolean;
   isCurrent: boolean;
   href: string | null;
+  /** Like a lesson node: the first tap brings the owl here; only the button opens the battle. */
+  onSelect?: () => void;
 }) {
   const t = COPY[lang];
   const { state, bossKey } = milestone;
@@ -342,10 +345,10 @@ export function MilestoneHero({
       )}
 
       <div className="relative">
-        {href ? (
-          <Link href={href} aria-label={`${label.title}: ${label.sub}`} className="block rounded-full focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300">
+        {href && onSelect ? (
+          <button type="button" onClick={onSelect} aria-label={`${label.title}: ${label.sub}`} className="block rounded-full focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300">
             {windowArt}
-          </Link>
+          </button>
         ) : (
           windowArt
         )}
@@ -394,13 +397,7 @@ export function MilestoneHero({
             className="absolute z-[5]"
             style={{ width: OWL_SIZE, height: OWL_SIZE, left: -OWL_SIZE + 6, top: (HERO_WINDOW + 14) * 0.86 - OWL_SIZE * OWL_FOOT.y, transformOrigin: "50% 100%" }}
           >
-            {href ? (
-              <Link href={href} tabIndex={-1} aria-hidden="true" className="block">
-                <OwlCharacter ref={owlRef} pose={passed ? "cheer" : "idle"} size={OWL_SIZE} glow={animate && awake} />
-              </Link>
-            ) : (
-              <OwlCharacter ref={owlRef} pose={passed ? "cheer" : "idle"} size={OWL_SIZE} />
-            )}
+            <OwlCharacter ref={owlRef} pose={passed ? "cheer" : "idle"} size={OWL_SIZE} glow={Boolean(href) && animate && awake} />
             {owlSays && (
               <p aria-live="polite" className="pointer-events-none absolute -top-[30px] right-[-6px] z-10 whitespace-nowrap rounded-[14px] bg-[#007229] px-2.5 py-1 text-[12px] font-bold text-white shadow-md motion-safe:animate-pop-in">
                 {owlSays}
@@ -457,7 +454,7 @@ export function MilestoneHero({
       >
         {label.sub}
       </p>
-      {href && (
+      {href && isCurrent && (
         <Link
           href={href}
           className={`mt-2 inline-flex h-12 items-center justify-center rounded-full px-7 font-fredoka text-[18px] font-bold shadow-[0_5px_0_rgba(0,0,0,0.2),inset_0_3px_0_rgba(255,255,255,0.35)] ${
