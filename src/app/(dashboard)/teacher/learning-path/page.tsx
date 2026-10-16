@@ -92,7 +92,8 @@ export default function LearningPathEditorPage() {
         body: JSON.stringify({ ...scope, ...body }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(MILESTONE_ERRORS[data.error] ?? `Generation failed: ${data.message ?? data.error ?? `error ${res.status}`}`);
+      // The server's own message names the cause (e.g. which difficulty was short); prefer it.
+      if (!res.ok) throw new Error(data.message ?? MILESTONE_ERRORS[data.error] ?? `Generation failed: ${data.error ?? `error ${res.status}`}`);
       return data;
     };
     try {

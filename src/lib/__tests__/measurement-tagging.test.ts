@@ -262,6 +262,27 @@ describe("placement generation", () => {
     expect(tables.homework_questions.every((q) => q.difficulty === 3 && q.tag_source === "model_disputed" && q.skill_key === "math.money")).toBe(true);
   });
 
+  it("tops up a difficulty the per-lesson cap left short from the lessons' spare items", async () => {
+    // Only the first two lessons have hard items (two each); one per lesson fits under the cap, the spare one tops up.
+    let calls = 0;
+    const fewHard = vi.fn(async (request: LessonItemRequest) => {
+      const hasHard = calls++ % 12 < 2; // the first two lessons of each run (lessons start in order)
+      return request.types.map((_, k) => choice(`${request.lessonTitleEn}-${k}`, { skill_key: request.defaultSkillKey, difficulty: hasHard && k >= 3 ? 3 : (k % 2) + 1 }));
+    });
+    const run = async (top: boolean) => {
+      const { tables, client } = seed();
+      const generate = top ? fewHard : vi.fn(async (request: LessonItemRequest) => (await fewHard(request)).slice(0, 4));
+      const result = generateMilestonePool({ admin: client as never, pathId: "path-1", afterWeekNumber: 0, poolSize: 24, actorId: "t", kind: "placement", generate, verify: passAll });
+      return { result, tables };
+    };
+    const withSpare = await run(true);
+    await withSpare.result;
+    expect(withSpare.tables.homework_questions.filter((q) => q.difficulty === 3)).toHaveLength(3);
+    // Without the spare hard items there are only two: the draft is refused, and the message says which difficulty is short.
+    const without = await run(false);
+    await expect(without.result).rejects.toMatchObject({ code: "generation_failed", message: expect.stringContaining("hard 2") });
+  });
+
   describe("as short steps (plan, lesson, finish)", () => {
     const scope = (client: unknown) => ({ admin: client as never, pathId: "path-1", afterWeekNumber: 0, poolSize: 24, kind: "placement" as const });
     beforeEach(() => vi.stubEnv("SUPABASE_SECRET_KEY", "test-secret"));

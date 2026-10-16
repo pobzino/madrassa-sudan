@@ -415,6 +415,7 @@ async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoo
 
   // 3c. Keep at most perLesson good items per lesson (a placement prefers one of each difficulty), no repeated prompts.
   let pool: PoolItem[] = [];
+  const spare: PoolItem[] = [];
   const seenPrompts = new Set<string>();
   settled.forEach((result, index) => {
     const lessonId = plan.sources[index].lessonId;
@@ -443,7 +444,10 @@ async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoo
       : result.value.kept;
     let kept = 0;
     for (const item of candidates) {
-      if (kept >= perLesson) break;
+      if (kept >= perLesson) {
+        spare.push({ ...item, sourceLessonId: lessonId });
+        continue;
+      }
       const key = promptKey(item.interaction);
       if (seenPrompts.has(key)) continue;
       seenPrompts.add(key);
@@ -455,17 +459,30 @@ async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoo
 
   // 4. Enough for the smallest battle (a placement: 12, with >= 3 of each difficulty)?
   if (placement) {
+    // A difficulty the per-lesson cap left short is topped up from the lessons' spare good items.
+    for (const d of [1, 2, 3] as Difficulty[]) {
+      for (const item of spare) {
+        if (difficultyCounts(pool)[d] >= PLACEMENT_MIN_PER_DIFFICULTY) break;
+        if (item.difficulty !== d) continue;
+        const key = promptKey(item.interaction);
+        if (seenPrompts.has(key)) continue;
+        seenPrompts.add(key);
+        pool.push(item);
+      }
+    }
     pool = trimPlacementPool(pool, poolSize);
     const counts = difficultyCounts(pool);
     if (pool.length < PLACEMENT_QUESTION_COUNT || ([1, 2, 3] as Difficulty[]).some((d) => counts[d] < PLACEMENT_MIN_PER_DIFFICULTY)) {
+      console.error("Milestone pool too small:", JSON.stringify({ kind, pool: pool.length, counts, lessons: plan.sources.length, skipped: skippedLessons.length, dropped: droppedItems.length }));
       throw new MilestoneRouteError(
         "generation_failed",
         502,
-        `Too few good questions of each difficulty were generated (easy ${counts[1]}, medium ${counts[2]}, hard ${counts[3]}). Try again.`,
+        `Too few good questions of each difficulty were generated (easy ${counts[1]}, medium ${counts[2]}, hard ${counts[3]}; ${skippedLessons.length} of ${plan.sources.length + plan.skippedLessons.length} lessons gave none). Try again.`,
       );
     }
   } else if (pool.length < MILESTONE_MIN_BATTLE_QUESTIONS) {
-    throw new MilestoneRouteError("generation_failed", 502, "Too few good questions were generated. Try again.");
+    console.error("Milestone pool too small:", JSON.stringify({ kind, pool: pool.length, lessons: plan.sources.length, skipped: skippedLessons.length, dropped: droppedItems.length }));
+    throw new MilestoneRouteError("generation_failed", 502, `Too few good questions were generated (${pool.length}; ${skippedLessons.length} lessons gave none). Try again.`);
   }
 
   // 5. Write. A published milestone must be unpublished before regenerating.
@@ -632,6 +649,7 @@ export async function finishMilestonePool(
     if (!given || typeof given.lessonId !== "string" || !Array.isArray(given.kept) || !Array.isArray(given.dropped)) continue;
     const result: LessonPoolResult = { lessonId: given.lessonId, kept: given.kept, dropped: given.dropped };
     if (signatureMatches(lessonSignature(plan, result), given.signature ?? "")) byLesson.set(result.lessonId, result);
+    else console.warn("Milestone lesson result rejected (signature):", result.lessonId);
   }
   const settled: PromiseSettledResult<LessonPoolResult>[] = plan.sources.map(({ lessonId }) => {
     const result = byLesson.get(lessonId);
