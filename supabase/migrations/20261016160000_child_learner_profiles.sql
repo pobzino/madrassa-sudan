@@ -186,6 +186,7 @@ $$;
 REVOKE ALL ON FUNCTION public.can_view_profile(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.can_view_profile(uuid) TO authenticated, service_role;
 DROP POLICY IF EXISTS "Profiles are viewable by authenticated users" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles visible to self and verified relationships" ON public.profiles;
 CREATE POLICY "Profiles visible to self and verified relationships" ON public.profiles
 FOR SELECT TO authenticated USING (public.can_view_profile(id));
 DROP POLICY IF EXISTS "Parents can read directly owned child profiles" ON public.profiles;

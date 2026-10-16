@@ -112,6 +112,9 @@ function client({ asService = false } = {}) {
   return {
     auth: { getUser: async () => ({ data: { user: { id: state.userId } }, error: null }) },
     from: (table: string) => query(table, { asService }),
+    // The learner can open every published lesson in these tests.
+    rpc: async (fn: string) =>
+      fn === "can_user_access_published_lesson" ? { data: true, error: null } : { data: null, error: { message: `unexpected rpc ${fn}` } },
   };
 }
 

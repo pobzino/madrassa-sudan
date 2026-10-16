@@ -49,6 +49,12 @@ export async function PATCH(request: NextRequest, route: RouteParams) {
       query = query.eq("parent_account_id", context.accountId).eq("role", "student").is("auth_user_id", null);
     }
     const { data, error } = await query.select("*").maybeSingle();
+    // The database refuses a child without a name (children made from signup
+    // ages start unnamed), so ask for one instead of failing.
+    if (error?.code === "22023") {
+      const nameMissing = /name/i.test(error.message || "");
+      return NextResponse.json({ error: nameMissing ? "learner_name_required" : "validation_error" }, { status: 400 });
+    }
     if (error) {
       console.error("Update learner failed:", error);
       return NextResponse.json({ error: "learner_update_failed" }, { status: 500 });
