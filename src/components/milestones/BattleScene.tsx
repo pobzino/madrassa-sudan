@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { RotateCw, Volume2, VolumeX, X } from "lucide-react";
 import { OwlHead } from "@/components/illustrations";
@@ -117,8 +117,6 @@ interface BattleSceneProps {
   /** The block's lessons: the entrance offers "Practise these lessons". */
   blockLessons: MilestoneIntroResponse["blockLessons"];
   fetcher: Fetcher;
-  /** The layer above the arena, for screen shakes. */
-  shellRef: RefObject<HTMLDivElement | null>;
   onEntranceEnd: () => void;
   onSubmit: (answer: InteractionAnswer, origin: DOMRect | null) => void;
   onAskOwl: () => void;
@@ -127,7 +125,7 @@ interface BattleSceneProps {
 }
 
 export default function BattleScene(props: BattleSceneProps) {
-  const { anchors, lang, bossKey, battle, question, feedback, pending, inFlight, isOnline, netError, hint, hintLoading, fxEvent, entrance, muted, fetcher, shellRef } = props;
+  const { anchors, lang, bossKey, battle, question, feedback, pending, inFlight, isOnline, netError, hint, hintLoading, fxEvent, entrance, muted, fetcher } = props;
   const t = MILESTONE_COPY[lang];
   const boss = bossName(bossKey, lang, true);
   const turn = turnOf(question);
@@ -151,7 +149,9 @@ export default function BattleScene(props: BattleSceneProps) {
   const arenaRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const bossBoxRef = useRef<HTMLDivElement>(null);
+  const bossRigRef = useRef<HTMLDivElement>(null);
   const owlBoxRef = useRef<HTMLDivElement>(null);
+  const shieldsRef = useRef<HTMLDivElement>(null);
   const bossRef = useRef<BossHandle>(null);
   const owlRef = useRef<OwlHandle>(null);
   const projectileRef = useRef<HTMLDivElement>(null);
@@ -172,17 +172,22 @@ export default function BattleScene(props: BattleSceneProps) {
   useEffect(() => () => clearFx(), []);
   const previousPhase = useRef(battle.phase);
 
-  const shake = useCallback(
-    (strength: number, delay = 0) =>
-      play(shellRef.current, [
+  // The entrance THUD shakes the characters only (never the HUD or the bubble), a small fast jitter.
+  const shake = useCallback((strength: number, delay = 0) => {
+    const s = Math.min(6, strength);
+    let first: Animation | null = null;
+    for (const el of [bossBoxRef.current, owlBoxRef.current, shieldsRef.current]) {
+      const a = play(el, [
         { transform: "translate(0, 0)" },
-        { transform: `translate(${-strength}px, ${strength * 0.5}px)` },
-        { transform: `translate(${strength * 0.8}px, ${-strength * 0.5}px)` },
-        { transform: `translate(${-strength * 0.5}px, ${strength * 0.3}px)` },
+        { transform: `translate(${-s}px, ${s * 0.4}px)` },
+        { transform: `translate(${s * 0.75}px, ${-s * 0.3}px)` },
+        { transform: `translate(${-s * 0.4}px, ${s * 0.2}px)` },
         { transform: "translate(0, 0)" },
-      ], { duration: 420, delay, easing: "linear" }),
-    [shellRef]
-  );
+      ], { duration: 170, delay, easing: "linear", composite: "add" });
+      first ??= a;
+    }
+    return first;
+  }, []);
 
   // ------------------------------------------------------------ entrance
   useEffect(() => {
@@ -303,7 +308,8 @@ export default function BattleScene(props: BattleSceneProps) {
         bossBox: () => bossBoxRef.current,
         owl: () => owlRef.current,
         boss: () => bossRef.current,
-        shell: () => shellRef.current,
+        shakeTargets: () => [bossBoxRef.current, owlBoxRef.current, shieldsRef.current].filter((el): el is HTMLDivElement => Boolean(el)),
+        bossRig: () => bossRigRef.current,
         hpBar: () => hpBarRef.current,
         bossProjectile: () => projectileRef.current,
       },
@@ -311,7 +317,7 @@ export default function BattleScene(props: BattleSceneProps) {
     );
     combat.current = engine;
     return () => engine.dispose();
-  }, [shellRef]);
+  }, []);
 
   // The boss's HP (and hits to go) stay as they were until the hit lands.
   const [held, setHeld] = useState<{ hp: number; correct: number } | null>(null);
@@ -460,7 +466,9 @@ export default function BattleScene(props: BattleSceneProps) {
       {/* The boss on its ledge */}
       <div ref={bossBoxRef} className="absolute" style={{ left: bossLeft, top: bossTop, width: bossSize, height: bossSize }}>
         <div data-layout="boss" className="pointer-events-none absolute" style={artBox(geometry.bossArt, geometry.boss)} aria-hidden="true" />
-        {bossMounted && <BossCharacter ref={bossRef} bossKey={bossKey} pose={bossPose} size={bossSize} enter={inEntrance} onCue={bossCues.onCue} title={BOSS_NAMES[bossKey][lang]} />}
+        <div ref={bossRigRef} className="absolute inset-0">
+          {bossMounted && <BossCharacter ref={bossRef} bossKey={bossKey} pose={bossPose} size={bossSize} enter={inEntrance} onCue={bossCues.onCue} title={BOSS_NAMES[bossKey][lang]} />}
+        </div>
         {inEntrance &&
           [0, 1, 2, 3].map((i) => (
             <span key={i} data-dust="" className="absolute bottom-[4%] h-8 w-8 rounded-full bg-[#F5E6C8] opacity-0" style={{ left: `${30 + i * 12}%` }} aria-hidden="true" />
@@ -534,7 +542,7 @@ export default function BattleScene(props: BattleSceneProps) {
       </div>
 
       {/* The owl's life: its shields (and the Super Star pips) in a row under its feet */}
-      <div data-layout="shields" className={`absolute z-[7] flex -translate-x-1/2 items-center gap-1.5 ${inEntrance ? "invisible" : ""}`} style={{ left: geometry.shields.x, top: geometry.shields.top, height: geometry.shields.height }}>
+      <div ref={shieldsRef} data-layout="shields" className={`absolute z-[7] flex -translate-x-1/2 items-center gap-1.5 ${inEntrance ? "invisible" : ""}`} style={{ left: geometry.shields.x, top: geometry.shields.top, height: geometry.shields.height }}>
         <span className={`flex gap-1 rounded-full px-2 py-1 ${GLASS}`} role="img" aria-label={`${t.shields}: ${formatNumber(battle.heartsLeft, lang)}`}>
           {Array.from({ length: battle.heartsTotal }, (_, i) => (
             <span key={i} className="block shrink-0" style={{ width: geometry.shields.icon, height: geometry.shields.icon }}>

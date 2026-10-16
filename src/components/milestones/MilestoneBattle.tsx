@@ -42,7 +42,6 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
   const [entrance, setEntrance] = useState<EntranceKind | null>(null);
   const [fxEvent, setFxEvent] = useState<FxEvent | null>(null);
   const [bigConfetti, setBigConfetti] = useState(0);
-  const shellRef = useRef<HTMLDivElement>(null);
   const advanceTimer = useRef<number | null>(null);
   const advanceRef = useRef<() => void>(() => undefined);
 
@@ -116,7 +115,7 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
             {/* phase 2: the arena warms as the boss powers up */}
             {powered && <div className="pointer-events-none absolute inset-0 bg-[#D21034]/15" aria-hidden="true" />}
             {dim && <div className="absolute inset-0 bg-[#1a1a1a]/35" aria-hidden="true" />}
-            <div ref={shellRef} className="absolute inset-0">
+            <div className="absolute inset-0">
               {typeof content === "function" ? (
                 content(anchors)
               ) : (
@@ -224,7 +223,6 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
       onToggleMute={sounds.toggleMuted}
       blockLessons={intro?.blockLessons ?? []}
       fetcher={fetcher}
-      shellRef={shellRef}
       onEntranceEnd={() => setEntrance(null)}
       onSubmit={session.submit}
       onAskOwl={() => void session.askOwl()}
