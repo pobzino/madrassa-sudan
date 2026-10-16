@@ -70,19 +70,7 @@ function Mid() {
       {/* mossy stones */}
       <path d="M118 520 C118 504 150 500 158 514 C162 526 120 530 118 520Z M318 600 C316 586 346 580 356 594 C360 606 320 610 318 600Z" fill="#2F4A3C" />
       <path d="M122 512 C130 502 150 502 156 510 C146 506 132 508 122 512Z M322 592 C330 584 346 582 352 590 C342 586 332 588 322 592Z" fill="#4E8A3C" />
-      {/* Numbo's rock ledge */}
-      <path d={blobs([[340, 300, 40], [388, 286, 46], [262, 304, 30]])} fill="#11522A" />
-      <path d={fan(358, 318, 6, 72, 13, -150, -40, 8)} fill="#1F7A3D" />
-      <ellipse cx={287} cy={400} rx={92} ry={12} fill="#000000" opacity={0.3} />
-      <path d="M178 334 C180 318 222 308 287 308 C352 308 394 318 396 334 C396 358 380 374 350 384 C304 398 252 396 214 384 C190 376 178 360 178 334Z" fill="#8A6538" />
-      <path d="M190 356 C214 376 256 384 290 384 C330 384 362 376 384 356 C376 372 350 386 304 394 C256 398 214 384 190 356Z" fill="#6E4E2A" />
-      <ellipse cx={287} cy={326} rx={108} ry={19} fill="#D6B97F" />
-      <ellipse cx={280} cy={322} rx={88} ry={11} fill="#ECD8AC" />
-      <path d="M182 332 C200 318 240 312 270 311" stroke="#FFF4D6" strokeWidth={2.4} strokeLinecap="round" fill="none" opacity={0.8} />
-      <path d="M214 348 L226 362 L222 374 M330 352 L322 366 M262 362 L270 378" stroke="#5E4022" strokeWidth={2.4} strokeLinecap="round" fill="none" />
-      <path d="M200 360 C198 380 206 394 202 412 M372 356 C376 372 370 388 376 402" stroke="#1F6B35" strokeWidth={2.6} strokeLinecap="round" fill="none" />
-      <path d={grass([[190, 330, 16], [382, 326, 18], [206, 340, 12], [366, 342, 13]], 11)} fill="#4CAF50" />
-      <path d={fan(182, 340, 4, 40, 8, 100, 190, 12) + fan(392, 336, 4, 40, 8, -10, 80, 13)} fill="#2E8B47" />
+      <NumboLedge />
     </>
   );
 }
@@ -140,3 +128,24 @@ export const numboClearing: ArenaDef = {
   anchors: { boss: { x: 287, y: 330 }, owl: { x: 102, y: 642 } },
   motes: { color: "#FDE68A", glow: "rgba(250, 204, 21, 0.55)" },
 };
+
+/** Numbo's rock ledge, standing on (287, 326). Shared with the landscape arena. */
+export function NumboLedge() {
+  return (
+    <>
+      {/* Numbo's rock ledge */}
+      <path d={blobs([[340, 300, 40], [388, 286, 46], [262, 304, 30]])} fill="#11522A" />
+      <path d={fan(358, 318, 6, 72, 13, -150, -40, 8)} fill="#1F7A3D" />
+      <ellipse cx={287} cy={400} rx={92} ry={12} fill="#000000" opacity={0.3} />
+      <path d="M178 334 C180 318 222 308 287 308 C352 308 394 318 396 334 C396 358 380 374 350 384 C304 398 252 396 214 384 C190 376 178 360 178 334Z" fill="#8A6538" />
+      <path d="M190 356 C214 376 256 384 290 384 C330 384 362 376 384 356 C376 372 350 386 304 394 C256 398 214 384 190 356Z" fill="#6E4E2A" />
+      <ellipse cx={287} cy={326} rx={108} ry={19} fill="#D6B97F" />
+      <ellipse cx={280} cy={322} rx={88} ry={11} fill="#ECD8AC" />
+      <path d="M182 332 C200 318 240 312 270 311" stroke="#FFF4D6" strokeWidth={2.4} strokeLinecap="round" fill="none" opacity={0.8} />
+      <path d="M214 348 L226 362 L222 374 M330 352 L322 366 M262 362 L270 378" stroke="#5E4022" strokeWidth={2.4} strokeLinecap="round" fill="none" />
+      <path d="M200 360 C198 380 206 394 202 412 M372 356 C376 372 370 388 376 402" stroke="#1F6B35" strokeWidth={2.6} strokeLinecap="round" fill="none" />
+      <path d={grass([[190, 330, 16], [382, 326, 18], [206, 340, 12], [366, 342, 13]], 11)} fill="#4CAF50" />
+      <path d={fan(182, 340, 4, 40, 8, 100, 190, 12) + fan(392, 336, 4, 40, 8, -10, 80, 13)} fill="#2E8B47" />
+    </>
+  );
+}

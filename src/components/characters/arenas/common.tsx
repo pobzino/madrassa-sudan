@@ -71,7 +71,7 @@ export function Pool({ id, cx, cy, rx, ry, color, strength = 0.55 }: { id: strin
 }
 
 /** A vertical gradient rectangle filling the scene (sky, wall). */
-export function Sky({ id, stops, y = 0, height = 844 }: { id: string; stops: readonly (readonly [number, string])[]; y?: number; height?: number }) {
+export function Sky({ id, stops, y = 0, height = 844, width = 410 }: { id: string; stops: readonly (readonly [number, string])[]; y?: number; height?: number; width?: number }) {
   return (
     <>
       <defs>
@@ -81,7 +81,7 @@ export function Sky({ id, stops, y = 0, height = 844 }: { id: string; stops: rea
           ))}
         </linearGradient>
       </defs>
-      <rect x={-10} y={y} width={410} height={height} fill={`url(#${id})`} />
+      <rect x={-10} y={y} width={width} height={height} fill={`url(#${id})`} />
     </>
   );
 }

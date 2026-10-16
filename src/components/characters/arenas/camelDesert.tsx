@@ -52,15 +52,7 @@ function Mid() {
         <path d={fan(52, 380, 7, 70, 12, -170, -10, 61)} fill="#2F6B33" />
         <path d={blobs([[48, 388, 5], [56, 390, 5], [52, 396, 5]])} fill="#B8662C" />
       </Sway>
-      {/* Harfi's sandstone outcrop */}
-      <ellipse cx={287} cy={402} rx={96} ry={12} fill="#7A4A2A" opacity={0.3} />
-      <path d="M176 334 C180 318 222 310 287 310 C352 310 394 318 398 334 L392 372 C370 392 320 398 288 398 C250 398 204 392 182 372Z" fill="#B9733C" />
-      <path d="M182 356 C214 378 256 384 290 384 C330 384 366 378 394 354 L392 372 C370 392 320 398 288 398 C250 398 204 392 182 372Z" fill="#94562A" />
-      <path d="M188 344 H392 M196 366 H384" stroke="#A3632F" strokeWidth={2.2} opacity={0.8} />
-      <ellipse cx={287} cy={327} rx={110} ry={18} fill="#E6B172" />
-      <ellipse cx={280} cy={323} rx={90} ry={10} fill="#F3CD94" />
-      <path d="M182 330 C200 318 240 313 270 312" stroke="#FFF1D2" strokeWidth={2.4} strokeLinecap="round" fill="none" opacity={0.85} />
-      <path d={grass([[190, 330, 12], [384, 328, 14]], 63)} fill="#8C9A3C" />
+      <HarfiLedge />
     </>
   );
 }
@@ -107,3 +99,20 @@ export const camelDesert: ArenaDef = {
   anchors: { boss: { x: 287, y: 328 }, owl: { x: 102, y: 642 } },
   motes: { color: "#FFF1D0", glow: "rgba(255, 214, 138, 0.5)" },
 };
+
+/** Harfi's sandstone outcrop, standing on (287, 328). Shared with the landscape arena. */
+export function HarfiLedge() {
+  return (
+    <>
+      {/* Harfi's sandstone outcrop */}
+      <ellipse cx={287} cy={402} rx={96} ry={12} fill="#7A4A2A" opacity={0.3} />
+      <path d="M176 334 C180 318 222 310 287 310 C352 310 394 318 398 334 L392 372 C370 392 320 398 288 398 C250 398 204 392 182 372Z" fill="#B9733C" />
+      <path d="M182 356 C214 378 256 384 290 384 C330 384 366 378 394 354 L392 372 C370 392 320 398 288 398 C250 398 204 392 182 372Z" fill="#94562A" />
+      <path d="M188 344 H392 M196 366 H384" stroke="#A3632F" strokeWidth={2.2} opacity={0.8} />
+      <ellipse cx={287} cy={327} rx={110} ry={18} fill="#E6B172" />
+      <ellipse cx={280} cy={323} rx={90} ry={10} fill="#F3CD94" />
+      <path d="M182 330 C200 318 240 313 270 312" stroke="#FFF1D2" strokeWidth={2.4} strokeLinecap="round" fill="none" opacity={0.85} />
+      <path d={grass([[190, 330, 12], [384, 328, 14]], 63)} fill="#8C9A3C" />
+    </>
+  );
+}

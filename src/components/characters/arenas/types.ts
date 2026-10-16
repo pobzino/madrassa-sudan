@@ -24,3 +24,15 @@ export interface ArenaDef {
   /** Ambient motes (fireflies, dust, pollen). */
   motes: { color: string; glow: string };
 }
+
+/** Landscape (desktop) arenas are drawn in a 1440 × 900 box, built to hold from 1024 × 640 to 2560 × 1440. */
+export const ARENA_LW = 1440;
+export const ARENA_LH = 900;
+
+/** The layers and anchors of one arena in one orientation. */
+export interface ArenaLayers {
+  Back: ComponentType<{ uid: string }>;
+  Mid: ComponentType<{ uid: string }>;
+  Floor: ComponentType<{ uid: string }>;
+  anchors: { boss: ArenaPoint; owl: ArenaPoint };
+}
