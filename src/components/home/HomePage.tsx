@@ -214,7 +214,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
               </Link>
             ) : (
               <>
-                <Link href="/auth/login" className="whitespace-nowrap rounded-full border border-gray-200 px-2.5 py-2 text-xs font-bold text-gray-700 transition-colors hover:border-[#007229]/30 hover:text-[#007229] sm:px-3 sm:py-2.5 sm:text-sm">
+                <Link href="/auth/login" className="whitespace-nowrap px-1.5 py-2 text-xs font-semibold text-gray-600 transition-colors hover:text-[#007229] sm:px-2 sm:py-2.5 sm:text-sm">
                   {txt.login}
                 </Link>
                 <Link
