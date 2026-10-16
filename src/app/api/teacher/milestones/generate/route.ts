@@ -67,7 +67,7 @@ export async function POST(request: Request) {
         : await generateMilestonePool({ ...scope, actorId: staff.userId });
     const row = await loadMilestoneRow(staff.admin, result.milestoneId);
     if (!row) return milestoneError("service_unavailable", 500);
-    return milestoneJson({ milestone: await teacherMilestoneRow(staff.admin, row), skippedLessons: result.skippedLessons, droppedItems: result.droppedItems });
+    return milestoneJson({ milestone: await teacherMilestoneRow(staff.admin, row), skippedLessons: result.skippedLessons, droppedItems: result.droppedItems, warnings: result.warnings });
   } catch (error) {
     if (error instanceof MilestoneRouteError) return milestoneError(error.code, error.status, { message: error.message });
     if ((error as { code?: string })?.code === "ai_timeout") return milestoneError("generation_failed", 504, { message: (error as Error).message });

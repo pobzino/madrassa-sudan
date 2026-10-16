@@ -123,12 +123,15 @@ export default function LearningPathEditorPage() {
       const failed = results.filter((result) => result === null).length;
       if (failed === plan.lessons.length) throw new Error(`No lesson's questions came back. ${lastLessonError}`);
       toast.loading("Saving the draft...", { id: progress });
+      let warnings: string[] = [];
       try {
-        await step({ step: "finish", results });
+        const saved = (await step({ step: "finish", results })) as { warnings?: string[] };
+        warnings = saved.warnings ?? [];
       } catch (error) {
         throw new Error(`${error instanceof Error ? error.message : "Saving failed."}${failed ? ` ${failed} of ${plan.lessons.length} lessons failed: ${lastLessonError}` : ""}`);
       }
       toast.success(placement ? "Starting boss draft ready: review the tags before publishing" : "Big Challenge draft ready: review it before publishing", { id: progress });
+      for (const warning of warnings) toast.warning(warning, { duration: 12000 });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Generation failed", { id: progress });
     } finally {

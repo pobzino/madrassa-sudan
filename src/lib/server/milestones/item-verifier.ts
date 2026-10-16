@@ -181,12 +181,18 @@ Return one verdict per item, using its index.`;
  * when present, else the generator's; skill = the generator's. Disputed when the
  * two disagree on the skill or by two difficulty steps. The drop rules
  * (applyVerdicts) are not affected.
+ * `preferGenerated`: the generator wrote to a difficulty plan (a placement), so
+ * its difficulty is the one asked for and stands; the verifier's estimate only
+ * disputes it. (The fast verifier rated a whole placement pool as easy / medium.)
  */
 export function mergeTags(
   generated: { skillKey: string | null; difficulty: Difficulty | null },
   verdict: Pick<ItemVerdict, "difficulty" | "skillKey"> | null | undefined,
+  options: { preferGenerated?: boolean } = {},
 ): { skillKey: string | null; difficulty: Difficulty | null; tagSource: TagSource } {
-  const difficulty = verdict?.difficulty ?? generated.difficulty ?? null;
+  const difficulty = options.preferGenerated
+    ? generated.difficulty ?? verdict?.difficulty ?? null
+    : verdict?.difficulty ?? generated.difficulty ?? null;
   const skillDispute = Boolean(verdict?.skillKey && generated.skillKey && verdict.skillKey !== generated.skillKey);
   const difficultyDispute = Boolean(verdict?.difficulty && generated.difficulty && Math.abs(verdict.difficulty - generated.difficulty) === 2);
   return { skillKey: generated.skillKey, difficulty, tagSource: skillDispute || difficultyDispute ? "model_disputed" : "model" };

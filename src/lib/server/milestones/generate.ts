@@ -63,6 +63,8 @@ export interface GenerateMilestonePoolResult {
   skippedLessons: string[];
   /** Items the checks or the verifier dropped, with why (also logged). */
   droppedItems: DroppedItem[];
+  /** Things to fix before publishing (the draft is saved anyway), e.g. an uneven difficulty mix. */
+  warnings: string[];
 }
 
 type PoolItem = {
@@ -422,7 +424,7 @@ async function runLesson(plan: PoolPlan, lessonIndex: number, generate: LessonIt
   const kept = checked
     .map((item, index) => ({ item, verdict: verdictByIndex.get(index) }))
     .filter(({ item }) => keptSet.has(item.interaction))
-    .map(({ item, verdict }) => ({ interaction: item.interaction, ...mergeTags(item, verdict) }));
+    .map(({ item, verdict }) => ({ interaction: item.interaction, ...mergeTags(item, verdict, { preferGenerated: plan.placement }) }));
   return { lessonId: source.lessonId, kept, dropped: [...dropped, ...verified.dropped] };
 }
 
@@ -476,7 +478,9 @@ async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoo
     if (!kept) skippedLessons.push(lessonId);
   });
 
-  // 4. Enough for the smallest battle (a placement: 12, with >= 3 of each difficulty)?
+  // 4. Enough for the smallest battle? A placement also wants >= 3 of each difficulty, but that is
+  //    publish_milestone's rule (pool_unbalanced): the draft is saved so staff can retag, and warned.
+  const warnings: string[] = [];
   if (placement) {
     // A difficulty the per-lesson cap left short is topped up from the lessons' spare good items.
     for (const d of [1, 2, 3] as Difficulty[]) {
@@ -491,12 +495,19 @@ async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoo
     }
     pool = trimPlacementPool(pool, poolSize);
     const counts = difficultyCounts(pool);
-    if (pool.length < PLACEMENT_QUESTION_COUNT || ([1, 2, 3] as Difficulty[]).some((d) => counts[d] < PLACEMENT_MIN_PER_DIFFICULTY)) {
+    if (pool.length < PLACEMENT_QUESTION_COUNT) {
       console.error("Milestone pool too small:", JSON.stringify({ kind, pool: pool.length, counts, lessons: plan.sources.length, skipped: skippedLessons.length, dropped: droppedItems.length }));
       throw new MilestoneRouteError(
         "generation_failed",
         502,
-        `Too few good questions of each difficulty were generated (easy ${counts[1]}, medium ${counts[2]}, hard ${counts[3]}; ${skippedLessons.length} of ${plan.sources.length + plan.skippedLessons.length} lessons gave none). Try again.`,
+        `Too few good questions were generated (${pool.length} of the 12 needed; ${skippedLessons.length} of ${plan.sources.length + plan.skippedLessons.length} lessons gave none). Try again.`,
+      );
+    }
+    const short = ([1, 2, 3] as Difficulty[]).filter((d) => counts[d] < PLACEMENT_MIN_PER_DIFFICULTY);
+    if (short.length) {
+      const name = { 1: "easy", 2: "medium", 3: "hard" } as const;
+      warnings.push(
+        `Uneven difficulty mix: easy ${counts[1]}, medium ${counts[2]}, hard ${counts[3]}. Publishing needs at least ${PLACEMENT_MIN_PER_DIFFICULTY} ${short.map((d) => name[d]).join(" and ")}: retag some questions or generate again.`,
       );
     }
   } else if (pool.length < MILESTONE_MIN_BATTLE_QUESTIONS) {
@@ -526,7 +537,7 @@ async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoo
       .update({ generated_at: now, generated_by: actorId, reviewed_at: null, reviewed_by: null })
       .eq("id", existing.id);
     if (milestoneError) throw new Error(milestoneError.message);
-    return { milestoneId: existing.id, assignmentId: existing.assignment_id, questionCount: pool.length, skippedLessons, droppedItems };
+    return { milestoneId: existing.id, assignmentId: existing.assignment_id, questionCount: pool.length, skippedLessons, droppedItems, warnings };
   }
 
   const { titleAr, titleEn } = placement ? PLACEMENT_TITLES : milestoneTitles(afterWeekNumber);
@@ -578,7 +589,7 @@ async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoo
       await admin.from("learning_path_milestones").delete().eq("id", milestone.id);
       throw new Error(questionsError.message);
     }
-    return { milestoneId: milestone.id, assignmentId: assignment.id, questionCount: pool.length, skippedLessons, droppedItems };
+    return { milestoneId: milestone.id, assignmentId: assignment.id, questionCount: pool.length, skippedLessons, droppedItems, warnings };
   } catch (error) {
     await admin.from("homework_assignments").delete().eq("id", assignment.id);
     throw error;

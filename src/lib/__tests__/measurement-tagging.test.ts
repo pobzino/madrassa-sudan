@@ -135,6 +135,10 @@ describe("verifier tags", () => {
     expect(mergeTags({ skillKey: "math.money", difficulty: 1 }, { skillKey: "math.money", difficulty: 3 })).toEqual({ skillKey: "math.money", difficulty: 3, tagSource: "model_disputed" });
     expect(mergeTags({ skillKey: "math.money", difficulty: 3 }, null)).toEqual({ skillKey: "math.money", difficulty: 3, tagSource: "model" });
     expect(mergeTags({ skillKey: null, difficulty: null }, { difficulty: null, skillKey: null })).toEqual({ skillKey: null, difficulty: null, tagSource: "model" });
+    // a placement: the planned (generator) difficulty stands; the verifier only disputes
+    expect(mergeTags({ skillKey: "math.money", difficulty: 3 }, { skillKey: "math.money", difficulty: 1 }, { preferGenerated: true })).toEqual({ skillKey: "math.money", difficulty: 3, tagSource: "model_disputed" });
+    expect(mergeTags({ skillKey: "math.money", difficulty: 3 }, { skillKey: "math.money", difficulty: 2 }, { preferGenerated: true })).toEqual({ skillKey: "math.money", difficulty: 3, tagSource: "model" });
+    expect(mergeTags({ skillKey: "math.money", difficulty: null }, { skillKey: "math.money", difficulty: 2 }, { preferGenerated: true })).toEqual({ skillKey: "math.money", difficulty: 2, tagSource: "model" });
   });
 });
 
@@ -253,11 +257,17 @@ describe("placement generation", () => {
     expect(new Set(questions.map((q) => q.skill_key))).toEqual(new Set(["math.counting-sequences", "math.money", "math.time", "math.general"]));
   });
 
-  it("fails with generation_failed unless >= 12 items and >= 3 per difficulty", async () => {
-    const { client } = seed();
+  it("saves an uneven placement pool with a warning (publish enforces >= 3 per difficulty); fails under 12 items", async () => {
+    const { tables, client } = seed();
     const allEasy = vi.fn(async (request: LessonItemRequest) => request.types.map((_, k) => choice(`${request.lessonTitleEn}-${k}`, { difficulty: 1 })));
-    await expect(generateMilestonePool({ admin: client as never, pathId: "path-1", afterWeekNumber: 0, poolSize: 24, actorId: "t", kind: "placement", generate: allEasy, verify: passAll }))
-      .rejects.toMatchObject({ code: "generation_failed" });
+    const result = await generateMilestonePool({ admin: client as never, pathId: "path-1", afterWeekNumber: 0, poolSize: 24, actorId: "t", kind: "placement", generate: allEasy, verify: passAll });
+    expect(tables.learning_path_milestones[0]).toMatchObject({ kind: "placement", status: "draft" });
+    expect(result.warnings).toEqual([expect.stringMatching(/^Uneven difficulty mix: easy \d+, medium 0, hard 0\. .*medium and hard/)]);
+    const few = seed();
+    // only six lessons give one item each: 6 < 12
+    const oneEach = vi.fn(async (request: LessonItemRequest) => (/Lesson [0-5]$/.test(request.lessonTitleEn) ? [choice(`${request.lessonTitleEn}-only`, { difficulty: 2 })] : []));
+    await expect(generateMilestonePool({ admin: few.client as never, pathId: "path-1", afterWeekNumber: 0, poolSize: 24, actorId: "t", kind: "placement", generate: oneEach, verify: passAll }))
+      .rejects.toMatchObject({ code: "generation_failed", message: expect.stringContaining("of the 12 needed") });
   });
 
   it("needs at least one week; a Big Challenge still needs its four", async () => {
@@ -295,9 +305,9 @@ describe("placement generation", () => {
     const withSpare = await run(true);
     await withSpare.result;
     expect(withSpare.tables.homework_questions.filter((q) => q.difficulty === 3)).toHaveLength(3);
-    // Without the spare hard items there are only two: the draft is refused, and the message says which difficulty is short.
+    // Without the spare hard items there are only two: the draft is saved and warned, naming the short difficulty.
     const without = await run(false);
-    await expect(without.result).rejects.toMatchObject({ code: "generation_failed", message: expect.stringContaining("hard 2") });
+    expect((await without.result).warnings).toEqual([expect.stringMatching(/hard 2\. Publishing needs at least 3 hard/)]);
   });
 
   describe("as short steps (plan, lesson, finish)", () => {
