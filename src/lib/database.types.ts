@@ -2612,6 +2612,7 @@ export type Database = {
         | "long_answer"
         | "file_upload"
         | "true_false"
+        | "trace_letter"
       question_type: "multiple_choice" | "true_false" | "fill_in_blank"
       submission_status:
         | "not_started"

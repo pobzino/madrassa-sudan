@@ -52,6 +52,7 @@ export const ACTIVITY_TYPE_OPTIONS: Array<{
   { type: 'sequence_order', label: 'Put in Order', icon: 'arrow-up-down', hint: 'Best for steps, timelines & processes' },
   { type: 'sort_groups', label: 'Sort into Groups', icon: 'folder-input', hint: 'Best for classification & categorization' },
   { type: 'draw_answer', label: 'Draw the Answer', icon: 'pen-line', hint: 'Best for open drawing answers graded by vision AI' },
+  { type: 'trace_letter', label: 'Trace a Letter', icon: 'pen-line', hint: 'Finger-friendly Arabic and English letter practice' },
   { type: 'drag_drop_label', label: 'Label an Image', icon: 'link-2', hint: 'Drag labels onto spots on a picture' },
 ];
 
@@ -355,6 +356,16 @@ function getDraftActivityContent(interactionType: SlideInteractionType) {
         expected_answer_ar: 'مثال: رسم يوضح الفكرة المطلوبة.',
         expected_answer_en: 'e.g. a drawing that shows the required idea.',
       };
+    case 'trace_letter':
+      return {
+        title_ar: 'تتبّع الحرف',
+        title_en: 'Trace the Letter',
+        body_ar: 'اتبع مسار الحرف بإصبعك.',
+        body_en: 'Trace the letter path with your finger.',
+        prompt_ar: 'تتبّع الحرف بإصبعك.',
+        prompt_en: 'Trace the letter with your finger.',
+        trace_config: { script: 'ar' as const, letter: 'ا', form: 'isolated' as const },
+      };
     case 'drag_drop_label':
       return {
         title_ar: 'سمّ الأجزاء',
@@ -430,6 +441,7 @@ export function createDraftActivitySlide(
     interaction_solution_map: 'solution_map' in content ? content.solution_map : null,
     interaction_free_entry: null,
     interaction_hotspots: null,
+    interaction_trace_config: 'trace_config' in content ? content.trace_config : null,
   };
 }
 

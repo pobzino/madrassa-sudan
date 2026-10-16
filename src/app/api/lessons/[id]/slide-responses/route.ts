@@ -7,6 +7,8 @@ import { createServiceClient, hasServiceRoleConfig } from '@/lib/supabase/servic
 import type { Database, Json } from '@/lib/database.types';
 import type { Slide } from '@/lib/slides.types';
 import { computeSlideInteractionCorrectness, hasStudentInteraction } from '@/lib/slide-interactions';
+import { slideToInteraction } from '@/lib/interactions/adapters';
+import { gradeInteraction } from '@/lib/interactions/grader';
 
 const SlideResponseSchema = z.object({
   slide_id: z.string().min(1),
@@ -17,6 +19,10 @@ const SlideResponseSchema = z.object({
     z.array(z.string()),
     // draw_answer submissions are { type: 'draw_answer', image_data_url: string }
     z.object({ type: z.literal('draw_answer'), image_data_url: z.string() }),
+    z.object({
+      type: z.literal('trace_letter'),
+      strokes: z.array(z.array(z.array(z.number().finite().min(0).max(1)).length(2)).min(1).max(512)).min(1).max(16),
+    }),
     z.null(),
   ]),
   time_spent_seconds: z.number().int().min(0).optional(),
@@ -291,7 +297,11 @@ export async function POST(
     typeof answer === 'object' && answer !== null && !Array.isArray(answer) && 'image_data_url' in answer
       ? (answer.image_data_url as string)
       : (answer as boolean | number | string | string[] | null);
-  const isCorrect = computeSlideInteractionCorrectness(slide, normalizedAnswer);
+  const interaction = slideToInteraction(slide);
+  const traceGrade = interaction?.type === 'trace_letter' && typeof answer === 'object' && answer !== null && !Array.isArray(answer) && answer.type === 'trace_letter'
+    ? gradeInteraction(interaction, { type: 'trace_letter', strokes: answer.strokes })
+    : null;
+  const isCorrect = traceGrade?.is_correct ?? computeSlideInteractionCorrectness(slide, normalizedAnswer);
   const responseData = {
     answer,
     ...(answeredAt ? { answered_at: answeredAt } : {}),
@@ -339,7 +349,7 @@ export async function POST(
       .update({
         interaction_type: interactionType,
         response_data: responseData,
-        completion_score: isCorrect ? 1 : 0,
+        completion_score: traceGrade?.score ?? (isCorrect ? 1 : 0),
         is_correct: isCorrect,
         time_spent_seconds: time_spent_seconds ?? 0,
         attempts: existing.attempts + 1,
@@ -366,7 +376,7 @@ export async function POST(
         student_id: learnerId,
         interaction_type: interactionType,
         response_data: responseData,
-        completion_score: isCorrect ? 1 : 0,
+        completion_score: traceGrade?.score ?? (isCorrect ? 1 : 0),
         is_correct: isCorrect,
         time_spent_seconds: time_spent_seconds ?? 0,
         attempts: 1,

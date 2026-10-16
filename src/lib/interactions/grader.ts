@@ -13,6 +13,7 @@
  * changing callers.
  */
 import type { Interaction, InteractionAnswer, InteractionResult } from './types';
+import { gradeTraceLetter } from './trace-letter';
 
 function result(
   answer: InteractionAnswer,
@@ -125,6 +126,18 @@ export function gradeInteraction(
       // No verdict yet: treat any non-empty drawing as pending but accepted,
       // matching today's behaviour in computeSlideInteractionCorrectness.
       return result(answer, answer.image_data_url.trim().length > 0, 'vision');
+    }
+
+    case 'trace_letter': {
+      if (answer.type !== 'trace_letter') return result(answer, false);
+      const grade = gradeTraceLetter(interaction.config, answer.strokes, interaction.tolerance);
+      return {
+        answer,
+        is_correct: grade.is_correct,
+        score: grade.score,
+        graded_by: 'trace',
+        graded_at: new Date().toISOString(),
+      };
     }
 
     case 'drag_drop_label': {

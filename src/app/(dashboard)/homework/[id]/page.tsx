@@ -22,6 +22,8 @@ import HomeworkOwlCompanion, { type OwlMood } from "@/components/homework/Homewo
 import HomeworkProgressBar from "@/components/homework/HomeworkProgressBar";
 import HomeworkCompletionCard from "@/components/homework/HomeworkCompletionCard";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
+import TraceLetterInput from "@/components/interactions/TraceLetterInput";
+import type { TraceLetterConfig } from "@/lib/interactions/types";
 
 const translations = {
   ar: {
@@ -1067,6 +1069,25 @@ export default function HomeworkAssignmentPage() {
                   />
                 </div>
               )}
+
+              {currentQ.question_type === "trace_letter" && (() => {
+                let config: TraceLetterConfig | null = null;
+                let traceAnswer: { type: "trace_letter"; strokes: number[][][] } | null = null;
+                try {
+                  config = JSON.parse(currentQ.question_content || "null") as TraceLetterConfig | null;
+                  const saved = JSON.parse(answers[currentQ.id] || "null") as { type?: string; strokes?: number[][][] } | null;
+                  if (saved?.type === "trace_letter" && Array.isArray(saved.strokes)) traceAnswer = { type: "trace_letter", strokes: saved.strokes };
+                } catch { /* An empty draft is normal before the first trace. */ }
+                return config ? (
+                  <TraceLetterInput
+                    config={config}
+                    language={language}
+                    answer={traceAnswer}
+                    disabled={isSubmitted}
+                    onAnswerChange={(answer) => handleAnswerChange(currentQ.id, JSON.stringify(answer))}
+                  />
+                ) : <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Letter tracing setup is incomplete.</p>;
+              })()}
 
               {currentQ.question_type === "long_answer" && (
                 <div>

@@ -11,6 +11,7 @@ const questionTypeSchema = z.enum([
   "long_answer",
   "file_upload",
   "true_false",
+  "trace_letter",
 ]);
 
 // Rubric criterion schema

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { CircleDot, AlignLeft, FileText, Paperclip, CheckCircle, type LucideIcon } from "lucide-react";
 import type { CreateQuestionInput, RubricCriterion } from "@/lib/homework.types";
+import type { TraceLetterConfig } from "@/lib/interactions/types";
+import { traceLetterOptions } from "@/components/interactions/TraceLetterInput";
 
 type QuestionType = CreateQuestionInput["question_type"];
 
@@ -21,6 +23,7 @@ const questionTypeLabels: Record<QuestionType, { ar: string; en: string; Icon: L
   long_answer: { ar: "إجابة طويلة", en: "Long Answer", Icon: FileText },
   file_upload: { ar: "رفع ملف", en: "File Upload", Icon: Paperclip },
   true_false: { ar: "صح/خطأ", en: "True/False", Icon: CheckCircle },
+  trace_letter: { ar: "تتبّع الحرف", en: "Trace a Letter", Icon: AlignLeft },
 };
 
 export function QuestionBuilder({
@@ -50,6 +53,10 @@ export function QuestionBuilder({
   );
   const correctOptionIndex =
     question.correct_option_index ?? (inferredCorrectIndex >= 0 ? inferredCorrectIndex : null);
+  const traceConfig = (() => {
+    try { return JSON.parse(question.question_content || "null") as TraceLetterConfig | null; }
+    catch { return null; }
+  })() ?? { script: "ar" as const, letter: "ا", form: "isolated" as const };
 
   const handleAddOption = () => {
     if (!newOption.trim()) return;
@@ -159,7 +166,10 @@ export function QuestionBuilder({
                 options_ar: type === "true_false" ? ["صحيح", "خطأ"] : null,
                 options_en: type === "true_false" ? ["True", "False"] : null,
                 correct_option_index: null,
-                correct_answer: null,
+                correct_answer: type === "trace_letter" ? "ا" : null,
+                question_content: type === "trace_letter"
+                  ? JSON.stringify({ script: "ar", letter: "ا", form: "isolated" })
+                  : null,
               });
             }}
             className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white"
@@ -397,6 +407,50 @@ export function QuestionBuilder({
               False / خطأ
             </button>
           </div>
+        </div>
+      )}
+
+      {question.question_type === "trace_letter" && (
+        <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
+          <label className="text-sm font-medium text-gray-700">Script
+            <select value={traceConfig.script} onChange={(e) => {
+              const script = e.target.value as "ar" | "en";
+              const next: TraceLetterConfig = script === "ar"
+                ? { script, letter: "ا", form: "isolated" }
+                : { script, letter: "A", case: "upper" };
+              onUpdate({ question_content: JSON.stringify(next), correct_answer: next.letter });
+            }} className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2">
+              <option value="ar">Arabic</option><option value="en">English</option>
+            </select>
+          </label>
+          <label className="text-sm font-medium text-gray-700">Letter
+            <select value={traceConfig.letter} onChange={(e) => {
+              const next = { ...traceConfig, letter: e.target.value };
+              onUpdate({ question_content: JSON.stringify(next), correct_answer: next.letter });
+            }} className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2" dir={traceConfig.script === "ar" ? "rtl" : "ltr"}>
+              {traceLetterOptions(traceConfig.script).filter((letter) => traceConfig.script === "ar" || (traceConfig.case === "lower" ? letter === letter.toLowerCase() : letter === letter.toUpperCase())).map((letter) => <option key={letter} value={letter}>{letter}</option>)}
+            </select>
+          </label>
+          {traceConfig.script === "ar" ? (
+            <label className="text-sm font-medium text-gray-700">Arabic form
+              <select value={traceConfig.form ?? "isolated"} onChange={(e) => {
+                const next = { ...traceConfig, form: e.target.value as TraceLetterConfig["form"] };
+                onUpdate({ question_content: JSON.stringify(next) });
+              }} className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2">
+                <option value="isolated">Isolated</option><option value="initial">Initial</option><option value="medial">Medial</option><option value="final">Final</option>
+              </select>
+            </label>
+          ) : (
+            <label className="text-sm font-medium text-gray-700">Case
+              <select value={traceConfig.case ?? "upper"} onChange={(e) => {
+                const letter = e.target.value === "lower" ? traceConfig.letter.toLowerCase() : traceConfig.letter.toUpperCase();
+                const next = { ...traceConfig, case: e.target.value as "upper" | "lower", letter };
+                onUpdate({ question_content: JSON.stringify(next), correct_answer: letter });
+              }} className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2">
+                <option value="upper">Uppercase</option><option value="lower">Lowercase</option>
+              </select>
+            </label>
+          )}
         </div>
       )}
 

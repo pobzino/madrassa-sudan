@@ -26,6 +26,7 @@ export type InteractionType =
   | 'sequence_order'
   | 'sort_groups'
   | 'draw_answer'
+  | 'trace_letter'
   | 'drag_drop_label';
 
 export interface BilingualText {
@@ -91,6 +92,27 @@ export interface DrawAnswerInteraction extends InteractionBase<'draw_answer'> {
   expected_answer: BilingualText;
 }
 
+export type TraceLetterScript = 'ar' | 'en';
+export type ArabicLetterForm = 'isolated' | 'initial' | 'medial' | 'final';
+export type EnglishLetterCase = 'upper' | 'lower';
+
+export interface TraceLetterConfig {
+  script: TraceLetterScript;
+  /** A single Arabic or Latin letter. */
+  letter: string;
+  /** Arabic joining form; defaults to isolated. */
+  form?: ArabicLetterForm;
+  /** English letter case; defaults from the supplied letter. */
+  case?: EnglishLetterCase;
+  /** Optional URL to the letter sound. */
+  audio_url?: string | null;
+}
+
+export interface TraceLetterInteraction extends InteractionBase<'trace_letter'> {
+  config: TraceLetterConfig;
+  tolerance?: number;
+}
+
 export interface DragDropLabelInteraction extends InteractionBase<'drag_drop_label'> {
   image_url: string | null;
   labels: BilingualList;
@@ -108,6 +130,7 @@ export type Interaction =
   | SequenceOrderInteraction
   | SortGroupsInteraction
   | DrawAnswerInteraction
+  | TraceLetterInteraction
   | DragDropLabelInteraction;
 
 // ── Answers ──────────────────────────────────────────────────────────────
@@ -141,6 +164,7 @@ export type InteractionAnswer =
       /** Populated after the vision grader returns. */
       vision_result?: { is_correct: boolean; feedback?: string };
     }
+  | { type: 'trace_letter'; strokes: number[][][] }
   | {
       type: 'drag_drop_label';
       placements: Array<{ label_index: number; hotspot_index: number }>;
@@ -148,7 +172,7 @@ export type InteractionAnswer =
 
 // ── Results ──────────────────────────────────────────────────────────────
 
-export type GradingSource = 'client' | 'vision' | 'ai' | 'manual';
+export type GradingSource = 'client' | 'vision' | 'ai' | 'manual' | 'trace';
 
 export interface InteractionResult {
   answer: InteractionAnswer;

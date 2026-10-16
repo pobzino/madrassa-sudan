@@ -5,6 +5,8 @@
 
 import { practiceAnswerMatches } from "@/lib/practice-answer";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
+import { gradeTraceLetter } from "@/lib/interactions/trace-letter";
+import type { TraceLetterConfig } from "@/lib/interactions/types";
 
 export interface SubmittedAnswerInput {
   question_id: string;
@@ -16,6 +18,7 @@ export interface GradableQuestion {
   question_type: string;
   correct_answer: string | null;
   points: number | null;
+  question_content?: string | null;
 }
 
 export type AnswerNormalization<T> =
@@ -61,19 +64,29 @@ export function isAutoGradableQuestion(
   isPractice: boolean
 ): boolean {
   return (
-    !!question.correct_answer &&
-    (question.question_type === "multiple_choice" ||
+    (question.question_type === "trace_letter" || !!question.correct_answer) &&
+    (question.question_type === "trace_letter" || question.question_type === "multiple_choice" ||
       question.question_type === "true_false" ||
       (isPractice && question.question_type === "short_answer"))
   );
 }
 
 export function isCorrectAnswer(
-  question: Pick<GradableQuestion, "question_type" | "correct_answer">,
+  question: Pick<GradableQuestion, "question_type" | "correct_answer" | "question_content">,
   response: string | null | undefined,
   isPractice: boolean
 ): boolean {
-  if (!response || !question.correct_answer) return false;
+  if (!response) return false;
+  if (question.question_type === "trace_letter") {
+    try {
+      const config = JSON.parse(question.question_content || "null") as TraceLetterConfig | null;
+      const answer = JSON.parse(response) as { strokes?: unknown };
+      return Boolean(config && Array.isArray(answer.strokes) && gradeTraceLetter(config, answer.strokes as number[][][]).is_correct);
+    } catch {
+      return false;
+    }
+  }
+  if (!question.correct_answer) return false;
   return isPractice
     ? practiceAnswerMatches(response, question.correct_answer, question.question_type)
     : response === question.correct_answer;

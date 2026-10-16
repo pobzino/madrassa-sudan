@@ -360,6 +360,9 @@ export function serverResponsesToLocal(
     if (raw && typeof raw === "object" && !Array.isArray(raw) && (raw as { type?: unknown }).type === "draw_answer") {
       const image = (raw as { image_data_url?: unknown }).image_data_url;
       answer = typeof image === "string" ? { type: "draw_answer", image_data_url: image } : null;
+    } else if (raw && typeof raw === "object" && !Array.isArray(raw) && (raw as { type?: unknown }).type === "trace_letter") {
+      const strokes = (raw as { strokes?: unknown }).strokes;
+      answer = Array.isArray(strokes) ? { type: "trace_letter", strokes: strokes as number[][][] } : null;
     } else if (isLegacyAnswer(raw)) {
       answer = answerFromLegacy(interaction, raw);
     }
