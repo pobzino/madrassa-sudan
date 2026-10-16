@@ -63,6 +63,8 @@ export interface Outcome {
   text: string;
   /** "Nearly!" (attack miss) or "Bonk!" (block miss). */
   missText: string;
+  /** Placement: the boss nods happily instead of recoiling (same timeline). */
+  neutral?: boolean;
 }
 
 export interface StartOptions {
@@ -685,7 +687,7 @@ export class Combat {
     // The word pops at the contact point the instant it hits; the cast freezes for a beat.
     if (withText) this.pop(at, outcome.text, outcome.big ? "big" : "normal");
     this.hitStop(run, () => {
-      void this.refs.boss()?.play(outcome.knockout ? "ko" : "hit");
+      void this.refs.boss()?.play(outcome.neutral ? "happy" : outcome.knockout ? "ko" : "hit");
       this.reinRecoil();
       this.sparks(at, outcome.big ? 18 : 12, bossSize * (outcome.big ? 0.6 : 0.45));
       this.shake(outcome.big);

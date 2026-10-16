@@ -14,7 +14,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   evaluatePath,
+  isPlacementOffered,
+  placementState,
+  splitPathMilestones,
   type MilestoneState,
+  type PlacementState,
   type PathInput,
   type StudentProgressInput,
   type StepPracticeState,
@@ -25,6 +29,7 @@ import {
 import { watchedPercent } from "@/lib/lessons/watched-percent";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 import { BOSS_KEYS, type BossKey } from "@/lib/milestones/types";
+import { PLACEMENT_MAX_PRIOR_LESSONS } from "@/lib/measurement/types";
 import { milestoneLevel, requiredCorrect } from "@/lib/milestones/rules";
 
 interface PathRow {
@@ -50,6 +55,7 @@ interface StepRow {
 
 interface MilestoneRow {
   id: string;
+  kind?: string | null;
   after_week_number: number;
   title_ar: string;
   title_en: string | null;
@@ -72,6 +78,19 @@ export interface TreeMilestone {
   /** Battle size N and the correct answers needed to win (display only). */
   questionCount: number;
   requiredCorrect: number;
+}
+
+/** "Meet your first boss": the path's placement, shown above week 1 while it is offered. */
+export interface TreePlacement {
+  id: string;
+  bossKey: BossKey;
+  titleAr: string;
+  titleEn: string | null;
+  state: PlacementState;
+  /** Shown on the path (until it's been met). */
+  offered: boolean;
+  /** More than PLACEMENT_MAX_PRIOR_LESSONS lessons were done first: still offered, flagged as a late baseline by the server. */
+  late: boolean;
 }
 
 export interface TreeStep {
@@ -108,6 +127,8 @@ export interface SubjectLearningPath {
   weeks: TreeWeek[];
   /** Published milestones whose week exists, in week order. */
   milestones: TreeMilestone[];
+  /** The published placement, or null. Never gates anything. */
+  placement?: TreePlacement | null;
   currentStepId: string | null;
 }
 
@@ -161,16 +182,32 @@ export async function loadSubjectLearningPath(
   // Read explicitly by learner id (not through RLS alone) so the server can
   // call this with a service client and get the same answer. A missing table
   // or a failed read means "no milestones" rather than a broken tree.
-  const { data: milestoneData } = await db
-    .from("learning_path_milestones")
-    .select("id, after_week_number, title_ar, title_en, boss_key, battle_question_count, status")
-    .eq("path_id", pathRow.id)
-    .eq("status", "published")
-    .order("after_week_number", { ascending: true })
-    .returns<MilestoneRow[]>();
-  const milestoneRows = milestoneData ?? [];
+  // The placement (kind 'placement', week 0) is read alongside, never as a milestone.
+  const [{ data: milestoneData }, { data: placementData }] = await Promise.all([
+    db
+      .from("learning_path_milestones")
+      .select("id, kind, after_week_number, title_ar, title_en, boss_key, battle_question_count, status")
+      .eq("path_id", pathRow.id)
+      .eq("status", "published")
+      .eq("kind", "milestone")
+      .order("after_week_number", { ascending: true })
+      .returns<MilestoneRow[]>(),
+    db
+      .from("learning_path_milestones")
+      .select("id, kind, after_week_number, title_ar, title_en, boss_key, battle_question_count, status")
+      .eq("path_id", pathRow.id)
+      .eq("status", "published")
+      .eq("kind", "placement")
+      .limit(1)
+      .returns<MilestoneRow[]>(),
+  ]);
+  // Belt and braces: a week-0 row is the placement even if `kind` were missing.
+  const split = splitPathMilestones([...(milestoneData ?? []), ...(placementData ?? [])]);
+  const milestoneRows = split.milestones;
+  const placementRow = split.placement;
   const milestoneIds = milestoneRows.map((m) => m.id);
-  const [{ data: certificateRows }, { data: battleRows }] = await Promise.all([
+  type PlacementBattleRow = { status: string; superseded_at: string | null; is_preview: boolean };
+  const [{ data: certificateRows }, { data: battleRows }, { data: placementBattleRows }] = await Promise.all([
     milestoneIds.length
       ? db
           .from("learner_certificates")
@@ -188,6 +225,15 @@ export async function loadSubjectLearningPath(
           .in("milestone_id", milestoneIds)
           .returns<Array<{ milestone_id: string }>>()
       : Promise.resolve({ data: [] as Array<{ milestone_id: string }> }),
+    placementRow
+      ? db
+          .from("milestone_battles")
+          .select("status, superseded_at, is_preview")
+          .eq("learner_id", userId)
+          .eq("milestone_id", placementRow.id)
+          .in("status", ["active", "completed"])
+          .returns<PlacementBattleRow[]>()
+      : Promise.resolve({ data: [] as PlacementBattleRow[] }),
   ]);
   const certificateByMilestone = new Map((certificateRows ?? []).map((c) => [c.milestone_id, c]));
 
@@ -346,6 +392,23 @@ export async function loadSubjectLearningPath(
     };
   });
 
+  const completedLessonsInPath = lessonIds.filter((id) => lessonCompletion[id]?.completed).length;
+  let treePlacement: TreePlacement | null = null;
+  if (placementRow) {
+    const state = placementState(
+      (placementBattleRows ?? []).map((b) => ({ status: b.status, supersededAt: b.superseded_at, isPreview: b.is_preview }))
+    );
+    treePlacement = {
+      id: placementRow.id,
+      bossKey: (BOSS_KEYS as readonly string[]).includes(placementRow.boss_key) ? (placementRow.boss_key as BossKey) : "puzzle_owlet",
+      titleAr: placementRow.title_ar,
+      titleEn: placementRow.title_en,
+      state,
+      offered: isPlacementOffered(state),
+      late: completedLessonsInPath > PLACEMENT_MAX_PRIOR_LESSONS,
+    };
+  }
+
   // Merge engine state with lesson metadata for rendering.
   const treeWeeks: TreeWeek[] = evaluation.weeks.map((weekResult) => {
     const weekMeta = weeks.find((w) => w.id === weekResult.id)!;
@@ -393,6 +456,7 @@ export async function loadSubjectLearningPath(
     title: (language === "ar" ? pathRow.title_ar : pathRow.title_en) || pathRow.title_ar,
     weeks: treeWeeks,
     milestones: treeMilestones,
+    placement: treePlacement,
     currentStepId: evaluation.currentStepId,
   };
 }

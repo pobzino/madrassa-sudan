@@ -10,6 +10,8 @@ import { useParams } from "next/navigation";
 import { toast } from "sonner";
 import InteractionRenderer from "@/components/interactions/InteractionRenderer";
 import { FitBoss } from "@/components/milestones/Characters";
+import { PoolTagSummary, QuestionTagControls } from "@/components/milestones/QuestionTags";
+import { PLACEMENT_QUESTION_COUNT, type RetagResponse } from "@/lib/measurement/types";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import {
   BOSS_KEYS,
@@ -27,6 +29,7 @@ const ERRORS: Record<string, string> = {
   pool_too_small: "Not enough auto-marked questions for the battle size yet.",
   publish_forbidden: "Only an approved admin or the path's teacher can publish this.",
   generation_failed: "Generation failed. Try again.",
+  pool_unbalanced: "A starting boss needs at least 3 easy, 3 medium and 3 hard questions.",
 };
 
 function blankQuestion(order: number): TeacherMilestoneQuestion {
@@ -67,7 +70,7 @@ export default function TeacherMilestoneReviewPage() {
   const [bossKey, setBossKey] = useState<BossKey>("number_giant");
   const [questions, setQuestions] = useState<TeacherMilestoneQuestion[]>([]);
   const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState<"save" | "publish" | "unpublish" | null>(null);
+  const [busy, setBusy] = useState<"save" | "publish" | "unpublish" | "retag" | null>(null);
 
   const apply = useCallback((data: TeacherMilestoneDetail) => {
     setDetail(data);
@@ -133,8 +136,31 @@ export default function TeacherMilestoneReviewPage() {
     }
   };
 
+  const retag = async () => {
+    if (dirty && !window.confirm("Tagging reloads the questions: unsaved edits will be lost. Continue?")) return;
+    setBusy("retag");
+    try {
+      const res = await fetch(`/api/teacher/milestones/${id}/retag`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "untagged" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) toast.error(ERRORS[data.error] ?? `Tagging failed: ${data.message ?? data.error ?? "unknown error"}`);
+      else {
+        const r = data as RetagResponse;
+        toast.success(`Tagged ${r.tagged} question${r.tagged === 1 ? "" : "s"}${r.disputed ? ` · ${r.disputed} to check` : ""}${r.unchanged ? ` · ${r.unchanged} unchanged` : ""}`);
+        await load();
+      }
+    } catch {
+      toast.error("Tagging failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const setLive = async (live: boolean) => {
-    if (!live && !window.confirm("Unpublish this Big Challenge? Any battles children are playing now will be reset.")) return;
+    if (!live && !window.confirm(`Unpublish this ${detail?.milestone.kind === "placement" ? "starting boss" : "Big Challenge"}? Any games children are playing now will be reset.`)) return;
     setBusy(live ? "publish" : "unpublish");
     try {
       const res = await fetch(`/api/teacher/milestones/${id}/${live ? "publish" : "unpublish"}`, { method: "POST" });
@@ -158,6 +184,8 @@ export default function TeacherMilestoneReviewPage() {
   }
 
   const m = detail.milestone;
+  const placement = m.kind === "placement";
+  const skills = detail.skills ?? [];
   return (
     <div className="mx-auto max-w-4xl space-y-5 p-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -166,7 +194,7 @@ export default function TeacherMilestoneReviewPage() {
         </Link>
         <div className="flex-1" />
         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${published ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
-          {published ? `Published · ${m.certificates} certificates` : `Draft · ${questions.length} questions`}
+          {published ? (placement ? "Published" : `Published · ${m.certificates} certificates`) : `Draft · ${questions.length} questions`}
         </span>
         <Link href={`/milestones/${m.id}`} className="rounded-xl border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50" title="Play it as staff: preview mode, no certificate">
           Try it
@@ -187,10 +215,10 @@ export default function TeacherMilestoneReviewPage() {
 
       <div>
         <h1 className="text-xl font-bold text-gray-900">
-          Big Challenge after week {m.afterWeekNumber} (weeks {m.afterWeekNumber - 3}–{m.afterWeekNumber})
+          {placement ? "Starting boss · “Meet your first boss”" : `Big Challenge after week ${m.afterWeekNumber} (weeks ${m.afterWeekNumber - 3}–${m.afterWeekNumber})`}
         </h1>
         <p className="mt-0.5 text-sm text-gray-500">
-          {m.autoGradableCount} auto-marked questions in the pool · {m.activeBattles} battles in progress
+          {m.autoGradableCount} auto-marked questions in the pool · {m.activeBattles} {placement ? "games" : "battles"} in progress
         </p>
       </div>
 
@@ -204,17 +232,23 @@ export default function TeacherMilestoneReviewPage() {
             Title (English)
             <input value={titleEn} onChange={(e) => { setTitleEn(e.target.value); setDirty(true); }} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" />
           </label>
-          <label className="block text-sm font-medium text-gray-700">
-            Battle size: {size} questions ({requiredCorrect(size)} right to win, {heartsFor(size)} shields)
-            <input
-              type="range"
-              min={MILESTONE_MIN_BATTLE_QUESTIONS}
-              max={MILESTONE_MAX_BATTLE_QUESTIONS}
-              value={size}
-              onChange={(e) => { setSize(Number(e.target.value)); setDirty(true); }}
-              className="mt-2 w-full accent-emerald-600"
-            />
-          </label>
+          {placement ? (
+            <p className="text-sm font-medium text-gray-700">
+              Game size: {PLACEMENT_QUESTION_COUNT} questions (fixed): 4 easy, 4 medium, 4 hard. No tries, no hint, never locks.
+            </p>
+          ) : (
+            <label className="block text-sm font-medium text-gray-700">
+              Battle size: {size} questions ({requiredCorrect(size)} right to win, {heartsFor(size)} shields)
+              <input
+                type="range"
+                min={MILESTONE_MIN_BATTLE_QUESTIONS}
+                max={MILESTONE_MAX_BATTLE_QUESTIONS}
+                value={size}
+                onChange={(e) => { setSize(Number(e.target.value)); setDirty(true); }}
+                className="mt-2 w-full accent-emerald-600"
+              />
+            </label>
+          )}
         </div>
         <div>
           <p className="mb-1 text-sm font-medium text-gray-700">Boss</p>
@@ -234,6 +268,24 @@ export default function TeacherMilestoneReviewPage() {
           </div>
           <p className="mt-1 text-center text-xs text-gray-500">{BOSS_NAMES[bossKey].en}</p>
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold text-gray-900">Skills and difficulty in the pool</h2>
+          <div className="flex-1" />
+          <button
+            onClick={() => void retag()}
+            disabled={busy !== null}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+            title="Ask the AI to tag questions that have no skill or difficulty yet"
+          >
+            {busy === "retag" && <span className="h-3 w-3 animate-spin rounded-full border-b-2 border-emerald-600" />}
+            {busy === "retag" ? "Tagging…" : "Tag questions with AI"}
+          </button>
+        </div>
+        <PoolTagSummary questions={questions} skills={skills} />
+        <p className="mt-2 text-[11px] text-gray-500">Tag edits are corrections: they also update results already recorded. You can edit tags while published.</p>
       </section>
 
       {groups.map(([lessonId, items]) => (
@@ -261,6 +313,7 @@ export default function TeacherMilestoneReviewPage() {
                 ) : (
                   <LegacyQuestionEditor question={q} published={published} onChange={(next) => update(index, next)} />
                 )}
+                <QuestionTagControls question={q} skills={skills} onChange={(next) => update(index, next)} />
               </li>
             ))}
           </ol>

@@ -7,6 +7,7 @@ import { ArenaBackdrop, type PlacedAnchor } from "@/components/characters";
 import AmalLoading from "@/components/AmalLoading";
 import BattleScene, { useViewport, type FxEvent } from "./BattleScene";
 import { MessageScreen, SoCloseScreen, VictoryScreen } from "./BattleEndScreens";
+import { PlacementDoneScreen, PlacementEndScreen, PlacementIntroScreen } from "./PlacementScreens";
 import { NeedsInternetCard } from "./BattleParts";
 import type { Fetcher } from "./api";
 import { bossName, formatNumber, MILESTONE_COPY } from "./copy";
@@ -49,7 +50,11 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
     (result: AnswerResult, feedback: Feedback, pending: PendingAnswer) => {
       setFxEvent({ key: Date.now(), result, feedback, origin: pending.origin });
       const big = feedback.super || (result.finished && result.passed);
-      if (result.correct) {
+      if (feedback.neutral) {
+        // Placement: no right/wrong sound, the same happy reaction, and straight on.
+        if (advanceTimer.current) window.clearTimeout(advanceTimer.current);
+        advanceTimer.current = window.setTimeout(() => advanceRef.current(), result.finished ? 1400 : 1200);
+      } else if (result.correct) {
         sounds.right(big);
         // A right answer carries straight on once the hit has landed.
         if (advanceTimer.current) window.clearTimeout(advanceTimer.current);
@@ -63,7 +68,7 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
   const onFinished = useCallback(
     (result: AnswerResult) => {
       setFxEvent(null);
-      if (result.passed) {
+      if (result.passed || result.neutral === true) {
         sounds.celebrate();
         setBigConfetti((n) => n + 1);
       }
@@ -167,6 +172,39 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
           : null;
     return shell(<MessageScreen lang={lang} bossKey={bossKey} level={level} title={title} action={action} />, true);
   }
+
+  if (screen === "placement_intro") {
+    return shell(
+      <PlacementIntroScreen
+        lang={lang}
+        bossKey={bossKey}
+        questionCount={intro?.milestone.questionCount ?? 12}
+        starting={session.restarting}
+        isOnline={isOnline}
+        preview={intro?.preview ?? false}
+        onPlay={() => void session.playAgain()}
+        onLater={session.dismissPlacement}
+      />,
+      true
+    );
+  }
+
+  if (screen === "placement_end") {
+    return shell(
+      <PlacementEndScreen
+        lang={lang}
+        bossKey={bossKey}
+        burst={bigConfetti}
+        knownSkills={session.final?.placement?.knownSkills ?? []}
+        growingSkills={session.final?.placement?.growingSkills ?? []}
+        toldGrownUp={session.final?.firstPass ?? false}
+        preview={battle?.preview ?? false}
+      />,
+      true
+    );
+  }
+
+  if (screen === "placement_done") return shell(<PlacementDoneScreen lang={lang} bossKey={bossKey} />, true);
 
   if (screen === "won") {
     return shell(

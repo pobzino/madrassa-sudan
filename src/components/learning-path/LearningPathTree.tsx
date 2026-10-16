@@ -12,6 +12,7 @@ import type {
   TreeWeek,
   TreeStep,
 } from "@/lib/lessons/useLearningPath";
+import PlacementNode from "./PlacementNode";
 import { HERO_ROOM_ABOVE, HERO_ROOM_BELOW, HERO_WINDOW, MilestoneHero, milestoneCta, milestoneHref, milestoneLabel } from "./MilestoneNode";
 
 const translations = {
@@ -377,6 +378,9 @@ export default function LearningPathTree({
   };
 
   return (
+    <>
+    {/* "Meet your first boss": above week 1, never part of the road (it gates nothing). */}
+    {path.placement && <PlacementNode placement={path.placement} lang={language} isOnline={isOnline} />}
     <div ref={containerRef} className="relative w-full" style={{ height: totalH }}>
       {width !== null && (
       <div className="relative w-full" style={{ height: totalH }}>
@@ -537,5 +541,6 @@ export default function LearningPathTree({
       </div>
       )}
     </div>
+    </>
   );
 }

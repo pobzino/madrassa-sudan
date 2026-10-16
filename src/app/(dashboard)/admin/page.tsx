@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 
+import PlacementResetDialog from "@/components/measurement/PlacementResetDialog";
 // ─── Types ───────────────────────────────────────────────────────
 
 type AdminUser = {
@@ -347,6 +348,7 @@ export default function AdminPage() {
   const isAdmin = profile?.role === "admin";
 
   const [tab, setTab] = useState<Tab>("overview");
+  const [resetFor, setResetFor] = useState<AdminUser | null>(null);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
   // Members state
@@ -669,10 +671,21 @@ export default function AdminPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
+      {resetFor && <PlacementResetDialog learnerId={resetFor.id} learnerName={resetFor.full_name ?? ""} onClose={() => setResetFor(null)} />}
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">Manage members, classes, and content</p>
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage members, classes, and content</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/teacher/impact" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+            Learning impact
+          </Link>
+          <Link href="/admin/impact/report" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+            Funder report
+          </Link>
+        </div>
       </div>
 
       {/* Tab Bar */}
@@ -1128,6 +1141,16 @@ export default function AdminPage() {
                       >
                         <Check className="h-3.5 w-3.5" aria-hidden="true" />
                         Verify email
+                      </button>
+                    )}
+                    {user.role === "student" && (
+                      <button
+                        type="button"
+                        onClick={() => setResetFor(user)}
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                        title="Let this child meet a subject's starting boss again"
+                      >
+                        Reset starting boss
                       </button>
                     )}
                     {/* Role Change Dropdown */}

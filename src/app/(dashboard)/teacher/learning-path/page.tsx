@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import MilestoneBlockCard from "@/components/milestones/MilestoneBlockCard";
+import PlacementBlockCard from "@/components/milestones/PlacementBlockCard";
 import { MILESTONE_WEEKS_PER_BLOCK, type TeacherMilestoneListResponse } from "@/lib/milestones/types";
 
 const LESSONS_PER_WEEK = 2;
@@ -18,7 +19,11 @@ const MILESTONE_ERRORS: Record<string, string> = {
   generation_failed: "The AI couldn't draft enough good questions. Try again.",
   pool_too_small: "Not enough auto-marked questions for the battle size yet.",
   publish_forbidden: "Only an approved admin or the path's teacher can publish this.",
+  pool_unbalanced: "A starting boss needs at least 3 easy, 3 medium and 3 hard questions.",
 };
+
+/** The starting boss (placement) uses week 0 in these handlers. */
+const PLACEMENT_WEEK = 0;
 
 interface SubjectRow {
   id: string;
@@ -62,20 +67,30 @@ export default function LearningPathEditorPage() {
     }
   }, []);
 
+  const milestoneAt = (afterWeekNumber: number) =>
+    afterWeekNumber === PLACEMENT_WEEK
+      ? milestones?.placement ?? null
+      : milestones?.blocks.find((b) => b.afterWeekNumber === afterWeekNumber)?.milestone ?? null;
+
   const generateMilestone = async (afterWeekNumber: number) => {
     if (!milestones?.pathId) return;
-    const existing = milestones.blocks.find((b) => b.afterWeekNumber === afterWeekNumber)?.milestone;
+    const placement = afterWeekNumber === PLACEMENT_WEEK;
+    const existing = milestoneAt(afterWeekNumber);
     if (existing && !window.confirm("Replace this draft's questions with a newly generated set?")) return;
     setGeneratingBlock(afterWeekNumber);
     try {
       const res = await fetch("/api/teacher/milestones/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path_id: milestones.pathId, after_week_number: afterWeekNumber }),
+        body: JSON.stringify(
+          placement
+            ? { path_id: milestones.pathId, kind: "placement" }
+            : { path_id: milestones.pathId, after_week_number: afterWeekNumber }
+        ),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) toast.error(MILESTONE_ERRORS[data.error] ?? `Generation failed: ${data.message ?? data.error ?? "unknown error"}`);
-      else toast.success("Big Challenge draft ready: review it before publishing");
+      else toast.success(placement ? "Starting boss draft ready: review the tags before publishing" : "Big Challenge draft ready: review it before publishing");
     } catch {
       toast.error("Generation failed");
     } finally {
@@ -85,15 +100,16 @@ export default function LearningPathEditorPage() {
   };
 
   const setMilestoneLive = async (afterWeekNumber: number, live: boolean) => {
-    const m = milestones?.blocks.find((b) => b.afterWeekNumber === afterWeekNumber)?.milestone;
+    const m = milestoneAt(afterWeekNumber);
     if (!m) return;
-    if (!live && !window.confirm("Unpublish this Big Challenge? Any battles children are playing now will be reset.")) return;
+    const what = afterWeekNumber === PLACEMENT_WEEK ? "starting boss" : "Big Challenge";
+    if (!live && !window.confirm(`Unpublish this ${what}? Any games children are playing now will be reset.`)) return;
     setMilestoneBusy(afterWeekNumber);
     try {
       const res = await fetch(`/api/teacher/milestones/${m.id}/${live ? "publish" : "unpublish"}`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) toast.error(MILESTONE_ERRORS[data.error] ?? `Failed: ${data.message ?? data.error ?? "unknown error"}`);
-      else toast.success(live ? "Big Challenge published" : "Big Challenge unpublished");
+      else toast.success(`${afterWeekNumber === PLACEMENT_WEEK ? "Starting boss" : "Big Challenge"} ${live ? "published" : "unpublished"}`);
     } finally {
       setMilestoneBusy(null);
       await loadMilestones(selectedSubject);
@@ -359,6 +375,18 @@ export default function LearningPathEditorPage() {
           {/* Ordered path */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <h2 className="text-sm font-semibold text-gray-900 mb-3">Path order</h2>
+            {ordered.length > 0 && (
+              <PlacementBlockCard
+                placement={milestones?.placement ?? null}
+                hasPath={Boolean(milestones?.pathId)}
+                disabled={dirty}
+                generating={generatingBlock === PLACEMENT_WEEK}
+                busy={generatingBlock !== null || milestoneBusy !== null}
+                onGenerate={() => void generateMilestone(PLACEMENT_WEEK)}
+                onPublish={() => void setMilestoneLive(PLACEMENT_WEEK, true)}
+                onUnpublish={() => void setMilestoneLive(PLACEMENT_WEEK, false)}
+              />
+            )}
             {ordered.length === 0 ? (
               <p className="text-sm text-gray-400 py-6 text-center">
                 No lessons on the path yet. Add lessons below.
