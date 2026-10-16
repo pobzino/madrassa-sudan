@@ -1,11 +1,12 @@
 // POST /api/milestones/battles/[battleId]/questions/[position]/audio {lang}
-// Narrates one question of the learner's own battle (instruction, content and
-// the options in this battle's display order) for pre-readers.
+// Narrates one question of the learner's own battle for pre-readers: the key
+// line only (instruction and content), so each question has one clip per
+// language however its options are shuffled. The phone's own voice reads the
+// options on request (ReadAloudButton).
 
 import { isUuid } from "@/lib/learners/types";
 import { openMilestoneLearnerRequest } from "@/lib/server/milestones/context";
 import { loadBattle, loadBattleQuestion, milestoneError, milestoneJson, parseLang } from "@/lib/server/milestones/load";
-import { battleDisplayOptions } from "@/lib/server/milestones/present";
 import { narrateQuestion } from "@/lib/server/question-audio";
 
 export const dynamic = "force-dynamic";
@@ -35,10 +36,7 @@ export async function POST(
     const loaded = await loadBattleQuestion(admin, battle, position);
     if (!loaded) return milestoneError("battle_not_found", 404);
 
-    const result = await narrateQuestion(admin, loaded.question, lang, loaded.languageMode, {
-      displayOptions: battleDisplayOptions(loaded.question, battle.id, lang, loaded.languageMode),
-      reuseStoredVariant: true,
-    });
+    const result = await narrateQuestion(admin, loaded.question, lang, loaded.languageMode, { promptOnly: true, reuseStoredVariant: true });
     if ("error" in result) {
       return milestoneError("service_unavailable", result.status, { message: result.error });
     }

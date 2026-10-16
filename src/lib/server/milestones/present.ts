@@ -137,7 +137,8 @@ export function toBattleQuestion(
     questionTextEn: question.question_text_en,
   });
   const options = displayChoices(interaction, perms, presentation.answerLanguage);
-  const { hash } = questionNarration(question, lang, languageMode, options);
+  // The battle's clip is the key line only (see the audio route), so the cached clip is looked up by that text.
+  const { hash } = questionNarration(question, lang, languageMode, undefined, true);
   const expected = interaction.type === "fill_missing_word" && interaction.free_entry ? interaction.expected_answer?.ar ?? "" : "";
 
   const shown = toPublicInteraction(interaction, perms);

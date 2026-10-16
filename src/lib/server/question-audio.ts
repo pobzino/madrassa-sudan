@@ -56,6 +56,13 @@ export interface NarrationOptions {
    * ElevenLabs. Battles shuffle options, so one question has several variants.
    */
   reuseStoredVariant?: boolean;
+  /**
+   * Voice the key line only (instruction and content), never the options:
+   * one clip per question and language, whatever order the options show in.
+   * Battles use this; the options are on screen (and the phone's own voice
+   * reads them on request).
+   */
+  promptOnly?: boolean;
 }
 
 function stringArray(value: unknown): string[] {
@@ -91,6 +98,7 @@ export function questionNarration(
   language: "ar" | "en",
   languageMode: LessonLanguageMode,
   displayOptions?: string[],
+  promptOnly = false,
 ) {
   const practiceLanguages = resolvePracticeDisplayLanguages(languageMode, language);
   const presentation = resolvePracticeQuestionPresentation({
@@ -105,8 +113,9 @@ export function questionNarration(
     questionTextAr: question.question_text_ar,
     questionTextEn: question.question_text_en,
   });
-  const localizedOptions =
-    displayOptions ??
+  const localizedOptions = promptOnly
+    ? []
+    : displayOptions ??
     stringArray(
       presentation.answerLanguage === "ar"
         ? question.options_ar ?? question.options
@@ -137,7 +146,7 @@ export async function narrateQuestion(
   options: NarrationOptions = {},
 ): Promise<NarrationResult> {
   const questionId = question.id;
-  const { text, hash } = questionNarration(question, language, languageMode, options.displayOptions);
+  const { text, hash } = questionNarration(question, language, languageMode, options.displayOptions, options.promptOnly === true);
   const cachedUrl = cachedNarrationUrl(question, language, hash);
   if (cachedUrl) return { audioUrl: cachedUrl, cached: true };
 
