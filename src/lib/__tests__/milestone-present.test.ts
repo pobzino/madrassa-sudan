@@ -172,3 +172,14 @@ describe("legacy rows and learner payloads", () => {
     expect(state.phase).toBe(2);
   });
 });
+
+describe("counting items must be answerable from the words", () => {
+  it("rejects prompts that need a picture to count", async () => {
+    const { countableFromWords, validateBattleInteraction } = await import("@/lib/server/milestones/interactions");
+    expect(countableFromWords({ en: "Count the apples.", ar: "عدّ التفاحات." })).toBe(false);
+    expect(countableFromWords({ en: "Tap and count the apples. How many are there?", ar: "اضغط وعدّ التفاحات. كم عددها؟" })).toBe(false);
+    expect(countableFromWords({ en: "Tap the number of stars left: 7 stars, take away 3.", ar: "اضغط على عدد النجوم الباقية: ٧ نجمات، شلنا ٣." })).toBe(true);
+    expect(countableFromWords({ en: "How many days are in a week? Tap that many stars.", ar: "كم يوماً في الأسبوع؟ اضغط نجمة لكل يوم." })).toBe(true);
+    expect("error" in validateBattleInteraction({ type: "tap_to_count", prompt: { en: "Count the apples.", ar: "عدّ التفاحات." }, target: 9, emoji: "🍎" })).toBe(true);
+  });
+});

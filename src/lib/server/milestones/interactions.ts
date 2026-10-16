@@ -68,6 +68,19 @@ function isIndex(value: unknown, length: number): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value < length;
 }
 
+/**
+ * A counting item a child can answer with no picture: it gives the numbers to
+ * work with ("7 stars, take away 3"), or asks a question answered from what
+ * they know ("How many days are in a week?"). Never "count the apples", which
+ * needs something on screen to count.
+ */
+export function countableFromWords(prompt: { ar: string; en: string }): boolean {
+  const text = `${prompt.en} ${prompt.ar}`;
+  const asksToCountSomething = /\bcount\b|عُ?دّ|\bعد\b/i.test(text);
+  if (asksToCountSomething) return /[0-9٠-٩]/.test(text);
+  return /[0-9٠-٩]/.test(text) || /[?؟]/.test(text);
+}
+
 export function isBattleInteractionType(value: unknown): value is BattleInteractionType {
   return typeof value === "string" && (BATTLE_INTERACTION_TYPES as readonly string[]).includes(value);
 }
@@ -109,7 +122,12 @@ export function validateBattleInteraction(value: unknown): { interaction: Battle
     }
     case "tap_to_count": {
       const target = raw.target;
-      if (typeof target !== "number" || !Number.isInteger(target) || target < 1 || target > 20) return { error: "Tap-to-count needs a number from 1 to 20." };
+      if (typeof target !== "number" || !Number.isInteger(target) || target < 1 || target > 12) return { error: "Tap-to-count needs a number from 1 to 12." };
+      // A battle has no picture to count: the words must hold the numbers to
+      // work with ("7 stars, take away 3"). "Count the apples." can't be answered.
+      if (!countableFromWords(prompt)) {
+        return { error: "A counting item must say the numbers to work with, e.g. \"7 stars, take away 3. Catch that many!\"" };
+      }
       return { interaction: { type: "tap_to_count", prompt, target, emoji: cleanText(raw.emoji) || "⭐" } };
     }
     case "match_pairs": {

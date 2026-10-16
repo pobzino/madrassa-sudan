@@ -12,7 +12,8 @@ import { pickList, pickText, type PublicInteraction } from "./contract";
 import { layoutCatch, type CatchLayout } from "./catchLayout";
 
 /** How many things the boss throws in a catch move (more than any count asked for). */
-export const CATCH_ITEMS = 8;
+/** More than any count a battle asks for (1-12), so catching them all is never the answer. */
+export const CATCH_ITEMS = 14;
 
 /**
  * Every battle move is a shared Interaction re-skinned for the arena and laid
