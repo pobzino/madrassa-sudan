@@ -31,8 +31,10 @@ export default function NarrationCard() {
   }, []);
 
   useEffect(() => {
-    void load();
+    // First read after mount (asynchronous: the state lands when the answer arrives).
+    const initial = window.setTimeout(() => void load(), 0);
     return () => {
+      window.clearTimeout(initial);
       if (timer.current) window.clearTimeout(timer.current);
     };
   }, [load]);
