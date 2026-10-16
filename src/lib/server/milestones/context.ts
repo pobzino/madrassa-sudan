@@ -20,10 +20,11 @@ export interface MilestoneLearnerRequest {
  */
 export async function openMilestoneLearnerRequest(
   request: Request,
-  options: { preview?: boolean } = {},
+  options: { preview?: boolean; fastAuth?: boolean } = {},
 ): Promise<{ ok: true; value: MilestoneLearnerRequest } | { ok: false; response: Response }> {
   const supabase = await createClient();
-  const resolved = await getLearnerContextResult(request, supabase);
+  // Battle routes run constantly during play: verify the token locally.
+  const resolved = await getLearnerContextResult(request, supabase, { fastAuth: options.fastAuth ?? true });
   if (resolved.response) return { ok: false, response: resolved.response };
   const context = resolved.context;
   const service = await createOwnedLearnerAdminClient(context);
