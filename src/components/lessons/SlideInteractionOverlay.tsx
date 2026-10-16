@@ -63,6 +63,8 @@ function draftAnswerIsReady(
     }
     case 'draw_answer':
       return answer.image_data_url.trim().length > 0;
+    case 'trace_letter':
+      return answer.strokes.length > 0 && answer.strokes.some((stroke) => stroke.length > 1);
   }
 }
 
@@ -405,6 +407,7 @@ export default function SlideInteractionOverlay({
         interaction.type === 'sequence_order' ||
         interaction.type === 'drag_drop_label' ||
         interaction.type === 'draw_answer' ||
+        interaction.type === 'trace_letter' ||
         (interaction.type === 'fill_missing_word' && interaction.free_entry === false))
     ) {
       const isAnswerReady = draftAnswerIsReady(interaction, draftAnswer);

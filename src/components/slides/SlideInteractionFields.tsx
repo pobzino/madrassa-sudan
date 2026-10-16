@@ -21,6 +21,7 @@ const INTERACTION_TYPES: Array<{ value: SlideInteractionType; label: string; hin
   { value: 'sequence_order', label: 'Put in Order', hint: 'Steps, timelines & processes' },
   { value: 'sort_groups', label: 'Sort Into Groups', hint: 'Classification & categorization' },
   { value: 'draw_answer', label: 'Draw the Answer', hint: 'Students draw on a whiteboard; vision grader judges the drawing' },
+  { value: 'trace_letter', label: 'Trace a Letter', hint: 'Finger-friendly Arabic and English letter practice' },
   { value: 'drag_drop_label', label: 'Label an Image', hint: 'Teacher places spots on the slide image; students drag labels onto them' },
 ];
 
@@ -56,6 +57,7 @@ export default function SlideInteractionFields({
         interaction_solution_map: null,
         interaction_free_entry: null,
         interaction_hotspots: null,
+        interaction_trace_config: null,
       });
       return;
     }
@@ -80,6 +82,7 @@ export default function SlideInteractionFields({
       interaction_solution_map: null,
       interaction_free_entry: null,
       interaction_hotspots: null,
+      interaction_trace_config: null,
     };
 
     if (nextType === 'free_response' || nextType === 'draw_answer') {
@@ -87,6 +90,12 @@ export default function SlideInteractionFields({
         slide.interaction_expected_answer_ar ?? '';
       baseUpdates.interaction_expected_answer_en =
         slide.interaction_expected_answer_en ?? '';
+    }
+
+    if (nextType === 'trace_letter') {
+      baseUpdates.interaction_trace_config = slide.interaction_trace_config ?? {
+        script: 'ar', letter: 'ا', form: 'isolated',
+      };
     }
 
     if (nextType === 'drag_drop_label') {

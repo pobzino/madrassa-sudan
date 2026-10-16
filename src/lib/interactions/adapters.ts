@@ -16,7 +16,7 @@ import type {
   BilingualList,
 } from './types';
 
-type LegacyAnswer = boolean | number | string | string[] | null;
+type LegacyAnswer = boolean | number | string | string[] | number[][][] | null;
 
 function pickList(
   ar: string[] | null | undefined,
@@ -133,6 +133,14 @@ export function slideToInteraction(slide: Slide): Interaction | null {
         },
       };
 
+    case 'trace_letter':
+      if (!slide.interaction_trace_config) return null;
+      return {
+        type: 'trace_letter',
+        prompt,
+        config: slide.interaction_trace_config,
+      };
+
     case 'drag_drop_label':
       return {
         type: 'drag_drop_label',
@@ -173,6 +181,7 @@ export function interactionToSlide(interaction: Interaction): Partial<Slide> {
     interaction_solution_map: null,
     interaction_free_entry: null,
     interaction_hotspots: null,
+    interaction_trace_config: null,
   };
 
   switch (interaction.type) {
@@ -256,6 +265,12 @@ export function interactionToSlide(interaction: Interaction): Partial<Slide> {
         interaction_expected_answer_en: interaction.expected_answer.en || null,
       };
 
+    case 'trace_letter':
+      return {
+        ...base,
+        interaction_trace_config: interaction.config,
+      };
+
     case 'drag_drop_label':
       return {
         ...base,
@@ -315,6 +330,8 @@ export function answerToLegacy(answer: InteractionAnswer): LegacyAnswer {
       );
     case 'draw_answer':
       return answer.image_data_url;
+    case 'trace_letter':
+      return answer.strokes;
     case 'drag_drop_label':
       return packMapping(
         answer.placements.map((p) => ({ a: p.label_index, b: p.hotspot_index }))
@@ -357,7 +374,7 @@ export function answerFromLegacy(
       return typeof raw === 'number' ? { type: 'tap_to_count', count: raw } : null;
 
     case 'match_pairs':
-      return Array.isArray(raw)
+      return Array.isArray(raw) && raw.every((v) => typeof v === 'string')
         ? {
             type: 'match_pairs',
             placements: parseMapping(raw).map(({ a, b }) => ({
@@ -368,7 +385,7 @@ export function answerFromLegacy(
         : null;
 
     case 'sequence_order':
-      return Array.isArray(raw)
+      return Array.isArray(raw) && raw.every((v) => typeof v === 'string')
         ? {
             type: 'sequence_order',
             order: raw
@@ -378,7 +395,7 @@ export function answerFromLegacy(
         : null;
 
     case 'sort_groups':
-      return Array.isArray(raw)
+      return Array.isArray(raw) && raw.every((v) => typeof v === 'string')
         ? {
             type: 'sort_groups',
             placements: parseMapping(raw).map(({ a, b }) => ({
@@ -393,8 +410,16 @@ export function answerFromLegacy(
         ? { type: 'draw_answer', image_data_url: raw }
         : null;
 
+    case 'trace_letter':
+      return Array.isArray(raw) && raw.every((stroke) =>
+        Array.isArray(stroke) && stroke.every((point) =>
+          Array.isArray(point) && point.length === 2 &&
+          point.every((coordinate) => typeof coordinate === 'number' && Number.isFinite(coordinate))
+        )
+      ) ? { type: 'trace_letter', strokes: raw as number[][][] } : null;
+
     case 'drag_drop_label':
-      return Array.isArray(raw)
+      return Array.isArray(raw) && raw.every((v) => typeof v === 'string')
         ? {
             type: 'drag_drop_label',
             placements: parseMapping(raw).map(({ a, b }) => ({
@@ -409,7 +434,8 @@ export function answerFromLegacy(
 /** Answer shapes POST /api/lessons/[id]/slide-responses accepts. */
 export type ServerSlideAnswer =
   | LegacyAnswer
-  | { type: 'draw_answer'; image_data_url: string };
+  | { type: 'draw_answer'; image_data_url: string }
+  | { type: 'trace_letter'; strokes: number[][][] };
 
 const INTERACTION_ANSWER_TYPES = new Set<string>([
   'free_response',
@@ -421,6 +447,7 @@ const INTERACTION_ANSWER_TYPES = new Set<string>([
   'sequence_order',
   'sort_groups',
   'draw_answer',
+  'trace_letter',
   'drag_drop_label',
 ]);
 
@@ -437,6 +464,13 @@ export function toServerSlideAnswer(answer: unknown): ServerSlideAnswer {
   if (typeof answer === 'number') return Number.isFinite(answer) ? answer : null;
 
   if (Array.isArray(answer)) {
+    if (answer.every((stroke) => Array.isArray(stroke) && stroke.every((point) =>
+      Array.isArray(point) && point.length === 2 && point.every((coordinate) => typeof coordinate === 'number' && Number.isFinite(coordinate) && coordinate >= 0 && coordinate <= 1)
+    ))) {
+      return answer.length <= 16 && answer.every((stroke) => stroke.length > 0 && stroke.length <= 512)
+        ? { type: 'trace_letter', strokes: answer as number[][][] }
+        : null;
+    }
     return answer.every((item) => typeof item === 'string' || typeof item === 'number')
       ? answer.map(String)
       : null;
@@ -445,6 +479,22 @@ export function toServerSlideAnswer(answer: unknown): ServerSlideAnswer {
   if (typeof answer === 'object') {
     const type = (answer as { type?: unknown }).type;
     if (typeof type !== 'string' || !INTERACTION_ANSWER_TYPES.has(type)) return null;
+    if (type === 'trace_letter') {
+      const strokes = (answer as { strokes?: unknown }).strokes;
+      if (!Array.isArray(strokes) || strokes.length > 16) return null;
+      const clean: number[][][] = [];
+      for (const stroke of strokes) {
+        if (!Array.isArray(stroke) || stroke.length > 512) return null;
+        const points: number[][] = [];
+        for (const point of stroke) {
+          if (!Array.isArray(point) || point.length !== 2 || point.some((n) => typeof n !== 'number' || !Number.isFinite(n))) return null;
+          if (point.some((n) => n < 0 || n > 1)) return null;
+          points.push([point[0] as number, point[1] as number]);
+        }
+        clean.push(points);
+      }
+      return { type: 'trace_letter', strokes: clean };
+    }
     try {
       const legacy = answerToLegacy(answer as InteractionAnswer);
       // Guard against partially-filled answers (e.g. missing placements).

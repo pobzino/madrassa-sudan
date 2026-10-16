@@ -87,6 +87,28 @@ describe("gradeHomeworkAnswers", () => {
     expect(grade.answers.map((a) => a.pointsEarned)).toEqual([10, 0]);
   });
 
+  it("grades trace-letter homework from strokes rather than a client pass flag", () => {
+    const config = { script: "en", letter: "A", case: "upper" };
+    const strokes = [
+      [[0.15, 0.85], [0.5, 0.15], [0.85, 0.85]],
+      [[0.29, 0.58], [0.71, 0.58]],
+    ];
+    const question: GradableQuestion = {
+      id: "trace",
+      question_type: "trace_letter",
+      correct_answer: "A",
+      question_content: JSON.stringify(config),
+      points: 5,
+    };
+    const grade = gradeHomeworkAnswers(
+      [question],
+      [{ question_id: "trace", response_text: JSON.stringify({ strokes, is_correct: false }) }],
+      false
+    );
+    expect(grade.autoGradedScore).toBe(5);
+    expect(grade.answers[0]?.isCorrect).toBe(true);
+  });
+
   it("leaves teacher-marked questions ungraded and reports partial auto-grading", () => {
     const mixed: GradableQuestion[] = [
       mc("q1", "A", 5),

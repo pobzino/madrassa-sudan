@@ -1,7 +1,8 @@
 import type { Slide } from '@/lib/slides.types';
+import { gradeTraceLetter } from '@/lib/interactions/trace-letter';
 
 export interface SlideInteractionResult {
-  answer: boolean | number | string | string[] | null;
+  answer: boolean | number | string | string[] | number[][][] | null;
   completedAt: string;
   isCorrect: boolean;
   timeSpentSeconds?: number;
@@ -101,12 +102,13 @@ function hashSeed(value: string) {
   return hash;
 }
 
-function parseMappedAnswer(answer: boolean | number | string | string[] | null) {
+function parseMappedAnswer(answer: unknown) {
   if (!Array.isArray(answer)) {
     return new Map<number, number>();
   }
 
   return answer.reduce((mapping, entry) => {
+    if (typeof entry !== 'string') return mapping;
     const [itemIndexRaw, targetIndexRaw] = entry.split(':');
     const itemIndex = Number(itemIndexRaw);
     const targetIndex = Number(targetIndexRaw);
@@ -121,7 +123,7 @@ function parseMappedAnswer(answer: boolean | number | string | string[] | null) 
 
 export function computeSlideInteractionCorrectness(
   slide: Slide,
-  answer: boolean | number | string | string[] | null
+  answer: boolean | number | string | string[] | number[][][] | null
 ): boolean {
   if (!slide.interaction_type) {
     return false;
@@ -136,6 +138,16 @@ export function computeSlideInteractionCorrectness(
     // resulting correctness is stored on the interaction result, so here we
     // only confirm that a drawing was submitted.
     return typeof answer === 'string' && answer.trim().length > 0;
+  }
+
+  if (slide.interaction_type === 'trace_letter') {
+    const strokes = answer;
+    if (
+      !slide.interaction_trace_config ||
+      !Array.isArray(strokes) ||
+      !strokes.every((stroke) => Array.isArray(stroke) && stroke.every((point) => Array.isArray(point)))
+    ) return false;
+    return gradeTraceLetter(slide.interaction_trace_config, strokes as number[][][]).is_correct;
   }
 
   if (slide.interaction_type === 'choose_correct' || slide.interaction_type === 'fill_missing_word') {

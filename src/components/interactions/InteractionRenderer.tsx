@@ -24,6 +24,8 @@ import SortGroupsDnD from '@/components/lessons/interactions/SortGroupsDnD';
 import SequenceOrderDnD from '@/components/lessons/interactions/SequenceOrderDnD';
 import DragDropLabelDnD from '@/components/lessons/interactions/DragDropLabelDnD';
 import DrawAnswerInput from './DrawAnswerInput';
+import TraceLetterInput from './TraceLetterInput';
+import { traceLetterOptions } from './TraceLetterInput';
 import type {
   Interaction,
   InteractionAnswer,
@@ -277,6 +279,17 @@ function AnswerMode({
         <DrawAnswerInput
           language={language}
           answer={answer?.type === 'draw_answer' ? answer : null}
+          onAnswerChange={onAnswerChange}
+          disabled={disabled}
+        />
+      );
+
+    case 'trace_letter':
+      return (
+        <TraceLetterInput
+          config={interaction.config}
+          language={language}
+          answer={answer?.type === 'trace_letter' ? answer : null}
           onAnswerChange={onAnswerChange}
           disabled={disabled}
         />
@@ -715,6 +728,10 @@ function AuthorMode({
         />
       )}
 
+      {interaction.type === 'trace_letter' && (
+        <TraceLetterAuthor interaction={interaction} onChange={onInteractionChange} />
+      )}
+
       {interaction.type === 'fill_missing_word' && (
         <FillMissingWordAuthor
           interaction={interaction}
@@ -783,6 +800,56 @@ function AuthorMode({
           onChange={onInteractionChange}
         />
       )}
+    </div>
+  );
+}
+
+function TraceLetterAuthor({
+  interaction,
+  onChange,
+}: {
+  interaction: Extract<Interaction, { type: 'trace_letter' }>;
+  onChange: (next: Interaction) => void;
+}) {
+  const config = interaction.config;
+  const letterOptions = traceLetterOptions(config.script);
+  const fieldClass = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm';
+  const update = (next: Partial<typeof config>) => onChange({ ...interaction, config: { ...config, ...next } });
+  return (
+    <div className="grid grid-cols-2 gap-3 rounded-xl border border-gray-200 bg-white p-3">
+      <label className="text-xs font-semibold text-gray-600">Script
+        <select value={config.script} onChange={(event) => {
+          const script = event.target.value as 'ar' | 'en';
+          const letter = script === 'ar' ? 'ا' : 'A';
+          update({ script, letter, form: script === 'ar' ? 'isolated' : undefined, case: script === 'en' ? 'upper' : undefined });
+        }} className={fieldClass}>
+          <option value="ar">Arabic</option><option value="en">English</option>
+        </select>
+      </label>
+      <label className="text-xs font-semibold text-gray-600">Letter
+        <select value={config.letter} onChange={(event) => update({ letter: event.target.value })} className={fieldClass}>
+          {letterOptions.map((letter) => <option key={letter} value={letter}>{letter}</option>)}
+        </select>
+      </label>
+      {config.script === 'ar' ? (
+        <label className="text-xs font-semibold text-gray-600">Arabic form
+          <select value={config.form ?? 'isolated'} onChange={(event) => update({ form: event.target.value as 'isolated' | 'initial' | 'medial' | 'final' })} className={fieldClass}>
+            <option value="isolated">Isolated</option><option value="initial">Initial</option><option value="medial">Medial</option><option value="final">Final</option>
+          </select>
+        </label>
+      ) : (
+        <label className="text-xs font-semibold text-gray-600">Letter case
+          <select value={config.case ?? 'upper'} onChange={(event) => update({ case: event.target.value as 'upper' | 'lower', letter: (event.target.value === 'lower' ? config.letter.toLowerCase() : config.letter.toUpperCase()) })} className={fieldClass}>
+            <option value="upper">Uppercase</option><option value="lower">Lowercase</option>
+          </select>
+        </label>
+      )}
+      <label className="col-span-2 text-xs font-semibold text-gray-600">Letter sound audio URL (optional)
+        <input value={config.audio_url ?? ''} onChange={(event) => update({ audio_url: event.target.value || null })} placeholder="https://…" className={fieldClass} />
+      </label>
+      <div className="col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-2">
+        <TraceLetterInput config={config} language={config.script} answer={null} disabled />
+      </div>
     </div>
   );
 }

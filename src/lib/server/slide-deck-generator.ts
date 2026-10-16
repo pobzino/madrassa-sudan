@@ -337,7 +337,7 @@ ${validationSchemaNotes}
 ## Student Interactions
 - Every practice slide (type "quiz_preview" or "question_answer") MUST include a student interaction
 - Activity slides (type "activity") MAY include a student interaction when it helps participation
-- Set interaction_type to one of: "free_response", "choose_correct", "true_false", "tap_to_count", "match_pairs", "sequence_order", "sort_groups", "fill_missing_word", or "draw_answer"
+- Set interaction_type to one of: "free_response", "choose_correct", "true_false", "tap_to_count", "match_pairs", "sequence_order", "sort_groups", "fill_missing_word", "draw_answer", or "trace_letter"
 - Every practice slide must set interaction_type to one of those values; it cannot be null
 - For free_response: set interaction_expected_answer_ar and interaction_expected_answer_en to a short model answer the teacher can reveal later
 - For choose_correct: provide 3-4 options in interaction_options_ar/interaction_options_en, set interaction_correct_index to the 0-based index of the correct answer
@@ -348,6 +348,7 @@ ${validationSchemaNotes}
 - For sequence_order: provide 3-5 ordered entries in interaction_items_ar/en. The listed order is the correct answer
 - For sort_groups: provide 2-6 items in interaction_items_ar/en, 2-4 group labels in interaction_targets_ar/en, and interaction_solution_map as the 0-based target index for each item
 - For draw_answer: fill interaction_expected_answer_ar and/or interaction_expected_answer_en with a short plain-language description of what a correct student drawing must contain (shapes, labels, relationships). This description is used by a vision grader to judge the submitted drawing.
+- For trace_letter: set interaction_trace_config with script ("ar" or "en"), one target letter, and its Arabic form ("isolated", "initial", "medial", "final") or English case ("upper", "lower"). The letter tracing grader ignores case-insensitive differences only when config.case says so; audio_url is optional.
 - Set interaction_prompt_ar/interaction_prompt_en: a short question or instruction for the student
 - Non-interactive slides (title, content, key_points, diagram_description, summary): set ALL interaction fields to null, including interaction_items_ar/en, interaction_targets_ar/en, and interaction_solution_map
 - Keep interaction prompts short and grade-appropriate for Grade ${lessonRow.grade_level || 1}`;
@@ -431,6 +432,7 @@ ${validationSchemaNotes}
                     "sort_groups",
                     "fill_missing_word",
                     "draw_answer",
+                    "trace_letter",
                   ],
                 },
                 { type: "null" },
@@ -484,6 +486,23 @@ ${validationSchemaNotes}
             interaction_free_entry: {
               anyOf: [{ type: "boolean" }, { type: "null" }],
             },
+            interaction_trace_config: {
+              anyOf: [
+                { type: "null" },
+                {
+                  type: "object",
+                  properties: {
+                    script: { type: "string", enum: ["ar", "en"] },
+                    letter: { type: "string" },
+                    form: { anyOf: [{ type: "string", enum: ["isolated", "initial", "medial", "final"] }, { type: "null" }] },
+                    case: { anyOf: [{ type: "string", enum: ["upper", "lower"] }, { type: "null" }] },
+                    audio_url: { anyOf: [{ type: "string" }, { type: "null" }] },
+                  },
+                  required: ["script", "letter", "form", "case", "audio_url"],
+                  additionalProperties: false,
+                },
+              ],
+            },
           },
           required: [
             "type",
@@ -523,6 +542,7 @@ ${validationSchemaNotes}
             "interaction_targets_en",
             "interaction_solution_map",
             "interaction_free_entry",
+            "interaction_trace_config",
           ],
           additionalProperties: false,
         },
@@ -552,6 +572,7 @@ ${validationSchemaNotes}
       interaction_targets_en: null,
       interaction_solution_map: null,
       interaction_free_entry: null,
+      interaction_trace_config: null,
     };
   }
 

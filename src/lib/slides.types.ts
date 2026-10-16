@@ -1,4 +1,5 @@
 import type { ExplorationWidgetType, ExplorationWidgetConfig } from '@/lib/explorations/types';
+import type { TraceLetterConfig } from '@/lib/interactions/types';
 
 export type SlideType =
   | 'title'
@@ -29,6 +30,7 @@ export type SlideInteractionType =
   | 'sort_groups'
   | 'fill_missing_word'
   | 'draw_answer'
+  | 'trace_letter'
   | 'drag_drop_label';
 
 /**
@@ -103,6 +105,8 @@ export interface Slide {
    * The hotspot at index i matches `interaction_items_*[i]`.
    */
   interaction_hotspots?: SlideInteractionHotspot[] | null;
+  /** Letter tracing parameters for `trace_letter` activities. */
+  interaction_trace_config?: TraceLetterConfig | null;
   activity_id?: string | null;
   annotations?: string | null;
   /** Exploration widget type for `type: 'exploration'` slides. */
