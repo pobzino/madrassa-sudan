@@ -11,18 +11,20 @@ import {
 import type { Slide } from "@/lib/slides.types";
 import { interactionRowFields, type BattleInteraction } from "@/lib/server/milestones/interactions";
 import {
+  checkGeneratedItem,
   generateLessonItems,
-  itemQualityIssue,
   itemTypesForLesson,
   promptKey,
-  toGeneratedInteraction,
   type LessonItemGenerator,
 } from "@/lib/server/milestones/item-generator";
+import { applyVerdicts, verifyItemsWithModel, type DroppedItem, type ItemVerifier } from "@/lib/server/milestones/item-verifier";
 import { MilestoneRouteError, type MilestoneAdminClient } from "@/lib/server/milestones/load";
 
 const MAX_PARALLEL_LESSONS = 4;
 const MIN_PER_LESSON = 2;
 const MAX_PER_LESSON = 6;
+/** Asked for on top of each lesson's share, so checks can drop items and the pool still fills. */
+export const EXTRA_ITEMS_PER_LESSON = 2;
 
 export interface GenerateMilestonePoolArgs {
   admin: MilestoneAdminClient;
@@ -32,6 +34,8 @@ export interface GenerateMilestonePoolArgs {
   actorId: string;
   /** Injected in tests; defaults to the interaction-mix item generator. */
   generate?: LessonItemGenerator;
+  /** Injected in tests; defaults to the fast-model blind verifier. */
+  verify?: ItemVerifier;
 }
 
 export interface GenerateMilestonePoolResult {
@@ -39,6 +43,8 @@ export interface GenerateMilestonePoolResult {
   assignmentId: string;
   questionCount: number;
   skippedLessons: string[];
+  /** Items the checks or the verifier dropped, with why (also logged). */
+  droppedItems: DroppedItem[];
 }
 
 type PoolItem = { interaction: BattleInteraction; sourceLessonId: string };
@@ -98,6 +104,7 @@ export async function generateMilestonePool({
   poolSize,
   actorId,
   generate = generateLessonItems,
+  verify = verifyItemsWithModel,
 }: GenerateMilestonePoolArgs): Promise<GenerateMilestonePoolResult> {
   if (!isMilestoneWeek(afterWeekNumber)) throw new MilestoneRouteError("block_incomplete", 400);
 
@@ -185,22 +192,45 @@ export async function generateMilestonePool({
   const perLesson = Math.min(MAX_PER_LESSON, Math.max(MIN_PER_LESSON, Math.ceil(poolSize / sources.length)));
   const subjectName = subject?.name_en || subject?.name_ar || "General";
   const gradeLevel = lessonIds.map((id) => lessonById.get(id)?.grade_level).find((grade) => grade != null) ?? 1;
+  // A few extra items per lesson, so the pool still fills after checks drop some.
+  const requested = perLesson + EXTRA_ITEMS_PER_LESSON;
+  const droppedItems: DroppedItem[] = [];
   const settled = await settleWithLimit(
-    sources.map((source, lessonIndex) => () => {
+    sources.map((source, lessonIndex) => async () => {
       const lesson = lessonById.get(source.lessonId);
-      return generate({
+      const lessonTitleEn = lesson?.title_en || lesson?.title_ar || "Lesson";
+      const raw = await generate({
         content: source.content,
         lessonTitleAr: lesson?.title_ar || lesson?.title_en || "درس",
-        lessonTitleEn: lesson?.title_en || lesson?.title_ar || "Lesson",
+        lessonTitleEn,
         subjectName,
         gradeLevel,
-        types: itemTypesForLesson(lessonIndex, perLesson),
+        types: itemTypesForLesson(lessonIndex, requested),
       });
+
+      // 3a. Deterministic checks: structure, keys that must add up, one order, quality rules.
+      const checked: BattleInteraction[] = [];
+      const dropped: DroppedItem[] = [];
+      for (const item of raw) {
+        const result = checkGeneratedItem(item);
+        if ("interaction" in result) checked.push(result.interaction);
+        else dropped.push({ prompt: result.prompt, reasons: [`check: ${result.reason}`] });
+      }
+
+      // 3b. The verifier answers each surviving item blind and flags the doubtful ones.
+      let verdicts;
+      try {
+        verdicts = await verify({ items: checked, lessonTitleEn, subjectName, gradeLevel });
+      } catch {
+        verdicts = await verify({ items: checked, lessonTitleEn, subjectName, gradeLevel });
+      }
+      const verified = applyVerdicts(checked, verdicts);
+      return { kept: verified.kept, dropped: [...dropped, ...verified.dropped] };
     }),
     MAX_PARALLEL_LESSONS,
   );
 
-  // 3. Validate each item as a battle Interaction and drop flagged or repeated ones.
+  // 3c. Keep at most perLesson good items per lesson, no repeated prompts.
   const pool: PoolItem[] = [];
   const seenPrompts = new Set<string>();
   settled.forEach((result, index) => {
@@ -210,10 +240,13 @@ export async function generateMilestonePool({
       skippedLessons.push(lessonId);
       return;
     }
+    for (const item of result.value.dropped) {
+      console.warn("Milestone item dropped:", lessonId, JSON.stringify(item));
+      droppedItems.push(item);
+    }
     let kept = 0;
-    for (const raw of result.value) {
-      const interaction = toGeneratedInteraction(raw);
-      if (!interaction || itemQualityIssue(interaction)) continue;
+    for (const interaction of result.value.kept) {
+      if (kept >= perLesson) break;
       const key = promptKey(interaction);
       if (seenPrompts.has(key)) continue;
       seenPrompts.add(key);
@@ -250,7 +283,7 @@ export async function generateMilestonePool({
       .update({ generated_at: now, generated_by: actorId, reviewed_at: null, reviewed_by: null })
       .eq("id", existing.id);
     if (milestoneError) throw new Error(milestoneError.message);
-    return { milestoneId: existing.id, assignmentId: existing.assignment_id, questionCount: pool.length, skippedLessons };
+    return { milestoneId: existing.id, assignmentId: existing.assignment_id, questionCount: pool.length, skippedLessons, droppedItems };
   }
 
   const { titleAr, titleEn } = milestoneTitles(afterWeekNumber);
@@ -299,7 +332,7 @@ export async function generateMilestonePool({
       await admin.from("learning_path_milestones").delete().eq("id", milestone.id);
       throw new Error(questionsError.message);
     }
-    return { milestoneId: milestone.id, assignmentId: assignment.id, questionCount: pool.length, skippedLessons };
+    return { milestoneId: milestone.id, assignmentId: assignment.id, questionCount: pool.length, skippedLessons, droppedItems };
   } catch (error) {
     await admin.from("homework_assignments").delete().eq("id", assignment.id);
     throw error;

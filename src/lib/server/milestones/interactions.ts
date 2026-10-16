@@ -5,6 +5,14 @@ import { gradeInteraction } from "@/lib/interactions/grader";
 import type { BilingualList, BilingualText, Interaction, InteractionAnswer } from "@/lib/interactions/types";
 import { practiceAnswerMatches } from "@/lib/practice-answer";
 import {
+  checkChoiceKey,
+  checkGroups,
+  checkPairs,
+  checkSequence,
+  checkTapTarget,
+  checkTrueFalseKey,
+} from "@/lib/server/milestones/item-checks";
+import {
   BATTLE_INTERACTION_TYPES,
   type BattleInteractionType,
   type OwlHint,
@@ -106,10 +114,16 @@ export function validateBattleInteraction(value: unknown): { interaction: Battle
       if (!options || options.ar.length < 2 || options.ar.length > 4) return { error: "Choose-correct needs 2 to 4 options." };
       if (!distinct(options.ar) || !distinct(options.en)) return { error: "The options must all be different." };
       if (!isIndex(raw.correct_index, options.ar.length)) return { error: "Pick the correct option." };
+      const keyError = checkChoiceKey(prompt, options, raw.correct_index);
+      if (keyError) return { error: keyError };
       return { interaction: { type: "choose_correct", prompt, options, correct_index: raw.correct_index } };
     }
     case "true_false":
       if (typeof raw.answer !== "boolean") return { error: "Say whether the sentence is true or false." };
+      {
+        const keyError = checkTrueFalseKey(prompt, raw.answer);
+        if (keyError) return { error: keyError };
+      }
       return { interaction: { type: "true_false", prompt, answer: raw.answer } };
     case "fill_missing_word": {
       if (raw.free_entry === true) {
@@ -122,11 +136,15 @@ export function validateBattleInteraction(value: unknown): { interaction: Battle
       if (!options || options.ar.length < 2 || options.ar.length > 4) return { error: "Fill-the-word needs 2 to 4 word choices." };
       if (!distinct(options.ar) || !distinct(options.en)) return { error: "The word choices must all be different." };
       if (!isIndex(raw.correct_index, options.ar.length)) return { error: "Pick the correct word." };
+      const keyError = checkChoiceKey(prompt, options, raw.correct_index);
+      if (keyError) return { error: keyError };
       return { interaction: { type: "fill_missing_word", prompt, free_entry: false, options, correct_index: raw.correct_index } };
     }
     case "tap_to_count": {
       const target = raw.target;
       if (typeof target !== "number" || !Number.isInteger(target) || target < 1 || target > 12) return { error: "Tap-to-count needs a number from 1 to 12." };
+      const keyError = checkTapTarget(prompt, target);
+      if (keyError) return { error: keyError };
       return { interaction: { type: "tap_to_count", prompt, target, emoji: cleanText(raw.emoji) || "⭐" } };
     }
     case "match_pairs": {
@@ -135,13 +153,17 @@ export function validateBattleInteraction(value: unknown): { interaction: Battle
       if (!items || !targets || items.ar.length < 2 || items.ar.length > 5 || targets.ar.length !== items.ar.length) {
         return { error: "Match-the-pairs needs 2 to 5 pairs." };
       }
-      if (!distinct(items.ar) || !distinct(targets.ar)) return { error: "Each pair must be different." };
+      if (!distinct(items.ar) || !distinct(targets.ar) || !distinct(items.en) || !distinct(targets.en)) return { error: "Each pair must be different." };
+      const pairError = checkPairs(items, targets);
+      if (pairError) return { error: pairError };
       return { interaction: { type: "match_pairs", prompt, items, targets } };
     }
     case "sequence_order": {
       const items = cleanList(raw.items);
       if (!items || items.ar.length < 3 || items.ar.length > 6) return { error: "Put-in-order needs 3 to 6 steps." };
-      if (!distinct(items.ar)) return { error: "Each step must be different." };
+      if (!distinct(items.ar) || !distinct(items.en)) return { error: "Each step must be different." };
+      const orderError = checkSequence(prompt, items);
+      if (orderError) return { error: orderError };
       return { interaction: { type: "sequence_order", prompt, items } };
     }
     case "sort_groups": {
@@ -155,6 +177,8 @@ export function validateBattleInteraction(value: unknown): { interaction: Battle
         return { error: "Give every item its group." };
       }
       if (!distinct(items.ar) || !distinct(targets.ar)) return { error: "Items and groups must be different." };
+      const groupError = checkGroups(items, targets, map as number[]);
+      if (groupError) return { error: groupError };
       return { interaction: { type: "sort_groups", prompt, items, targets, solution_map: map as number[] } };
     }
     case "drag_drop_label": {
