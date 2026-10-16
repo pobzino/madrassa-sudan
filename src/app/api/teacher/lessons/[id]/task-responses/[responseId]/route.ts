@@ -5,7 +5,7 @@ import { normalizeTaskType } from "@/lib/lesson-activities";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { recalculateLessonTaskProgress } from "@/lib/server/lesson-task-progress";
-import { canManageLesson, getClassStudentIds, getTeacherRole } from "@/lib/server/teacher-lesson-access";
+import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
 
 const ReviewSchema = z.object({
   review_status: z.enum(["pending_review", "accepted", "needs_retry"]),
@@ -69,17 +69,6 @@ export async function PATCH(
     .single();
 
   if (responseError || !responseRow) {
-    return NextResponse.json({ error: "Response not found" }, { status: 404 });
-  }
-
-  // Lesson authors only review students in their own classes.
-  let classStudentIds: Set<string> | null;
-  try {
-    classStudentIds = await getClassStudentIds(service, role, user.id);
-  } catch {
-    return NextResponse.json({ error: "Failed to check class" }, { status: 500 });
-  }
-  if (classStudentIds && !classStudentIds.has(responseRow.student_id)) {
     return NextResponse.json({ error: "Response not found" }, { status: 404 });
   }
 

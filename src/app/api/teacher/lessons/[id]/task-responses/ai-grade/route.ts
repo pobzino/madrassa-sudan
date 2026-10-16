@@ -4,7 +4,7 @@ import { z } from "zod";
 import { normalizeTaskType } from "@/lib/lesson-activities";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
-import { canManageLesson, getClassStudentIds, getTeacherRole } from "@/lib/server/teacher-lesson-access";
+import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
 import { getOpenAIClient } from "@/lib/ai/openai-client";
 
 const AiGradeSchema = z.object({
@@ -76,22 +76,11 @@ export async function POST(
   // Load all responses
   const { data: responses, error: responsesError } = await service
     .from("lesson_task_responses")
-    .select("id, task_id, student_id, response_data")
+    .select("id, task_id, response_data")
     .in("id", response_ids);
 
   if (responsesError || !responses) {
     return NextResponse.json({ error: "Failed to load responses" }, { status: 500 });
-  }
-
-  // Lesson authors only grade students in their own classes.
-  let classStudentIds: Set<string> | null;
-  try {
-    classStudentIds = await getClassStudentIds(service, role, user.id);
-  } catch {
-    return NextResponse.json({ error: "Failed to check class" }, { status: 500 });
-  }
-  if (classStudentIds && responses.some((response) => !classStudentIds.has(response.student_id))) {
-    return NextResponse.json({ error: "Response not found" }, { status: 404 });
   }
 
   // Load associated tasks

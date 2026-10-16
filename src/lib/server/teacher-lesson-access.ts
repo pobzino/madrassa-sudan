@@ -109,32 +109,3 @@ export async function canEditAssignedLesson({
 
   return Boolean(assignment);
 }
-
-// Published lessons are open to every family, so authoring a lesson does not
-// make its students yours. Returns the approved students in the teacher's own
-// classes, or null for an admin (who may see everyone).
-export async function getClassStudentIds(
-  service: SupabaseClient<Database>,
-  role: TeacherRole,
-  teacherId: string
-): Promise<Set<string> | null> {
-  if (role === "admin") return null;
-
-  const { data: cohortRows, error: cohortError } = await service
-    .from("cohort_teachers")
-    .select("cohort_id")
-    .eq("teacher_id", teacherId);
-  if (cohortError) throw cohortError;
-
-  const cohortIds = (cohortRows || []).map((row) => row.cohort_id);
-  if (!cohortIds.length) return new Set();
-
-  const { data: memberRows, error: memberError } = await service
-    .from("cohort_students")
-    .select("student_id")
-    .in("cohort_id", cohortIds)
-    .eq("status", "approved");
-  if (memberError) throw memberError;
-
-  return new Set((memberRows || []).map((row) => row.student_id));
-}
