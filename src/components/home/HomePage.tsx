@@ -42,7 +42,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
   const t = {
     ar: {
       nav: { features: "المميزات", howItWorks: "كيف يعمل", sample: "درس نموذجي", parents: "للأهل", teachers: "للمعلمين", faq: "الأسئلة" },
-      login: "تسجيل الدخول",
+      login: "دخول",
       getStarted: "ابدأ الآن",
       goToDashboard: "لوحة التحكم",
       hero: {
@@ -181,7 +181,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
                 className="h-full w-full"
               />
             </span>
-            <span className="font-fredoka text-xl font-semibold tracking-tight text-[#007229] sm:text-2xl">
+            <span className="max-[360px]:hidden font-fredoka text-xl font-semibold tracking-tight text-[#007229] sm:text-2xl">
               amal school
             </span>
           </Link>
@@ -214,7 +214,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
               </Link>
             ) : (
               <>
-                <Link href="/auth/login" className="hidden sm:block text-sm font-semibold text-gray-600 hover:text-gray-900">
+                <Link href="/auth/login" className="whitespace-nowrap rounded-full border border-gray-200 px-2.5 py-2 text-xs font-bold text-gray-700 transition-colors hover:border-[#007229]/30 hover:text-[#007229] sm:px-3 sm:py-2.5 sm:text-sm">
                   {txt.login}
                 </Link>
                 <Link
