@@ -711,7 +711,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </button>
           <button
             onClick={() => setSidebarOpen(true)}
-            className={`p-2 rounded-xl hover:bg-gray-100 transition-colors ${isInTeacherView ? "" : "standalone:hidden"}`}
+            // Learners in the installed app use the bottom tab bar; staff keep the menu, which is their only way to the teacher pages.
+            className={`p-2 rounded-xl hover:bg-gray-100 transition-colors ${isInTeacherView || isTeacherOrAdmin ? "" : "standalone:hidden"}`}
           >
             {Icons.menu}
           </button>
