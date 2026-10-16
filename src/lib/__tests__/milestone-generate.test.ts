@@ -162,7 +162,7 @@ describe("verify-and-drop", () => {
     expect(result.droppedItems.filter((item) => item.reasons.includes("no verdict"))).toHaveLength(7);
   });
 
-  it("retries the verifier once, then skips the lesson", async () => {
+  it("skips a lesson whose verifier call fails (one try: the page retries the lesson step)", async () => {
     let calls = 0;
     const flaky: ItemVerifier = async (request) => {
       calls += 1;
@@ -170,7 +170,9 @@ describe("verify-and-drop", () => {
       return passAll(request);
     };
     const flakyResult = await run(flaky).promise;
-    expect(flakyResult.skippedLessons).toEqual(["lesson-7"]);
+    // lesson-7 has no deck; the lesson whose verifier call failed is skipped too.
+    expect(flakyResult.skippedLessons).toHaveLength(2);
+    expect(flakyResult.skippedLessons).toContain("lesson-7");
 
     const broken: ItemVerifier = async () => {
       throw new Error("down");

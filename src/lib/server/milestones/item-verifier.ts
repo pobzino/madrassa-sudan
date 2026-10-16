@@ -2,7 +2,7 @@ import "server-only";
 
 import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
 import { AI_MODEL_FAST, AI_MODEL_MILESTONE_VERIFY, getOpenAIClient } from "@/lib/ai/openai-client";
-import { isModelUnavailableError } from "@/lib/ai/model-errors";
+import { isModelUnavailableError, MILESTONE_CALL_OPTIONS, timedMilestoneCall } from "@/lib/ai/model-errors";
 import type { Difficulty, TagSource } from "@/lib/measurement/types";
 import {
   interactionPerms,
@@ -155,12 +155,11 @@ Return one verdict per item, using its index.`;
     },
   };
   // The newest model first; an older one if this key cannot use it.
-  const completion = await openai.chat.completions
-    .create({ model: AI_MODEL_MILESTONE_VERIFY, ...params })
+  const completion = await timedMilestoneCall("verify", AI_MODEL_MILESTONE_VERIFY, (model) => openai.chat.completions.create({ model, ...params }, MILESTONE_CALL_OPTIONS.verify))
     .catch((error: unknown) => {
       if (!isModelUnavailableError(error) || AI_MODEL_MILESTONE_VERIFY === AI_MODEL_FAST) throw error;
       console.warn(`OpenAI model ${AI_MODEL_MILESTONE_VERIFY} unavailable; using ${AI_MODEL_FAST}`);
-      return openai.chat.completions.create({ model: AI_MODEL_FAST, ...params });
+      return timedMilestoneCall("verify", AI_MODEL_FAST, (model) => openai.chat.completions.create({ model, ...params }, MILESTONE_CALL_OPTIONS.verify));
     });
   const text = completion.choices[0]?.message?.content;
   if (!text) throw new Error("Big Challenge verification returned no content.");

@@ -391,12 +391,8 @@ async function runLesson(plan: PoolPlan, lessonIndex: number, generate: LessonIt
   // 3b. The verifier answers each surviving item blind and flags the doubtful ones (and estimates difficulty).
   const interactions = checked.map((item) => item.interaction);
   const request = { items: interactions, lessonTitleEn, subjectName, gradeLevel, skills: promptSkills };
-  let verdicts: ItemVerdict[];
-  try {
-    verdicts = await verify(request);
-  } catch {
-    verdicts = await verify(request);
-  }
+  // One try: a slow verifier must not push the lesson step past the function time limit (the page retries the lesson).
+  const verdicts: ItemVerdict[] = await verify(request);
   const verified = applyVerdicts(interactions, verdicts);
   const verdictByIndex = new Map(verdicts.map((verdict) => [verdict.index, verdict]));
   const keptSet = new Set(verified.kept);

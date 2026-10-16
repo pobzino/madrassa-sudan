@@ -56,7 +56,10 @@ export async function POST(request: Request) {
     if (parsed.data.step === "plan") return milestoneJson(await planMilestonePool(scope));
     if (parsed.data.step === "lesson") {
       if (!parsed.data.lesson_id) return milestoneError("block_incomplete", 400, { message: "lesson_id is required" });
-      return milestoneJson(await generateMilestonePoolLesson({ ...scope, lessonId: parsed.data.lesson_id }));
+      const started = Date.now();
+      const result = await generateMilestonePoolLesson({ ...scope, lessonId: parsed.data.lesson_id });
+      console.log(JSON.stringify({ event: "milestone_lesson_step", lessonId: result.lessonId, ms: Date.now() - started, kept: result.kept.length, dropped: result.dropped.length }));
+      return milestoneJson(result);
     }
     const result =
       parsed.data.step === "finish"

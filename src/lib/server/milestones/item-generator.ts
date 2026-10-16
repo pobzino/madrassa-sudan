@@ -4,7 +4,7 @@ import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/ch
 import { slideToInteraction } from "@/lib/interactions/adapters";
 import { TRACE_LETTERS } from "@/lib/interactions/trace-letter";
 import { AI_MODEL, AI_MODEL_MILESTONE, getOpenAIClient } from "@/lib/ai/openai-client";
-import { isModelUnavailableError } from "@/lib/ai/model-errors";
+import { isModelUnavailableError, MILESTONE_CALL_OPTIONS, timedMilestoneCall } from "@/lib/ai/model-errors";
 import type { BattleInteractionType } from "@/lib/milestones/types";
 import type { Difficulty } from "@/lib/measurement/types";
 import type { Slide } from "@/lib/slides.types";
@@ -273,12 +273,11 @@ Before answering, silently check every answer, translation and distractor.`;
     },
   };
   // The newest model first; an older one if this key cannot use it.
-  const completion = await openai.chat.completions
-    .create({ model: AI_MODEL_MILESTONE, ...params })
+  const completion = await timedMilestoneCall("generate", AI_MODEL_MILESTONE, (model) => openai.chat.completions.create({ model, ...params }, MILESTONE_CALL_OPTIONS.generate))
     .catch((error: unknown) => {
       if (!isModelUnavailableError(error) || AI_MODEL_MILESTONE === AI_MODEL) throw error;
       console.warn(`OpenAI model ${AI_MODEL_MILESTONE} unavailable; using ${AI_MODEL}`);
-      return openai.chat.completions.create({ model: AI_MODEL, ...params });
+      return timedMilestoneCall("generate", AI_MODEL, (model) => openai.chat.completions.create({ model, ...params }, MILESTONE_CALL_OPTIONS.generate));
     });
   const text = completion.choices[0]?.message?.content;
   if (!text) throw new Error("Big Challenge generation returned no content.");
