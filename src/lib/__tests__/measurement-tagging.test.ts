@@ -18,8 +18,11 @@ import {
 } from "@/lib/server/milestones/item-generator";
 import { mergeTags, verdictSchema, verifyItemsWithModel, type ItemVerifier } from "@/lib/server/milestones/item-verifier";
 import {
+  finishMilestonePool,
   generateMilestonePool,
+  generateMilestonePoolLesson,
   placementDifficultyPlan,
+  planMilestonePool,
   PLACEMENT_TITLES,
   samplePlacementLessons,
 } from "@/lib/server/milestones/generate";
@@ -257,5 +260,55 @@ describe("placement generation", () => {
     const mixed = vi.fn(async (request: LessonItemRequest) => request.types.map((_, k) => choice(`${request.lessonTitleEn}-${k}`, { skill_key: "math.money", difficulty: 1 })));
     await generateMilestonePool({ admin: client as never, pathId: "path-1", afterWeekNumber: 4, poolSize: 24, actorId: "t", generate: mixed, verify: hardVerifier });
     expect(tables.homework_questions.every((q) => q.difficulty === 3 && q.tag_source === "model_disputed" && q.skill_key === "math.money")).toBe(true);
+  });
+
+  describe("as short steps (plan, lesson, finish)", () => {
+    const scope = (client: unknown) => ({ admin: client as never, pathId: "path-1", afterWeekNumber: 0, poolSize: 24, kind: "placement" as const });
+    beforeEach(() => vi.stubEnv("SUPABASE_SECRET_KEY", "test-secret"));
+
+    it("writes the same placement draft as the one-request form", async () => {
+      const one = seed();
+      await generateMilestonePool({ ...scope(one.client), actorId: "t", generate: byPlan, verify: passAll });
+      const steps = seed();
+      const plan = await planMilestonePool(scope(steps.client));
+      expect(plan.lessons).toHaveLength(12);
+      const results = await Promise.all(plan.lessons.map(({ lessonId }) =>
+        generateMilestonePoolLesson({ ...scope(steps.client), lessonId, generate: byPlan, verify: passAll })));
+      // the results survive the trip through the browser
+      const result = await finishMilestonePool({ ...scope(steps.client), actorId: "t", results: JSON.parse(JSON.stringify(results)) });
+      const strip = (rows: Row[]) => rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !["id", "assignment_id", "tagged_at"].includes(key))));
+      expect(strip(steps.tables.homework_questions)).toEqual(strip(one.tables.homework_questions));
+      expect(result.questionCount).toBe(one.tables.homework_questions.length);
+      expect(steps.tables.learning_path_milestones[0]).toMatchObject({ kind: "placement", status: "draft" });
+    });
+
+    it("drops a lesson whose result was changed or is unsigned, and a missing lesson counts as skipped", async () => {
+      const { tables, client } = seed();
+      const plan = await planMilestonePool(scope(client));
+      const results = await Promise.all(plan.lessons.map(({ lessonId }) =>
+        generateMilestonePoolLesson({ ...scope(client), lessonId, generate: byPlan, verify: passAll })));
+      const forged = JSON.parse(JSON.stringify(results));
+      forged[0].kept[0].interaction.prompt = { en: "Forged", ar: "مزور" };
+      delete forged[1].signature;
+      forged[2] = null;
+      const result = await finishMilestonePool({ ...scope(client), actorId: "t", results: forged });
+      const lessonsUsed = new Set(tables.homework_questions.map((q) => q.source_lesson_id));
+      for (const index of [0, 1, 2]) {
+        expect(lessonsUsed.has(plan.lessons[index].lessonId)).toBe(false);
+        expect(result.skippedLessons).toContain(plan.lessons[index].lessonId);
+      }
+      expect(tables.homework_questions.some((q) => q.interaction_prompt_en === "Forged")).toBe(false);
+    });
+
+    it("refuses a lesson outside the block, and a signature from another block", async () => {
+      const { client } = seed();
+      await expect(generateMilestonePoolLesson({ ...scope(client), lessonId: "not-a-lesson", generate: byPlan, verify: passAll }))
+        .rejects.toMatchObject({ code: "block_incomplete" });
+      const plan = await planMilestonePool(scope(client));
+      const signed = await generateMilestonePoolLesson({ ...scope(client), lessonId: plan.lessons[0].lessonId, generate: byPlan, verify: passAll });
+      const other = seed();
+      await expect(finishMilestonePool({ ...scope(other.client), pathId: "path-1", afterWeekNumber: 4, kind: "milestone", actorId: "t", results: [signed] }))
+        .rejects.toMatchObject({ code: "generation_failed" });
+    });
   });
 });

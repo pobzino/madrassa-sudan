@@ -78,21 +78,51 @@ export default function LearningPathEditorPage() {
     const existing = milestoneAt(afterWeekNumber);
     if (existing && !window.confirm("Replace this draft's questions with a newly generated set?")) return;
     setGeneratingBlock(afterWeekNumber);
-    try {
+    const what = placement ? "starting boss" : "Big Challenge";
+    const progress = toast.loading(`Planning the ${what}...`);
+    const scope = placement
+      ? { path_id: milestones.pathId, kind: "placement" }
+      : { path_id: milestones.pathId, after_week_number: afterWeekNumber };
+    // Short steps, each well under the server's time limit: plan, then each
+    // lesson's questions (four at once), then finish (writes the draft).
+    const step = async (body: Record<string, unknown>) => {
       const res = await fetch("/api/teacher/milestones/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          placement
-            ? { path_id: milestones.pathId, kind: "placement" }
-            : { path_id: milestones.pathId, after_week_number: afterWeekNumber }
-        ),
+        body: JSON.stringify({ ...scope, ...body }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) toast.error(MILESTONE_ERRORS[data.error] ?? `Generation failed: ${data.message ?? data.error ?? "unknown error"}`);
-      else toast.success(placement ? "Starting boss draft ready: review the tags before publishing" : "Big Challenge draft ready: review it before publishing");
-    } catch {
-      toast.error("Generation failed");
+      if (!res.ok) throw new Error(MILESTONE_ERRORS[data.error] ?? `Generation failed: ${data.message ?? data.error ?? `error ${res.status}`}`);
+      return data;
+    };
+    try {
+      const plan = (await step({ step: "plan" })) as { lessons: Array<{ lessonId: string }> };
+      const results: unknown[] = new Array(plan.lessons.length).fill(null);
+      let done = 0;
+      let next = 0;
+      const worker = async () => {
+        while (next < plan.lessons.length) {
+          const index = next;
+          next += 1;
+          // One retry; a lesson that still fails is skipped, like the server does.
+          for (let attempt = 0; attempt < 2 && results[index] === null; attempt += 1) {
+            try {
+              results[index] = await step({ step: "lesson", lesson_id: plan.lessons[index].lessonId });
+            } catch {
+              /* retried once, then skipped */
+            }
+          }
+          done += 1;
+          toast.loading(`Writing questions: ${done} of ${plan.lessons.length} lessons`, { id: progress });
+        }
+      };
+      toast.loading(`Writing questions: 0 of ${plan.lessons.length} lessons`, { id: progress });
+      await Promise.all(Array.from({ length: Math.min(4, plan.lessons.length) }, worker));
+      toast.loading("Saving the draft...", { id: progress });
+      await step({ step: "finish", results });
+      toast.success(placement ? "Starting boss draft ready: review the tags before publishing" : "Big Challenge draft ready: review it before publishing", { id: progress });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Generation failed", { id: progress });
     } finally {
       setGeneratingBlock(null);
       await loadMilestones(selectedSubject);

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { extractSlideContent } from "@/lib/ai/homework-slides";
 import { bossForSubject, isMilestoneWeek, milestoneBlockWeeks } from "@/lib/milestones/rules";
 import {
@@ -189,21 +190,42 @@ function trimPlacementPool(pool: PoolItem[], size: number): PoolItem[] {
   return result;
 }
 
-/**
- * Generate (or regenerate, while draft) a milestone's question pool from the
- * lessons of weeks k-3..k, or a placement's from weeks 1..min(12, last week).
- * Every item is tagged with a skill and a difficulty. Writes through the service client.
- */
-export async function generateMilestonePool({
-  admin,
-  pathId,
-  afterWeekNumber: requestedWeek,
-  poolSize: requestedPoolSize,
-  actorId,
-  kind = "milestone",
-  generate = generateLessonItems,
-  verify = verifyItemsWithModel,
-}: GenerateMilestonePoolArgs): Promise<GenerateMilestonePoolResult> {
+type PlanArgs = Pick<GenerateMilestonePoolArgs, "admin" | "pathId" | "afterWeekNumber" | "poolSize" | "kind">;
+
+type LessonSource = { lessonId: string; content: string };
+
+/** Everything the steps need, recomputed from the database on every request (nothing is trusted from the client). */
+interface PoolPlan {
+  admin: MilestoneAdminClient;
+  pathId: string;
+  kind: MilestoneKind;
+  placement: boolean;
+  afterWeekNumber: number;
+  poolSize: number;
+  path: { id: string; subject_id: string };
+  subject: { name_ar: string | null; name_en: string | null } | null;
+  lessonById: Map<string, { id: string; title_ar: string; title_en: string | null; grade_level: number | null; curriculum_topic: unknown }>;
+  sources: LessonSource[];
+  skippedLessons: string[];
+  perLesson: number;
+  requested: number;
+  subjectName: string;
+  gradeLevel: number;
+  skillKeys: string[];
+  promptSkills: Array<{ key: string; label: string }>;
+  defaultSkillOf: (lessonId: string) => string;
+  findExisting: () => Promise<{ id: string; assignment_id: string; status: string } | null>;
+}
+
+/** One lesson's generated, checked and verified items (the "lesson" step's result). */
+export interface LessonPoolResult {
+  lessonId: string;
+  kept: Array<Omit<PoolItem, "sourceLessonId">>;
+  dropped: DroppedItem[];
+}
+
+/** 1. The source weeks, their steps in path order, lessons, decks. */
+async function loadPoolPlan({ admin, pathId, afterWeekNumber: requestedWeek, poolSize: requestedPoolSize, kind = "milestone" }: PlanArgs): Promise<PoolPlan> {
   const placement = kind === "placement";
   const afterWeekNumber = placement ? 0 : requestedWeek;
   const poolSize = placement ? PLACEMENT_DEFAULT_POOL_SIZE : requestedPoolSize;
@@ -227,7 +249,6 @@ export async function generateMilestonePool({
   };
   if ((await findExisting())?.status === "published") throw new MilestoneRouteError("unpublish_first", 409);
 
-  // 1. The source weeks, their steps in path order, lessons, decks.
   const { data: weeks } = placement
     ? await admin
         .from("learning_path_weeks")
@@ -299,7 +320,7 @@ export async function generateMilestonePool({
   }
 
   const skippedLessons: string[] = [];
-  const sources: Array<{ lessonId: string; content: string }> = [];
+  const sources: LessonSource[] = [];
   for (const lessonId of lessonIds) {
     const deck = latestDeck.get(lessonId);
     const content = deck ? extractSlideContent(deck) : "";
@@ -310,70 +331,93 @@ export async function generateMilestonePool({
     throw new MilestoneRouteError("generation_failed", 502, placement ? "No lesson in these weeks has a recorded deck yet." : "No lesson in this block has a recorded deck yet.");
   }
 
-  // 2. Per-lesson generation (a mix of interaction types), at most four at once.
   const perLesson = placement ? PLACEMENT_PER_LESSON : Math.min(MAX_PER_LESSON, Math.max(MIN_PER_LESSON, Math.ceil(poolSize / sources.length)));
-  const subjectName = subject?.name_en || subject?.name_ar || "General";
-  const gradeLevel = lessonIds.map((id) => lessonById.get(id)?.grade_level).find((grade) => grade != null) ?? 1;
-  // A few extra items per lesson, so the pool still fills after checks drop some.
-  const requested = perLesson + EXTRA_ITEMS_PER_LESSON;
-  const promptSkills = tagSkills.map((skill) => ({ key: skill.skillKey, label: skill.labelEn }));
+  return {
+    admin,
+    pathId,
+    kind,
+    placement,
+    afterWeekNumber,
+    poolSize,
+    path,
+    subject: subject ?? null,
+    lessonById,
+    sources,
+    skippedLessons,
+    perLesson,
+    // A few extra items per lesson, so the pool still fills after checks drop some.
+    requested: perLesson + EXTRA_ITEMS_PER_LESSON,
+    subjectName: subject?.name_en || subject?.name_ar || "General",
+    gradeLevel: lessonIds.map((id) => lessonById.get(id)?.grade_level).find((grade) => grade != null) ?? 1,
+    skillKeys,
+    promptSkills: tagSkills.map((skill) => ({ key: skill.skillKey, label: skill.labelEn })),
+    defaultSkillOf,
+    findExisting,
+  };
+}
+
+/** 2-3b. One lesson: generate (a mix of interaction types), deterministic checks, then the blind verifier. */
+async function runLesson(plan: PoolPlan, lessonIndex: number, generate: LessonItemGenerator, verify: ItemVerifier): Promise<LessonPoolResult> {
+  const source = plan.sources[lessonIndex];
+  const lesson = plan.lessonById.get(source.lessonId);
+  const lessonTitleEn = lesson?.title_en || lesson?.title_ar || "Lesson";
+  const lessonTitleAr = lesson?.title_ar || lesson?.title_en || "درس";
+  const defaultSkillKey = plan.defaultSkillOf(source.lessonId);
+  const { subjectName, gradeLevel, promptSkills, skillKeys, requested } = plan;
+  // A lesson that teaches letters also gets a letter to trace.
+  const letters = lessonLetters({ subjectName, lessonTitleAr, lessonTitleEn, content: source.content });
+  const raw = await generate({
+    content: source.content,
+    lessonTitleAr,
+    lessonTitleEn,
+    subjectName,
+    gradeLevel,
+    types: itemTypesForLesson(lessonIndex, requested, Boolean(letters)),
+    letters,
+    skills: promptSkills,
+    defaultSkillKey,
+    ...(plan.placement ? { difficultyPlan: placementDifficultyPlan(lessonIndex, requested) } : {}),
+  });
+
+  // 3a. Deterministic checks: structure, keys that must add up, one order, quality rules. Tags never drop an item.
+  const checked: Array<{ interaction: BattleInteraction; skillKey: string | null; difficulty: Difficulty | null }> = [];
+  const dropped: DroppedItem[] = [];
+  for (const item of raw) {
+    const result = checkGeneratedItem(item, { letters, skillKeys: skillKeys.length ? skillKeys : undefined, defaultSkillKey });
+    if ("interaction" in result) checked.push({ interaction: result.interaction, skillKey: result.skillKey ?? defaultSkillKey, difficulty: result.difficulty ?? null });
+    else dropped.push({ prompt: result.prompt, reasons: [`check: ${result.reason}`] });
+  }
+
+  // 3b. The verifier answers each surviving item blind and flags the doubtful ones (and estimates difficulty).
+  const interactions = checked.map((item) => item.interaction);
+  const request = { items: interactions, lessonTitleEn, subjectName, gradeLevel, skills: promptSkills };
+  let verdicts: ItemVerdict[];
+  try {
+    verdicts = await verify(request);
+  } catch {
+    verdicts = await verify(request);
+  }
+  const verified = applyVerdicts(interactions, verdicts);
+  const verdictByIndex = new Map(verdicts.map((verdict) => [verdict.index, verdict]));
+  const keptSet = new Set(verified.kept);
+  const kept = checked
+    .map((item, index) => ({ item, verdict: verdictByIndex.get(index) }))
+    .filter(({ item }) => keptSet.has(item.interaction))
+    .map(({ item, verdict }) => ({ interaction: item.interaction, ...mergeTags(item, verdict) }));
+  return { lessonId: source.lessonId, kept, dropped: [...dropped, ...verified.dropped] };
+}
+
+/** 3c-5. Assemble the pool from the lessons' results and write it (a draft). */
+async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoolResult>[], actorId: string): Promise<GenerateMilestonePoolResult> {
+  const { admin, placement, perLesson, poolSize, path, subject, pathId, kind, afterWeekNumber } = plan;
+  const skippedLessons = [...plan.skippedLessons];
   const droppedItems: DroppedItem[] = [];
-  const settled = await settleWithLimit(
-    sources.map((source, lessonIndex) => async () => {
-      const lesson = lessonById.get(source.lessonId);
-      const lessonTitleEn = lesson?.title_en || lesson?.title_ar || "Lesson";
-      const lessonTitleAr = lesson?.title_ar || lesson?.title_en || "درس";
-      const defaultSkillKey = defaultSkillOf(source.lessonId);
-      // A lesson that teaches letters also gets a letter to trace.
-      const letters = lessonLetters({ subjectName, lessonTitleAr, lessonTitleEn, content: source.content });
-      const raw = await generate({
-        content: source.content,
-        lessonTitleAr,
-        lessonTitleEn,
-        subjectName,
-        gradeLevel,
-        types: itemTypesForLesson(lessonIndex, requested, Boolean(letters)),
-        letters,
-        skills: promptSkills,
-        defaultSkillKey,
-        ...(placement ? { difficultyPlan: placementDifficultyPlan(lessonIndex, requested) } : {}),
-      });
-
-      // 3a. Deterministic checks: structure, keys that must add up, one order, quality rules. Tags never drop an item.
-      const checked: Array<{ interaction: BattleInteraction; skillKey: string | null; difficulty: Difficulty | null }> = [];
-      const dropped: DroppedItem[] = [];
-      for (const item of raw) {
-        const result = checkGeneratedItem(item, { letters, skillKeys: skillKeys.length ? skillKeys : undefined, defaultSkillKey });
-        if ("interaction" in result) checked.push({ interaction: result.interaction, skillKey: result.skillKey ?? defaultSkillKey, difficulty: result.difficulty ?? null });
-        else dropped.push({ prompt: result.prompt, reasons: [`check: ${result.reason}`] });
-      }
-
-      // 3b. The verifier answers each surviving item blind and flags the doubtful ones (and estimates difficulty).
-      const interactions = checked.map((item) => item.interaction);
-      const request = { items: interactions, lessonTitleEn, subjectName, gradeLevel, skills: promptSkills };
-      let verdicts: ItemVerdict[];
-      try {
-        verdicts = await verify(request);
-      } catch {
-        verdicts = await verify(request);
-      }
-      const verified = applyVerdicts(interactions, verdicts);
-      const verdictByIndex = new Map(verdicts.map((verdict) => [verdict.index, verdict]));
-      const keptSet = new Set(verified.kept);
-      const kept = checked
-        .map((item, index) => ({ item, verdict: verdictByIndex.get(index) }))
-        .filter(({ item }) => keptSet.has(item.interaction))
-        .map(({ item, verdict }) => ({ interaction: item.interaction, ...mergeTags(item, verdict) }));
-      return { kept, dropped: [...dropped, ...verified.dropped] };
-    }),
-    MAX_PARALLEL_LESSONS,
-  );
 
   // 3c. Keep at most perLesson good items per lesson (a placement prefers one of each difficulty), no repeated prompts.
   let pool: PoolItem[] = [];
   const seenPrompts = new Set<string>();
   settled.forEach((result, index) => {
-    const lessonId = sources[index].lessonId;
+    const lessonId = plan.sources[index].lessonId;
     if (result.status === "rejected") {
       console.error("Milestone lesson generation failed:", lessonId, result.reason);
       skippedLessons.push(lessonId);
@@ -426,7 +470,7 @@ export async function generateMilestonePool({
 
   // 5. Write. A published milestone must be unpublished before regenerating.
   const now = new Date().toISOString();
-  const existing = await findExisting();
+  const existing = await plan.findExisting();
   if (existing?.status === "published") throw new MilestoneRouteError("unpublish_first", 409);
 
   if (existing) {
@@ -503,4 +547,95 @@ export async function generateMilestonePool({
     await admin.from("homework_assignments").delete().eq("id", assignment.id);
     throw error;
   }
+}
+
+/**
+ * Generate (or regenerate, while draft) a milestone's question pool from the
+ * lessons of weeks k-3..k, or a placement's from weeks 1..min(12, last week).
+ * Every item is tagged with a skill and a difficulty. Writes through the service client.
+ * In one call (tests, local dev); the deployed app runs the same work as steps
+ * (planMilestonePool, generateMilestonePoolLesson, finishMilestonePool) to stay under the function time limit.
+ */
+export async function generateMilestonePool({
+  generate = generateLessonItems,
+  verify = verifyItemsWithModel,
+  actorId,
+  ...args
+}: GenerateMilestonePoolArgs): Promise<GenerateMilestonePoolResult> {
+  const plan = await loadPoolPlan(args);
+  const settled = await settleWithLimit(
+    plan.sources.map((_, lessonIndex) => () => runLesson(plan, lessonIndex, generate, verify)),
+    MAX_PARALLEL_LESSONS,
+  );
+  return writePool(plan, settled, actorId);
+}
+
+// -----------------------------------------------------------------------------
+// The same work as short steps. Each step is one request well under the
+// function time limit (about 30 s on Netlify); the teacher page runs them.
+// A lesson step's result is signed, so the finish step only accepts items this
+// server generated, checked and verified, for this path, block and lesson.
+// -----------------------------------------------------------------------------
+
+export const MILESTONE_GENERATE_PARALLEL_LESSONS = MAX_PARALLEL_LESSONS;
+
+function signingKey(): string {
+  const secret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if (!secret) throw new MilestoneRouteError("service_unavailable", 503, "Generation is not configured on this server.");
+  return createHmac("sha256", secret).update("milestone-generate-lesson-v1").digest("hex");
+}
+
+function lessonSignature(scope: { pathId: string; kind: MilestoneKind; afterWeekNumber: number }, result: LessonPoolResult): string {
+  return createHmac("sha256", signingKey())
+    .update(JSON.stringify([scope.pathId, scope.kind, scope.afterWeekNumber, result.lessonId, result.kept, result.dropped]))
+    .digest("hex");
+}
+
+function signatureMatches(expected: string, given: string): boolean {
+  const a = Buffer.from(expected, "hex");
+  const b = Buffer.from(typeof given === "string" ? given : "", "hex");
+  return a.length === b.length && a.length > 0 && timingSafeEqual(a, b);
+}
+
+/** Step 1: the lessons that will be generated, in order. */
+export async function planMilestonePool(args: PlanArgs): Promise<{ lessons: Array<{ lessonId: string; titleEn: string; titleAr: string }>; skippedLessons: string[] }> {
+  const plan = await loadPoolPlan(args);
+  return {
+    lessons: plan.sources.map(({ lessonId }) => {
+      const lesson = plan.lessonById.get(lessonId);
+      return { lessonId, titleEn: lesson?.title_en || lesson?.title_ar || "Lesson", titleAr: lesson?.title_ar || lesson?.title_en || "درس" };
+    }),
+    skippedLessons: plan.skippedLessons,
+  };
+}
+
+export type SignedLessonPoolResult = LessonPoolResult & { signature: string };
+
+/** Step 2: one lesson's items (generated, checked, verified), signed. */
+export async function generateMilestonePoolLesson(
+  args: PlanArgs & { lessonId: string; generate?: LessonItemGenerator; verify?: ItemVerifier },
+): Promise<SignedLessonPoolResult> {
+  const plan = await loadPoolPlan(args);
+  const lessonIndex = plan.sources.findIndex((source) => source.lessonId === args.lessonId);
+  if (lessonIndex < 0) throw new MilestoneRouteError("block_incomplete", 400, "That lesson is not part of this Big Challenge.");
+  const result = await runLesson(plan, lessonIndex, args.generate ?? generateLessonItems, args.verify ?? verifyItemsWithModel);
+  return { ...result, signature: lessonSignature(plan, result) };
+}
+
+/** Step 3: assemble and write the pool from the signed lesson results. A missing or unsigned lesson counts as failed. */
+export async function finishMilestonePool(
+  args: PlanArgs & { actorId: string; results: ReadonlyArray<Partial<SignedLessonPoolResult> | null | undefined> },
+): Promise<GenerateMilestonePoolResult> {
+  const plan = await loadPoolPlan(args);
+  const byLesson = new Map<string, LessonPoolResult>();
+  for (const given of args.results) {
+    if (!given || typeof given.lessonId !== "string" || !Array.isArray(given.kept) || !Array.isArray(given.dropped)) continue;
+    const result: LessonPoolResult = { lessonId: given.lessonId, kept: given.kept, dropped: given.dropped };
+    if (signatureMatches(lessonSignature(plan, result), given.signature ?? "")) byLesson.set(result.lessonId, result);
+  }
+  const settled: PromiseSettledResult<LessonPoolResult>[] = plan.sources.map(({ lessonId }) => {
+    const result = byLesson.get(lessonId);
+    return result ? { status: "fulfilled", value: result } : { status: "rejected", reason: new Error("no signed result for this lesson") };
+  });
+  return writePool(plan, settled, args.actorId);
 }
