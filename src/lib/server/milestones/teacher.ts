@@ -33,12 +33,23 @@ import {
  * read and write through the service client (milestone questions have no
  * learner- or teacher-readable policy).
  */
-export async function openStaffRequest(): Promise<
+export async function openStaffRequest(options: { fastAuth?: boolean } = {}): Promise<
   { ok: true; userId: string; role: TeacherRole; admin: MilestoneAdminClient } | { ok: false; response: Response }
 > {
   const supabase = await createClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return { ok: false, response: milestoneError("unauthorized", 401) };
+  // fastAuth: verify the session token locally (ES256, getClaims) instead of a round trip to the auth
+  // server; the role and approval below are still read from the database on every request.
+  let userId: string | null = null;
+  if (options.fastAuth) {
+    const { data, error } = await supabase.auth.getClaims();
+    const sub = data?.claims?.sub;
+    userId = !error && typeof sub === "string" && sub ? sub : null;
+  } else {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    userId = !error && user ? user.id : null;
+  }
+  if (!userId) return { ok: false, response: milestoneError("unauthorized", 401) };
+  const user = { id: userId };
   const role = await getTeacherRole(supabase, user.id);
   if (!role) return { ok: false, response: milestoneError("unauthorized", 403, { message: "Forbidden" }) };
   if (!hasServiceRoleConfig()) return { ok: false, response: milestoneError("service_unavailable", 503) };

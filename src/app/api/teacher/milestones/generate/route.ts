@@ -37,7 +37,7 @@ const BodySchema = z
   .refine((body) => body.kind === "placement" || (body.after_week_number ?? 0) > 0);
 
 export async function POST(request: Request) {
-  const staff = await openStaffRequest();
+  const staff = await openStaffRequest({ fastAuth: true });
   if (!staff.ok) return staff.response;
   const parsed = BodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return milestoneError("block_incomplete", 400, { message: "Invalid request" });

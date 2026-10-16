@@ -38,7 +38,12 @@ vi.mock("next/server", async (importOriginal) => ({
   },
 }));
 vi.mock("@/lib/supabase/server", () => ({
-  createClient: async () => ({ auth: { getUser: async () => ({ data: { user: mocks.user }, error: null }) } }),
+  createClient: async () => ({
+    auth: {
+      getUser: async () => ({ data: { user: mocks.user }, error: null }),
+      getClaims: async () => ({ data: mocks.user ? { claims: { sub: mocks.user.id } } : null, error: null }),
+    },
+  }),
 }));
 vi.mock("@/lib/supabase/service", () => ({ hasServiceRoleConfig: () => true, createServiceClient: () => mocks.admin }));
 vi.mock("@/lib/server/learner-context", () => ({

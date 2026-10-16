@@ -9,7 +9,7 @@ import { openStaffRequest, teacherMilestoneRow } from "@/lib/server/milestones/t
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const staff = await openStaffRequest();
+  const staff = await openStaffRequest({ fastAuth: true });
   if (!staff.ok) return staff.response;
   const { admin } = staff;
   const subjectId = new URL(request.url).searchParams.get("subject_id");
@@ -41,15 +41,18 @@ export async function GET(request: Request) {
           .returns<Array<{ week_id: string; lesson_id: string }>>()
       : { data: [] as Array<{ week_id: string; lesson_id: string }> };
     const lessonIds = [...new Set((steps ?? []).map((step) => step.lesson_id))];
+    // Only whether each recorded deck has a first slide (its type), not the decks themselves (hundreds of KB per path).
     const { data: sims } = lessonIds.length
       ? await admin
           .from("lesson_sims")
-          .select("lesson_id, deck_snapshot")
+          .select("lesson_id, first_slide_type:deck_snapshot->0->>type")
           .in("lesson_id", lessonIds)
-          .returns<Array<{ lesson_id: string; deck_snapshot: unknown }>>()
-      : { data: [] as Array<{ lesson_id: string; deck_snapshot: unknown }> };
+          .returns<Array<{ lesson_id: string; first_slide_type?: string | null; deck_snapshot?: unknown }>>()
+      : { data: [] as Array<{ lesson_id: string; first_slide_type?: string | null; deck_snapshot?: unknown }> };
     const withContent = new Set(
-      (sims ?? []).filter((sim) => Array.isArray(sim.deck_snapshot) && sim.deck_snapshot.length > 0).map((sim) => sim.lesson_id),
+      (sims ?? [])
+        .filter((sim) => sim.first_slide_type != null || (Array.isArray(sim.deck_snapshot) && sim.deck_snapshot.length > 0))
+        .map((sim) => sim.lesson_id),
     );
 
     const weekByNumber = new Map(weekList.map((week) => [week.week_number, week]));
@@ -59,25 +62,26 @@ export async function GET(request: Request) {
     const placementRow = (milestones ?? []).find((row) => row.kind === "placement") ?? null;
     const milestoneByWeek = new Map(blockMilestones.map((row) => [row.after_week_number, row]));
 
-    const blocks: TeacherMilestoneBlock[] = [];
-    for (let k = MILESTONE_WEEKS_PER_BLOCK; k <= maxWeek; k += MILESTONE_WEEKS_PER_BLOCK) {
-      const blockWeeks = milestoneBlockWeeks(k).filter((number) => weekByNumber.has(number));
-      const blockWeekIds = new Set(blockWeeks.map((number) => weekByNumber.get(number)!.id));
-      const blockLessons = [...new Set((steps ?? []).filter((step) => blockWeekIds.has(step.week_id)).map((step) => step.lesson_id))];
-      const milestone = milestoneByWeek.get(k);
-      blocks.push({
-        afterWeekNumber: k,
-        weekNumbers: blockWeeks,
-        lessonCount: blockLessons.length,
-        lessonsWithContent: blockLessons.filter((id) => withContent.has(id)).length,
-        milestone: milestone ? await teacherMilestoneRow(admin, milestone) : null,
-      });
-    }
-    return milestoneJson({
-      pathId: path.id,
-      blocks,
-      placement: placementRow ? await teacherMilestoneRow(admin, placementRow) : null,
-    } satisfies TeacherMilestoneListResponse);
+    const blockWeeksAt: number[] = [];
+    for (let k = MILESTONE_WEEKS_PER_BLOCK; k <= maxWeek; k += MILESTONE_WEEKS_PER_BLOCK) blockWeeksAt.push(k);
+    // Every boss's details at once (each is its own small query).
+    const [blocks, placement] = await Promise.all([
+      Promise.all(blockWeeksAt.map(async (k): Promise<TeacherMilestoneBlock> => {
+        const blockWeeks = milestoneBlockWeeks(k).filter((number) => weekByNumber.has(number));
+        const blockWeekIds = new Set(blockWeeks.map((number) => weekByNumber.get(number)!.id));
+        const blockLessons = [...new Set((steps ?? []).filter((step) => blockWeekIds.has(step.week_id)).map((step) => step.lesson_id))];
+        const milestone = milestoneByWeek.get(k);
+        return {
+          afterWeekNumber: k,
+          weekNumbers: blockWeeks,
+          lessonCount: blockLessons.length,
+          lessonsWithContent: blockLessons.filter((id) => withContent.has(id)).length,
+          milestone: milestone ? await teacherMilestoneRow(admin, milestone) : null,
+        };
+      })),
+      placementRow ? teacherMilestoneRow(admin, placementRow) : Promise.resolve(null),
+    ]);
+    return milestoneJson({ pathId: path.id, blocks, placement } satisfies TeacherMilestoneListResponse);
   } catch (error) {
     console.error("Teacher milestone list failed:", error);
     return milestoneError("service_unavailable", 500);
