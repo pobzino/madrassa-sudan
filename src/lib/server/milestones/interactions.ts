@@ -69,16 +69,20 @@ function isIndex(value: unknown, length: number): value is number {
 }
 
 /**
- * A counting item a child can answer with no picture: it gives the numbers to
- * work with ("7 stars, take away 3"), or asks a question answered from what
- * they know ("How many days are in a week?"). Never "count the apples", which
- * needs something on screen to count.
+ * True when working the number out is the question itself ("7 stars, take
+ * away 3", "How many days are in a week?"), so the count stays hidden. A bare
+ * "Count the apples." asks nothing: the battle tells the child how many to tap.
  */
-export function countableFromWords(prompt: { ar: string; en: string }): boolean {
+export function countIsTheQuestion(prompt: { ar: string; en: string }): boolean {
   const text = `${prompt.en} ${prompt.ar}`;
-  const asksToCountSomething = /\bcount\b|عُ?دّ|\bعد\b/i.test(text);
-  if (asksToCountSomething) return /[0-9٠-٩]/.test(text);
-  return /[0-9٠-٩]/.test(text) || /[?؟]/.test(text);
+  if (/[0-9٠-٩]/.test(text)) return true;
+  return /[?؟]/.test(text) && !/\bcount\b|عُ?دّ|\bعد\b/i.test(text);
+}
+
+/** The prompt already says the count to tap ("Count 5 apples!"). */
+export function statesCount(prompt: { ar: string; en: string }, target: number): boolean {
+  const latin = `${prompt.en} ${prompt.ar}`.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+  return new RegExp(`(^|\\D)${target}(\\D|$)`).test(latin) && !/[+\-−×÷=]|take away|plus|minus|left|بقي|الباقي|شلنا|ناقص|زائد/i.test(latin);
 }
 
 export function isBattleInteractionType(value: unknown): value is BattleInteractionType {
@@ -123,11 +127,6 @@ export function validateBattleInteraction(value: unknown): { interaction: Battle
     case "tap_to_count": {
       const target = raw.target;
       if (typeof target !== "number" || !Number.isInteger(target) || target < 1 || target > 12) return { error: "Tap-to-count needs a number from 1 to 12." };
-      // A battle has no picture to count: the words must hold the numbers to
-      // work with ("7 stars, take away 3"). "Count the apples." can't be answered.
-      if (!countableFromWords(prompt)) {
-        return { error: "A counting item must say the numbers to work with, e.g. \"7 stars, take away 3. Catch that many!\"" };
-      }
       return { interaction: { type: "tap_to_count", prompt, target, emoji: cleanText(raw.emoji) || "⭐" } };
     }
     case "match_pairs": {
@@ -325,7 +324,7 @@ export function toPublicInteraction(interaction: BattleInteraction, perms: Inter
         options: interaction.free_entry || !interaction.options ? null : permuteList(interaction.options, perms.options),
       };
     case "tap_to_count":
-      return { type: "tap_to_count", prompt, emoji: interaction.emoji };
+      return { type: "tap_to_count", prompt, emoji: interaction.emoji, catch_count: statesCount(prompt, interaction.target) || !countIsTheQuestion(prompt) ? interaction.target : null };
     case "match_pairs":
       return { type: "match_pairs", prompt, items: permuteList(interaction.items, perms.items), targets: permuteList(interaction.targets, perms.targets) };
     case "sequence_order":

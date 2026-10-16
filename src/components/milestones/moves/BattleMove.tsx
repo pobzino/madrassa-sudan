@@ -337,8 +337,9 @@ function DodgeLanes({ lang, disabled, onSubmit }: BattleMoveProps) {
 
 function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, catchTarget, throwFrom, hintButton, catchRise = 0, catchAvoid, catchKey = "" }: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "tap_to_count" }> }) {
   const t = MILESTONE_COPY[lang];
-  // More than any count asked for: the prompt says how many to catch.
+  // More than any count asked for: the prompt says how many to tap.
   const total = CATCH_ITEMS;
+  const goal = interaction.catch_count;
   const [caught, setCaught] = useState<number[]>([]);
   const fieldRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<CatchLayout | null>(null);
@@ -435,6 +436,7 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
         <div className="flex h-12 shrink-0 items-center gap-1.5 rounded-full bg-[#FFF8EC] px-3.5 text-[#1a1a1a] shadow-[0_4px_0_rgba(0,0,0,0.25)]" aria-live="polite">
           <span className="text-[18px] font-bold leading-none">{t.caught}</span>
           <span className="text-[24px] font-bold leading-none">{formatNumber(caught.length, lang)}</span>
+          {goal !== null && <span className="text-[16px] font-bold leading-none text-[#6B7280]">/ {formatNumber(goal, lang)}</span>}
         </div>
         <ConfirmButton kind={turn === "attack" ? "fire" : "block"} lang={lang} disabled={disabled || caught.length === 0} onClick={(origin) => onSubmit({ type: "tap_to_count", count: caught.length }, origin)} />
       </div>

@@ -42,7 +42,7 @@ const PUBLIC_KEYS: Record<BattleInteraction["type"], string[]> = {
   choose_correct: ["options", "prompt", "type"],
   true_false: ["prompt", "type"],
   fill_missing_word: ["free_entry", "options", "prompt", "type"],
-  tap_to_count: ["emoji", "prompt", "type"],
+  tap_to_count: ["catch_count", "emoji", "prompt", "type"],
   match_pairs: ["items", "prompt", "targets", "type"],
   sequence_order: ["items", "prompt", "type"],
   sort_groups: ["items", "prompt", "targets", "type"],
@@ -173,13 +173,39 @@ describe("legacy rows and learner payloads", () => {
   });
 });
 
-describe("counting items must be answerable from the words", () => {
-  it("rejects prompts that need a picture to count", async () => {
-    const { countableFromWords, validateBattleInteraction } = await import("@/lib/server/milestones/interactions");
-    expect(countableFromWords({ en: "Count the apples.", ar: "عدّ التفاحات." })).toBe(false);
-    expect(countableFromWords({ en: "Tap and count the apples. How many are there?", ar: "اضغط وعدّ التفاحات. كم عددها؟" })).toBe(false);
-    expect(countableFromWords({ en: "Tap the number of stars left: 7 stars, take away 3.", ar: "اضغط على عدد النجوم الباقية: ٧ نجمات، شلنا ٣." })).toBe(true);
-    expect(countableFromWords({ en: "How many days are in a week? Tap that many stars.", ar: "كم يوماً في الأسبوع؟ اضغط نجمة لكل يوم." })).toBe(true);
-    expect("error" in validateBattleInteraction({ type: "tap_to_count", prompt: { en: "Count the apples.", ar: "عدّ التفاحات." }, target: 9, emoji: "🍎" })).toBe(true);
+
+describe("catch moves say what to tap", () => {
+  it("tells the child how many when the prompt doesn't ask", async () => {
+    const { countInstruction } = await import("@/lib/server/milestones/present");
+    const { toPublicInteraction, interactionPerms } = await import("@/lib/server/milestones/interactions");
+    const bare = { type: "tap_to_count" as const, prompt: { en: "Count the apples.", ar: "عدّ التفاحات." }, target: 5, emoji: "🍎" };
+    const shown = toPublicInteraction(bare, interactionPerms(BATTLE_A, "q", bare));
+    expect(shown).toMatchObject({ catch_count: 5 });
+    expect(countInstruction("Count the apples.", shown as { emoji: string; catch_count: number | null }, "en")).toBe("Count 5 🍎!");
+    expect(countInstruction("عدّ التفاحات.", shown as { emoji: string; catch_count: number | null }, "ar")).toBe("عُدّ 5 🍎!");
+  });
+
+  it("keeps the count hidden when working it out is the question", async () => {
+    const { countInstruction } = await import("@/lib/server/milestones/present");
+    const { toPublicInteraction, interactionPerms } = await import("@/lib/server/milestones/interactions");
+    const sum = { type: "tap_to_count" as const, prompt: { en: "7 stars, take away 3.", ar: "٧ نجمات، شلنا ٣." }, target: 4, emoji: "⭐" };
+    const shown = toPublicInteraction(sum, interactionPerms(BATTLE_A, "q", sum)) as { emoji: string; catch_count: number | null };
+    expect(shown.catch_count).toBeNull();
+    expect(countInstruction("7 stars, take away 3.", shown, "en")).toBe("7 stars, take away 3. Tap that many ⭐!");
+    const week = INTERACTIONS.tap_to_count;
+    const shownWeek = toPublicInteraction(week, interactionPerms(BATTLE_A, "q", week)) as { emoji: string; catch_count: number | null };
+    expect(shownWeek.catch_count).toBeNull();
+  });
+});
+
+describe("a prompt that already says the count", () => {
+  it("keeps its words and shows the count to tap", async () => {
+    const { countInstruction } = await import("@/lib/server/milestones/present");
+    const { toPublicInteraction, interactionPerms } = await import("@/lib/server/milestones/interactions");
+    const direct = { type: "tap_to_count" as const, prompt: { en: "Count 5 apples!", ar: "عُدّ ٥ تفاحات!" }, target: 5, emoji: "🍎" };
+    const shown = toPublicInteraction(direct, interactionPerms(BATTLE_A, "q", direct)) as { emoji: string; catch_count: number | null };
+    expect(shown.catch_count).toBe(5);
+    expect(countInstruction("Count 5 apples!", shown, "en")).toBe("Count 5 apples!");
+    expect(countInstruction("عُدّ ٥ تفاحات!", shown, "ar")).toBe("عُدّ ٥ تفاحات!");
   });
 });
