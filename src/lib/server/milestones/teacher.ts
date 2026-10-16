@@ -45,6 +45,27 @@ export async function openStaffRequest(): Promise<
   return { ok: true, userId: user.id, role, admin: createServiceClient() as unknown as MilestoneAdminClient };
 }
 
+/**
+ * Who may generate, edit, publish or unpublish a path's milestones: an
+ * approved admin, or the approved teacher who created the learning path (the
+ * same rule as can_publish_milestone in the database).
+ */
+export async function canManagePathMilestones(
+  admin: MilestoneAdminClient,
+  staff: { userId: string; role: TeacherRole },
+  pathId: string,
+): Promise<boolean> {
+  if (staff.role === "admin") return true;
+  const { data } = await admin.from("learning_paths").select("created_by").eq("id", pathId).maybeSingle<{ created_by: string | null }>();
+  return Boolean(data && data.created_by === staff.userId);
+}
+
+export function publishForbiddenResponse() {
+  return milestoneError("publish_forbidden", 403, {
+    message: "Only an approved admin or the teacher who built this learning path can do this.",
+  });
+}
+
 export async function loadMilestoneRow(admin: MilestoneAdminClient, id: string) {
   const { data } = await admin.from("learning_path_milestones").select(MILESTONE_COLUMNS).eq("id", id).maybeSingle<MilestoneRow>();
   return data ?? null;

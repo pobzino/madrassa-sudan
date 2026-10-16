@@ -14,6 +14,7 @@ import type { AnswerResult, BattleQuestion } from "@/lib/milestones/types";
 import { openMilestoneLearnerRequest } from "@/lib/server/milestones/context";
 import { gradeBattleAnswer, InvalidAnswerError, MAX_TEXT_ANSWER_LENGTH } from "@/lib/server/milestones/grade";
 import { storedAnswer } from "@/lib/server/milestones/interactions";
+import type { InteractionAnswer } from "@/lib/interactions/types";
 import {
   battleStateFor,
   loadBattle,
@@ -82,6 +83,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
     let isCorrect = false;
     let canonicalIndex: number | null = null;
     let responseText: string | null = null;
+    let canonicalAnswer: InteractionAnswer | null = null;
     if (!isReplay) {
       const loaded = await loadBattleQuestion(admin, battle, position);
       if (!loaded) return milestoneError("service_unavailable", 503);
@@ -90,6 +92,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
       const graded = gradeBattleAnswer(item.interaction, item.perms, { answer, choiceIndex, text });
       isCorrect = graded.isCorrect;
       ({ choiceIndex: canonicalIndex, responseText } = storedAnswer(graded.canonical));
+      canonicalAnswer = graded.canonical;
     }
 
     const { data, error } = await admin.rpc("record_milestone_answer", {
@@ -98,6 +101,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
       p_choice_index: canonicalIndex,
       p_response_text: responseText,
       p_is_correct: isCorrect,
+      // The canonical InteractionAnswer (display indexes already mapped back), for the attempt log.
+      p_answer: canonicalAnswer,
     });
     if (error || !data) {
       const mapped = mapMilestoneRpcError(error);

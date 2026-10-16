@@ -6,7 +6,13 @@ import { z } from "zod";
 import { MILESTONE_DEFAULT_POOL_SIZE } from "@/lib/milestones/types";
 import { generateMilestonePool } from "@/lib/server/milestones/generate";
 import { MilestoneRouteError, milestoneError, milestoneJson } from "@/lib/server/milestones/load";
-import { loadMilestoneRow, openStaffRequest, teacherMilestoneRow } from "@/lib/server/milestones/teacher";
+import {
+  canManagePathMilestones,
+  loadMilestoneRow,
+  openStaffRequest,
+  publishForbiddenResponse,
+  teacherMilestoneRow,
+} from "@/lib/server/milestones/teacher";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -22,6 +28,7 @@ export async function POST(request: Request) {
   if (!staff.ok) return staff.response;
   const parsed = BodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return milestoneError("block_incomplete", 400, { message: "Invalid request" });
+  if (!(await canManagePathMilestones(staff.admin, staff, parsed.data.path_id))) return publishForbiddenResponse();
 
   try {
     const result = await generateMilestonePool({

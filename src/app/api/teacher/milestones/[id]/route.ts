@@ -23,6 +23,8 @@ import {
   loadMilestoneRow,
   loadTeacherQuestions,
   openStaffRequest,
+  canManagePathMilestones,
+  publishForbiddenResponse,
   questionWriteRow,
   teacherMilestoneRow,
   validateTeacherQuestion,
@@ -75,6 +77,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
   try {
     const row = await loadMilestoneRow(admin, id);
     if (!row) return milestoneError("milestone_not_found", 404);
+    if (!(await canManagePathMilestones(admin, staff, row.path_id))) return publishForbiddenResponse();
     const published = row.status === "published";
     const now = new Date().toISOString();
 

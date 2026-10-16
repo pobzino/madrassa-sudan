@@ -116,13 +116,47 @@ export function milestoneError(code: MilestoneErrorCode, status: number, extra: 
   return milestoneJson({ error: code, ...extra }, status);
 }
 
-/** Map a Postgres error raised by the milestone RPCs (§1.4) to a route error. */
-export function mapMilestoneRpcError(error: { message?: string; code?: string } | null): MilestoneRouteError {
+function digits(lang: Lang, value: number) {
+  return new Intl.NumberFormat(lang === "ar" ? "ar-EG" : "en-GB").format(value);
+}
+
+/**
+ * The kind, child-facing line for a locked Big Challenge (shown on the
+ * battle screen). Names the weeks when the caller knows them.
+ */
+export function milestoneLockedMessage(lang: Lang, afterWeekNumber?: number): string {
+  if (afterWeekNumber) {
+    const [first, last] = [afterWeekNumber - 3, afterWeekNumber].map((week) => digits(lang, week));
+    return lang === "ar"
+      ? `أكمل الأسابيع ${first}–${last} أولاً، ثم عُد إلى التحدي الكبير!`
+      : `Finish weeks ${first}–${last} first, then come back for the Big Challenge!`;
+  }
+  return lang === "ar"
+    ? "أكمل دروس هذه الأسابيع أولاً، ثم عُد إلى التحدي الكبير!"
+    : "Finish the lessons in these weeks first, then come back for the Big Challenge!";
+}
+
+/**
+ * Map a Postgres error raised by the milestone RPCs to a route error. The
+ * functions raise these tokens at the start of the message.
+ */
+export function mapMilestoneRpcError(
+  error: { message?: string; code?: string } | null,
+  options: { lang?: Lang; afterWeekNumber?: number } = {},
+): MilestoneRouteError {
   const message = error?.message ?? "";
   if (message.includes("milestone_not_found")) return new MilestoneRouteError("milestone_not_found", 404);
   if (message.includes("milestone_unpublished")) return new MilestoneRouteError("milestone_unpublished", 404);
+  if (message.includes("milestone_locked")) {
+    return new MilestoneRouteError("milestone_locked", 409, milestoneLockedMessage(options.lang ?? "ar", options.afterWeekNumber));
+  }
+  if (message.includes("publish_forbidden")) {
+    return new MilestoneRouteError("publish_forbidden", 403, "Only an approved admin or the teacher who built this learning path can do this.");
+  }
+  if (message.includes("battle_not_found")) return new MilestoneRouteError("battle_not_found", 404);
   if (message.includes("battle_finished")) return new MilestoneRouteError("battle_finished", 409);
   if (message.includes("position_mismatch")) return new MilestoneRouteError("position_mismatch", 409);
+  if (message.includes("invalid_answer")) return new MilestoneRouteError("invalid_answer", 400);
   if (message.includes("pool_too_small")) return new MilestoneRouteError("pool_too_small", 422);
   if (message.includes("pool_mismatch")) return new MilestoneRouteError("service_unavailable", 503, "pool_mismatch");
   return new MilestoneRouteError("service_unavailable", 500, message || undefined);

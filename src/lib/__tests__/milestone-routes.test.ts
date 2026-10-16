@@ -22,6 +22,8 @@ const mocks = vi.hoisted(() => ({
   afterCallbacks: [] as Array<() => unknown>,
   notify: vi.fn(async () => ({ status: "sent" })),
   userClient: null as unknown,
+  rpcCalls: [] as Array<{ name: string; args: Record<string, unknown> }>,
+  rpcOverride: null as null | ((name: string) => { data: unknown; error: { message: string } | null } | null),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -32,6 +34,7 @@ vi.mock("next/server", async (importOriginal) => ({
   },
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => mocks.userClient ?? {} }));
+vi.mock("@/lib/supabase/service", () => ({ hasServiceRoleConfig: () => true, createServiceClient: () => mocks.admin }));
 vi.mock("@/lib/server/learner-context", () => ({
   getLearnerContextResult: async () => ({ context: mocks.context, response: null }),
 }));
@@ -48,6 +51,9 @@ import { POST as hint } from "@/app/api/milestones/[id]/battle/hint/route";
 import { POST as submitHomework, PUT as saveDraft } from "@/app/api/homework/[id]/submit/route";
 import { POST as retake } from "@/app/api/homework/[id]/retake/route";
 import { GET as bossBook } from "@/app/api/milestones/boss-book/route";
+import { POST as publish } from "@/app/api/teacher/milestones/[id]/publish/route";
+import { POST as unpublish } from "@/app/api/teacher/milestones/[id]/unpublish/route";
+import { mapMilestoneRpcError } from "@/lib/server/milestones/load";
 import { BOSS_KEYS } from "@/lib/milestones/types";
 
 type Row = Record<string, unknown>;
@@ -67,6 +73,9 @@ function poolQuestions(count: number): MilestonePoolQuestion[] {
 /** A faithful-enough stand-in for the §1.4 RPCs. */
 function rpcFor(tables: Record<string, Row[]>) {
   return async (name: string, args: Record<string, unknown>) => {
+    mocks.rpcCalls.push({ name, args });
+    const override = mocks.rpcOverride?.(name);
+    if (override) return override;
     const battles = tables.milestone_battles;
     if (name === "start_milestone_battle") {
       const active = battles.find((b) => b.learner_id === args.p_learner_id && b.milestone_id === args.p_milestone_id && b.status === "active");
@@ -158,6 +167,8 @@ beforeEach(() => {
   mocks.afterCallbacks.length = 0;
   mocks.notify.mockClear();
   mocks.userClient = null;
+  mocks.rpcCalls.length = 0;
+  mocks.rpcOverride = null;
 });
 
 describe("start battle", () => {
@@ -352,5 +363,109 @@ describe("generic homework routes refuse milestones", () => {
     const response = await retake(post({}) as never, params);
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "use_battle" });
+  });
+});
+
+describe("database errors and checks", () => {
+  it("maps every RPC error token to its code and status", () => {
+    const cases: Array<[string, string, number]> = [
+      ["milestone_locked", "milestone_locked", 409],
+      ["publish_forbidden", "publish_forbidden", 403],
+      ["battle_not_found", "battle_not_found", 404],
+      ["invalid_answer: a verdict is required", "invalid_answer", 400],
+      ["position_mismatch: expected 3", "position_mismatch", 409],
+      ["pool_too_small: 5 auto-gradable questions, 8 needed", "pool_too_small", 422],
+      ["milestone_unpublished", "milestone_unpublished", 404],
+      ["something else", "service_unavailable", 500],
+    ];
+    for (const [message, code, status] of cases) {
+      expect(mapMilestoneRpcError({ message })).toMatchObject({ code, status });
+    }
+    expect(mapMilestoneRpcError({ message: "milestone_locked" }, { lang: "en", afterWeekNumber: 8 }).message)
+      .toBe("Finish weeks 5–8 first, then come back for the Big Challenge!");
+    expect(mapMilestoneRpcError({ message: "milestone_locked" }, { lang: "ar", afterWeekNumber: 4 }).message)
+      .toBe("أكمل الأسابيع ١–٤ أولاً، ثم عُد إلى التحدي الكبير!");
+  });
+
+  it("turns the database's milestone_locked floor into a kind 409", async () => {
+    seed();
+    mocks.rpcOverride = (name) => (name === "start_milestone_battle" ? { data: null, error: { message: "milestone_locked" } } : null);
+    const response = await startBattle(post({ lang: "en" }), milestoneParams);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "milestone_locked", message: "Finish weeks 1–4 first, then come back for the Big Challenge!" });
+  });
+
+  it("gives the server's locked check the same kind message", async () => {
+    seed();
+    mocks.tree = { pathId: IDS.path, weeks: [], milestones: [{ id: IDS.milestone, state: "locked" }] };
+    const body = await (await startBattle(post({ lang: "ar" }), milestoneParams)).json();
+    expect(body).toEqual({ error: "milestone_locked", message: "أكمل الأسابيع ١–٤ أولاً، ثم عُد إلى التحدي الكبير!" });
+  });
+
+  it("passes the canonical InteractionAnswer to record_milestone_answer", async () => {
+    const tables = seed();
+    const battleId = (await (await startBattle(post({}), milestoneParams)).json()).battle.battleId;
+    const display = correctChoice(tables, battleId, 0);
+    await answer(post({ position: 0, choiceIndex: display }), battleParams(battleId));
+    const call = mocks.rpcCalls.find((item) => item.name === "record_milestone_answer")!;
+    expect(Object.keys(call.args).sort()).toEqual(["p_answer", "p_battle_id", "p_choice_index", "p_is_correct", "p_position", "p_response_text"]);
+    expect(call.args).toMatchObject({
+      p_battle_id: battleId, p_position: 0, p_choice_index: 2, p_response_text: null, p_is_correct: true,
+      p_answer: { type: "choose_correct", selected_index: 2 },
+    });
+  });
+});
+
+describe("publish and unpublish", () => {
+  function staffAs(userId: string, role: "teacher" | "admin") {
+    mocks.teacherRole = role;
+    mocks.userClient = { auth: { getUser: async () => ({ data: { user: { id: userId } }, error: null }) } };
+  }
+  const params = { params: Promise.resolve({ id: IDS.milestone }) };
+  const publishedRow = (tables: Record<string, Row[]>) => {
+    mocks.rpcOverride = (name) => (name.endsWith("publish_milestone") ? { data: tables.learning_path_milestones[0], error: null } : null);
+  };
+
+  it("refuses an approved teacher who did not build the path, before calling the database", async () => {
+    const tables = seed();
+    tables.learning_paths[0].created_by = "author-teacher";
+    staffAs("other-teacher", "teacher");
+    for (const route of [publish, unpublish]) {
+      const response = await route(post({}), params);
+      expect(response.status).toBe(403);
+      expect((await response.json()).error).toBe("publish_forbidden");
+    }
+    expect(mocks.rpcCalls).toHaveLength(0);
+  });
+
+  it("lets the path's author and approved admins publish", async () => {
+    const tables = seed();
+    tables.learning_paths[0].created_by = "author-teacher";
+    publishedRow(tables);
+    staffAs("author-teacher", "teacher");
+    expect((await publish(post({}), params)).status).toBe(200);
+    staffAs("some-admin", "admin");
+    expect((await unpublish(post({}), params)).status).toBe(200);
+    expect(mocks.rpcCalls.map((call) => [call.name, call.args.p_actor])).toEqual([
+      ["publish_milestone", "author-teacher"],
+      ["unpublish_milestone", "some-admin"],
+    ]);
+  });
+
+  it("maps the database's own publish_forbidden to a clean 403", async () => {
+    const tables = seed();
+    tables.learning_paths[0].created_by = "author-teacher";
+    staffAs("author-teacher", "teacher");
+    mocks.rpcOverride = () => ({ data: null, error: { message: "publish_forbidden" } });
+    const response = await publish(post({}), params);
+    expect(response.status).toBe(403);
+    expect((await response.json()).error).toBe("publish_forbidden");
+  });
+
+  it("maps pool_too_small to 422", async () => {
+    seed();
+    staffAs("some-admin", "admin");
+    mocks.rpcOverride = () => ({ data: null, error: { message: "pool_too_small: 5 auto-gradable questions, 8 needed" } });
+    expect((await publish(post({}), params)).status).toBe(422);
   });
 });

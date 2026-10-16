@@ -18,6 +18,7 @@ import {
   mapMilestoneRpcError,
   milestoneError,
   milestoneJson,
+  milestoneLockedMessage,
   milestoneUnlockedFor,
   parseLang,
 } from "@/lib/server/milestones/load";
@@ -63,7 +64,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     const { row, path } = loaded;
 
     if (!preview && !(await milestoneUnlockedFor(admin, row, path, learnerId))) {
-      return milestoneError("milestone_locked", 409);
+      return milestoneError("milestone_locked", 409, { message: milestoneLockedMessage(lang, row.after_week_number) });
     }
 
     const active = await loadActiveBattle(admin, learnerId, row.id);
@@ -110,8 +111,9 @@ export async function POST(request: Request, { params }: RouteContext) {
       p_preview: preview,
     });
     if (error || !data) {
-      const mapped = mapMilestoneRpcError(error);
-      return milestoneError(mapped.code, mapped.status);
+      // The database re-checks the block (milestone_locked) as a floor under the check above.
+      const mapped = mapMilestoneRpcError(error, { lang, afterWeekNumber: row.after_week_number });
+      return milestoneError(mapped.code, mapped.status, mapped.code === "milestone_locked" ? { message: mapped.message } : {});
     }
     const result = data as { battle: MilestoneBattleRow; resumed: boolean };
     const response: StartBattleResponse = {
