@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     });
     const row = await loadMilestoneRow(staff.admin, result.milestoneId);
     if (!row) return milestoneError("service_unavailable", 500);
-    return milestoneJson({ milestone: await teacherMilestoneRow(staff.admin, row), skippedLessons: result.skippedLessons });
+    return milestoneJson({ milestone: await teacherMilestoneRow(staff.admin, row), skippedLessons: result.skippedLessons, droppedItems: result.droppedItems });
   } catch (error) {
     if (error instanceof MilestoneRouteError) return milestoneError(error.code, error.status, { message: error.message });
     console.error("Milestone generation failed:", error);

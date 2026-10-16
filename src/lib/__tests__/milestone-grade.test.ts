@@ -25,8 +25,12 @@ describe("gradeBattleAnswer on legacy rows", () => {
   });
 
   it("falls back to the answer text when the index is missing", () => {
-    const interaction = battleInteractionFor(mcQuestion({ correct_option_index: null, correct_answer: "8" }));
-    expect(interaction).toMatchObject({ type: "choose_correct", correct_index: 3 });
+    const interaction = battleInteractionFor(mcQuestion({ correct_option_index: null, correct_answer: "7" }));
+    expect(interaction).toMatchObject({ type: "choose_correct", correct_index: 2 });
+  });
+
+  it("drops a legacy row whose key does not answer its own sum", () => {
+    expect(battleInteractionFor(mcQuestion({ correct_option_index: null, correct_answer: "8" }))).toBeNull();
   });
 
   it("normalizes true/false stored as text", () => {
