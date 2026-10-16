@@ -37,20 +37,18 @@ export default function NarrationCard() {
     };
   }, [load]);
 
-  const follow = useCallback(
-    (startedAt: number) => {
-      timer.current = window.setTimeout(async () => {
-        const data = await load();
-        const stillMissing = data?.backlog.missing.total ?? 0;
-        if (stillMissing > 0 && Date.now() - startedAt < 15 * 60 * 1000) follow(startedAt);
-        else {
-          setRunning(false);
-          toast.success(stillMissing === 0 ? "Every question has a voice." : `Stopped with ${n(stillMissing)} still to voice.`);
-        }
-      }, 8000);
-    },
-    [load],
-  );
+  // Follows the count down every few seconds until it reaches zero or 15 minutes pass.
+  function follow(startedAt: number) {
+    timer.current = window.setTimeout(async () => {
+      const data = await load();
+      const stillMissing = data?.backlog.missing.total ?? 0;
+      if (stillMissing > 0 && Date.now() - startedAt < 15 * 60 * 1000) follow(startedAt);
+      else {
+        setRunning(false);
+        toast.success(stillMissing === 0 ? "Every question has a voice." : `Stopped with ${n(stillMissing)} still to voice.`);
+      }
+    }, 8000);
+  }
 
   const start = async () => {
     setRunning(true);
