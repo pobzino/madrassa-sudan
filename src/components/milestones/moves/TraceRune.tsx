@@ -8,13 +8,15 @@ import { arrowPath, penAt, startMarkers, tracePath, useReducedMotion, useTraceDe
 import { formatNumber, MILESTONE_COPY } from "../copy";
 import type { BattleMoveProps } from "./BattleMove";
 import type { PublicInteraction } from "./contract";
-import { castRune, shieldRune } from "./runeFx";
+import * as fx from "./fx";
+import { runeIntoOwl } from "./runeFx";
 
 /**
  * trace_letter: the Rune Spell. The letter glows as a big rune in the band
  * between the boss and the owl; "Watch me" draws it with a sparkle pen; the
- * child traces it with a finger, then casts it (attack: it flies at the boss)
- * or raises it as a rune shield (block). Harf the Letter Dragon's signature
+ * child traces it with a finger, then casts it (attack: it flies into the
+ * owl's wing and the owl throws it at the boss) or raises it as a rune shield
+ * around the owl (block). Harf the Letter Dragon's signature
  * skin is dragon fire; every other boss gets the starlight skin.
  */
 
@@ -104,11 +106,19 @@ export default function TraceRune(props: BattleMoveProps & { interaction: Extrac
     if (firstPlay.current) clearTimeout(firstPlay.current);
   }, []);
 
+  // The lead-in only (BattleScene's combat timeline owns the rest): attack, the
+  // rune flies into the owl's wing and the owl throws it at the boss; block,
+  // the rune shield forms around the owl and the rune flies into it.
   const cast = (origin: DOMRect | null) => {
     if (!strokes.length) return;
     stop();
-    if (turn === "attack") castRune(runeRef.current, props.throwFrom?.() ?? null, skin.spell);
-    else shieldRune(runeRef.current, props.catchTarget?.() ?? null, skin.ring);
+    const owl = props.catchTarget?.() ?? null;
+    if (turn === "block") fx.formShield("rune", owl, interaction.letter);
+    const wing = owl ? new DOMRect(owl.left + owl.width * 0.8 - owl.width * 0.15, owl.top + owl.height * 0.5 - owl.width * 0.15, owl.width * 0.3, owl.width * 0.3) : null;
+    const target = turn === "attack" ? wing : owl ? new DOMRect(owl.left + owl.width * 0.25, owl.top + owl.height * 0.3, owl.width * 0.5, owl.width * 0.5) : null;
+    const rune = runeRef.current;
+    // A frame later, so the confirm's first frame is never held up.
+    requestAnimationFrame(() => runeIntoOwl(rune, target, turn === "attack" ? skin.spell : skin.ring));
     onSubmit({ type: "trace_letter", strokes }, origin);
   };
 
@@ -118,11 +128,12 @@ export default function TraceRune(props: BattleMoveProps & { interaction: Extrac
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-[var(--band,210px)] shrink-0 items-center justify-center" dir="ltr">
+      <div data-layout="moves" className="ml-[var(--band-inset,0px)] flex h-[var(--band,210px)] shrink-0 items-center justify-center" dir="ltr">
+        {/* Always square (the trace maps onto it): as tall as the band, or as wide as it can be. */}
         <div
           ref={runeRef}
-          data-layout="moves"
-          className="relative aspect-square h-full max-w-full select-none [-webkit-touch-callout:none]"
+          className="relative select-none [-webkit-touch-callout:none]"
+          style={{ width: "min(100%, var(--band, 210px))", aspectRatio: "1 / 1" }}
         >
           <div data-rune-backdrop="" className="pointer-events-none absolute inset-[-4%] rounded-full motion-safe:animate-pulse [animation-duration:3.2s]" style={{ background: skin.backdrop }} aria-hidden="true" />
           <svg
@@ -200,7 +211,7 @@ export default function TraceRune(props: BattleMoveProps & { interaction: Extrac
           </svg>
         </div>
       </div>
-      <div className="mt-auto flex h-[76px] shrink-0 items-center gap-3">
+      <div data-layout="actions" className="mt-auto ml-[var(--actions-inset,0px)] flex h-[var(--actions,76px)] w-[calc(100%-var(--actions-inset,0px))] max-w-[620px] shrink-0 items-center gap-2.5 self-center">
         {hintButton}
         <RoundButton label={copy.watch} onClick={playing ? stop : play} disabled={disabled} highlight={playing}>
           <Sparkles className="h-6 w-6" aria-hidden="true" />
@@ -225,7 +236,7 @@ function RoundButton({ label, onClick, disabled, highlight, hideWhenDisabled, ch
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className={`grid h-14 w-14 shrink-0 place-items-center rounded-full shadow-[0_4px_0_rgba(0,0,0,0.25)] transition-opacity ${highlight ? "bg-[#FDE68A] text-[#78350F]" : "bg-[#FFF8EC] text-[#007229]"} ${hideWhenDisabled ? "disabled:opacity-0" : "disabled:opacity-50"}`}
+      className={`grid h-[min(56px,calc(var(--actions,76px)-8px))] w-[min(56px,calc(var(--actions,76px)-8px))] shrink-0 place-items-center rounded-full shadow-[0_4px_0_rgba(0,0,0,0.25)] transition-opacity ${highlight ? "bg-[#FDE68A] text-[#78350F]" : "bg-[#FFF8EC] text-[#007229]"} ${hideWhenDisabled ? "disabled:opacity-0" : "disabled:opacity-50"}`}
     >
       {children}
     </button>
@@ -245,7 +256,7 @@ function CastButton({ lang, block, disabled, onClick }: { lang: Lang; block: boo
       type="button"
       disabled={disabled}
       onClick={() => onClick(ref.current?.getBoundingClientRect() ?? null)}
-      className={`h-[68px] min-w-0 flex-1 rounded-full text-[28px] font-bold transition-transform active:translate-y-1 active:shadow-none disabled:bg-none disabled:bg-[#9CA3AF] disabled:text-white/90 disabled:shadow-[0_6px_0_#6B7280] disabled:[text-shadow:none] disabled:active:translate-y-0 ${colours}`}
+      className={`h-[calc(var(--actions,76px)-8px)] min-w-0 flex-1 rounded-full text-[clamp(22px,calc(var(--actions,76px)*0.37),28px)] font-bold transition-transform active:translate-y-1 active:shadow-none disabled:bg-none disabled:bg-[#9CA3AF] disabled:text-white/90 disabled:shadow-[0_6px_0_#6B7280] disabled:[text-shadow:none] disabled:active:translate-y-0 ${colours}`}
     >
       {block ? t.block : t.cast}
     </button>

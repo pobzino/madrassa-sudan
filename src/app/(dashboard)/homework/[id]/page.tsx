@@ -1086,7 +1086,7 @@ export default function HomeworkAssignmentPage() {
                     disabled={isSubmitted}
                     onAnswerChange={(answer) => handleAnswerChange(currentQ.id, JSON.stringify(answer))}
                   />
-                ) : <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Letter tracing setup is incomplete.</p>;
+                ) : <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">{language === "ar" ? "هذا الحرف غير جاهز بعد." : "This letter is not ready yet."}</p>;
               })()}
 
               {currentQ.question_type === "long_answer" && (

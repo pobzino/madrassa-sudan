@@ -9,7 +9,7 @@ import { prefersReducedMotion } from "../motion";
  * become a quick fade, with no particles.
  */
 
-export type ShieldMotif = "orb" | "lanes" | "catch" | "runes" | "pairs" | "baskets" | "scroll" | "stamp";
+export type ShieldMotif = "orb" | "lanes" | "catch" | "runes" | "pairs" | "baskets" | "scroll" | "stamp" | "rune";
 
 interface Point {
   x: number;
@@ -506,6 +506,10 @@ function buildShield(motif: ShieldMotif, owl: DOMRect, glyph: string) {
     case "stamp":
       part({ inset: "6%", background: AMBER, clipPath: "polygon(50% 0,61% 12%,77% 7%,79% 23%,95% 28%,88% 43%,100% 55%,86% 64%,90% 80%,73% 81%,65% 96%,50% 87%,35% 96%,27% 81%,10% 80%,14% 64%,0 55%,12% 43%,5% 28%,21% 23%,23% 7%,39% 12%)", boxShadow: "0 0 18px rgba(245,158,11,0.9)" });
       part({ inset: "0", color: "#3B1D00", fontSize: `${Math.round(size * 0.32)}px`, fontWeight: "700", lineHeight: "1" }, "✓");
+      break;
+    case "rune": // trace_letter: the traced letter glows in a ring of light
+      ring({ border: "5px solid #A7F3D0", background: "radial-gradient(circle, rgba(236,253,245,0.05) 42%, rgba(110,231,183,0.32) 68%, rgba(16,185,129,0.5))", boxShadow: "0 0 26px rgba(52,211,153,0.9), inset 0 0 18px rgba(167,243,208,0.7)" });
+      part({ inset: "0", color: "#FEF08A", fontSize: `${Math.round(size * 0.4)}px`, fontWeight: "700", lineHeight: "1", textShadow: "0 0 14px rgba(253,224,71,0.95)", opacity: "0.8" }, glyph);
       break;
   }
   if (reduced()) {
