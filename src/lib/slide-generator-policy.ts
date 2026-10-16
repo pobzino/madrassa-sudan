@@ -1,4 +1,5 @@
 import type { Slide } from "@/lib/slides.types";
+import { traceLetterOf } from "@/lib/interactions/trace-letter";
 import type { SupportedSubjectKey } from "@/lib/curriculum";
 
 export type SlideLessonPhase =
@@ -230,7 +231,7 @@ export const INTERACTION_FIELD_RULES: readonly string[] = [
     "- `sequence_order`: requires `interaction_items_ar/en` with 3-5 entries in the correct order.",
     "- `sort_groups`: requires `interaction_items_ar/en`, `interaction_targets_ar/en`, and `interaction_solution_map` where each item maps to a target index.",
     "- `draw_answer`: requires `interaction_prompt_ar`/`interaction_prompt_en` and a plain-language description of what a correct drawing contains in `interaction_expected_answer_ar` and/or `interaction_expected_answer_en` so the vision grader can judge the student's drawing.",
-    "- `trace_letter`: requires `interaction_trace_config` with `script` (`ar` or `en`) and a single `letter`; set Arabic `form` (`isolated`, `initial`, `medial`, `final`) or English `case` (`upper`, `lower`), and may include `audio_url`.",
+    "- `trace_letter`: requires `interaction_trace_config` with `script` (`ar` or `en`) and a single `letter`; Arabic letters use `form` `isolated` (the only form traced); English letters set `case` (`upper` or `lower`); `audio_url` is optional. Only for lessons that teach letters.",
     "- `drag_drop_label`: reserved for teacher-authored slides that pin labels to an image. Do not emit this interaction type during generation; teachers add hotspots manually after the deck is created.",
 ];
 
@@ -481,11 +482,8 @@ export function validateGeneratedSlides(
       }
 
       if (slide.interaction_type === "trace_letter") {
-        const config = slide.interaction_trace_config;
-        const expectedLetters = config?.script === "ar"
-          ? [..."ابتثجحخدذرزسشصضطظعغفقكلمنهوي"]
-          : [..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"];
-        if (!config || !["ar", "en"].includes(config.script) || !expectedLetters.includes(config.letter)) {
+        // traceLetterOf: a letter we have a template for (isolated Arabic form, English case).
+        if (!traceLetterOf(slide.interaction_trace_config)) {
           issues.push(`Slide ${index + 1} trace_letter must include a valid script and single letter in interaction_trace_config.`);
         }
       }

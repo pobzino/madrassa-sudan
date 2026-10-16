@@ -11,6 +11,7 @@ import { MathText } from "../BattleParts";
 import { pickList, pickText, type PublicInteraction } from "./contract";
 import { layoutCatch, type CatchLayout } from "./catchLayout";
 import * as fx from "./fx";
+import TraceRune from "./TraceRune";
 
 /** How many things the boss throws in a catch move (more than any count asked for). */
 /** More than any count a battle asks for (1-12), so catching them all is never the answer. */
@@ -90,6 +91,8 @@ function MoveBody(props: BattleMoveProps) {
       return <PlacePieces {...props} interaction={props.interaction} />;
     case "fill_missing_word":
       return <SpellScroll {...props} interaction={props.interaction} />;
+    case "trace_letter":
+      return <TraceRune {...props} interaction={props.interaction} />;
   }
 }
 

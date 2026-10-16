@@ -18,7 +18,8 @@ export type SkinKey =
   | "beds"
   | "seeds"
   | "puzzle"
-  | "feathers";
+  | "feathers"
+  | "rune";
 
 export interface SignatureMove {
   name: { en: string; ar: string };
@@ -36,10 +37,11 @@ const GARDEN_BEDS: SignatureMove = { name: { en: "Garden Beds!", ar: "أحواض
 const SEED_LINE: SignatureMove = { name: { en: "Seed Line!", ar: "صف البذور!" }, skin: "seeds" };
 const PUZZLE_PIECES: SignatureMove = { name: { en: "Puzzle Pieces!", ar: "قطع اللغز!" }, skin: "puzzle" };
 const FEATHER_SORT: SignatureMove = { name: { en: "Feather Sort!", ar: "فرز الريش!" }, skin: "feathers" };
+const RUNE_SPELL: SignatureMove = { name: { en: "Rune Spell!", ar: "تعويذة الحرف!" }, skin: "rune" };
 
 const SIGNATURE_SKINS: Record<BossKey, Partial<Record<BattleInteractionType, SignatureMove>>> = {
   number_giant: { tap_to_count: DICE_ROLL, sequence_order: NUMBER_BOULDERS },
-  letter_dragon: { sequence_order: JUMBLED_LETTERS, fill_missing_word: JUMBLED_LETTERS, match_pairs: SCROLL_SWAP },
+  letter_dragon: { sequence_order: JUMBLED_LETTERS, fill_missing_word: JUMBLED_LETTERS, match_pairs: SCROLL_SWAP, trace_letter: RUNE_SPELL },
   word_dragon: { fill_missing_word: WORD_PUFF, match_pairs: SCROLL_SWAP },
   letter_camel: { fill_missing_word: SAND_LETTERS, match_pairs: CARAVAN_MATCH },
   sprout_buddy: { sort_groups: GARDEN_BEDS, sequence_order: SEED_LINE },
@@ -104,6 +106,8 @@ export interface SkinParts {
   slotFilled?: string;
   /** What gets thrown in a count move. */
   thrown?: "die" | "seed";
+  /** Harf's Rune Spell: the trace rune in dragon fire. */
+  rune?: "dragon";
 }
 
 const DARK_TEXT = "text-[#1a1a1a] [text-shadow:none]";
@@ -135,4 +139,5 @@ export const SKIN_PARTS: Record<SkinKey, SkinParts> = {
     slot: "rounded-[60%_10%_60%_10%] border-4 border-dashed border-[#FDE68A] bg-[#D97706]/80 text-white",
     slotFilled: "rounded-[60%_10%_60%_10%] border-4 border-[#FDE68A] bg-[#D97706] text-white",
   },
+  rune: { rune: "dragon" },
 };

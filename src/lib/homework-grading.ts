@@ -5,7 +5,7 @@
 
 import { practiceAnswerMatches } from "@/lib/practice-answer";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
-import { gradeTraceLetter } from "@/lib/interactions/trace-letter";
+import { gradeTraceLetterOnServer } from "@/lib/interactions/trace-templates.server";
 import type { TraceLetterConfig } from "@/lib/interactions/types";
 
 export interface SubmittedAnswerInput {
@@ -81,7 +81,7 @@ export function isCorrectAnswer(
     try {
       const config = JSON.parse(question.question_content || "null") as TraceLetterConfig | null;
       const answer = JSON.parse(response) as { strokes?: unknown };
-      return Boolean(config && Array.isArray(answer.strokes) && gradeTraceLetter(config, answer.strokes as number[][][]).is_correct);
+      return Boolean(config && Array.isArray(answer.strokes) && gradeTraceLetterOnServer(config, answer.strokes).is_correct);
     } catch {
       return false;
     }

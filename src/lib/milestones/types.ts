@@ -1,6 +1,6 @@
 // Shared between server routes and app UI. Owner: server builder. No server-only imports.
 import type { LearnerAvatar } from "@/lib/learners/types";
-import type { BilingualList, BilingualText, Interaction, InteractionAnswer } from "@/lib/interactions/types";
+import type { BilingualList, BilingualText, EnglishLetterCase, Interaction, InteractionAnswer, TraceLetterScript } from "@/lib/interactions/types";
 import type { SlideInteractionHotspot } from "@/lib/slides.types";
 
 export const MILESTONE_WEEKS_PER_BLOCK = 4;
@@ -28,6 +28,7 @@ export type BattlePhase = 1 | 2;
 export const BATTLE_INTERACTION_TYPES = [
   "choose_correct", "true_false", "fill_missing_word", "tap_to_count",
   "match_pairs", "sequence_order", "sort_groups", "drag_drop_label",
+  "trace_letter",
 ] as const;
 export type BattleInteractionType = (typeof BATTLE_INTERACTION_TYPES)[number];
 
@@ -46,6 +47,9 @@ export type BattleInteractionType = (typeof BATTLE_INTERACTION_TYPES)[number];
  *  - sequence_order: items shuffled (never served in the correct order)
  *  - sort_groups: items and groups shuffled, no solution_map
  *  - drag_drop_label: labels and hotspots shuffled independently
+ *  - trace_letter: the letter and its `guide` (the demo strokes the child
+ *    watches and traces over). Not an answer key: tracing the shown letter IS
+ *    the task; the server grades the strokes (shape, dots, stroke count).
  */
 export type PublicInteraction =
   | { type: "choose_correct"; prompt: BilingualText; options: BilingualList }
@@ -55,7 +59,25 @@ export type PublicInteraction =
   | { type: "match_pairs"; prompt: BilingualText; items: BilingualList; targets: BilingualList }
   | { type: "sequence_order"; prompt: BilingualText; items: BilingualList }
   | { type: "sort_groups"; prompt: BilingualText; items: BilingualList; targets: BilingualList }
-  | { type: "drag_drop_label"; prompt: BilingualText; image_url: string | null; labels: BilingualList; hotspots: SlideInteractionHotspot[] };
+  | { type: "drag_drop_label"; prompt: BilingualText; image_url: string | null; labels: BilingualList; hotspots: SlideInteractionHotspot[] }
+  | {
+      type: "trace_letter";
+      prompt: BilingualText;
+      script: TraceLetterScript;
+      letter: string;
+      /** Arabic: always the isolated form; null for English. */
+      form: "isolated" | null;
+      /** English: capital or small; null for Arabic. */
+      case: EnglishLetterCase | null;
+      guide: TraceGuideStroke[];
+    };
+
+/** One stroke of a letter's guide, on a 0..1 box, in writing order and direction. */
+export interface TraceGuideStroke {
+  kind: "main" | "dot" | "hamza";
+  width: number;
+  points: [number, number][];
+}
 
 /** The Owl Hint, in display indexes. Never names the correct option of a choice. */
 export interface OwlHint {

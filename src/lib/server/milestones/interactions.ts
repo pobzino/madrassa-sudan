@@ -2,7 +2,9 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import { gradeInteraction } from "@/lib/interactions/grader";
-import type { BilingualList, BilingualText, Interaction, InteractionAnswer } from "@/lib/interactions/types";
+import { compactTraceStrokes, isTraceStrokeList, MAX_TRACE_POINTS, MAX_TRACE_STROKES, traceLetterOf } from "@/lib/interactions/trace-letter";
+import { gradeTraceLetterOnServer, serverTraceTemplate } from "@/lib/interactions/trace-templates.server";
+import type { BilingualList, BilingualText, EnglishLetterCase, Interaction, InteractionAnswer } from "@/lib/interactions/types";
 import { practiceAnswerMatches } from "@/lib/practice-answer";
 import {
   checkChoiceKey,
@@ -198,6 +200,19 @@ export function validateBattleInteraction(value: unknown): { interaction: Battle
       }
       return { interaction: { type: "drag_drop_label", prompt, image_url: imageUrl, labels, hotspots: spots } };
     }
+    case "trace_letter": {
+      const config = (raw.config && typeof raw.config === "object" ? raw.config : {}) as Record<string, unknown>;
+      const script = config.script === "ar" || config.script === "en" ? config.script : null;
+      const letter = script ? traceLetterOf({ script, letter: config.letter as string, case: config.case as EnglishLetterCase | undefined, form: config.form as "isolated" | undefined }) : null;
+      if (!script || !letter || !serverTraceTemplate({ script, letter })) return { error: "Trace-a-letter needs one Arabic or English letter." };
+      return {
+        interaction: {
+          type: "trace_letter",
+          prompt,
+          config: script === "ar" ? { script, letter, form: "isolated" } : { script, letter, case: letter === letter.toLowerCase() ? "lower" : "upper" },
+        },
+      };
+    }
   }
   return { error: "This item type cannot be used in a Big Challenge." };
 }
@@ -303,6 +318,7 @@ export function interactionPerms(battleId: string, questionId: string, interacti
     case "true_false":
       return { options: [0, 1], items: [], targets: [] };
     case "tap_to_count":
+    case "trace_letter":
       return { options: [], items: [], targets: [] };
     case "sequence_order": {
       let items = shuffle(":items", interaction.items.ar.length);
@@ -363,6 +379,23 @@ export function toPublicInteraction(interaction: BattleInteraction, perms: Inter
         labels: permuteList(interaction.labels, perms.items),
         hotspots: perms.targets.map((i) => ({ x_percent: interaction.hotspots[i].x_percent, y_percent: interaction.hotspots[i].y_percent })),
       };
+    case "trace_letter": {
+      const { script, letter } = interaction.config;
+      const template = serverTraceTemplate(interaction.config);
+      return {
+        type: "trace_letter",
+        prompt,
+        script,
+        letter,
+        form: script === "ar" ? "isolated" : null,
+        case: script === "en" ? (letter === letter.toLowerCase() ? "lower" : "upper") : null,
+        guide: (template?.strokes ?? []).map((stroke) => ({
+          kind: stroke.kind,
+          width: stroke.width ?? 0.06,
+          points: stroke.points.map(([x, y]) => [x, y] as [number, number]),
+        })),
+      };
+    }
   }
 }
 
@@ -453,6 +486,11 @@ export function toCanonicalAnswer(interaction: BattleInteraction, perms: Interac
       if (new Set(canonical).size !== n) throw new InvalidAnswerError();
       return { type: "sequence_order", order: canonical };
     }
+    case "trace_letter": {
+      // At most 6 strokes of 48 points (the tracer resamples), each point in the box.
+      if (!isTraceStrokeList(raw.strokes, MAX_TRACE_STROKES, MAX_TRACE_POINTS)) throw new InvalidAnswerError();
+      return { type: "trace_letter", strokes: compactTraceStrokes(raw.strokes) };
+    }
   }
 }
 
@@ -487,6 +525,9 @@ export function gradeBattleInteraction(interaction: BattleInteraction, canonical
     // Arabic-Indic digits and numeric forms, as Practice short answers accept them.
     return expected.some((value) => practiceAnswerMatches(text, value, "short_answer"));
   }
+  if (interaction.type === "trace_letter") {
+    return canonical.type === "trace_letter" && gradeTraceLetterOnServer(interaction.config, canonical.strokes).is_correct;
+  }
   return gradeInteraction(interaction, canonical).is_correct;
 }
 
@@ -510,6 +551,9 @@ export function storedAnswer(canonical: InteractionAnswer): { choiceIndex: numbe
       return { choiceIndex: null, responseText: JSON.stringify(canonical.placements.map((p) => [p.item_index, p.target_index])).slice(0, MAX_TEXT_ANSWER_LENGTH) };
     case "drag_drop_label":
       return { choiceIndex: null, responseText: JSON.stringify(canonical.placements.map((p) => [p.label_index, p.hotspot_index])).slice(0, MAX_TEXT_ANSWER_LENGTH) };
+    case "trace_letter":
+      // The strokes themselves travel in the full answer (p_answer).
+      return { choiceIndex: null, responseText: `trace: ${canonical.strokes.length} strokes` };
     default:
       return { choiceIndex: null, responseText: null };
   }
@@ -557,6 +601,9 @@ export function owlHintFor(battleId: string, questionId: string, interaction: Ba
       return interaction.items.ar.length < 3
         ? null
         : { hideOptionIds: [], lockedPlacement: { itemIndex: inverse(perms.items)[0], targetIndex: 0 } };
+    case "trace_letter":
+      // Nothing to narrow down: the guide already shows the letter ("Watch me").
+      return null;
     default:
       return null;
   }
@@ -636,6 +683,8 @@ export function interactionShape(interaction: BattleInteraction): string {
       return `sort_groups:${interaction.items.ar.length}:${interaction.targets.ar.length}`;
     case "drag_drop_label":
       return `drag_drop_label:${interaction.labels.ar.length}`;
+    case "trace_letter":
+      return `trace_letter:${interaction.config.script}:${interaction.config.letter}`;
     default:
       return interaction.type;
   }

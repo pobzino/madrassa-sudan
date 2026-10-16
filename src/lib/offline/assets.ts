@@ -10,6 +10,7 @@
  */
 
 import type { SimPayload } from "@/lib/sim.types";
+import { traceTemplateUrl } from "@/lib/interactions/trace-letter";
 import { ASSET_CACHE } from "./cache-names";
 import { assetUrlFromMetaKey, getAllAssetRefs } from "./db";
 
@@ -49,7 +50,9 @@ function defaultBaseUrl(): string | undefined {
 /**
  * Every image the player can load for this sim: each slide's `image_url`,
  * each slide's `exploration_config.image_url` (image hotspots), and each
- * `exploration_gate` event's `config.image_url`. Absolute, deduped, in order.
+ * `exploration_gate` event's `config.image_url`, plus the letter template of
+ * each letter-tracing slide (small JSON the tracer loads). Absolute, deduped,
+ * in order.
  */
 export function collectSimAssetUrls(
   payload: SimPayload | null | undefined,
@@ -69,6 +72,9 @@ export function collectSimAssetUrls(
     add(slide.image_url);
     const config = slide.exploration_config as { image_url?: unknown } | null | undefined;
     if (config && typeof config === "object") add(config.image_url);
+    if (slide.interaction_type === "trace_letter" && slide.interaction_trace_config) {
+      add(traceTemplateUrl(slide.interaction_trace_config));
+    }
   }
 
   for (const event of Array.isArray(sim.events) ? sim.events : []) {

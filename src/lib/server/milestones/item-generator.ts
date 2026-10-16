@@ -1,6 +1,7 @@
 import "server-only";
 
 import { slideToInteraction } from "@/lib/interactions/adapters";
+import { TRACE_LETTERS } from "@/lib/interactions/trace-letter";
 import { AI_MODEL, getOpenAIClient } from "@/lib/ai/openai-client";
 import type { BattleInteractionType } from "@/lib/milestones/types";
 import type { Slide } from "@/lib/slides.types";
@@ -27,8 +28,74 @@ export const ITEM_TYPE_MIX: readonly GeneratedItemType[] = [
   "tap_to_count",
 ];
 
-export function itemTypesForLesson(lessonIndex: number, count: number): GeneratedItemType[] {
-  return Array.from({ length: count }, (_, k) => ITEM_TYPE_MIX[(lessonIndex * count + k) % ITEM_TYPE_MIX.length]);
+/**
+ * The types to ask for, spread across lessons. A lesson that teaches letters
+ * also gets a trace_letter item (two when there is room), in place of the
+ * mix's slot 1 (and slot 4).
+ */
+export function itemTypesForLesson(lessonIndex: number, count: number, teachesLetters = false): GeneratedItemType[] {
+  const types: GeneratedItemType[] = Array.from({ length: count }, (_, k) => ITEM_TYPE_MIX[(lessonIndex * count + k) % ITEM_TYPE_MIX.length]);
+  if (teachesLetters) {
+    if (count >= 2) types[1] = "trace_letter";
+    if (count >= 7) types[4] = "trace_letter";
+  }
+  return types;
+}
+
+/** The letters a lesson teaches (from its titles, else its content), for trace_letter items. */
+export interface LessonLetters {
+  script: "ar" | "en";
+  letters: string[];
+}
+
+const ARABIC_LETTER_NAMES: Array<[string, string]> = [
+  ["ألف", "ا"], ["باء", "ب"], ["تاء", "ت"], ["ثاء", "ث"], ["جيم", "ج"], ["حاء", "ح"], ["خاء", "خ"], ["دال", "د"],
+  ["ذال", "ذ"], ["راء", "ر"], ["زاي", "ز"], ["سين", "س"], ["شين", "ش"], ["صاد", "ص"], ["ضاد", "ض"], ["طاء", "ط"],
+  ["ظاء", "ظ"], ["عين", "ع"], ["غين", "غ"], ["فاء", "ف"], ["قاف", "ق"], ["كاف", "ك"], ["لام", "ل"], ["ميم", "م"],
+  ["نون", "ن"], ["هاء", "ه"], ["واو", "و"], ["ياء", "ي"],
+];
+
+function arabicLettersIn(text: string): string[] {
+  const found = new Set<string>();
+  // A letter on its own ("حرف ب", "ب - باب"), never one inside a word.
+  for (const match of text.matchAll(/(?:^|[^ء-ي])([ا-ي])(?=$|[^ء-ي])/gu)) {
+    if (TRACE_LETTERS.ar.includes(match[1])) found.add(match[1]);
+  }
+  // Or by name: "حرف الباء", "الباء".
+  for (const [name, letter] of ARABIC_LETTER_NAMES) {
+    if (new RegExp(`(?:ال|حرف\\s+)${name}(?![\\u0621-\\u064A])`, "u").test(text)) found.add(letter);
+  }
+  return [...found];
+}
+
+function englishLettersIn(text: string): string[] {
+  const found = new Set<string>();
+  // "Letter B", "Letters a and b", "the letters s, a, t"
+  for (const match of text.matchAll(/\bletters?\s+((?:[A-Za-z](?:\s*(?:,|&|\/|and)\s*|\s+|$))+)/gi)) {
+    for (const letter of match[1].match(/\b[A-Za-z]\b/g) ?? []) found.add(letter);
+  }
+  // "Bb", "/s/"
+  for (const match of text.matchAll(/\b([A-Z])([a-z])\b/g)) if (match[1].toLowerCase() === match[2]) found.add(match[1]).add(match[2]);
+  for (const match of text.matchAll(/\/([a-z])\//g)) found.add(match[1]);
+  // A letter in one case may be traced in either.
+  for (const letter of [...found]) found.add(letter.toUpperCase()).add(letter.toLowerCase());
+  return [...found].filter((letter) => TRACE_LETTERS.en.includes(letter));
+}
+
+/**
+ * Null unless the lesson teaches Arabic or English letters (an Arabic /
+ * English subject whose lesson title is about letters) and names at least one.
+ */
+export function lessonLetters(input: { subjectName: string; lessonTitleAr: string; lessonTitleEn: string; content: string }): LessonLetters | null {
+  const subject = input.subjectName.toLowerCase();
+  const script = /english|إنجليزي|انجليزي/.test(subject) ? "en" : /arabic|عربي|لغتي/.test(subject) ? "ar" : null;
+  if (!script) return null;
+  const titles = `${input.lessonTitleEn} ${input.lessonTitleAr}`;
+  const aboutLetters = /\b(letters?|alphabet|phonics|abc)\b/i.test(titles) || /حرف|حروف|أبجد|الهجاء/u.test(titles);
+  if (!aboutLetters) return null;
+  const find = script === "ar" ? arabicLettersIn : englishLettersIn;
+  const letters = find(titles).length ? find(titles) : find(input.content);
+  return letters.length ? { script, letters } : null;
 }
 
 export interface LessonItemRequest {
@@ -39,6 +106,8 @@ export interface LessonItemRequest {
   gradeLevel: number;
   /** One requested type per item, in order. */
   types: GeneratedItemType[];
+  /** The letters this lesson teaches, when it does (trace_letter items use one of them). */
+  letters?: LessonLetters | null;
 }
 
 /** Returns raw items in the flat interaction_* shape (validated by the caller). */
@@ -48,7 +117,7 @@ const nullable = (schema: object) => ({ anyOf: [schema, { type: "null" }] });
 const stringList = { type: "array", items: { type: "string" } };
 
 const ITEM_FIELDS = {
-  interaction_type: { type: "string", enum: [...new Set(ITEM_TYPE_MIX)] },
+  interaction_type: { type: "string", enum: [...new Set<GeneratedItemType>([...ITEM_TYPE_MIX, "trace_letter"])] },
   interaction_prompt_ar: { type: "string" },
   interaction_prompt_en: { type: "string" },
   interaction_options_ar: nullable(stringList),
@@ -65,6 +134,9 @@ const ITEM_FIELDS = {
   interaction_free_entry: nullable({ type: "boolean" }),
   interaction_expected_answer_ar: nullable({ type: "string" }),
   interaction_expected_answer_en: nullable({ type: "string" }),
+  interaction_trace_script: nullable({ type: "string", enum: ["ar", "en"] }),
+  interaction_trace_letter: nullable({ type: "string" }),
+  interaction_trace_case: nullable({ type: "string", enum: ["upper", "lower"] }),
 } as const;
 
 const ITEMS_SCHEMA = {
@@ -108,6 +180,8 @@ export const TYPE_RULES: Record<GeneratedItemType, string> = {
     "sequence_order: 3-5 SINGLE, directly comparable values: plain numbers (7), words compared by length or alphabet, or events in time. NEVER pairs, sums or compound values (\"3 and 7\", \"2 + 5\"). No ties and no repeated values: exactly one order under the stated rule. The prompt is complete, at most 10 words, and states the rule, e.g. \"Smallest to biggest!\" or \"Put the day in order: morning first!\". List the items in the correct order.",
   sort_groups:
     "sort_groups: 2-3 groups and 4-6 items; every item belongs to exactly one group under the prompt's rule (e.g. even / odd), every group gets at least one item, and no item could fit two groups.",
+  trace_letter:
+    "trace_letter: the child traces ONE letter this lesson teaches (from LETTERS TAUGHT), shown to them as a guide. Set interaction_trace_script (\"ar\" for an Arabic letter, \"en\" for an English one), interaction_trace_letter to that single letter (Arabic: the plain letter, e.g. \"ب\"; English: in the case to trace, e.g. \"b\" or \"B\"), and interaction_trace_case (\"upper\" / \"lower\" for English, null for Arabic). The prompt asks the child to trace that letter and names it, e.g. \"Trace the letter b!\" / \"تتبّع حرف الباء ب!\". All option, item and answer fields are null.",
 };
 
 /** The default generator: one structured OpenAI call per lesson. */
@@ -127,9 +201,9 @@ ${request.content}
 
 ITEM TYPES, IN ORDER
 ${plan}
-
+${request.letters?.letters.length ? `\nLETTERS TAUGHT (trace_letter uses one of these)\n${request.letters.letters.join(" ")}\n` : ""}
 FIELD RULES
-${INTERACTION_FIELD_RULES.filter((rule) => !/free_response|draw_answer|drag_drop_label/.test(rule)).join("\n")}
+${INTERACTION_FIELD_RULES.filter((rule) => !/free_response|draw_answer|drag_drop_label|trace_letter/.test(rule)).join("\n")}
 
 CHILD-QUALITY RULES
 ${CHILD_RULES.join("\n")}
@@ -154,19 +228,40 @@ Before answering, silently check every answer, translation and distractor.`;
 };
 
 /** Turn one flat generated item into a validated battle Interaction, or null. */
-export function toGeneratedInteraction(raw: unknown): BattleInteraction | null {
-  const checked = checkGeneratedItem(raw);
+export function toGeneratedInteraction(raw: unknown, context?: { letters?: LessonLetters | null }): BattleInteraction | null {
+  const checked = checkGeneratedItem(raw, context);
   return "interaction" in checked ? checked.interaction : null;
 }
 
-/** Validate one generated item (structure, deterministic sense checks, quality), with the reason when it fails. */
-export function checkGeneratedItem(raw: unknown): { interaction: BattleInteraction } | { reason: string; prompt: string } {
+/**
+ * Validate one generated item (structure, deterministic sense checks,
+ * quality), with the reason when it fails. With a lesson `context`, a
+ * trace_letter item must trace a letter that lesson teaches.
+ */
+export function checkGeneratedItem(raw: unknown, context?: { letters?: LessonLetters | null }): { interaction: BattleInteraction } | { reason: string; prompt: string } {
   const flat = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const prompt = String(flat.interaction_prompt_en ?? flat.interaction_prompt_ar ?? "");
-  const interaction = slideToInteraction({ ...flat, image_url: null } as unknown as Slide);
+  const traced = flat.interaction_type === "trace_letter"
+    ? {
+        interaction_trace_config: {
+          script: flat.interaction_trace_script,
+          letter: typeof flat.interaction_trace_letter === "string" ? flat.interaction_trace_letter.trim() : flat.interaction_trace_letter,
+          case: flat.interaction_trace_case ?? undefined,
+          form: flat.interaction_trace_script === "ar" ? "isolated" : undefined,
+        },
+      }
+    : {};
+  const interaction = slideToInteraction({ ...flat, ...traced, image_url: null } as unknown as Slide);
   if (!interaction) return { reason: "not an interaction", prompt };
   const checked = validateBattleInteraction(interaction);
   if ("error" in checked) return { reason: checked.error, prompt };
+  if (checked.interaction.type === "trace_letter" && context) {
+    const letters = context.letters;
+    if (!letters?.letters.length) return { reason: "trace_letter in a lesson that does not teach letters", prompt };
+    if (letters.script !== checked.interaction.config.script || !letters.letters.includes(checked.interaction.config.letter)) {
+      return { reason: "trace_letter letter is not one this lesson teaches", prompt };
+    }
+  }
   const issue = itemQualityIssue(checked.interaction);
   return issue ? { reason: issue, prompt } : checked;
 }
@@ -202,6 +297,14 @@ export function itemQualityIssue(interaction: BattleInteraction): string | null 
     if (!ORDER_CRITERION.test(en) && !ORDER_CRITERION.test(ar)) return "put-in-order prompt does not say which way to order";
   }
   if (textsOf(interaction).some((value) => value.length > 80)) return "a choice is too long";
+  if (interaction.type === "trace_letter") {
+    const letter = interaction.config.letter;
+    // On its own or by name ("ب", "حرف الباء"), not inside another word (تتبّع).
+    const named = interaction.config.script === "ar"
+      ? arabicLettersIn(`${ar} ${en}`).includes(letter)
+      : new RegExp(`(^|[^A-Za-z])${letter}([^A-Za-z]|$)`).test(`${en} ${ar}`);
+    if (!named) return "trace prompt does not name the letter to trace";
+  }
   return null;
 }
 

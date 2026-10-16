@@ -119,7 +119,7 @@ describe("signature moves", () => {
   it("maps every boss, including Harf, to battle-ready types", () => {
     expect(BOSS_NAMES.letter_dragon).toEqual({ en: "Harf the Letter Dragon", ar: "حَرف تنين الحروف" });
     expect(BOSS_SIGNATURE_TYPES.number_giant).toEqual(["tap_to_count", "sequence_order"]);
-    expect(BOSS_SIGNATURE_TYPES.letter_dragon).toEqual(["sequence_order", "fill_missing_word", "match_pairs"]);
+    expect(BOSS_SIGNATURE_TYPES.letter_dragon).toEqual(["sequence_order", "fill_missing_word", "match_pairs", "trace_letter"]);
     for (const key of BOSS_KEYS) {
       expect(BOSS_SIGNATURE_TYPES[key].length).toBeGreaterThan(0);
       for (const type of BOSS_SIGNATURE_TYPES[key]) expect(BATTLE_INTERACTION_TYPES).toContain(type);

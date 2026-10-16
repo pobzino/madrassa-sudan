@@ -10,6 +10,7 @@ import {
   type InteractionPerms,
 } from "@/lib/server/milestones/interactions";
 import { battleStateFromRow, canonicalChoice, optionPermutation, servedItem, toBattleQuestion } from "@/lib/server/milestones/present";
+import { serverTraceTemplate } from "@/lib/interactions/trace-templates.server";
 import { BATTLE_A, BATTLE_B, INTERACTIONS, battleRow, interactionQuestion, mcQuestion, shortQuestion, tfQuestion } from "./milestone-fixtures";
 
 /** The correct answer in DISPLAY indexes, built the way a child would place it on screen. */
@@ -34,6 +35,9 @@ function correctDisplayAnswer(interaction: BattleInteraction, perms: Interaction
       return { type: "sort_groups", placements: perms.items.map((canonical, display) => ({ item_index: display, target_index: targets[interaction.solution_map[canonical]] })) };
     case "drag_drop_label":
       return { type: "drag_drop_label", placements: perms.items.map((canonical, display) => ({ label_index: display, hotspot_index: targets[canonical] })) };
+    case "trace_letter":
+      // Tracing the shown guide is the right answer.
+      return { type: "trace_letter", strokes: serverTraceTemplate(interaction.config)!.strokes.map((stroke) => stroke.points) };
   }
 }
 
@@ -47,6 +51,7 @@ const PUBLIC_KEYS: Record<BattleInteraction["type"], string[]> = {
   sequence_order: ["items", "prompt", "type"],
   sort_groups: ["items", "prompt", "targets", "type"],
   drag_drop_label: ["hotspots", "image_url", "labels", "prompt", "type"],
+  trace_letter: ["case", "form", "guide", "letter", "prompt", "script", "type"],
 };
 const KEY_FIELDS = ["correct_index", "correct_option_index", "correct_answer", "answer", "expected_answer", "target", "solution_map"];
 

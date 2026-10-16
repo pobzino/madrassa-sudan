@@ -348,7 +348,7 @@ ${validationSchemaNotes}
 - For sequence_order: provide 3-5 ordered entries in interaction_items_ar/en. The listed order is the correct answer
 - For sort_groups: provide 2-6 items in interaction_items_ar/en, 2-4 group labels in interaction_targets_ar/en, and interaction_solution_map as the 0-based target index for each item
 - For draw_answer: fill interaction_expected_answer_ar and/or interaction_expected_answer_en with a short plain-language description of what a correct student drawing must contain (shapes, labels, relationships). This description is used by a vision grader to judge the submitted drawing.
-- For trace_letter: set interaction_trace_config with script ("ar" or "en"), one target letter, and its Arabic form ("isolated", "initial", "medial", "final") or English case ("upper", "lower"). The letter tracing grader ignores case-insensitive differences only when config.case says so; audio_url is optional.
+- For trace_letter: set interaction_trace_config with script ("ar" or "en"), one target letter, and form "isolated" for Arabic (the only form) or English case ("upper" or "lower"); audio_url is optional. Only use trace_letter in lessons that teach letters.
 - Set interaction_prompt_ar/interaction_prompt_en: a short question or instruction for the student
 - Non-interactive slides (title, content, key_points, diagram_description, summary): set ALL interaction fields to null, including interaction_items_ar/en, interaction_targets_ar/en, and interaction_solution_map
 - Keep interaction prompts short and grade-appropriate for Grade ${lessonRow.grade_level || 1}`;
@@ -494,7 +494,7 @@ ${validationSchemaNotes}
                   properties: {
                     script: { type: "string", enum: ["ar", "en"] },
                     letter: { type: "string" },
-                    form: { anyOf: [{ type: "string", enum: ["isolated", "initial", "medial", "final"] }, { type: "null" }] },
+                    form: { anyOf: [{ type: "string", enum: ["isolated"] }, { type: "null" }] },
                     case: { anyOf: [{ type: "string", enum: ["upper", "lower"] }, { type: "null" }] },
                     audio_url: { anyOf: [{ type: "string" }, { type: "null" }] },
                   },

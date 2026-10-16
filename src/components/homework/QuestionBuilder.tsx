@@ -431,16 +431,8 @@ export function QuestionBuilder({
               {traceLetterOptions(traceConfig.script).filter((letter) => traceConfig.script === "ar" || (traceConfig.case === "lower" ? letter === letter.toLowerCase() : letter === letter.toUpperCase())).map((letter) => <option key={letter} value={letter}>{letter}</option>)}
             </select>
           </label>
-          {traceConfig.script === "ar" ? (
-            <label className="text-sm font-medium text-gray-700">Arabic form
-              <select value={traceConfig.form ?? "isolated"} onChange={(e) => {
-                const next = { ...traceConfig, form: e.target.value as TraceLetterConfig["form"] };
-                onUpdate({ question_content: JSON.stringify(next) });
-              }} className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2">
-                <option value="isolated">Isolated</option><option value="initial">Initial</option><option value="medial">Medial</option><option value="final">Final</option>
-              </select>
-            </label>
-          ) : (
+          {/* Arabic letters are traced in their isolated form (the only form with templates). */}
+          {traceConfig.script === "ar" ? null : (
             <label className="text-sm font-medium text-gray-700">Case
               <select value={traceConfig.case ?? "upper"} onChange={(e) => {
                 const letter = e.target.value === "lower" ? traceConfig.letter.toLowerCase() : traceConfig.letter.toUpperCase();

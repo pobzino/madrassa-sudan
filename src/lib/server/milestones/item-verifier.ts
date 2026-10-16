@@ -53,12 +53,28 @@ export function describeKey(item: BattleInteraction): string {
       return item.items.en.map((value, i) => `"${value}" → ${item.targets.en[item.solution_map[i]]}`).join("; ");
     case "drag_drop_label":
       return item.labels.en.map((label, i) => `"${label}" → spot ${i + 1}`).join("; ");
+    case "trace_letter":
+      return `trace the letter "${item.config.letter}" (shown to the child as a guide)`;
   }
+}
+
+/**
+ * The child sees no choices in a trace item (the letter's guide is shown and
+ * tracing it is the task), so there is nothing to answer blind: only whether
+ * the prompt makes sense counts.
+ */
+export function answersBlind(item: BattleInteraction): boolean {
+  return item.type !== "trace_letter";
 }
 
 /** What the child sees: the public view in a shuffled order, so no key leaks through list order. */
 export function describeForChild(item: BattleInteraction, index: number): string {
-  return JSON.stringify(toPublicInteraction(item, interactionPerms("verify", String(index), item)));
+  const shown = toPublicInteraction(item, interactionPerms("verify", String(index), item));
+  // The guide's coordinates mean nothing to a reader: name the letter instead.
+  if (shown.type === "trace_letter") {
+    return JSON.stringify({ type: "trace_letter", prompt: shown.prompt, letter_shown: shown.letter, script: shown.script });
+  }
+  return JSON.stringify(shown);
 }
 
 const VERDICT_SCHEMA = {
@@ -111,6 +127,7 @@ For each item set:
 - incomplete_prompt: the prompt is missing words, the rule to follow, or doesn't make sense on its own.
 - too_hard: well beyond a 7-year-old at this grade.
 - reason: one short sentence when any flag is true or matches_key is false, else "".
+Trace-a-letter items (type "trace_letter") have nothing to choose: the child traces the letter shown. Set child_answer to "trace" and matches_key to true; only judge the prompt: it must make sense on its own and ask the child to trace (write) exactly that letter (incomplete_prompt otherwise).
 Return one verdict per item, using its index.`;
 
   const completion = await openai.chat.completions.create({
@@ -146,9 +163,13 @@ export function applyVerdicts(items: BattleInteraction[], verdicts: ItemVerdict[
   const dropped: DroppedItem[] = [];
   items.forEach((item, index) => {
     const verdict = byIndex.get(index);
+    // Trace items have no blind answer (and so no key to get wrong): only the prompt checks count.
+    const blind = answersBlind(item);
     const reasons = !verdict
       ? ["no verdict"]
-      : [...verdict.flags, ...(verdict.matchesKey || verdict.flags.includes("wrong_key") ? [] : ["wrong_key"])];
+      : blind
+        ? [...verdict.flags, ...(verdict.matchesKey || verdict.flags.includes("wrong_key") ? [] : ["wrong_key"])]
+        : verdict.flags.filter((flag) => flag !== "wrong_key");
     if (verdict?.reason && reasons.length) reasons.push(verdict.reason);
     if (reasons.length) dropped.push({ prompt: item.prompt.en || item.prompt.ar, type: item.type, reasons });
     else kept.push(item);

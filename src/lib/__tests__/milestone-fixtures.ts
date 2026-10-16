@@ -84,6 +84,7 @@ export const INTERACTIONS = {
     labels: list(["leaf", "stem", "root"], ["ورقة", "ساق", "جذر"]),
     hotspots: [{ x_percent: 50, y_percent: 10 }, { x_percent: 50, y_percent: 50 }, { x_percent: 50, y_percent: 90 }],
   },
+  trace_letter: { type: "trace_letter", prompt: prompt("Trace the letter baa ب!", "تتبّع حرف الباء ب!"), config: { script: "ar", letter: "ب", form: "isolated" } },
 } satisfies { [K in BattleInteraction["type"]]: Extract<BattleInteraction, { type: K }> };
 
 /** A pool row that stores an Interaction in its jsonb column. */

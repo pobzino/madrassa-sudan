@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { RotateCcw, Sparkles, Undo2, Volume2 } from 'lucide-react';
 import type { InteractionAnswer, TraceLetterConfig } from '@/lib/interactions/types';
-import { getTraceLetterTemplate } from '@/lib/interactions/trace-letter';
+import { TRACE_LETTERS, traceLetterLabel, type TraceLetterTemplate } from '@/lib/interactions/trace-letter';
+import { arrowPath, penAt, startMarkers, tracePath, useReducedMotion, useTraceDemo, useTracePad, useTraceTemplate } from './tracePad';
 
 interface Props {
   config: TraceLetterConfig;
@@ -12,174 +13,200 @@ interface Props {
   disabled?: boolean;
 }
 
-type Point = [number, number];
-const letters = {
-  ar: [...'ابتثجحخدذرزسشصضطظعغفقكلمنهوي'],
-  en: [...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'],
+const COPY = {
+  ar: {
+    hint: (label: string) => `تتبّع ${label} بإصبعك`,
+    watch: 'شاهدني',
+    undo: 'تراجع',
+    clear: 'ابدأ من جديد',
+    sound: 'استمع',
+    loading: 'نجهّز الحرف…',
+    missing: 'هذا الحرف غير جاهز بعد.',
+    board: (label: string) => `لوح تتبّع ${label}`,
+  },
+  en: {
+    hint: (label: string) => `Trace ${label} with your finger`,
+    watch: 'Watch me',
+    undo: 'Undo',
+    clear: 'Start again',
+    sound: 'Listen',
+    loading: 'Getting the letter ready…',
+    missing: 'This letter is not ready yet.',
+    board: (label: string) => `Tracing board for ${label}`,
+  },
 };
 
-function pathData(points: readonly Point[]): string {
-  return points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${(x * 100).toFixed(2)} ${(y * 100).toFixed(2)}`).join(' ');
-}
-
-function arrowAt(points: readonly Point[]): Point[] {
-  const index = Math.max(1, Math.floor((points.length - 1) * 0.72));
-  const [x, y] = points[index];
-  const [px, py] = points[index - 1];
-  const angle = Math.atan2(y - py, x - px);
-  const size = 0.034;
-  return [
-    [x - size * Math.cos(angle - 0.52), y - size * Math.sin(angle - 0.52)],
-    [x, y],
-    [x - size * Math.cos(angle + 0.52), y - size * Math.sin(angle + 0.52)],
-  ];
+/** The letter's track, numbered starts and arrows, the demo pen and the child's ink, on a 0..100 box. */
+export function TraceBoard({
+  template,
+  strokes,
+  current,
+  demo,
+  inkColor = '#1D4ED8',
+  numberLabel = String,
+}: {
+  template: TraceLetterTemplate;
+  strokes: number[][][];
+  current: number[][] | null;
+  demo: { stroke: number; t: number } | null;
+  inkColor?: string;
+  /** Stroke numbers in the reader's digits. */
+  numberLabel?: (n: number) => string;
+}) {
+  const pen = demo ? penAt(template.strokes[demo.stroke], demo.t) : null;
+  const starts = startMarkers(template);
+  return (
+    <>
+      {template.strokes.map((stroke, index) => (
+        <path
+          key={`track-${index}`}
+          d={tracePath(stroke.points)}
+          fill="none"
+          stroke="#DDEFE3"
+          strokeWidth={Math.max(5, (stroke.width ?? 0.06) * 100 + 2)}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+      {template.strokes.map((stroke, index) => (
+        <path key={`dash-${index}`} d={tracePath(stroke.points)} fill="none" stroke="#8FC5A3" strokeWidth={0.9} strokeDasharray="1.4 2.6" strokeLinecap="round" />
+      ))}
+      {template.strokes.map((stroke, index) => {
+        const arrow = arrowPath(stroke);
+        return arrow ? <path key={`arrow-${index}`} d={arrow} fill="none" stroke="#2E8B57" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /> : null;
+      })}
+      {demo &&
+        template.strokes.slice(0, demo.stroke + 1).map((stroke, index) => (
+          <path
+            key={`demo-${index}`}
+            d={tracePath(stroke.points)}
+            pathLength={1}
+            fill="none"
+            stroke="#0E9F5A"
+            strokeWidth={Math.max(3.4, (stroke.width ?? 0.06) * 100 * 0.55)}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray={index < demo.stroke ? undefined : `${Math.max(0.001, demo.t)} 1`}
+          />
+        ))}
+      {strokes.map((stroke, index) => (
+        <path key={`ink-${index}`} d={tracePath(stroke)} fill="none" stroke={inkColor} strokeWidth={3.6} strokeLinecap="round" strokeLinejoin="round" />
+      ))}
+      {current && <path d={tracePath(current)} fill="none" stroke={inkColor} strokeWidth={3.6} strokeLinecap="round" strokeLinejoin="round" />}
+      {template.strokes.map((stroke, index) => (
+        <g key={`start-${index}`} opacity={strokes.length > index ? 0.35 : 1}>
+          <circle cx={starts[index][0] * 100} cy={starts[index][1] * 100} r={3.1} fill="#0E7A45" stroke="#fff" strokeWidth={0.8} />
+          <text x={starts[index][0] * 100} y={starts[index][1] * 100 + 1.25} fill="#fff" textAnchor="middle" fontSize={3.6} fontWeight={700}>
+            {numberLabel(index + 1)}
+          </text>
+        </g>
+      ))}
+      {pen && (
+        <g transform={`translate(${pen[0] * 100} ${pen[1] * 100})`} aria-hidden="true">
+          <circle r={4.2} fill="#FDE68A" opacity={0.55} />
+          <path d="M0 -3.6 L1 -1 L3.6 0 L1 1 L0 3.6 L-1 1 L-3.6 0 L-1 -1 Z" fill="#F59E0B" stroke="#fff" strokeWidth={0.5} />
+        </g>
+      )}
+    </>
+  );
 }
 
 export default function TraceLetterInput({ config, language, answer, onAnswerChange, disabled = false }: Props) {
-  const svgRef = useRef<SVGSVGElement>(null);
+  const copy = COPY[language];
+  const { template, loading } = useTraceTemplate(config);
+  const reducedMotion = useReducedMotion();
+  const { demo, play, stop, playing } = useTraceDemo(template, reducedMotion);
   const strokes = answer?.strokes ?? [];
-  const [current, setCurrent] = useState<number[][] | null>(null);
-  const [demoStep, setDemoStep] = useState(-1);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isAr = language === 'ar';
-  const template = useMemo(() => getTraceLetterTemplate(config), [config]);
-  const configLetter = config.script === 'en'
-    ? (config.case === 'lower' ? config.letter.toLowerCase() : config.letter.toUpperCase())
-    : config.letter;
-
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-
-  const announce = (next: number[][][]) => {
-    onAnswerChange?.({ type: 'trace_letter', strokes: next });
-  };
-
-  const pointFromEvent = (event: React.PointerEvent<SVGSVGElement>): Point => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    return [
-      Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
-      Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
-    ];
-  };
-
-  const startStroke = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (disabled || demoStep >= 0) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const point = pointFromEvent(event);
-    setCurrent([point]);
-  };
-
-  const moveStroke = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (!current || disabled) return;
-    event.preventDefault();
-    const point = pointFromEvent(event);
-    setCurrent((active) => active ? [...active, point] : null);
-  };
-
-  const finishStroke = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (!current) return;
-    event.preventDefault();
-    const point = pointFromEvent(event);
-    announce([...strokes, [...current, point]]);
-    setCurrent(null);
-  };
-
-  const watchDemo = () => {
-    if (!template) return;
-    if (timer.current) clearTimeout(timer.current);
-    setDemoStep(0);
-  };
-
-  useEffect(() => {
-    if (demoStep < 0 || !template) return;
-    timer.current = setTimeout(() => {
-      setDemoStep((step) => step + 1 >= template.strokes.length ? -1 : step + 1);
-    }, 800);
-    return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [demoStep, template]);
-
-  const copy = isAr
-    ? { watch: 'شاهد طريقة الكتابة', undo: 'تراجع', clear: 'مسح', sound: 'استمع', hint: 'اكتب بإصبعك فوق الحرف', invalid: 'اختر حرفاً صحيحاً' }
-    : { watch: 'Watch me', undo: 'Undo', clear: 'Clear', sound: 'Listen', hint: 'Trace the letter with your finger', invalid: 'Choose a valid letter' };
-
-  if (!template) return <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">{copy.invalid}</p>;
-
-  const templatePaths = template.strokes.map((stroke) => pathData(stroke.points));
-  const glyphFont = config.script === 'ar' ? 'Amal Trace Naskh, serif' : 'Amal Trace Print, sans-serif';
+  const pad = useTracePad({
+    strokes,
+    disabled: disabled || !template,
+    onStrokes: (next) => onAnswerChange?.({ type: 'trace_letter', strokes: next }),
+    onStrokeStart: stop,
+  });
+  const label = traceLetterLabel(config, language);
 
   return (
-    <div className="mx-auto w-full max-w-[520px] select-none" dir={isAr ? 'rtl' : 'ltr'}>
+    <div className="mx-auto w-full max-w-[460px] select-none" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-bold text-slate-700">{copy.hint}</p>
-        </div>
-        <div className="flex items-center gap-2">
+        <p className="text-base font-bold text-slate-700 [unicode-bidi:plaintext]">{copy.hint(label)}</p>
+        <div className="flex shrink-0 items-center gap-2">
           {config.audio_url && (
-            <button type="button" onClick={() => new Audio(config.audio_url!).play()} className="rounded-full bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">{copy.sound}</button>
+            <button
+              type="button"
+              onClick={() => void new Audio(config.audio_url!).play().catch(() => undefined)}
+              aria-label={copy.sound}
+              title={copy.sound}
+              className="grid h-11 w-11 place-items-center rounded-full bg-emerald-50 text-emerald-800"
+            >
+              <Volume2 className="h-5 w-5" aria-hidden="true" />
+            </button>
           )}
-          <button type="button" onClick={watchDemo} disabled={disabled || demoStep >= 0} className="rounded-full bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{copy.watch}</button>
+          <button
+            type="button"
+            onClick={playing ? stop : play}
+            disabled={!template}
+            className="inline-flex h-11 items-center gap-1.5 rounded-full bg-emerald-700 px-4 text-sm font-bold text-white shadow-[0_3px_0_#065F46] active:translate-y-0.5 active:shadow-none disabled:opacity-50"
+          >
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            {copy.watch}
+          </button>
         </div>
       </div>
-      <div className="overflow-hidden rounded-[28px] border-2 border-emerald-100 bg-white shadow-sm">
+      <div className="relative overflow-hidden rounded-[28px] border-2 border-emerald-100 bg-white shadow-sm">
         <svg
-          ref={svgRef}
           viewBox="0 0 100 100"
           role="img"
-          aria-label={isAr ? `تتبّع الحرف ${configLetter}` : `Trace the letter ${configLetter}`}
+          aria-label={copy.board(label)}
           className="block aspect-square w-full"
-          style={{ touchAction: 'none', cursor: disabled ? 'default' : 'crosshair' }}
-          onPointerDown={startStroke}
-          onPointerMove={moveStroke}
-          onPointerUp={finishStroke}
-          onPointerCancel={finishStroke}
+          style={{ touchAction: 'none', cursor: disabled || !template ? 'default' : 'crosshair' }}
+          {...pad.handlers}
         >
-          <defs>
-            <marker id="trace-arrow" markerWidth="4" markerHeight="4" refX="2.5" refY="2" orient="auto" markerUnits="userSpaceOnUse">
-              <path d="M0,0 L4,2 L0,4 z" fill="#1b8a50" />
-            </marker>
-          </defs>
-          <rect width="100" height="100" fill="#fff" />
-          <text x="50" y="69" textAnchor="middle" direction={config.script === 'ar' ? 'rtl' : 'ltr'} style={{ fontFamily: glyphFont, fontSize: config.script === 'ar' ? 78 : 82, fill: '#e8f1eb', fontWeight: 700 }}>{configLetter}</text>
-          {template.strokes.map((stroke, index) => (
-            <g key={`guide-${index}`} opacity={demoStep === index ? 1 : 0.92}>
-              <path d={templatePaths[index]} fill="none" stroke="#bdd8c7" strokeWidth={Math.max(1.2, (stroke.width ?? 0.025) * 100)} strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx={stroke.points[0][0] * 100} cy={stroke.points[0][1] * 100} r="2.15" fill="#118447" />
-              <text x={stroke.points[0][0] * 100} y={stroke.points[0][1] * 100 + 1.2} fill="white" textAnchor="middle" fontSize="2.3" fontWeight="700">{index + 1}</text>
-              {stroke.kind !== 'dot' && stroke.kind !== 'hamza' && <path d={pathData(arrowAt(stroke.points))} fill="none" stroke="#1b8a50" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" markerEnd="url(#trace-arrow)" />}
-            </g>
-          ))}
-          {template.strokes.map((stroke, index) => (
-            <path
-              key={`demo-${index}`}
-              d={templatePaths[index]}
-              fill="none"
-              stroke="#087f3c"
-              strokeWidth={Math.max(2.4, (stroke.width ?? 0.025) * 100)}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray="2 200"
-              strokeDashoffset="0"
-              className={demoStep === index ? 'trace-letter-demo-stroke' : ''}
-              style={{ opacity: demoStep >= index ? 1 : 0, strokeDasharray: demoStep > index ? '200 0' : '2 200', ...(demoStep === index ? { animation: 'trace-letter-draw 0.75s ease-out forwards' } : {}) }}
+          <rect width="100" height="100" fill="#FFFFFF" />
+          <path d="M6 50H94M50 6V94" stroke="#F1F5F9" strokeWidth={0.6} />
+          {template && (
+            <TraceBoard
+              template={template}
+              strokes={strokes}
+              current={pad.current}
+              demo={demo}
+              numberLabel={(n) => (language === 'ar' ? String.fromCharCode(0x0660 + n) : String(n))}
             />
-          ))}
-          {strokes.map((stroke, index) => <polyline key={`answer-${index}`} points={stroke.map(([x, y]) => `${x * 100},${y * 100}`).join(' ')} fill="none" stroke="#154d9b" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />)}
-          {current && <polyline points={current.map(([x, y]) => `${x * 100},${y * 100}`).join(' ')} fill="none" stroke="#154d9b" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />}
+          )}
         </svg>
+        {!template && (
+          <p className="absolute inset-0 grid place-items-center p-6 text-center text-sm font-semibold text-slate-500">
+            {loading ? copy.loading : copy.missing}
+          </p>
+        )}
       </div>
-      <style jsx global>{`
-        @font-face { font-family: 'Amal Trace Naskh'; src: url('/trace-letter/AmalTraceNaskh.ttf') format('truetype'); font-display: swap; }
-        @font-face { font-family: 'Amal Trace Print'; src: url('/trace-letter/AmalTracePrint.ttf') format('truetype'); font-display: swap; }
-        @keyframes trace-letter-draw { from { stroke-dasharray: 0 200; } to { stroke-dasharray: 200 0; } }
-      `}</style>
-      {!disabled && (
-        <div className="mt-3 flex justify-between gap-3">
-          <button type="button" onClick={() => announce(strokes.slice(0, -1))} disabled={!strokes.length} className="min-h-11 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-40">{copy.undo}</button>
-          <button type="button" onClick={() => announce([])} disabled={!strokes.length} className="min-h-11 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-40">{copy.clear}</button>
+      {!disabled && template && (
+        <div className="mt-3 flex justify-center gap-4">
+          <button
+            type="button"
+            onClick={pad.undo}
+            disabled={!strokes.length}
+            aria-label={copy.undo}
+            title={copy.undo}
+            className="grid h-12 w-12 place-items-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm disabled:opacity-40"
+          >
+            <Undo2 className="h-5 w-5 rtl:-scale-x-100" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={pad.clear}
+            disabled={!strokes.length}
+            aria-label={copy.clear}
+            title={copy.clear}
+            className="grid h-12 w-12 place-items-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm disabled:opacity-40"
+          >
+            <RotateCcw className="h-5 w-5" aria-hidden="true" />
+          </button>
         </div>
       )}
     </div>
   );
 }
 
-export function traceLetterOptions(script: 'ar' | 'en') { return letters[script]; }
+export function traceLetterOptions(script: 'ar' | 'en') {
+  return [...TRACE_LETTERS[script]];
+}

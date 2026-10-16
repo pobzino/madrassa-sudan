@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getTraceLetterTemplate } from "../interactions/trace-letter";
+import { serverTraceTemplate } from "../interactions/trace-templates.server";
 import {
   countsAsNewHomeworkCompletion,
   decideRetake,
@@ -90,7 +90,7 @@ describe("gradeHomeworkAnswers", () => {
 
   it("grades trace-letter homework from strokes rather than a client pass flag", () => {
     const config = { script: "en", letter: "A", case: "upper" } as const;
-    const strokes = getTraceLetterTemplate(config)!.strokes.map((stroke) =>
+    const strokes = serverTraceTemplate(config)!.strokes.map((stroke) =>
       stroke.points.map(([x, y]) => [x, y])
     );
     const question: GradableQuestion = {

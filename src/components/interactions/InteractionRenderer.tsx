@@ -828,19 +828,16 @@ function TraceLetterAuthor({
       </label>
       <label className="text-xs font-semibold text-gray-600">Letter
         <select value={config.letter} onChange={(event) => update({ letter: event.target.value })} className={fieldClass}>
-          {letterOptions.map((letter) => <option key={letter} value={letter}>{letter}</option>)}
+          {letterOptions
+            .filter((letter) => config.script === 'ar' || (config.case === 'lower' ? letter === letter.toLowerCase() : letter === letter.toUpperCase()))
+            .map((letter) => <option key={letter} value={letter}>{letter}</option>)}
         </select>
       </label>
-      {config.script === 'ar' ? (
-        <label className="text-xs font-semibold text-gray-600">Arabic form
-          <select value={config.form ?? 'isolated'} onChange={(event) => update({ form: event.target.value as 'isolated' | 'initial' | 'medial' | 'final' })} className={fieldClass}>
-            <option value="isolated">Isolated</option><option value="initial">Initial</option><option value="medial">Medial</option><option value="final">Final</option>
-          </select>
-        </label>
-      ) : (
+      {/* Arabic letters are traced in their isolated form (the only form with templates). */}
+      {config.script === 'en' && (
         <label className="text-xs font-semibold text-gray-600">Letter case
           <select value={config.case ?? 'upper'} onChange={(event) => update({ case: event.target.value as 'upper' | 'lower', letter: (event.target.value === 'lower' ? config.letter.toLowerCase() : config.letter.toUpperCase()) })} className={fieldClass}>
-            <option value="upper">Uppercase</option><option value="lower">Lowercase</option>
+            <option value="upper">Capital</option><option value="lower">Small</option>
           </select>
         </label>
       )}

@@ -201,7 +201,7 @@ export const BOSS_NAMES: Record<BossKey, { en: string; ar: string }> = {
  */
 export const BOSS_SIGNATURE_TYPES: Record<BossKey, readonly BattleInteractionType[]> = {
   number_giant: ["tap_to_count", "sequence_order"],
-  letter_dragon: ["sequence_order", "fill_missing_word", "match_pairs"],
+  letter_dragon: ["sequence_order", "fill_missing_word", "match_pairs", "trace_letter"],
   word_dragon: ["fill_missing_word", "match_pairs"],
   letter_camel: ["fill_missing_word", "match_pairs"],
   sprout_buddy: ["sort_groups", "sequence_order"],

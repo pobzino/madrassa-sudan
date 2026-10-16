@@ -9,6 +9,7 @@ import type { Slide } from '@/lib/slides.types';
 import { computeSlideInteractionCorrectness, hasStudentInteraction } from '@/lib/slide-interactions';
 import { slideToInteraction } from '@/lib/interactions/adapters';
 import { gradeInteraction } from '@/lib/interactions/grader';
+import '@/lib/interactions/trace-templates.server';
 
 const SlideResponseSchema = z.object({
   slide_id: z.string().min(1),

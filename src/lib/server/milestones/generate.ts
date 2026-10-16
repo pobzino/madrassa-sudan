@@ -14,6 +14,7 @@ import {
   checkGeneratedItem,
   generateLessonItems,
   itemTypesForLesson,
+  lessonLetters,
   promptKey,
   type LessonItemGenerator,
 } from "@/lib/server/milestones/item-generator";
@@ -199,20 +200,24 @@ export async function generateMilestonePool({
     sources.map((source, lessonIndex) => async () => {
       const lesson = lessonById.get(source.lessonId);
       const lessonTitleEn = lesson?.title_en || lesson?.title_ar || "Lesson";
+      const lessonTitleAr = lesson?.title_ar || lesson?.title_en || "درس";
+      // A lesson that teaches letters also gets a letter to trace.
+      const letters = lessonLetters({ subjectName, lessonTitleAr, lessonTitleEn, content: source.content });
       const raw = await generate({
         content: source.content,
-        lessonTitleAr: lesson?.title_ar || lesson?.title_en || "درس",
+        lessonTitleAr,
         lessonTitleEn,
         subjectName,
         gradeLevel,
-        types: itemTypesForLesson(lessonIndex, requested),
+        types: itemTypesForLesson(lessonIndex, requested, Boolean(letters)),
+        letters,
       });
 
       // 3a. Deterministic checks: structure, keys that must add up, one order, quality rules.
       const checked: BattleInteraction[] = [];
       const dropped: DroppedItem[] = [];
       for (const item of raw) {
-        const result = checkGeneratedItem(item);
+        const result = checkGeneratedItem(item, { letters });
         if ("interaction" in result) checked.push(result.interaction);
         else dropped.push({ prompt: result.prompt, reasons: [`check: ${result.reason}`] });
       }
