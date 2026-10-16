@@ -27,6 +27,7 @@ import { BOSS_TAUNTS, REMATCH_TAUNT, RESUME_TAUNT, SKIN_PARTS, signatureFor } fr
 import { superReady, turnOf } from "./turns";
 import type { EntranceKind, Feedback, PendingAnswer } from "./useBattleSession";
 import { battleGeometry, layoutModeFor, type BattleLayoutMode } from "./geometry";
+import { clearFx } from "./moves/fx";
 
 export interface FxEvent {
   key: number;
@@ -181,6 +182,8 @@ export default function BattleScene(props: BattleSceneProps) {
   const [step, setStep] = useState<EntranceStep | null>(entrance ? (entrance === "resume" ? 2 : 0) : null);
   const [launch, setLaunch] = useState<Launch | null>(null);
   const launchAnimations = useRef<Animation[]>([]);
+  // Signature effects fly in a layer of their own: clear it when the battle closes.
+  useEffect(() => () => clearFx(), []);
   const previousPhase = useRef(battle.phase);
 
   const shake = useCallback(
@@ -764,6 +767,7 @@ export default function BattleScene(props: BattleSceneProps) {
               return rects;
             }}
             catchTarget={() => owlBoxRef.current?.getBoundingClientRect() ?? null}
+            owlBox={() => owlBoxRef.current}
             throwFrom={() => bossBoxRef.current?.getBoundingClientRect() ?? null}
             hintButton={
               canHint ? (

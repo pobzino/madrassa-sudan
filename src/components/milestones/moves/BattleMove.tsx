@@ -10,6 +10,7 @@ import type { SkinParts } from "../signatures";
 import { MathText } from "../BattleParts";
 import { pickList, pickText, type PublicInteraction } from "./contract";
 import { layoutCatch, type CatchLayout } from "./catchLayout";
+import * as fx from "./fx";
 
 /** How many things the boss throws in a catch move (more than any count asked for). */
 /** More than any count a battle asks for (1-12), so catching them all is never the answer. */
@@ -46,6 +47,8 @@ export interface BattleMoveProps {
   catchTarget?: () => DOMRect | null;
   /** Where thrown things come from (the boss). */
   throwFrom?: () => DOMRect | null;
+  /** The owl's box, for moves that move the owl itself (the dodge roll). */
+  owlBox?: () => HTMLElement | null;
   /** The Owl hint icon button, first in the action row (when the hint fits). */
   hintButton?: ReactNode;
   /** Height of the targets band, between the boss's ledge and the owl's head (px). */
@@ -111,6 +114,14 @@ const ACTION_ROW = "mt-auto flex h-[76px] shrink-0 items-center gap-3";
 
 function rectOf(element: Element | null): DOMRect | null {
   return element ? element.getBoundingClientRect() : null;
+}
+
+/** Attacks fly at the boss; blocks gather in front of the owl as a shield in the move's motif. */
+function aimOf(props: Pick<BattleMoveProps, "turn" | "throwFrom" | "catchTarget">, motif: fx.ShieldMotif, glyph?: string): DOMRect | null {
+  if (props.turn === "attack") return props.throwFrom?.() ?? null;
+  const owl = props.catchTarget?.() ?? null;
+  fx.formShield(motif, owl, glyph);
+  return owl;
 }
 
 type ConfirmKind = "fire" | "block" | "cast";
@@ -206,12 +217,19 @@ function orbArc(count: number): Array<{ x: number; y: number }> {
   return [{ x: 20, y: 25 }, { x: 80, y: 25 }, { x: 36, y: 76 }, { x: 64, y: 76 }];
 }
 
-function StarOrbs({ interaction, lang, hint, disabled, onSubmit, hintButton }: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "choose_correct" }> }) {
+function StarOrbs(props: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "choose_correct" }> }) {
+  const { interaction, lang, hint, disabled, onSubmit, hintButton } = props;
   const options = pickList(interaction.options, lang).slice(0, 4);
   const hidden = hint?.hideOptionIds ?? [];
   const round = options.every((option) => option.trim().length <= 9);
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
   const spots = orbArc(options.length);
+  // The chosen orb charges and launches with a comet trail; the others pop.
+  const choose = (index: number) => {
+    const origin = rectOf(refs.current[index]);
+    fx.orbLaunch(refs.current[index], refs.current.filter((_, i) => i !== index), aimOf(props, "orb"));
+    onSubmit({ type: "choose_correct", selected_index: index }, origin);
+  };
 
   // The orbs drift in from the owl.
   useLayoutEffect(() => {
@@ -242,7 +260,7 @@ function StarOrbs({ interaction, lang, hint, disabled, onSubmit, hintButton }: B
               type="button"
               disabled={disabled || gone}
               aria-hidden={gone || undefined}
-              onClick={() => onSubmit({ type: "choose_correct", selected_index: index }, rectOf(refs.current[index]))}
+              onClick={() => choose(index)}
               className={`min-h-14 w-full rounded-full px-5 py-1.5 text-start text-[21px] font-semibold leading-snug text-[#1a1a1a] transition-[opacity,scale] duration-300 active:scale-95 ${gone ? "scale-50 opacity-0" : ""}`}
               style={ORB_STYLE}
             >
@@ -271,7 +289,7 @@ function StarOrbs({ interaction, lang, hint, disabled, onSubmit, hintButton }: B
             type="button"
             disabled={disabled || gone}
             aria-hidden={gone || undefined}
-            onClick={() => onSubmit({ type: "choose_correct", selected_index: index }, rectOf(refs.current[index]))}
+            onClick={() => choose(index)}
             className={`absolute grid aspect-square h-[min(100px,calc(var(--band)*0.44))] -translate-y-1/2 place-items-center rounded-full text-[clamp(30px,5dvh,40px)] font-bold text-[#1a1a1a] transition-[opacity,scale] duration-300 active:scale-95 ltr:-translate-x-1/2 rtl:translate-x-1/2 ${gone ? "scale-50 opacity-0" : ""}`}
             style={{ ...ORB_STYLE, insetInlineStart: `${spot.x}%`, top: `${spot.y}%` }}
           >
@@ -288,13 +306,18 @@ function StarOrbs({ interaction, lang, hint, disabled, onSubmit, hintButton }: B
 
 /* ------------------------------------------- true_false: dodge left/right */
 
-function DodgeLanes({ lang, disabled, onSubmit }: BattleMoveProps) {
+function DodgeLanes(props: BattleMoveProps) {
+  const { lang, disabled, onSubmit } = props;
   const t = MILESTONE_COPY[lang];
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
   const swipe = useRef<{ x: number } | null>(null);
   const choose = (value: boolean) => {
     if (disabled) return;
-    onSubmit({ type: "true_false", value }, rectOf(refs.current[value ? 0 : 1]));
+    const chosen = rectOf(refs.current[value ? 0 : 1]);
+    // The attack streaks through the lane you left; the owl dodge-rolls your way.
+    fx.dodgeRoll(props.owlBox?.() ?? null, chosen, rectOf(refs.current[value ? 1 : 0]));
+    if (props.turn === "block") aimOf(props, "lanes");
+    onSubmit({ type: "true_false", value }, chosen);
   };
   // Swipe toward a lane to dodge into it. The "True" lane is on the start side.
   const onPointerDown = (event: ReactPointerEvent) => {
@@ -351,6 +374,7 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
   const goal = interaction.catch_count;
   const [caught, setCaught] = useState<number[]>([]);
   const fieldRef = useRef<HTMLDivElement>(null);
+  const counterRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<CatchLayout | null>(null);
 
   // Lay the bubbles out over the whole field, clear of the owl and its platform.
@@ -414,9 +438,20 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
           { transform: `translate(${(to.left + to.width / 2 - (from.left + from.width / 2)) / z}px, ${(to.top + to.height / 2 - (from.top + from.height / 2)) / z}px) scale(0.35)`, opacity: 0.2 },
         ], { duration: 420, easing: "ease-in", fill: "forwards" })
       : null;
-    const done = () => setCaught((current) => [...current, index]);
+    // It zips into the owl's shield: "+1", and the counter bumps.
+    const done = () => {
+      setCaught((current) => [...current, index]);
+      fx.plusOne(catchTarget?.() ?? null);
+      fx.squash(counterRef.current, "bump");
+    };
     if (animation) animation.onfinish = done;
     else done();
+  };
+  const fire = (origin: DOMRect | null) => {
+    // Everything caught fires as a volley (or rings the owl as its shield).
+    const aim = aimOf({ turn, throwFrom, catchTarget }, "catch", interaction.emoji || "⭐");
+    if (turn === "attack") fx.volley(interaction.emoji || "⭐", caught.length, catchTarget?.() ?? null, aim);
+    onSubmit({ type: "tap_to_count", count: caught.length }, origin);
   };
 
   const glyph = interaction.emoji || "⭐";
@@ -453,12 +488,12 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
         <IconButton label={t.undo} onClick={() => setCaught((current) => current.slice(0, -1))} disabled={disabled || caught.length === 0}>
           <Undo2 className="h-6 w-6" aria-hidden="true" />
         </IconButton>
-        <div className="flex h-12 shrink-0 items-center gap-1.5 rounded-full bg-[#FFF8EC] px-3.5 text-[#1a1a1a] shadow-[0_4px_0_rgba(0,0,0,0.25)]" aria-live="polite">
+        <div ref={counterRef} className="flex h-12 shrink-0 items-center gap-1.5 rounded-full bg-[#FFF8EC] px-3.5 text-[#1a1a1a] shadow-[0_4px_0_rgba(0,0,0,0.25)]" aria-live="polite">
           <span className="text-[18px] font-bold leading-none">{t.caught}</span>
           <span className="text-[24px] font-bold leading-none">{formatNumber(caught.length, lang)}</span>
           {goal !== null && <span className="text-[16px] font-bold leading-none text-[#6B7280]">/ {formatNumber(goal, lang)}</span>}
         </div>
-        <ConfirmButton kind={turn === "attack" ? "fire" : "block"} lang={lang} disabled={disabled || caught.length === 0} onClick={(origin) => onSubmit({ type: "tap_to_count", count: caught.length }, origin)} />
+        <ConfirmButton kind={turn === "attack" ? "fire" : "block"} lang={lang} disabled={disabled || caught.length === 0} onClick={fire} />
       </div>
     </div>
   );
@@ -466,7 +501,8 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
 
 /* --------------------------------- sequence_order: rune stones in order */
 
-function RuneStones({ interaction, lang, hint, disabled, onSubmit, skin, hintButton }: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "sequence_order" }> }) {
+function RuneStones(props: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "sequence_order" }> }) {
+  const { interaction, lang, hint, disabled, onSubmit, skin, hintButton } = props;
   const t = MILESTONE_COPY[lang];
   const items = pickList(interaction.items, lang);
   // The Owl hint lights the first stone for you.
@@ -474,19 +510,39 @@ function RuneStones({ interaction, lang, hint, disabled, onSubmit, skin, hintBut
   const [picked, setPicked] = useState<number[]>([]);
   const order = [...locked, ...picked.filter((index) => !locked.includes(index))];
   const complete = order.length === items.length && items.length > 0;
+  const stones = useRef<Array<HTMLButtonElement | null>>([]);
+  const links = useRef<HTMLDivElement>(null);
+  // A glowing line links each lit stone to the one before it.
+  const orderKey = order.join(",");
+  useLayoutEffect(() => {
+    fx.linkStones(links.current, stones.current, orderKey ? orderKey.split(",").map(Number) : [], true);
+  }, [orderKey]);
+  const pick = (index: number) => {
+    fx.squash(stones.current[index], "pulse");
+    setPicked((current) => [...current, index]);
+  };
+  const cast = (origin: DOMRect | null) => {
+    // The chain flashes in order and fires a beam.
+    fx.chainBeam(stones.current, order, aimOf(props, "runes"));
+    onSubmit({ type: "sequence_order", order }, origin);
+  };
   return (
     <div className="flex h-full flex-col">
       <div className={`flex items-center ${BAND}`}>
-        <div className={`grid w-full gap-x-6 gap-y-7 px-2 ${items.length > 4 ? "grid-cols-3" : "grid-cols-2"}`}>
+        <div className={`relative grid w-full gap-x-6 gap-y-7 px-2 ${items.length > 4 ? "grid-cols-3" : "grid-cols-2"}`}>
+          <div ref={links} className="pointer-events-none absolute inset-0" aria-hidden="true" />
           {items.map((item, index) => {
             const place = order.indexOf(index);
             const lit = place >= 0;
             return (
               <button
                 key={index}
+                ref={(element) => {
+                  stones.current[index] = element;
+                }}
                 type="button"
                 disabled={disabled || lit}
-                onClick={() => setPicked((current) => [...current, index])}
+                onClick={() => pick(index)}
                 className={`relative min-h-[84px] px-3 py-3 text-[30px] font-bold leading-snug transition-[scale,opacity] active:scale-95 ${skin?.piece ?? RUNE_STONE} ${lit ? "ring-4 ring-[#F59E0B] ring-offset-2 ring-offset-transparent" : ""}`}
                 style={{ rotate: `${[-5, 4, 3, -4, 5, -3][index % 6]}deg`, translate: `0 ${index % 2 ? 10 : -6}px`, borderRadius: RUNE_SHAPES[index % RUNE_SHAPES.length] }}
               >
@@ -506,7 +562,7 @@ function RuneStones({ interaction, lang, hint, disabled, onSubmit, skin, hintBut
         <IconButton label={t.undo} onClick={() => setPicked((current) => current.slice(0, -1))} disabled={disabled || picked.length === 0}>
           <Undo2 className="h-6 w-6" aria-hidden="true" />
         </IconButton>
-        <ConfirmButton kind="cast" lang={lang} disabled={disabled || !complete} onClick={(origin) => onSubmit({ type: "sequence_order", order }, origin)} />
+        <ConfirmButton kind="cast" lang={lang} disabled={disabled || !complete} onClick={cast} />
       </div>
     </div>
   );
@@ -514,8 +570,11 @@ function RuneStones({ interaction, lang, hint, disabled, onSubmit, skin, hintBut
 
 /* ------------- match_pairs / sort_groups / drag_drop_label: one piece at a time */
 
-function PlacePieces({ interaction, lang, turn, hint, disabled, onSubmit, skin, hintButton }: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "match_pairs" | "sort_groups" | "drag_drop_label" }> }) {
+function PlacePieces(props: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "match_pairs" | "sort_groups" | "drag_drop_label" }> }) {
+  const { interaction, lang, turn, hint, disabled, onSubmit, skin, hintButton } = props;
   const t = MILESTONE_COPY[lang];
+  const pieceRef = useRef<HTMLDivElement>(null);
+  const slotRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const pieces = pickList(interaction.type === "drag_drop_label" ? interaction.labels : interaction.items, lang);
   const slots = interaction.type === "drag_drop_label" ? interaction.hotspots.map((_, i) => String(i + 1)) : pickList(interaction.targets, lang);
   const oneEach = interaction.type !== "sort_groups";
@@ -532,7 +591,23 @@ function PlacePieces({ interaction, lang, turn, hint, disabled, onSubmit, skin, 
 
   const place = (slot: number) => {
     if (disabled || !hasCurrent || slotTaken(slot)) return;
+    // Matches snap in with a spark; sorted things fly into a basket that gulps
+    // them; labels stamp onto the picture.
+    const target = slotRefs.current[slot];
+    if (interaction.type === "sort_groups") fx.intoBasket(pieceRef.current, target);
+    else {
+      fx.flyInto(pieceRef.current, target, 0.5);
+      window.setTimeout(() => (interaction.type === "match_pairs" ? fx.snapSpark(slotRefs.current[slot]) : fx.stampLabel(slotRefs.current[slot])), 260);
+    }
     setMade((list) => [...list, [current, slot]]);
+  };
+  const confirm = (origin: DOMRect | null) => {
+    const filled = [...new Set(all.map(([, slot]) => slot))].sort((a, b) => a - b).map((slot) => slotRefs.current[slot]);
+    const aim = aimOf(props, interaction.type === "match_pairs" ? "pairs" : interaction.type === "sort_groups" ? "baskets" : "stamp");
+    if (interaction.type === "match_pairs") fx.pairsFly(filled, aim);
+    else if (interaction.type === "sort_groups") fx.basketsBurst(filled);
+    else fx.labelsFire(filled, turn === "attack" ? aim : null);
+    onSubmit(answer(), origin);
   };
   const drag = useDragPiece((slot) => place(Number(slot)), disabled || !hasCurrent);
 
@@ -550,6 +625,7 @@ function PlacePieces({ interaction, lang, turn, hint, disabled, onSubmit, skin, 
           {hasCurrent ? (
             <div
               key={current}
+              ref={pieceRef}
               {...drag}
               className={`min-h-16 min-w-[140px] max-w-full cursor-grab touch-none select-none rounded-[20px] px-5 py-3 text-center text-[26px] font-bold leading-snug motion-safe:animate-pop-in ${skin?.piece ?? STONE}`}
             >
@@ -567,6 +643,9 @@ function PlacePieces({ interaction, lang, turn, hint, disabled, onSubmit, skin, 
               return (
                 <button
                   key={index}
+                  ref={(element) => {
+                    slotRefs.current[index] = element;
+                  }}
                   type="button"
                   data-slot={index}
                   disabled={disabled || !hasCurrent || slotTaken(index)}
@@ -589,6 +668,9 @@ function PlacePieces({ interaction, lang, turn, hint, disabled, onSubmit, skin, 
               return (
                 <button
                   key={index}
+                  ref={(element) => {
+                    slotRefs.current[index] = element;
+                  }}
                   type="button"
                   data-slot={index}
                   disabled={disabled || !hasCurrent || slotTaken(index)}
@@ -621,7 +703,7 @@ function PlacePieces({ interaction, lang, turn, hint, disabled, onSubmit, skin, 
         <IconButton label={t.undo} onClick={() => setMade((list) => list.slice(0, -1))} disabled={disabled || made.length === 0}>
           <Undo2 className="h-6 w-6" aria-hidden="true" />
         </IconButton>
-        <ConfirmButton kind={turn === "attack" ? "fire" : "block"} lang={lang} disabled={disabled || !complete} onClick={(origin) => onSubmit(answer(), origin)} />
+        <ConfirmButton kind={turn === "attack" ? "fire" : "block"} lang={lang} disabled={disabled || !complete} onClick={confirm} />
       </div>
     </div>
   );
@@ -632,15 +714,15 @@ function PlacePieces({ interaction, lang, turn, hint, disabled, onSubmit, skin, 
 const BLANK = /_{2,}|…|\.{3}/;
 
 /** A tile you can tap, or drag onto the scroll's blank. */
-function DragTile({ disabled, pressed, hiddenTile, onPick, className, children }: { disabled: boolean; pressed: boolean; hiddenTile: boolean; onPick: () => void; className: string; children: ReactNode }) {
-  const drag = useDragPiece(onPick, disabled);
+function DragTile({ disabled, pressed, hiddenTile, onPick, className, children }: { disabled: boolean; pressed: boolean; hiddenTile: boolean; onPick: (tile?: HTMLElement) => void; className: string; children: ReactNode }) {
+  const drag = useDragPiece(() => onPick(), disabled);
   return (
     <button
       type="button"
       disabled={disabled}
       aria-pressed={pressed}
       aria-hidden={hiddenTile || undefined}
-      onClick={onPick}
+      onClick={(event) => onPick(event.currentTarget)}
       {...drag}
       className={`touch-none select-none ${className}`}
     >
@@ -649,7 +731,9 @@ function DragTile({ disabled, pressed, hiddenTile, onPick, className, children }
   );
 }
 
-function SpellScroll({ interaction, lang, hint, numeric, disabled, onSubmit, prompt: promptText, speaker, skin, hintButton }: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "fill_missing_word" }> }) {
+function SpellScroll(props: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "fill_missing_word" }> }) {
+  const { interaction, lang, hint, numeric, disabled, onSubmit, prompt: promptText, speaker, skin, hintButton } = props;
+  const scrollRef = useRef<HTMLDivElement>(null);
   const t = MILESTONE_COPY[lang];
   const prompt = promptText || pickText(interaction.prompt, lang);
   const options = pickList(interaction.options, lang).slice(0, 4);
@@ -666,14 +750,17 @@ function SpellScroll({ interaction, lang, hint, numeric, disabled, onSubmit, pro
   const fill = free ? typed : chosen !== null ? options[chosen] : "";
   const [before, after] = BLANK.test(prompt) ? prompt.split(BLANK, 2) : [prompt, ""];
   const ready = free ? typed.trim().length > 0 : chosen !== null;
-  const submit = (origin: DOMRect | null) =>
+  const submit = (origin: DOMRect | null) => {
+    // The scroll glows, rolls up into a spell and flies.
+    fx.scrollSpell(scrollRef.current, aimOf(props, "scroll"));
     onSubmit(free ? { type: "fill_missing_word", text: typed.trim().slice(0, 200) } : { type: "fill_missing_word", selected_index: chosen ?? -1 }, origin);
+  };
 
   return (
     <div className="flex h-full flex-col">
       <div className={`flex flex-col justify-center gap-4 ${BAND}`}>
         {/* the spell scroll */}
-        <div className="relative mx-2 rounded-[18px] bg-[#FEF3C7] px-5 pb-4 pt-5 text-[#1a1a1a] shadow-[0_6px_0_#D6B77A]">
+        <div ref={scrollRef} className="relative mx-2 rounded-[18px] bg-[#FEF3C7] px-5 pb-4 pt-5 text-[#1a1a1a] shadow-[0_6px_0_#D6B77A]">
           <span className="absolute inset-y-2 -start-2 w-4 rounded-full bg-[#E9C98B]" aria-hidden="true" />
           <span className="absolute inset-y-2 -end-2 w-4 rounded-full bg-[#E9C98B]" aria-hidden="true" />
           {speaker && <div className="absolute -top-5 end-3">{speaker}</div>}
@@ -717,7 +804,11 @@ function SpellScroll({ interaction, lang, hint, numeric, disabled, onSubmit, pro
                   disabled={disabled || gone}
                   pressed={chosen === index}
                   hiddenTile={gone}
-                  onPick={() => setChosen(index)}
+                  onPick={(tile) => {
+                    // The word flies into the gap.
+                    if (tile) fx.flyInto(tile, blankRef.current);
+                    setChosen(index);
+                  }}
                   className={`min-h-16 rounded-[18px] px-1 text-[clamp(22px,3.6dvh,30px)] font-bold transition-[transform,opacity] active:scale-95 ${skin?.piece ?? STONE} ${
                     chosen === index ? "ring-4 ring-[#F59E0B]" : ""
                   } ${gone ? "scale-50 opacity-0" : ""}`}
