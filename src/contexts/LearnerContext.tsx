@@ -29,9 +29,10 @@ interface LearnerContextValue {
   activeLearner: Learner | null;
   accountId: string | null;
   isParent: boolean;
+  canManageChildren: boolean;
   canHaveChildren: boolean;
   needsSelfName: boolean;
-  suggestedChildren: LearnersResponse["suggestedChildren"];
+  suggestedChildren: NonNullable<LearnersResponse["suggestedChildren"]>;
   needsSetup: boolean;
   loading: boolean;
   error: string | null;
@@ -60,19 +61,33 @@ function readSavedLearner(accountId: string): string | null {
   }
 }
 
+function claimChildProfilesWelcome(accountId: string, canManageChildren: boolean): boolean {
+  if (!canManageChildren) return false;
+  const key = `amal-child-profiles-welcome:v2:${accountId}`;
+  try {
+    if (localStorage.getItem(key) === "shown") return false;
+    localStorage.setItem(key, "shown");
+  } catch {
+    // If storage is unavailable, the one-time welcome is best effort.
+  }
+  return true;
+}
+
 export function LearnerProvider({ children }: { children: ReactNode }) {
   const [learners, setLearners] = useState<Learner[]>([]);
   const learnersRef = useRef<Learner[]>([]);
   const [activeLearner, setActiveLearnerState] = useState<Learner | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [isParent, setIsParent] = useState(false);
+  const [canManageChildren, setCanManageChildren] = useState(false);
   const [canHaveChildren, setCanHaveChildren] = useState(false);
   const [needsSelfName, setNeedsSelfName] = useState(false);
   const needsSelfNameRef = useRef(false);
-  const [suggestedChildren, setSuggestedChildren] = useState<LearnersResponse["suggestedChildren"]>([]);
+  const [suggestedChildren, setSuggestedChildren] = useState<NonNullable<LearnersResponse["suggestedChildren"]>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [welcomePrompt, setWelcomePrompt] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [initialSelectionRequired, setInitialSelectionRequired] = useState(false);
   const router = useRouter();
@@ -88,8 +103,9 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
       if (!payload.accountId || !Array.isArray(payload.learners) || payload.learners.length === 0) {
         throw new Error("Learners response is incomplete");
       }
-      const parent = Object.prototype.hasOwnProperty.call(payload, "needsSelfName") ||
-        Object.prototype.hasOwnProperty.call(payload, "suggestedChildren");
+      const parent = payload.isParent ?? (Object.prototype.hasOwnProperty.call(payload, "needsSelfName") ||
+        Object.prototype.hasOwnProperty.call(payload, "suggestedChildren"));
+      const canManage = payload.canManageChildren ?? parent;
       const nextLearners = payload.learners;
       const self = nextLearners.find((learner) => learner.isSelf);
       if (!self) throw new Error("Learners response has no account learner");
@@ -98,6 +114,7 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
       learnersRef.current = nextLearners;
       setLearners(nextLearners);
       setIsParent(parent);
+      setCanManageChildren(canManage);
       setCanHaveChildren(Boolean(payload.canHaveChildren));
       needsSelfNameRef.current = Boolean(payload.needsSelfName);
       setNeedsSelfName(Boolean(payload.needsSelfName));
@@ -108,19 +125,23 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
       const selectedId = saved && !saved.needsSetup && !payload.needsSelfName ? saved.id : self.id;
       cacheValidatedLearnerSelection(payload.accountId, selectedId, nextLearners.map((learner) => learner.id));
       const pending = (learner: Learner | undefined) => Boolean(learner?.needsSetup);
-      if (parent) {
+      if (canManage) {
         if (saved && !pending(saved) && !payload.needsSelfName) {
           setActiveLearnerState(saved);
           setInitialSelectionRequired(false);
-          setPickerOpen(false);
+          const showWelcome = claimChildProfilesWelcome(payload.accountId, canManage);
+          setWelcomePrompt(showWelcome);
+          setPickerOpen(showWelcome);
         } else {
           setActiveLearnerState(null);
           setInitialSelectionRequired(true);
+          setWelcomePrompt(claimChildProfilesWelcome(payload.accountId, canManage));
           setPickerOpen(true);
         }
       } else {
         setActiveLearnerState(self);
         setInitialSelectionRequired(false);
+        setWelcomePrompt(false);
         setPickerOpen(false);
       }
     } catch (cause) {
@@ -161,6 +182,7 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
         setLearners([self]);
         setActiveLearnerState(self);
         setIsParent(false);
+        setCanManageChildren(false);
         setInitialSelectionRequired(false);
         setPickerOpen(false);
       } else {
@@ -202,6 +224,7 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
     cacheValidatedLearnerSelection(accountId, id, learnersRef.current.map((learner) => learner.id));
     setActiveLearnerState(learner);
     setInitialSelectionRequired(false);
+    setWelcomePrompt(false);
     setPickerOpen(false);
     router.refresh();
     setSwitching(false);
@@ -215,14 +238,16 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
   }, [activeLearner]);
 
   const openPicker = useCallback(() => {
-    if (isParent) setPickerOpen(true);
-  }, [isParent]);
+    setWelcomePrompt(false);
+    if (canManageChildren) setPickerOpen(true);
+  }, [canManageChildren]);
 
   const value = useMemo<LearnerContextValue>(() => ({
     learners,
     activeLearner,
     accountId,
     isParent,
+    canManageChildren,
     canHaveChildren,
     needsSelfName,
     suggestedChildren,
@@ -233,9 +258,9 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
     setActiveLearner,
     openPicker,
     fetchWithLearner,
-  }), [learners, activeLearner, accountId, isParent, canHaveChildren, needsSelfName, suggestedChildren, loading, error, refresh, setActiveLearner, openPicker, fetchWithLearner]);
+  }), [learners, activeLearner, accountId, isParent, canManageChildren, canHaveChildren, needsSelfName, suggestedChildren, loading, error, refresh, setActiveLearner, openPicker, fetchWithLearner]);
 
-  const requiresPicker = isParent && (pickerOpen || initialSelectionRequired || switching || !activeLearner || Boolean(activeLearner.needsSetup) || needsSelfName);
+  const requiresPicker = canManageChildren && (pickerOpen || initialSelectionRequired || switching || !activeLearner || Boolean(activeLearner.needsSetup) || needsSelfName);
 
   return (
     <LearnerContext.Provider value={value}>
@@ -259,7 +284,8 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
           suggestedChildren={suggestedChildren}
           language={language}
           dismissible={Boolean(activeLearner && !initialSelectionRequired && !activeLearner.needsSetup && !needsSelfName)}
-          onClose={() => setPickerOpen(false)}
+          welcomePrompt={welcomePrompt}
+          onClose={() => { setWelcomePrompt(false); setPickerOpen(false); }}
           onSelect={setActiveLearner}
           onUpdated={refresh}
         />
@@ -279,9 +305,9 @@ export function useLearnerContext() {
 
 /** Compact dashboard control; selecting a learner completes before the old page remounts. */
 export function LearnerSwitcher({ className = "" }: { className?: string }) {
-  const { activeLearner, isParent, openPicker } = useLearnerContext();
+  const { activeLearner, canManageChildren, openPicker } = useLearnerContext();
   const { language } = useLanguage();
-  if (!isParent || !activeLearner) return null;
+  if (!canManageChildren || !activeLearner) return null;
   return (
     <button type="button" onClick={openPicker} className={`inline-flex items-center gap-2 rounded-full border border-[#007229]/20 bg-white/90 px-4 py-2 text-sm font-bold text-[#005C22] shadow-sm hover:bg-[#007229]/5 ${className}`} aria-label={language === "ar" ? "تبديل المتعلّم" : "Switch learner"}>
       <span aria-hidden="true">{activeLearner.avatar ? ({ cat: "🐱", dog: "🐶", lion: "🦁", elephant: "🐘", camel: "🐪", rabbit: "🐰", turtle: "🐢", fish: "🐟", bird: "🐦", monkey: "🐵", bear: "🐻", frog: "🐸" } as const)[activeLearner.avatar] : "👤"}</span>

@@ -27,7 +27,9 @@ export async function PATCH(request: NextRequest, route: RouteParams) {
     try { body = await request.json(); } catch { return NextResponse.json({ error: "invalid_json" }, { status: 400 }); }
     const parsed = PatchSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "validation_error", issues: parsed.error.issues }, { status: 400 });
-    if (!context.isSelf && context.accountProfile.role !== "parent") return NextResponse.json({ error: "parent_required" }, { status: 403 });
+    const canManageChildren = context.accountProfile.role === "parent" ||
+      (context.accountProfile.role === "admin" && context.accountProfile.is_approved);
+    if (!context.isSelf && !canManageChildren) return NextResponse.json({ error: "parent_required" }, { status: 403 });
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
       return NextResponse.json({ error: "invalid_learner_id" }, { status: 400 });
     }
@@ -72,7 +74,9 @@ export async function DELETE(request: NextRequest, route: RouteParams) {
     const { id } = await route.params;
     const supabase = await createClient();
     const context = await resolveLearnerContext(request, supabase);
-    if (context.accountProfile.role !== "parent") return NextResponse.json({ error: "parent_required" }, { status: 403 });
+    const canManageChildren = context.accountProfile.role === "parent" ||
+      (context.accountProfile.role === "admin" && context.accountProfile.is_approved);
+    if (!canManageChildren) return NextResponse.json({ error: "parent_required" }, { status: 403 });
     if (id === context.accountId) return NextResponse.json({ error: "self_learner_cannot_be_deleted" }, { status: 400 });
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
       return NextResponse.json({ error: "invalid_learner_id" }, { status: 400 });

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   LEARNER_AVATAR_LABELS,
-  LEARNER_AVATARS,
+  LEARNER_AVATAR_CHOICES,
   LEARNER_HEADER,
   MAX_CHILD_PROFILES_PER_ACCOUNT,
   MAX_LEARNER_NAME_LENGTH,
@@ -12,6 +12,7 @@ import {
   type LearnerAvatar,
   type SuggestedChild,
 } from "@/lib/learners/types";
+import LearnerAvatarIcon from "@/components/learners/LearnerAvatarIcon";
 import type { Language } from "@/contexts/LanguageContext";
 
 type LearnerFormValue = { id?: string; name: string; age: string; avatar: LearnerAvatar | ""; isSelf: boolean };
@@ -24,7 +25,8 @@ const COPY = {
     remove: (name: string) => `Delete ${name} and their learning data?`, cannotUndo: "This cannot be undone.",
     offline: "Connect to the internet once to use this learner offline.", error: "Couldn’t load learners. Try again.",
     grade: (grade: number) => `Grade ${grade}`, self: "Account learner", saving: "Saving…", nameRequired: "Enter a name between 1 and 60 characters.",
-    permission: "Only a parent account can manage child profiles.",
+    permission: "Only a parent or approved admin account can manage child profiles.",
+    welcome: "Add or manage your children’s profiles here to keep their learning progress separate.",
   },
   ar: {
     title: "من سيتعلّم الآن؟", subtitle: "اختر ملفك الشخصي", add: "أضف طفلًا", addAnother: "أضف طفلًا آخر",
@@ -33,14 +35,10 @@ const COPY = {
     remove: (name: string) => `هل تريد حذف ${name} وبيانات تعلّمه؟`, cannotUndo: "لا يمكن التراجع عن هذا الإجراء.",
     offline: "اتصل بالإنترنت مرة واحدة لاستخدام ملف المتعلّم دون اتصال.", error: "تعذّر تحميل ملفات المتعلّمين. حاول مرة أخرى.",
     grade: (grade: number) => `الصف ${grade}`, self: "متعلّم الحساب", saving: "جاري الحفظ…", nameRequired: "أدخل اسمًا من حرف واحد إلى ٦٠ حرفًا.",
-    permission: "يمكن لوليّ الأمر فقط إدارة ملفات الأطفال.",
+    permission: "يمكن لوليّ الأمر أو المدير المعتمد إدارة ملفات الأطفال.",
+    welcome: "أضف ملفات أطفالك أو أدرها هنا لمتابعة تقدّم كلٍّ منهم بشكل مستقل.",
   },
 } as const;
-
-const AVATAR_EMOJI: Record<LearnerAvatar, string> = {
-  cat: "🐱", dog: "🐶", lion: "🦁", elephant: "🐘", camel: "🐪", rabbit: "🐰",
-  turtle: "🐢", fish: "🐟", bird: "🐦", monkey: "🐵", bear: "🐻", frog: "🐸",
-};
 
 interface LearnerPickerProps {
   learners: Learner[];
@@ -54,10 +52,11 @@ interface LearnerPickerProps {
   onSelect: (id: string) => Promise<boolean>;
   onUpdated: () => Promise<void>;
   manageMode?: boolean;
+  welcomePrompt?: boolean;
 }
 
 export default function LearnerPicker(props: LearnerPickerProps) {
-  const { learners, accountId, canHaveChildren, needsSelfName, suggestedChildren, language, dismissible, onClose, onSelect, onUpdated, manageMode = false } = props;
+  const { learners, accountId, canHaveChildren, needsSelfName, suggestedChildren, language, dismissible, onClose, onSelect, onUpdated, manageMode = false, welcomePrompt = false } = props;
   const t = COPY[language];
   const rtl = language === "ar";
   const [form, setForm] = useState<LearnerFormValue | null>(null);
@@ -177,6 +176,8 @@ export default function LearnerPicker(props: LearnerPickerProps) {
         {dismissible && !manageMode && <button type="button" onClick={onClose} className="rounded-full p-2 text-gray-500 hover:bg-gray-100" aria-label={t.cancel}>×</button>}
       </div>
 
+      {welcomePrompt && <p className="mb-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">{t.welcome}</p>}
+
       {suggestedChildren.length > 0 && !manageMode && (
         <p className="mb-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">{language === "ar" ? "أكمل إعداد ملفات المتعلّمين الذين أضفتهم عند التسجيل." : "Finish setting up the learners you mentioned at sign-up."}</p>
       )}
@@ -193,7 +194,9 @@ export default function LearnerPicker(props: LearnerPickerProps) {
                 disabled={loadingLearner !== null}
                 className={`flex min-h-36 flex-col items-center justify-center rounded-2xl border-2 p-4 text-center transition hover:-translate-y-0.5 hover:border-[#007229]/40 hover:bg-[#007229]/5 disabled:opacity-60 ${needsName ? "border-amber-300 bg-amber-50" : "border-gray-100 bg-gray-50"}`}
               >
-                <span className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-white text-3xl shadow-sm" aria-hidden="true">{learner.avatar ? AVATAR_EMOJI[learner.avatar] : learner.isSelf ? "👤" : "🌟"}</span>
+                <span className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm" aria-hidden="true">
+                  {learner.avatar ? <LearnerAvatarIcon avatar={learner.avatar} className="h-12 w-12" /> : <span className="text-xl font-bold text-[#007229]">{learner.name?.trim().charAt(0).toLocaleUpperCase() || "?"}</span>}
+                </span>
                 <span className="font-bold text-gray-800">{needsName ? t.name : learner.name || (learner.isSelf ? t.self : t.name)}</span>
                 {learner.gradeLevel && <span className="mt-1 text-xs text-gray-500">{t.grade(learner.gradeLevel)}</span>}
                 {loadingLearner === learner.id && <span className="mt-1 text-xs text-[#007229]">{t.saving}</span>}
@@ -213,7 +216,9 @@ export default function LearnerPicker(props: LearnerPickerProps) {
         <div className="space-y-3">
           {children.length === 0 ? <p className="rounded-2xl bg-gray-50 p-5 text-gray-600">{language === "ar" ? "لم تتم إضافة أطفال بعد." : "No children have been added yet."}</p> : children.map((learner) => (
             <div key={learner.id} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-3 sm:p-4">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-2xl" aria-hidden="true">{learner.avatar ? AVATAR_EMOJI[learner.avatar] : "🌟"}</span>
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white" aria-hidden="true">
+                {learner.avatar ? <LearnerAvatarIcon avatar={learner.avatar} className="h-10 w-10" /> : <span className="font-bold text-[#007229]">{learner.name?.trim().charAt(0).toLocaleUpperCase() || "?"}</span>}
+              </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-bold text-gray-900">{learner.name || t.name}</p>
                 {learner.gradeLevel && <p className="text-sm text-gray-500">{t.grade(learner.gradeLevel)}</p>}
@@ -251,7 +256,7 @@ export default function LearnerPicker(props: LearnerPickerProps) {
             <fieldset>
               <legend className="mb-2 text-sm font-bold text-gray-700">{t.avatar}</legend>
               <div className="grid grid-cols-6 gap-2">
-                {LEARNER_AVATARS.map((avatar) => <button key={avatar} type="button" aria-label={LEARNER_AVATAR_LABELS[avatar][language]} title={LEARNER_AVATAR_LABELS[avatar][language]} aria-pressed={form.avatar === avatar} onClick={() => setForm({ ...form, avatar })} className={`rounded-xl p-2 text-2xl ${form.avatar === avatar ? "bg-[#007229]/10 ring-2 ring-[#007229]" : "bg-gray-50 hover:bg-gray-100"}`}>{AVATAR_EMOJI[avatar]}</button>)}
+                {LEARNER_AVATAR_CHOICES.map((avatar) => <button key={avatar} type="button" aria-label={LEARNER_AVATAR_LABELS[avatar][language]} title={LEARNER_AVATAR_LABELS[avatar][language]} aria-pressed={form.avatar === avatar} onClick={() => setForm({ ...form, avatar })} className={`flex h-14 w-14 items-center justify-center rounded-xl p-1 ${form.avatar === avatar ? "bg-[#007229]/10 ring-2 ring-[#007229]" : "bg-gray-50 hover:bg-gray-100"}`}><LearnerAvatarIcon avatar={avatar} className="h-12 w-12" /></button>)}
               </div>
             </fieldset>
             {formError && <p role="alert" className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800">{formError}</p>}

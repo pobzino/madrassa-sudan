@@ -557,7 +557,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {profile?.role === "parent" && (
+          {(profile?.role === "parent" || profile?.role === "admin") && (
             <Link href="/settings/children" className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:border-[#007229]/30 hover:bg-[#007229]/[0.02]">
               <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-2xl" aria-hidden="true">👨‍👩‍👧</span>
               <span className="min-w-0 flex-1">

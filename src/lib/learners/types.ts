@@ -29,6 +29,9 @@ export const LEARNER_AVATARS = [
   "frog",
 ] as const;
 
+/** New profile choices. Keep the legacy elephant value readable for profiles that already use it. */
+export const LEARNER_AVATAR_CHOICES = LEARNER_AVATARS.filter((avatar) => avatar !== "elephant");
+
 export type LearnerAvatar = (typeof LEARNER_AVATARS)[number];
 
 export const LEARNER_AVATAR_LABELS: Record<LearnerAvatar, { en: string; ar: string }> = {
@@ -66,15 +69,19 @@ export interface SuggestedChild {
 /** GET /api/learners */
 export interface LearnersResponse {
   accountId: string;
-  /** Only parent accounts can add children. */
-  canHaveChildren: boolean;
-  /** A parent account whose own learner has no name yet (first open after release). */
-  needsSelfName: boolean;
+  /** The account may create and manage child profiles (parents and approved admins). */
+  canManageChildren?: boolean;
+  /** True only for parent accounts; used to distinguish parent onboarding from admin access. */
+  isParent?: boolean;
+  /** Whether the account has room for another child profile. */
+  canHaveChildren?: boolean;
+  /** Whether the account learner still needs a display name. */
+  needsSelfName?: boolean;
   /** The first child's age from signup, to pre-fill the naming step. */
   selfSuggestedAge: number | null;
   /** The account's own learner first, then children oldest-added first. */
   learners: Learner[];
-  suggestedChildren: SuggestedChild[];
+  suggestedChildren?: SuggestedChild[];
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

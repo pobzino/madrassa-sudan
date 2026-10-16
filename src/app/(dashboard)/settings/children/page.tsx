@@ -7,12 +7,12 @@ import LearnerPicker from "@/components/learners/LearnerPicker";
 
 export default function MyChildrenPage() {
   const { language } = useLanguage();
-  const { learners, accountId, canHaveChildren, needsSelfName, suggestedChildren, refresh, setActiveLearner, isParent } = useLearnerContext();
+  const { learners, accountId, canHaveChildren, needsSelfName, suggestedChildren, refresh, setActiveLearner, canManageChildren } = useLearnerContext();
   const isRtl = language === "ar";
 
-  if (!isParent) {
+  if (!canManageChildren) {
     return <main className="mx-auto max-w-3xl px-5 py-10" dir={isRtl ? "rtl" : "ltr"}>
-      <p className="mb-5 rounded-2xl bg-gray-50 p-5 text-gray-700">{language === "ar" ? "إدارة ملفات الأطفال متاحة لحسابات أولياء الأمور فقط." : "Child profiles are available to parent accounts."}</p>
+      <p className="mb-5 rounded-2xl bg-gray-50 p-5 text-gray-700">{language === "ar" ? "إدارة ملفات الأطفال متاحة لحسابات أولياء الأمور فقط." : "Child profiles are available to parent and approved admin accounts."}</p>
       <Link href="/settings" className="font-bold text-[#007229]">{language === "ar" ? "العودة إلى الإعدادات" : "Back to Settings"}</Link>
     </main>;
   }

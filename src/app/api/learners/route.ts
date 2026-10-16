@@ -38,8 +38,9 @@ export async function GET(request: NextRequest) {
     const context = await resolveLearnerContext(request, supabase);
     const account = context.accountProfile as Record<string, unknown>;
     const isParent = account.role === "parent";
+    const canManageChildren = isParent || (account.role === "admin" && account.is_approved === true);
 
-    const { data: rawChildren, error: childrenError } = isParent
+    const { data: rawChildren, error: childrenError } = canManageChildren
       ? await supabase.from("profiles").select("*").eq("parent_account_id", context.accountId).order("created_at", { ascending: true }).order("id", { ascending: true })
       : { data: [], error: null };
     if (childrenError) return NextResponse.json({ error: "learners_unavailable" }, { status: 500 });
@@ -72,7 +73,9 @@ export async function GET(request: NextRequest) {
       accountId: context.accountId,
       learners,
     };
-    if (isParent) {
+    response.isParent = isParent;
+    response.canManageChildren = canManageChildren;
+    if (canManageChildren) {
       response.canHaveChildren = (rawChildren?.length ?? 0) < 8;
       response.needsSelfName = !learnerDisplayName(account as { full_name?: string | null; learner_name?: string | null });
       response.selfSuggestedAge = selfSuggestedAge;
@@ -88,7 +91,9 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const context = await resolveLearnerContext(request, supabase);
-    if (context.accountProfile.role !== "parent") return NextResponse.json({ error: "parent_required" }, { status: 403 });
+    const canManageChildren = context.accountProfile.role === "parent" ||
+      (context.accountProfile.role === "admin" && context.accountProfile.is_approved);
+    if (!canManageChildren) return NextResponse.json({ error: "parent_required" }, { status: 403 });
 
     let body: unknown;
     try { body = await request.json(); } catch { return NextResponse.json({ error: "invalid_json" }, { status: 400 }); }

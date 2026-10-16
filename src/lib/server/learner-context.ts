@@ -58,7 +58,9 @@ export async function resolveLearnerContext(
     return { accountId: user.id, learnerId: user.id, learnerProfile: accountProfile, accountProfile, isSelf: true };
   }
   if (!isUuid(learnerId)) throw new LearnerContextError(400, "invalid_learner_id");
-  if (accountProfile.role !== "parent") throw new LearnerContextError(403, "learner_forbidden");
+  const canManageChildren = accountProfile.role === "parent" ||
+    (accountProfile.role === "admin" && accountProfile.is_approved);
+  if (!canManageChildren) throw new LearnerContextError(403, "learner_forbidden");
 
   const { data: rawLearner, error: learnerError } = await supabase
     .from("profiles")
