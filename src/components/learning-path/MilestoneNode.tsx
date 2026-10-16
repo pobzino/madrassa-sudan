@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import ConfettiBurst from "@/components/practice/ConfettiBurst";
 import { ARENAS, BossCharacter, OWL_FOOT, OwlCharacter, type BossHandle, type OwlHandle } from "@/components/characters";
@@ -26,6 +27,11 @@ const COPY = {
     battle: "Battle!",
     continue: "Continue",
     bossBook: "Boss Book",
+    close: "Close",
+    puzzles: "puzzles",
+    toWin: "right to win",
+    shields: "shields",
+    reward: "Win a certificate and a new card for your Boss Book!",
     /** The face-off when the owl stands on the node: [boss, owl]. */
     faceOff: [
       ["Ready to lose, little owl?", "Let's battle!"],
@@ -44,6 +50,11 @@ const COPY = {
     battle: "إلى المعركة!",
     continue: "أكمل",
     bossBook: "كتاب الوحوش",
+    close: "إغلاق",
+    puzzles: "ألغاز",
+    toWin: "صحيحة للفوز",
+    shields: "دروع",
+    reward: "اربح شهادة وبطاقة جديدة في كتاب الوحوش!",
     faceOff: [
       ["مستعد تخسر يا بومة؟", "يلا نتحدى!"],
       ["ألغازي صعبة جداً!", "لقد تدرّبت!"],
@@ -138,6 +149,8 @@ export function MilestoneHero({
   const [bossSays, setBossSays] = useState<string | null>(null);
   const [owlSays, setOwlSays] = useState<string | null>(null);
   const [confetti, setConfetti] = useState(0);
+  // Tapping the boss opens a preview card; only its button starts the battle.
+  const [previewOpen, setPreviewOpen] = useState(false);
   const isActive = useSyncExternalStore(subscribe, () => activeNode === milestone.id, () => false);
   const reduceMotion = useSyncExternalStore(
     (cb) => {
@@ -345,8 +358,15 @@ export function MilestoneHero({
       )}
 
       <div className="relative">
-        {href && onSelect ? (
-          <button type="button" onClick={onSelect} aria-label={`${label.title}: ${label.sub}`} className="block rounded-full focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300">
+        {href ? (
+          <button
+            type="button"
+            onClick={() => {
+              onSelect?.();
+              setPreviewOpen(true);
+            }}
+            aria-haspopup="dialog"
+            aria-label={`${label.title}: ${label.sub}`} className="block rounded-full focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300">
             {windowArt}
           </button>
         ) : (
@@ -468,8 +488,80 @@ export function MilestoneHero({
         </Link>
       )}
 
+      {previewOpen && href && (
+        <BossPreview milestone={milestone} lang={lang} href={href} onClose={() => setPreviewOpen(false)} />
+      )}
+
       <ConfettiBurst burst={confetti} big originY={0.25} className="-inset-16 !h-[calc(100%+8rem)] !w-[calc(100%+8rem)]" />
     </div>
+  );
+}
+
+/** The card a tap on the boss opens: who it is, what it takes, and the one button that starts it. */
+function BossPreview({ milestone, lang, href, onClose }: { milestone: TreeMilestone; lang: "ar" | "en"; href: string; onClose: () => void }) {
+  const t = COPY[lang];
+  const boss = bossName(milestone.bossKey, lang, true);
+  const passed = milestone.state === "passed";
+  const label = milestoneLabel(milestone, lang, true);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const stats: Array<[string, string]> = [
+    [formatNumber(milestone.questionCount, lang), t.puzzles],
+    [formatNumber(milestone.requiredCorrect, lang), t.toWin],
+    [formatNumber(milestone.questionCount - milestone.requiredCorrect, lang), t.shields],
+  ];
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose} dir={lang === "ar" ? "rtl" : "ltr"}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={label.title}
+        onClick={(event) => event.stopPropagation()}
+        className="relative w-full max-w-[420px] overflow-hidden rounded-t-[28px] bg-[#08361C] font-fredoka text-white shadow-2xl motion-safe:animate-pop-in sm:rounded-[28px]"
+      >
+        <div className="relative h-[200px]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_70%,#1E7A43,#08361C_70%)]" aria-hidden="true" />
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
+            <BossCharacter bossKey={milestone.bossKey} pose={passed ? "ko" : "taunt"} size={170} title={bossName(milestone.bossKey, lang)} />
+          </div>
+          <button type="button" onClick={onClose} aria-label={t.close} className="absolute end-3 top-3 grid h-11 w-11 place-items-center rounded-full bg-black/35 text-xl font-bold">
+            ×
+          </button>
+        </div>
+        <div className="-mt-3 bg-[#D21034] px-4 py-1.5 text-center" style={{ transform: "skewY(-3deg)" }}>
+          <p className="text-[11px] font-bold tracking-[0.2em] text-[#FDE68A]">{t.ribbon}</p>
+          <p className="text-[26px] font-bold uppercase leading-tight">{boss}</p>
+        </div>
+        <div className="flex flex-col items-center gap-4 px-5 pb-6 pt-5 text-center">
+          <p className="text-[17px] font-semibold leading-snug">{label.sub}</p>
+          {!passed && (
+            <div className="grid w-full grid-cols-3 gap-2">
+              {stats.map(([value, name]) => (
+                <div key={name} className="rounded-2xl bg-white/10 px-2 py-2.5">
+                  <p className="text-[24px] font-bold leading-none">{value}</p>
+                  <p className="mt-1 text-[12px] font-medium text-white/80">{name}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {!passed && <p className="text-[14px] text-[#FDE68A]">{t.reward}</p>}
+          <Link
+            href={href}
+            className={`inline-flex h-14 w-full items-center justify-center rounded-full text-[20px] font-bold shadow-[0_5px_0_rgba(0,0,0,0.3),inset_0_3px_0_rgba(255,255,255,0.35)] ${
+              passed
+                ? "bg-[linear-gradient(180deg,#FDE68A,#F59E0B_55%,#D97706)] text-[#3B1D00]"
+                : "bg-[linear-gradient(180deg,#F05A73,#D21034_55%,#A01028)] text-white"
+            }`}
+          >
+            {milestoneCta(milestone, lang)}
+          </Link>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
