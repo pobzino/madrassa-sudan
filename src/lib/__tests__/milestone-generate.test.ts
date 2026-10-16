@@ -7,6 +7,8 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/ai/openai-client", () => ({
   AI_MODEL: "big-model",
   AI_MODEL_FAST: "fast-model",
+  AI_MODEL_MILESTONE: "milestone-model",
+  AI_MODEL_MILESTONE_VERIFY: "verify-model",
   getOpenAIClient: () => ({ chat: { completions: { create: openai.create } } }),
 }));
 
@@ -198,7 +200,7 @@ describe("verify-and-drop", () => {
 });
 
 describe("verifyItemsWithModel", () => {
-  it("shows the child view before the key, on the fast model, and reads the flags", async () => {
+  it("shows the child view before the key, on the verify model at low effort, and reads the flags", async () => {
     openai.create.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ verdicts: [
         { index: 0, child_answer: "1, 3, 8", matches_key: true, ambiguous: false, wrong_key: false, needs_picture: false, incomplete_prompt: false, too_hard: false, reason: "" },
@@ -214,8 +216,9 @@ describe("verifyItemsWithModel", () => {
       { index: 0, childAnswer: "1, 3, 8", matchesKey: true, flags: [], reason: "" },
       { index: 1, childAnswer: "?", matchesKey: false, flags: ["ambiguous", "needs_picture"], reason: "needs the picture" },
     ]);
-    const request = openai.create.mock.calls[0][0] as { model: string; messages: Array<{ content: string }> };
-    expect(request.model).toBe("fast-model");
+    const request = openai.create.mock.calls[0][0] as { model: string; reasoning_effort?: string; messages: Array<{ content: string }> };
+    expect(request.model).toBe("verify-model");
+    expect(request.reasoning_effort).toBe("low");
     const text = request.messages[1].content;
     const [childPart, keyPart] = text.split("STEP 2");
     expect(childPart).not.toContain("correct_index");

@@ -6,6 +6,8 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/ai/openai-client", () => ({
   AI_MODEL: "big-model",
   AI_MODEL_FAST: "fast-model",
+  AI_MODEL_MILESTONE: "milestone-model",
+  AI_MODEL_MILESTONE_VERIFY: "verify-model",
   getOpenAIClient: () => ({ chat: { completions: { create: openai.create } } }),
 }));
 
@@ -81,6 +83,21 @@ describe("generator tags", () => {
     expect(prompt).toContain("DIFFICULTY, IN ORDER: 2, 3, 1");
     expect(prompt).toContain("Make each item that hard.");
     expect(call.response_format.json_schema.schema.properties.items.items.properties.skill_key.enum).toEqual(["math.money", "math.time"]);
+    expect(call.response_format.json_schema.strict).toBe(true);
+    expect(call).toMatchObject({ model: "milestone-model", reasoning_effort: "low" });
+  });
+
+  it("falls back to the older model when this key cannot use the new one", async () => {
+    const request: LessonItemRequest = { content: "Coins", lessonTitleAr: "النقود", lessonTitleEn: "Money", subjectName: "Maths", gradeLevel: 1, types: ["choose_correct"] };
+    openai.create
+      .mockRejectedValueOnce(Object.assign(new Error("The model does not exist"), { status: 404, code: "model_not_found" }))
+      .mockResolvedValueOnce({ choices: [{ message: { content: JSON.stringify({ items: [] }) } }] });
+    await expect(generateLessonItems(request)).resolves.toEqual([]);
+    expect(openai.create.mock.calls.map(([call]) => call.model)).toEqual(["milestone-model", "big-model"]);
+    // other errors are not retried on another model
+    openai.create.mockReset().mockRejectedValueOnce(Object.assign(new Error("rate limited"), { status: 429 }));
+    await expect(generateLessonItems(request)).rejects.toThrow("rate limited");
+    expect(openai.create).toHaveBeenCalledTimes(1);
   });
 
   it("never drops an item for its tags: unknown skill -> default, bad difficulty -> null", () => {

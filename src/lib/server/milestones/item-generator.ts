@@ -1,8 +1,10 @@
 import "server-only";
 
+import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
 import { slideToInteraction } from "@/lib/interactions/adapters";
 import { TRACE_LETTERS } from "@/lib/interactions/trace-letter";
-import { AI_MODEL, getOpenAIClient } from "@/lib/ai/openai-client";
+import { AI_MODEL, AI_MODEL_MILESTONE, getOpenAIClient } from "@/lib/ai/openai-client";
+import { isModelUnavailableError } from "@/lib/ai/model-errors";
 import type { BattleInteractionType } from "@/lib/milestones/types";
 import type { Difficulty } from "@/lib/measurement/types";
 import type { Slide } from "@/lib/slides.types";
@@ -258,8 +260,9 @@ ${[...new Set(request.types)].map((type) => `- ${TYPE_RULES[type]}`).join("\n")}
 
 Before answering, silently check every answer, translation and distractor.`;
 
-  const completion = await openai.chat.completions.create({
-    model: AI_MODEL,
+  const params: Omit<ChatCompletionCreateParamsNonStreaming, "model"> = {
+    // Low effort: the blind verifier checks every item afterwards; gpt-5.4 at its default (medium) took 15-25 s per lesson.
+    reasoning_effort: "low",
     messages: [
       { role: "system", content: "You are a rigorous bilingual primary-education game designer. Accuracy and child clarity come first." },
       { role: "user", content: prompt },
@@ -268,7 +271,15 @@ Before answering, silently check every answer, translation and distractor.`;
       type: "json_schema",
       json_schema: { name: "milestone_items", strict: true, schema: itemsSchema((request.skills ?? []).map((skill) => skill.key).concat(request.defaultSkillKey ?? [])) },
     },
-  });
+  };
+  // The newest model first; an older one if this key cannot use it.
+  const completion = await openai.chat.completions
+    .create({ model: AI_MODEL_MILESTONE, ...params })
+    .catch((error: unknown) => {
+      if (!isModelUnavailableError(error) || AI_MODEL_MILESTONE === AI_MODEL) throw error;
+      console.warn(`OpenAI model ${AI_MODEL_MILESTONE} unavailable; using ${AI_MODEL}`);
+      return openai.chat.completions.create({ model: AI_MODEL, ...params });
+    });
   const text = completion.choices[0]?.message?.content;
   if (!text) throw new Error("Big Challenge generation returned no content.");
   const parsed = JSON.parse(text) as { items?: unknown[] };

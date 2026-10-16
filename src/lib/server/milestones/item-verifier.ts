@@ -1,6 +1,8 @@
 import "server-only";
 
-import { AI_MODEL_FAST, getOpenAIClient } from "@/lib/ai/openai-client";
+import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
+import { AI_MODEL_FAST, AI_MODEL_MILESTONE_VERIFY, getOpenAIClient } from "@/lib/ai/openai-client";
+import { isModelUnavailableError } from "@/lib/ai/model-errors";
 import type { Difficulty, TagSource } from "@/lib/measurement/types";
 import {
   interactionPerms,
@@ -141,8 +143,8 @@ For each item set:
 Trace-a-letter items (type "trace_letter") have nothing to choose: the child traces the letter shown. Set child_answer to "trace" and matches_key to true; only judge the prompt: it must make sense on its own and ask the child to trace (write) exactly that letter (incomplete_prompt otherwise).
 Return one verdict per item, using its index.`;
 
-  const completion = await openai.chat.completions.create({
-    model: AI_MODEL_FAST,
+  const params: Omit<ChatCompletionCreateParamsNonStreaming, "model"> = {
+    reasoning_effort: "low",
     messages: [
       { role: "system", content: "You are a strict, careful reviewer of children's quiz items. When in doubt, flag." },
       { role: "user", content: prompt },
@@ -151,7 +153,15 @@ Return one verdict per item, using its index.`;
       type: "json_schema",
       json_schema: { name: "milestone_item_verdicts", strict: true, schema: verdictSchema((request.skills ?? []).map((skill) => skill.key)) },
     },
-  });
+  };
+  // The newest model first; an older one if this key cannot use it.
+  const completion = await openai.chat.completions
+    .create({ model: AI_MODEL_MILESTONE_VERIFY, ...params })
+    .catch((error: unknown) => {
+      if (!isModelUnavailableError(error) || AI_MODEL_MILESTONE_VERIFY === AI_MODEL_FAST) throw error;
+      console.warn(`OpenAI model ${AI_MODEL_MILESTONE_VERIFY} unavailable; using ${AI_MODEL_FAST}`);
+      return openai.chat.completions.create({ model: AI_MODEL_FAST, ...params });
+    });
   const text = completion.choices[0]?.message?.content;
   if (!text) throw new Error("Big Challenge verification returned no content.");
   const parsed = JSON.parse(text) as { verdicts?: Array<Record<string, unknown>> };
