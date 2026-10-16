@@ -10,19 +10,29 @@ export type { PublicInteraction };
 export type MoveType = BattleInteractionType;
 
 /** The localized list, falling back to the other language (as InteractionRenderer does). */
+/**
+ * In Arabic every number in the battle uses Arabic-Indic digits, so the
+ * question ("٧ + ٥") and its answers ("١٢") match. Display only: answers are
+ * sent as indexes or counts, never as this text.
+ */
+export function localizeDigits(text: string, lang: Lang): string {
+  return lang === "ar" ? text.replace(/[0-9]/g, (d) => String.fromCharCode(0x0660 + Number(d))) : text;
+}
+
 export function pickList(list: BilingualList | null | undefined, lang: Lang): string[] {
   if (!list) return [];
-  return list[lang]?.length ? list[lang] : list[lang === "ar" ? "en" : "ar"] ?? [];
+  const items = list[lang]?.length ? list[lang] : list[lang === "ar" ? "en" : "ar"] ?? [];
+  return items.map((item) => localizeDigits(item, lang));
 }
 
 export function pickText(text: BilingualText | null | undefined, lang: Lang): string {
   if (!text) return "";
-  return text[lang] || text[lang === "ar" ? "en" : "ar"] || "";
+  return localizeDigits(text[lang] || text[lang === "ar" ? "en" : "ar"] || "", lang);
 }
 
 /** The prompt to show: the server's localized instruction, else the interaction's own. */
 export function promptOf(question: BattleQuestion, lang: Lang): string {
-  return question.instruction || pickText(question.interaction.prompt, lang);
+  return question.instruction ? localizeDigits(question.instruction, lang) : pickText(question.interaction.prompt, lang);
 }
 
 export function answerRequestFor(question: BattleQuestion, answer: InteractionAnswer): AnswerRequest {

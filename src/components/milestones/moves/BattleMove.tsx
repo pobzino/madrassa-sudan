@@ -414,7 +414,7 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
               aria-label={glyph}
               className={`pointer-events-auto absolute grid place-items-center leading-none active:scale-90 ${
                 skin?.thrown === "die"
-                  ? "rounded-[16px] bg-white shadow-[0_5px_0_#C7C2B8]"
+                  ? "rounded-full border-2 border-[#FDE68A]/70 bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.55),rgba(253,224,71,0.22)_50%,rgba(245,158,11,0.3))] shadow-[0_0_20px_rgba(252,211,77,0.6),inset_0_0_12px_rgba(255,255,255,0.25)]"
                   : skin?.thrown === "seed"
                     ? "rounded-[50%] bg-[radial-gradient(circle_at_35%_30%,#E8B880,#A86F37)]"
                     : "rounded-full border-2 border-white/45 bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.38),rgba(110,231,183,0.14)_55%,rgba(16,185,129,0.2))] shadow-[0_0_18px_rgba(110,231,183,0.5),inset_0_0_12px_rgba(255,255,255,0.18)]"

@@ -25,7 +25,7 @@ export interface SignatureMove {
   skin: SkinKey;
 }
 
-const DICE_ROLL: SignatureMove = { name: { en: "Dice Roll!", ar: "رمية النرد!" }, skin: "dice" };
+const DICE_ROLL: SignatureMove = { name: { en: "Star Shower!", ar: "مطر النجوم!" }, skin: "dice" };
 const NUMBER_BOULDERS: SignatureMove = { name: { en: "Number Boulders!", ar: "صخور الأرقام!" }, skin: "boulders" };
 const JUMBLED_LETTERS: SignatureMove = { name: { en: "Jumbled Letters!", ar: "حروف مبعثرة!" }, skin: "letters" };
 const SCROLL_SWAP: SignatureMove = { name: { en: "Scroll Swap!", ar: "تبديل اللفائف!" }, skin: "scrolls" };
