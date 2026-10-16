@@ -172,7 +172,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
     <div dir={isRtl ? "rtl" : "ltr"} className="min-h-screen bg-white overflow-x-clip">
       {/* Navbar */}
       <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-1.5 sm:gap-2">
             <span className="block h-8 w-8 shrink-0 sm:h-10 sm:w-10">
               <SudanFlagToAmalOwl
@@ -195,10 +195,10 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
             <a href="#faq" className="hover:text-[#007229] transition-colors">{txt.nav.faq}</a>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3">
             <button
               onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
-              className="px-2.5 py-1.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="px-2 py-1.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors sm:px-2.5"
             >
               {language === "ar" ? "EN" : "عربي"}
             </button>
@@ -213,15 +213,15 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
                 <span className="hidden xs:inline">{txt.goToDashboard}</span>
               </Link>
             ) : (
-              <div className="flex items-center rounded-full border border-gray-200 bg-white p-1 shadow-sm">
-                <Link href="/auth/login" className="whitespace-nowrap rounded-full px-2.5 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 hover:text-[#007229] sm:px-3 sm:py-2.5 sm:text-sm">
+              <div className="flex items-center rounded-full border border-gray-200 bg-white p-0.5 shadow-sm sm:p-1">
+                <Link href="/auth/login" className="whitespace-nowrap rounded-full px-2 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 hover:text-[#007229] sm:px-3 sm:py-2.5 sm:text-sm">
                   {txt.login}
                 </Link>
                 <Link
                   href="/auth/signup"
                   data-analytics="signup_click"
                   data-analytics-source="navbar"
-                  className="px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-white bg-[#007229] rounded-full hover:bg-[#005C22] transition-all shadow-lg shadow-[#007229]/30"
+                  className="px-2.5 py-1.5 text-xs font-bold text-white bg-[#007229] rounded-full hover:bg-[#005C22] transition-all shadow-lg shadow-[#007229]/30 sm:px-5 sm:py-2.5 sm:text-sm"
                 >
                   {txt.getStarted}
                 </Link>
