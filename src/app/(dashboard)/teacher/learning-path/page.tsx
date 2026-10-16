@@ -41,6 +41,25 @@ interface StepPracticeInfo {
   practiceAssignmentId: string | null;
 }
 
+// A boss-generation job's progress is polled; the job id is kept in localStorage so a
+// reopened page (a phone that switched apps) picks the job back up.
+const jobKey = (pathId: string, afterWeekNumber: number) => `amal.bossJob:${pathId}:${afterWeekNumber}`;
+function readJobId(pathId: string, afterWeekNumber: number) {
+  try {
+    return window.localStorage.getItem(jobKey(pathId, afterWeekNumber));
+  } catch {
+    return null;
+  }
+}
+function writeJobId(pathId: string, afterWeekNumber: number, jobId: string | null) {
+  try {
+    if (jobId) window.localStorage.setItem(jobKey(pathId, afterWeekNumber), jobId);
+    else window.localStorage.removeItem(jobKey(pathId, afterWeekNumber));
+  } catch {
+    /* no storage: the page just cannot resume */
+  }
+}
+
 export default function LearningPathEditorPage() {
   const { loading: authLoading } = useTeacherGuard();
   const [subjects, setSubjects] = useState<SubjectRow[]>([]);
@@ -72,6 +91,42 @@ export default function LearningPathEditorPage() {
       ? milestones?.placement ?? null
       : milestones?.blocks.find((b) => b.afterWeekNumber === afterWeekNumber)?.milestone ?? null;
 
+  const pollJob = useCallback(async (pathId: string, afterWeekNumber: number, jobId: string, progress: string | number) => {
+    const placement = afterWeekNumber === PLACEMENT_WEEK;
+    const what = placement ? "starting boss" : "Big Challenge";
+    setGeneratingBlock(afterWeekNumber);
+    try {
+      for (;;) {
+        const res = await fetch(`/api/teacher/milestones/generate/status?job=${encodeURIComponent(jobId)}`, { cache: "no-store" });
+        if (res.status === 404) throw new Error("This generation is no longer tracked. Generate again.");
+        const job = (await res.json().catch(() => ({}))) as { status?: string; progressDone?: number; progressTotal?: number; message?: string | null; warnings?: string[] };
+        if (!res.ok) throw new Error(job.message ?? "Could not read the generation's progress.");
+        if (job.status === "done") {
+          writeJobId(pathId, afterWeekNumber, null);
+          toast.success(placement ? "Starting boss draft ready: review the tags before publishing" : "Big Challenge draft ready: review it before publishing", { id: progress });
+          for (const warning of job.warnings ?? []) toast.warning(warning, { duration: 12000 });
+          return;
+        }
+        if (job.status === "failed") {
+          writeJobId(pathId, afterWeekNumber, null);
+          toast.error(job.message ?? `Generating the ${what} failed.`, { id: progress });
+          return;
+        }
+        toast.loading(
+          job.progressTotal ? `Writing questions: ${job.progressDone ?? 0} of ${job.progressTotal} lessons` : `Planning the ${what}...`,
+          { id: progress },
+        );
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+    } catch (error) {
+      writeJobId(pathId, afterWeekNumber, null);
+      toast.error(error instanceof Error ? error.message : "Generation failed", { id: progress });
+    } finally {
+      setGeneratingBlock(null);
+      await loadMilestones(selectedSubject);
+    }
+  }, [loadMilestones, selectedSubject]);
+
   const generateMilestone = async (afterWeekNumber: number) => {
     if (!milestones?.pathId) return;
     const placement = afterWeekNumber === PLACEMENT_WEEK;
@@ -79,59 +134,28 @@ export default function LearningPathEditorPage() {
     if (existing && !window.confirm("Replace this draft's questions with a newly generated set?")) return;
     setGeneratingBlock(afterWeekNumber);
     const what = placement ? "starting boss" : "Big Challenge";
-    const progress = toast.loading(`Planning the ${what}...`);
-    const scope = placement
-      ? { path_id: milestones.pathId, kind: "placement" }
-      : { path_id: milestones.pathId, after_week_number: afterWeekNumber };
-    // Short steps, each well under the server's time limit: plan, then each
-    // lesson's questions (four at once), then finish (writes the draft).
-    const step = async (body: Record<string, unknown>) => {
+    const progress = toast.loading(`Starting the ${what}...`);
+    try {
       const res = await fetch("/api/teacher/milestones/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...scope, ...body }),
+        body: JSON.stringify(
+          placement
+            ? { path_id: milestones.pathId, kind: "placement" }
+            : { path_id: milestones.pathId, after_week_number: afterWeekNumber }
+        ),
       });
-      const data = await res.json().catch(() => ({}));
-      // The server's own message names the cause (e.g. which difficulty was short); prefer it.
-      if (!res.ok) throw new Error(data.message ?? MILESTONE_ERRORS[data.error] ?? `Generation failed: ${data.error ?? `error ${res.status}`}`);
-      return data;
-    };
-    try {
-      const plan = (await step({ step: "plan" })) as { lessons: Array<{ lessonId: string }> };
-      const results: unknown[] = new Array(plan.lessons.length).fill(null);
-      let done = 0;
-      let next = 0;
-      let lastLessonError = "";
-      const worker = async () => {
-        while (next < plan.lessons.length) {
-          const index = next;
-          next += 1;
-          // One retry; a lesson that still fails is skipped, like the server does.
-          for (let attempt = 0; attempt < 2 && results[index] === null; attempt += 1) {
-            try {
-              results[index] = await step({ step: "lesson", lesson_id: plan.lessons[index].lessonId });
-            } catch (error) {
-              lastLessonError = error instanceof Error ? error.message : "lesson step failed";
-            }
-          }
-          done += 1;
-          toast.loading(`Writing questions: ${done} of ${plan.lessons.length} lessons`, { id: progress });
-        }
-      };
-      toast.loading(`Writing questions: 0 of ${plan.lessons.length} lessons`, { id: progress });
-      await Promise.all(Array.from({ length: Math.min(4, plan.lessons.length) }, worker));
-      const failed = results.filter((result) => result === null).length;
-      if (failed === plan.lessons.length) throw new Error(`No lesson's questions came back. ${lastLessonError}`);
-      toast.loading("Saving the draft...", { id: progress });
-      let warnings: string[] = [];
-      try {
-        const saved = (await step({ step: "finish", results })) as { warnings?: string[] };
-        warnings = saved.warnings ?? [];
-      } catch (error) {
-        throw new Error(`${error instanceof Error ? error.message : "Saving failed."}${failed ? ` ${failed} of ${plan.lessons.length} lessons failed: ${lastLessonError}` : ""}`);
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string; jobId?: string; warnings?: string[] };
+      if (!res.ok) throw new Error(data.message ?? MILESTONE_ERRORS[data.error ?? ""] ?? `Generation failed: ${data.error ?? `error ${res.status}`}`);
+      if (res.status === 202 && data.jobId) {
+        // The deployed site: the server does the work; this page (or a reopened one) follows it.
+        writeJobId(milestones.pathId, afterWeekNumber, data.jobId);
+        toast.loading(`Generating the ${what}: you can leave this page and come back.`, { id: progress });
+        await pollJob(milestones.pathId, afterWeekNumber, data.jobId, progress);
+        return;
       }
       toast.success(placement ? "Starting boss draft ready: review the tags before publishing" : "Big Challenge draft ready: review it before publishing", { id: progress });
-      for (const warning of warnings) toast.warning(warning, { duration: 12000 });
+      for (const warning of data.warnings ?? []) toast.warning(warning, { duration: 12000 });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Generation failed", { id: progress });
     } finally {
@@ -139,6 +163,21 @@ export default function LearningPathEditorPage() {
       await loadMilestones(selectedSubject);
     }
   };
+
+  // A job started earlier (this page or another) is picked back up.
+  useEffect(() => {
+    const pathId = milestones?.pathId;
+    if (!pathId || generatingBlock !== null) return;
+    const weeks = [PLACEMENT_WEEK, ...(milestones?.blocks.map((b) => b.afterWeekNumber) ?? [])];
+    for (const week of weeks) {
+      const jobId = readJobId(pathId, week);
+      if (jobId) {
+        void pollJob(pathId, week, jobId, toast.loading("Checking on the generation..."));
+        break;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [milestones?.pathId]);
 
   const setMilestoneLive = async (afterWeekNumber: number, live: boolean) => {
     const m = milestoneAt(afterWeekNumber);

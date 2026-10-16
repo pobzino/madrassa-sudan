@@ -6,10 +6,14 @@
 //   step "plan"                       -> { lessons: [{ lessonId, titleEn, titleAr }], skippedLessons }
 //   step "lesson", lesson_id          -> one lesson's signed result (four run at once)
 //   step "finish", results: [...]     -> writes the draft, same response as the one-request form
+// Without `step` on a deployed site it instead creates a background job (202
+// { jobId }) that the Netlify function drives through /api/internal/milestones/
+// generate-job; the page polls /api/teacher/milestones/generate/status.
 
 import { z } from "zod";
 import { MILESTONE_DEFAULT_POOL_SIZE } from "@/lib/milestones/types";
 import { finishMilestonePool, generateMilestonePoolLesson, generateMilestonePool, planMilestonePool } from "@/lib/server/milestones/generate";
+import { backgroundGenerationEnabled, createGenerationJob, enqueueGenerationJob, updateGenerationJob } from "@/lib/server/milestones/jobs";
 import { MilestoneRouteError, milestoneError, milestoneJson } from "@/lib/server/milestones/load";
 import {
   canManagePathMilestones,
@@ -60,6 +64,18 @@ export async function POST(request: Request) {
       const result = await generateMilestonePoolLesson({ ...scope, lessonId: parsed.data.lesson_id });
       console.log(JSON.stringify({ event: "milestone_lesson_step", lessonId: result.lessonId, ms: Date.now() - started, kept: result.kept.length, dropped: result.dropped.length }));
       return milestoneJson(result);
+    }
+    if (!parsed.data.step && backgroundGenerationEnabled(request.url)) {
+      // The deployed site: the work runs in the background function; the page polls the job.
+      const job = await createGenerationJob(staff.admin, { pathId: scope.pathId, kind, afterWeekNumber: scope.afterWeekNumber, poolSize: scope.poolSize }, staff.userId);
+      try {
+        await enqueueGenerationJob(request.url, job.id);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Background worker unreachable";
+        await updateGenerationJob(staff.admin, job.id, { status: "failed", message, finished_at: new Date().toISOString() }).catch(() => undefined);
+        return milestoneError("service_unavailable", 502, { message });
+      }
+      return milestoneJson({ jobId: job.id, status: "queued" }, 202);
     }
     const result =
       parsed.data.step === "finish"

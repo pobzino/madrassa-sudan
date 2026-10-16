@@ -251,7 +251,7 @@ export type MilestoneErrorCode =
   | "unauthorized" | "learner_forbidden" | "milestone_not_found" | "milestone_locked"
   | "milestone_unpublished" | "battle_not_found" | "battle_finished" | "position_mismatch"
   | "invalid_answer" | "pool_too_small" | "unpublish_first" | "use_battle"
-  | "generation_failed" | "block_incomplete" | "service_unavailable"
+  | "generation_failed" | "block_incomplete" | "service_unavailable" | "job_running"
   | "hint_used" | "hint_unavailable" | "publish_forbidden"
   | "placement_done" | "pool_unbalanced";
 export interface MilestoneError { error: MilestoneErrorCode; message?: string; battle?: BattleState }
