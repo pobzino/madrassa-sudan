@@ -79,7 +79,8 @@ export function milestoneCta(m: TreeMilestone, lang: "ar" | "en"): string {
 /** Passed: the Boss Book card. Open and online: the challenge. Otherwise nothing to open. */
 export function milestoneHref(m: TreeMilestone, isOnline: boolean): string | null {
   if (m.state === "passed") return `/boss-book#${m.bossKey}`;
-  if ((m.state === "available" || m.state === "in_battle") && isOnline) return `/milestones/${m.id}`;
+  // Straight into the fight: the boss's entrance is the intro.
+  if ((m.state === "available" || m.state === "in_battle") && isOnline) return `/milestones/${m.id}/battle?boss=${m.bossKey}`;
   return null;
 }
 
