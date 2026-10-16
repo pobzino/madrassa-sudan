@@ -17,8 +17,13 @@ import { MilestoneRouteError, type MilestoneAdminClient } from "@/lib/server/mil
 
 export const JOB_SECRET_HEADER = "x-milestone-job-secret";
 export const BACKGROUND_FUNCTION_PATH = "/.netlify/functions/generate-milestone-background";
-/** A job still queued / running after this long is treated as dead (the function crashed or was cut off). */
-export const JOB_STALE_MS = 20 * 60 * 1000;
+/**
+ * A job is treated as dead when it stays queued this long without the function
+ * picking it up (a plan step marks it running within seconds), or running this
+ * long without a progress update (lessons report every 10-30 s).
+ */
+export const JOB_QUEUED_STALE_MS = 2 * 60 * 1000;
+export const JOB_RUNNING_STALE_MS = 10 * 60 * 1000;
 
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
@@ -69,12 +74,17 @@ export function backgroundGenerationEnabled(requestUrl: string): boolean {
 }
 
 export async function expireStaleJobs(admin: MilestoneAdminClient): Promise<void> {
-  const cutoff = new Date(Date.now() - JOB_STALE_MS).toISOString();
+  const now = new Date().toISOString();
   await admin
     .from("milestone_generation_jobs")
-    .update({ status: "failed", message: "Generation stopped before it finished. Try again.", finished_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-    .in("status", ["queued", "running"])
-    .lt("updated_at", cutoff);
+    .update({ status: "failed", message: "The background worker never picked this up. Try again; if it repeats, the job secret is not set on the site.", finished_at: now, updated_at: now })
+    .eq("status", "queued")
+    .lt("updated_at", new Date(Date.now() - JOB_QUEUED_STALE_MS).toISOString());
+  await admin
+    .from("milestone_generation_jobs")
+    .update({ status: "failed", message: "Generation stopped before it finished. Try again.", finished_at: now, updated_at: now })
+    .eq("status", "running")
+    .lt("updated_at", new Date(Date.now() - JOB_RUNNING_STALE_MS).toISOString());
 }
 
 /** Creates the queued row. Rejects with job_running when one is already queued / running for this boss. */

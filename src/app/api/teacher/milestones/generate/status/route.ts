@@ -2,7 +2,7 @@
 // The state of a boss-generation job: its requester or an approved admin.
 
 import { openStaffRequest } from "@/lib/server/milestones/teacher";
-import { loadGenerationJob } from "@/lib/server/milestones/jobs";
+import { expireStaleJobs, loadGenerationJob } from "@/lib/server/milestones/jobs";
 import { milestoneError, milestoneJson } from "@/lib/server/milestones/load";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +14,8 @@ export async function GET(request: Request) {
   if (!staff.ok) return staff.response;
   const jobId = new URL(request.url).searchParams.get("job") ?? "";
   if (!UUID.test(jobId)) return milestoneError("milestone_not_found", 400, { message: "job is required" });
+  // A dead job (the function never started, or stopped reporting) reads as failed, with the reason.
+  await expireStaleJobs(staff.admin).catch(() => undefined);
   const job = await loadGenerationJob(staff.admin, jobId);
   if (!job || (job.requested_by !== staff.userId && staff.role !== "admin")) return milestoneError("milestone_not_found", 404, { message: "Unknown job" });
   return milestoneJson({

@@ -147,6 +147,16 @@ describe("job status", () => {
     mocks.user = null;
     expect((await statusRoute(new Request(`${SITE}/s?job=${created.jobId}`))).status).toBe(401);
   });
+
+  it("reads a job the worker never picked up as failed after two minutes, with the reason", async () => {
+    const tables = seed();
+    const created = await (await generateRoute(post(`${SITE}/x`, { path_id: IDS.path, kind: "placement" }))).json();
+    tables.milestone_generation_jobs[0].updated_at = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+    const body = await (await statusRoute(new Request(`${SITE}/s?job=${created.jobId}`))).json();
+    expect(body).toMatchObject({ status: "failed", message: expect.stringContaining("never picked this up") });
+    // and the boss can be generated again
+    expect((await generateRoute(post(`${SITE}/x`, { path_id: IDS.path, kind: "placement" }))).status).toBe(202);
+  });
 });
 
 describe("internal step route", () => {

@@ -41,7 +41,10 @@ function allowedOrigin(requested: string): string | null {
 export async function handler(event: { headers: Record<string, string | undefined>; body: string | null }) {
   const secret = process.env.SLIDE_JOB_SECRET?.trim() || "";
   const supplied = event.headers[SECRET_HEADER] || event.headers[SECRET_HEADER.toUpperCase()] || "";
-  if (!secret || !secretsMatch(secret, supplied)) return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
+  if (!secret || !secretsMatch(secret, supplied)) {
+    console.error(JSON.stringify({ event: "milestone_job", phase: "rejected", reason: secret ? "bad secret" : "SLIDE_JOB_SECRET not set" }));
+    return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
+  }
 
   let payload: { jobId?: unknown; origin?: unknown } = {};
   try {
@@ -50,8 +53,7 @@ export async function handler(event: { headers: Record<string, string | undefine
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid payload" }) };
   }
   const jobId = typeof payload.jobId === "string" ? payload.jobId : "";
-  const origin = allowedOrigin(typeof payload.origin === "string" ? payload.origin : "");
-  if (!jobId || !origin) return { statusCode: 400, body: JSON.stringify({ error: "jobId and a known origin are required" }) };
+  if (!jobId) return { statusCode: 400, body: JSON.stringify({ error: "jobId is required" }) };
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -61,6 +63,15 @@ export async function handler(event: { headers: Record<string, string | undefine
     const { error } = await db.from("milestone_generation_jobs").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", jobId);
     if (error) console.error("Milestone job update failed:", jobId, error.message);
   };
+
+  const requestedOrigin = typeof payload.origin === "string" ? payload.origin : "";
+  const origin = allowedOrigin(requestedOrigin);
+  if (!origin) {
+    const message = `The background worker will not call back ${requestedOrigin || "an empty origin"} (known: ${[process.env.URL, process.env.DEPLOY_PRIME_URL].filter(Boolean).join(", ") || "none"}).`;
+    console.error(JSON.stringify({ event: "milestone_job", jobId, phase: "failed", message }));
+    await update({ status: "failed", message: message.slice(0, 1000), finished_at: new Date().toISOString() });
+    return { statusCode: 400, body: JSON.stringify({ error: message }) };
+  }
 
   const step = async (body: Record<string, unknown>) => {
     const controller = new AbortController();
