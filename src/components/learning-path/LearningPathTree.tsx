@@ -430,6 +430,7 @@ export default function LearningPathTree({
                       setFromId(selId);
                       setSelectedId(node.id);
                     }}
+                    owlFrom={isSelected ? { dx: owlDx, dy: owlDy, key: `${fromNodeId ?? "start"}->${node.id}` } : null}
                   />
                 </div>
               </div>

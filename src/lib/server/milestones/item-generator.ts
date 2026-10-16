@@ -87,6 +87,7 @@ const CHILD_RULES = [
   "- Arabic and English fields are separate, natural and meaning-aligned; never mix languages in one field.",
   "- English vocabulary, phonics and spelling items keep the English target words in Latin script in BOTH option/item lists.",
   "- true_false prompts are short statements, never questions.",
+  "- tap_to_count: the child taps that many things in the game. Write the prompt as a clear direction with the number, e.g. \"Count 5 apples!\" (target 5, emoji 🍎), or as a counting question whose answer is the target, e.g. \"7 stars, take away 3. How many are left?\".",
   "- Distractors are plausible but clearly wrong; all choices distinct; no \"all of the above\".",
   "- If a requested type cannot be made meaningfully from this lesson, use choose_correct for that item instead.",
   "- Set every field that does not apply to the item's type to null.",

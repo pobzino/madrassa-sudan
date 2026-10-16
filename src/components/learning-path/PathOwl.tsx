@@ -12,12 +12,16 @@ import { LivingOwl } from "@/components/brand/LivingOwl";
  * keyframes reading custom properties: Safari (so every iPhone) can't
  * interpolate those, and snaps between keyframes instead of moving.
  */
+/** How long a flight of this offset takes (longer hops a little longer, within limits). */
+export function pathOwlFlightMs(dx: number, dy: number): number {
+  return Math.round(Math.min(1800, Math.max(900, 700 + Math.hypot(dx, dy) * 1.6)));
+}
+
 export function PathOwl({ dx, dy }: { dx: number; dy: number }) {
   const travelRef = useRef<HTMLDivElement>(null);
   const arcRef = useRef<HTMLDivElement>(null);
   const distance = Math.hypot(dx, dy);
-  // Longer hops take a little longer, within limits.
-  const duration = Math.round(Math.min(1800, Math.max(900, 700 + distance * 1.6)));
+  const duration = pathOwlFlightMs(dx, dy);
   const travels = distance > 1;
   const [flying, setFlying] = useState(travels);
 

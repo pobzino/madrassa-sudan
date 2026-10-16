@@ -39,7 +39,9 @@ export type BattleInteractionType = (typeof BATTLE_INTERACTION_TYPES)[number];
  *  - choose_correct: no correct_index
  *  - true_false: no answer (True stays first)
  *  - fill_missing_word: no correct_index / expected_answer
- *  - tap_to_count: no target
+ *  - tap_to_count: `catch_count` is how many to tap when the prompt doesn't
+ *    ask for it ("Count 5 🍎!"); null when working the number out IS the
+ *    question ("How many days are in a week? Tap that many ⭐!").
  *  - match_pairs: items and targets shuffled independently (no pair mapping)
  *  - sequence_order: items shuffled (never served in the correct order)
  *  - sort_groups: items and groups shuffled, no solution_map
@@ -49,7 +51,7 @@ export type PublicInteraction =
   | { type: "choose_correct"; prompt: BilingualText; options: BilingualList }
   | { type: "true_false"; prompt: BilingualText }
   | { type: "fill_missing_word"; prompt: BilingualText; free_entry: boolean; options: BilingualList | null }
-  | { type: "tap_to_count"; prompt: BilingualText; emoji: string }
+  | { type: "tap_to_count"; prompt: BilingualText; emoji: string; catch_count: number | null }
   | { type: "match_pairs"; prompt: BilingualText; items: BilingualList; targets: BilingualList }
   | { type: "sequence_order"; prompt: BilingualText; items: BilingualList }
   | { type: "sort_groups"; prompt: BilingualText; items: BilingualList; targets: BilingualList }

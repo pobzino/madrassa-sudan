@@ -79,6 +79,23 @@ export function servedItem(question: MilestonePoolQuestion, battleId: string): S
   return { interaction, perms: interactionPerms(battleId, question.id, interaction) };
 }
 
+/** A catch move always says what to tap: "Count 5 🍎!", or the question then "Tap that many ⭐!". */
+export function countInstruction(
+  prompt: string,
+  shown: { emoji: string; catch_count: number | null },
+  lang: Lang,
+): string {
+  const { emoji, catch_count: count } = shown;
+  if (count !== null) {
+    // Keep a prompt that already gives the direction with its number ("Count 5 apples!").
+    const digits = prompt.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+    if (new RegExp(`(^|\\D)${count}(\\D|$)`).test(digits)) return prompt;
+    return lang === "ar" ? `عُدّ ${count} ${emoji}!` : `Count ${count} ${emoji}!`;
+  }
+  const tail = lang === "ar" ? `اضغط بعددها ${emoji}!` : `Tap that many ${emoji}!`;
+  return /that many|بعدد/i.test(prompt) ? prompt : `${prompt.trim()} ${tail}`;
+}
+
 export function toBattleQuestion(
   question: MilestonePoolQuestion,
   battleId: string,
@@ -106,12 +123,13 @@ export function toBattleQuestion(
   const { hash } = questionNarration(question, lang, languageMode, options);
   const expected = interaction.type === "fill_missing_word" && interaction.free_entry ? interaction.expected_answer?.ar ?? "" : "";
 
+  const shown = toPublicInteraction(interaction, perms);
   return {
     position,
     questionId: question.id,
     type: interaction.type,
-    interaction: toPublicInteraction(interaction, perms),
-    instruction: presentation.instruction,
+    interaction: shown,
+    instruction: shown.type === "tap_to_count" ? countInstruction(presentation.instruction, shown, lang) : presentation.instruction,
     content: presentation.questionContent,
     contentLanguage: presentation.questionContentLanguage,
     answerLanguage: presentation.answerLanguage,
