@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 
 import PlacementResetDialog from "@/components/measurement/PlacementResetDialog";
+import NarrationCard from "@/components/admin/NarrationCard";
 // ─── Types ───────────────────────────────────────────────────────
 
 type AdminUser = {
@@ -825,6 +826,8 @@ export default function AdminPage() {
                   value={analytics.product.registrations}
                 />
               </div>
+
+              <NarrationCard />
 
               <section className="border-y border-gray-200 py-5">
                 <div className="mb-4 flex items-center justify-between gap-3">

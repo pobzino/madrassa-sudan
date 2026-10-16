@@ -84,6 +84,12 @@ export function createFakeDb(tables: Record<string, Row[]>, rpc?: FakeDb["rpc"])
       eq(column: string, value: unknown) { filters.push((row) => row[column] === value); return api; },
       in(column: string, list: unknown[]) { filters.push((row) => list.includes(row[column])); return api; },
       is(column: string, value: unknown) { filters.push((row) => (row[column] ?? null) === value); return api; },
+      // "a.eq.1,b.eq.true": any of the comma-separated eq conditions (the only form used)
+      or(conditions: string) {
+        const parts = conditions.split(",").map((part) => part.split(".eq."));
+        filters.push((row) => parts.some(([column, raw]) => String(row[column]) === raw));
+        return api;
+      },
       lt(column: string, value: unknown) { filters.push((row) => String(row[column] ?? "") < String(value)); return api; },
       gt(column: string, value: unknown) { filters.push((row) => String(row[column] ?? "") > String(value)); return api; },
       order(column: string, options: { ascending?: boolean } = {}) { order = { column, ascending: options.ascending !== false }; return api; },
