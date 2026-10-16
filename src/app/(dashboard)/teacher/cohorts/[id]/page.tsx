@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import { watchedPercent } from "@/lib/lessons/watched-percent";
 import ProgressBar from "@/components/ui/ProgressBar";
+import ClassProgressView from "@/components/measurement/ClassProgressView";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 /** How far a student got through one assigned lesson. */
 interface LessonWatch {
@@ -83,7 +85,8 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [assignedLessons, setAssignedLessons] = useState<AssignedLesson[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"students" | "assignments" | "lessons">("students");
+  const [activeTab, setActiveTab] = useState<"students" | "assignments" | "lessons" | "progress">("students");
+  const { language } = useLanguage();
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -561,7 +564,7 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex flex-wrap gap-2 mb-6">
           <button
             onClick={() => setActiveTab("students")}
             className={`px-4 py-2 rounded-xl font-medium transition-colors ${
@@ -597,7 +600,20 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
           >
             Lessons ({assignedLessons.length})
           </button>
+          <button
+            onClick={() => setActiveTab("progress")}
+            className={`px-4 py-2 rounded-xl font-medium transition-colors ${
+              activeTab === "progress"
+                ? "bg-emerald-600 text-white"
+                : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            {language === "ar" ? "التقدّم" : "Progress"}
+          </button>
         </div>
+
+        {/* Progress Tab: bands per child + class totals (approved members only) */}
+        {activeTab === "progress" && <ClassProgressView lang={language} cohortId={id} />}
 
         {/* Students Tab */}
         {activeTab === "students" && (

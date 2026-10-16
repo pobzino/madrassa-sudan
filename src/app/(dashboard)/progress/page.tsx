@@ -5,9 +5,11 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useLearnerContext } from "@/contexts/LearnerContext";
+import SkillsProgressCard from "@/components/measurement/SkillsProgressCard";
+import ClassMembershipCard from "@/components/measurement/ClassMembershipCard";
 import { OwlThinking, OwlCelebrating } from "@/components/illustrations";
 import type { Subject } from "@/lib/database.types";
-import { getCachedUser, getLastAuthStatus } from "@/lib/supabase/auth-cache";
+import { getCachedProfile, getCachedUser, getLastAuthStatus } from "@/lib/supabase/auth-cache";
 import { Clapperboard, BookOpen, GraduationCap, PenLine, ClipboardCheck, Flame, Star, Trophy, CircleDot, Sparkles, type LucideIcon } from "lucide-react";
 
 const translations = {
@@ -155,7 +157,10 @@ export default function ProgressPage() {
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
-  const { activeLearner } = useLearnerContext();
+  const { activeLearner, fetchWithLearner, learners, isParent } = useLearnerContext();
+  // The skills card is for families and students, not staff looking at their own account.
+  const [viewerIsStaff, setViewerIsStaff] = useState(false);
+  const staffSelf = viewerIsStaff && (!activeLearner || activeLearner.isSelf);
   const t = translations[language];
   const isRtl = language === "ar";
 
@@ -168,6 +173,9 @@ export default function ProgressPage() {
         if (getLastAuthStatus() === "signed_out") router.push("/auth/login");
         return;
       }
+
+      const viewerProfile = await getCachedProfile(supabase, user.id);
+      setViewerIsStaff(viewerProfile?.role === "teacher" || viewerProfile?.role === "admin");
 
       // Fetch streak data
       const { data: streakData } = await supabase
@@ -382,6 +390,25 @@ export default function ProgressPage() {
             </div>
           </div>
         </div>
+
+        {!staffSelf && (
+          <SkillsProgressCard
+            lang={language}
+            fetcher={(input, init) => fetchWithLearner(input, init)}
+            learnerName={activeLearner?.isSelf ? "" : activeLearner?.name ?? ""}
+            learnerKey={activeLearner?.id ?? "self"}
+            self={activeLearner?.isSelf ?? true}
+          />
+        )}
+
+        {!staffSelf && activeLearner && (
+          <ClassMembershipCard
+            lang={language}
+            learners={(isParent && !activeLearner.isSelf ? learners.filter((l) => !l.isSelf) : [activeLearner]).map((l) => ({ id: l.id, name: l.name }))}
+            activeLearnerId={activeLearner.id}
+            self={activeLearner.isSelf}
+          />
+        )}
 
         {/* Weekly Activity */}
         <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm mb-8">

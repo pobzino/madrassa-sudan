@@ -14,9 +14,12 @@ export const BOSS_KEYS = ["number_giant", "word_dragon", "letter_camel", "sprout
 export type BossKey = (typeof BOSS_KEYS)[number];
 
 export type MilestoneStatus = "draft" | "published";
-export type BattleStatus = "active" | "won" | "lost" | "abandoned";
+// ---- added for measurement (phase 1) ----
+export type MilestoneKind = "milestone" | "placement";
+
+export type BattleStatus = "active" | "won" | "lost" | "abandoned" | "completed";          // + "completed" (placement only)
 /** Learner-facing node state. "in_battle" = an active (resumable) battle exists. */
-export type MilestoneLearnerState = "locked" | "available" | "in_battle" | "passed";
+export type MilestoneLearnerState = "locked" | "available" | "in_battle" | "passed" | "completed"; // + "completed" (placement done)
 export type BattleQuestionType = "multiple_choice" | "true_false" | "short_answer";
 export type Lang = "ar" | "en";
 /** Presentational turn: even question index = "attack" (the child strikes), odd = "block" (the boss throws, the child blocks). */
@@ -104,6 +107,8 @@ export interface MilestoneSummary {
   questionCount: number;            // battle size N
   requiredCorrect: number;          // ceil(0.75 N)
   heartsTotal: number;              // N - requiredCorrect ("tries")
+  /** Always set by the server; absent means "milestone". Placement: afterWeekNumber 0, firstWeekNumber 1, level 0. */
+  kind?: MilestoneKind;
 }
 
 export interface BattleQuestion {
@@ -142,6 +147,9 @@ export interface BattleState {
   phase: BattlePhase;               // 1 while bossHpPercent > 50, else 2
   hintUsed: boolean;                // the one Owl Hint of this battle is spent
   hint: OwlHint | null;             // the hint applied to the CURRENT question (resume), else null
+  kind?: MilestoneKind;
+  /** Placement: false (no Owl Hint). Milestone: true. */
+  hintAllowed?: boolean;
 }
 
 export interface StartBattleResponse { battle: BattleState; resumed: boolean }
@@ -169,6 +177,10 @@ export interface AnswerResult {
   stars: 1 | 2 | 3 | null;          // when passed
   combo: number;                    // consecutive-correct streak after this answer (0 after a wrong one)
   phase: BattlePhase;               // 1 while bossHpPercent > 50, else 2
+  /** Placement: true. The UI reacts the same to every answer and never shows right/wrong. */
+  neutral?: boolean;
+  /** Placement, when finished: what to show the child. Null otherwise. */
+  placement?: import("@/lib/measurement/types").PlacementOutcome | null;
 }
 
 /** POST /api/milestones/[id]/battle/hint: one Owl Hint per battle, for the current question. */
@@ -193,6 +205,7 @@ export interface MilestoneIntroResponse {
   /** The block's lessons in path order, for "Practise these lessons". */
   blockLessons: { lessonId: string; title: string; weekNumber: number }[];
   preview: boolean;
+  kind?: MilestoneKind;
 }
 
 export interface CertificateView {
@@ -239,7 +252,8 @@ export type MilestoneErrorCode =
   | "milestone_unpublished" | "battle_not_found" | "battle_finished" | "position_mismatch"
   | "invalid_answer" | "pool_too_small" | "unpublish_first" | "use_battle"
   | "generation_failed" | "block_incomplete" | "service_unavailable"
-  | "hint_used" | "hint_unavailable" | "publish_forbidden";
+  | "hint_used" | "hint_unavailable" | "publish_forbidden"
+  | "placement_done" | "pool_unbalanced";
 export interface MilestoneError { error: MilestoneErrorCode; message?: string; battle?: BattleState }
 
 // ---- teacher / admin ----
@@ -262,6 +276,9 @@ export interface TeacherMilestoneQuestion {
   correct_answer: string;               // MC/TF: = options_ar[correct_option_index]; short: the answer
   source_lesson_id: string | null;
   display_order: number;
+  skill_key?: string | null;                         // absent on PUT = keep stored value
+  difficulty?: 1 | 2 | 3 | null;
+  tag_source?: "model" | "model_disputed" | "teacher" | "backfill_lesson" | null;  // read-only (server sets "teacher" when a tag changes)
 }
 export interface TeacherMilestoneRow {
   id: string;
@@ -280,6 +297,9 @@ export interface TeacherMilestoneRow {
   publishedAt: string | null;
   activeBattles: number;
   certificates: number;
+  kind?: MilestoneKind;
+  /** Gradable items per tagged difficulty; untagged counted under "none". */
+  difficultyCounts?: { d1: number; d2: number; d3: number; none: number };
 }
 export interface TeacherMilestoneBlock {
   afterWeekNumber: number;
@@ -288,9 +308,17 @@ export interface TeacherMilestoneBlock {
   lessonsWithContent: number;       // lessons with a sim deck (AI source)
   milestone: TeacherMilestoneRow | null;
 }
-export interface TeacherMilestoneListResponse { pathId: string | null; blocks: TeacherMilestoneBlock[] }
+export interface TeacherMilestoneListResponse {
+  pathId: string | null;
+  blocks: TeacherMilestoneBlock[];
+  /** The path's placement ("Meet your first boss"), or null when not created. */
+  placement?: TeacherMilestoneRow | null;
+}
 export interface TeacherMilestoneDetail { milestone: TeacherMilestoneRow; questions: TeacherMilestoneQuestion[];
-  lessons: { id: string; title: string; weekNumber: number }[] }
+  lessons: { id: string; title: string; weekNumber: number }[];
+  /** The subject's skills, for the tag dropdown. */
+  skills?: import("@/lib/measurement/types").SkillInfo[];
+}
 export interface TeacherMilestoneUpdate {
   titleAr?: string; titleEn?: string | null; battleQuestionCount?: number; bossKey?: BossKey;
   questions?: TeacherMilestoneQuestion[];   // full replacement; when published: same ids only (text edits)

@@ -671,7 +671,7 @@ describe("completion days for streaks (OFF-26)", () => {
     expect(item.data).toMatchObject({ completed: true, completed_at: "2026-10-12T10:00:00.000Z", last_position_seconds: 590 });
 
     await syncOfflineQueue();
-    expect(state.upserts[0]).toMatchObject({ completed: true, completed_at: "2026-10-12T10:00:00.000Z" });
+    expect(state.upserts[0]).toMatchObject({ completed: true, completed_at: "2026-10-12T10:00:00.000Z", completion_source: "offline_sync" });
   });
 
   it("sends lessons in the order they were finished", async () => {

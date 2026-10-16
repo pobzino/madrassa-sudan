@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   evaluatePath,
+  isPlacementOffered,
   isTestPassed,
   milestoneNodeId,
+  placementState,
+  splitPathMilestones,
   type PathInput,
   type StudentProgressInput,
   type TestResultInput,
@@ -351,5 +354,61 @@ describe('milestones (Big Challenge after every 4 weeks)', () => {
     const r = evaluatePath({ weeks }, progress(doneThrough(4)));
     expect(r.weeks[4].state).toBe('available');
     expect(r.currentStepId).toBe('s5');
+  });
+});
+
+describe('placement ("Meet your first boss")', () => {
+  const weeks = Array.from({ length: 8 }, (_, i) => ({
+    id: `w${i + 1}`,
+    weekNumber: i + 1,
+    testAssignmentId: null,
+    steps: [{ id: `s${i + 1}`, lessonId: `l${i + 1}`, sequence: 1 }],
+  }));
+  const rows = [
+    { id: 'pl', kind: 'placement', after_week_number: 0 },
+    { id: 'm4', kind: 'milestone', after_week_number: 4 },
+  ];
+
+  it('never enters milestones and never gates week 1', () => {
+    const split = splitPathMilestones(rows);
+    expect(split.placement?.id).toBe('pl');
+    expect(split.milestones.map((m) => m.id)).toEqual(['m4']);
+    const r = evaluatePath(
+      { weeks, milestones: split.milestones.map((m) => ({ id: m.id, afterWeekNumber: m.after_week_number })) },
+      progress({})
+    );
+    expect(r.milestones.map((m) => m.id)).toEqual(['m4']);
+    expect(r.weeks[0].state).toBe('available');
+    expect(r.weeks[0].steps[0].state).toBe('available');
+    expect(r.currentStepId).toBe('s1');
+  });
+
+  it('treats a week-0 row as the placement even without a kind', () => {
+    const split = splitPathMilestones([{ id: 'x', after_week_number: 0 }, { id: 'm4', after_week_number: 4 }]);
+    expect(split.placement?.id).toBe('x');
+    expect(split.milestones.map((m) => m.id)).toEqual(['m4']);
+  });
+
+  it('is offered once to everyone (0, 3 or 4+ lessons done) until completed', () => {
+    // Owner default: every learner may meet the boss once per path; a late one is flagged by the server.
+    for (const done of [0, 3, 4, 12]) {
+      expect({ done, offered: isPlacementOffered(placementState([])) }).toEqual({ done, offered: true });
+    }
+    expect(isPlacementOffered(placementState([{ status: 'active', supersededAt: null, isPreview: false }]))).toBe(true);
+    expect(isPlacementOffered(placementState([{ status: 'completed', supersededAt: null, isPreview: false }]))).toBe(false);
+  });
+
+  it('completed vs superseded vs preview', () => {
+    expect(placementState([{ status: 'completed', supersededAt: null, isPreview: false }])).toBe('completed');
+    // A staff reset supersedes the old result: the child can play again.
+    expect(placementState([{ status: 'completed', supersededAt: '2026-10-16T00:00:00Z', isPreview: false }])).toBe('available');
+    expect(
+      placementState([
+        { status: 'completed', supersededAt: '2026-10-16T00:00:00Z', isPreview: false },
+        { status: 'active', supersededAt: null, isPreview: false },
+      ])
+    ).toBe('in_battle');
+    // A staff preview never counts as met.
+    expect(placementState([{ status: 'completed', supersededAt: null, isPreview: true }])).toBe('available');
   });
 });

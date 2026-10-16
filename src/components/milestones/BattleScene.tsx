@@ -131,7 +131,9 @@ export default function BattleScene(props: BattleSceneProps) {
   const turn = turnOf(question);
   const interaction = question.interaction;
   const prompt = promptOf(question, lang);
-  const powered = battle.phase === 2;
+  // Placement ("Meet your first boss"): no tries, no hint, no combo; every answer gets the same happy reaction.
+  const placement = battle.kind === "placement";
+  const powered = !placement && battle.phase === 2;
   const signature = signatureFor(bossKey, interaction.type, turn);
 
   // The layout for this screen (phone or desktop) and the question's length.
@@ -203,7 +205,12 @@ export default function BattleScene(props: BattleSceneProps) {
   }, [entrance]);
 
   const activeStep = entrance ? step : null;
-  const taunt = activeStep === 3 ? (entrance === "rematch" ? REMATCH_TAUNT : entrance === "resume" ? RESUME_TAUNT : BOSS_TAUNTS[bossKey])[lang] : null;
+  const taunt =
+    activeStep === 3
+      ? placement && entrance !== "resume"
+        ? t.placementHello(boss)
+        : (entrance === "rematch" ? REMATCH_TAUNT : entrance === "resume" ? RESUME_TAUNT : BOSS_TAUNTS[bossKey])[lang]
+      : null;
 
   useEffect(() => {
     if (activeStep === null || !entrance) return;
@@ -256,7 +263,7 @@ export default function BattleScene(props: BattleSceneProps) {
   const turnKey = !entrance ? `${question.questionId}:${question.position}` : null;
   useEffect(() => {
     if (!turnKey) return;
-    const grumpy = battle.phase === 2 && previousPhase.current === 1;
+    const grumpy = !placement && battle.phase === 2 && previousPhase.current === 1;
     previousPhase.current = battle.phase;
     const id = window.setTimeout(() => {
       setLaunched(false);
@@ -355,17 +362,23 @@ export default function BattleScene(props: BattleSceneProps) {
   useEffect(() => {
     if (!fxEvent) return;
     const { feedback: fb, result } = fxEvent;
-    const knockout = result.finished && result.passed;
+    const knockout = !fb.neutral && result.finished && result.passed;
     const big = fb.super || knockout;
-    combat.current?.resolve(fb.turn, {
-      correct: fb.correct,
-      big,
-      knockout,
-      hpFrom: hpBefore.current,
-      hpTo: result.bossHpPercent,
-      text: knockout ? t.burstKo : fb.turn === "attack" ? (fb.super ? t.burstSuper : t.burstPow) : t.burstBlocked,
-      missText: fb.turn === "attack" ? t.nearly : t.burstBonk,
-    });
+    combat.current?.resolve(
+      fb.turn,
+      fb.neutral
+        ? // The same short "Got it!" and a happy nod for every answer; the meter fills (no HP chunk).
+          { correct: true, big: false, knockout: false, neutral: true, hpFrom: hpBefore.current, hpTo: hpBefore.current, text: t.placementGotIt, missText: t.placementGotIt }
+        : {
+            correct: fb.correct,
+            big,
+            knockout,
+            hpFrom: hpBefore.current,
+            hpTo: result.bossHpPercent,
+            text: knockout ? t.burstKo : fb.turn === "attack" ? (fb.super ? t.burstSuper : t.burstPow) : t.burstBlocked,
+            missText: fb.turn === "attack" ? t.nearly : t.burstBonk,
+          }
+    );
     const timers: number[] = [];
     if (!fb.correct) timers.push(window.setTimeout(() => setHeld(null), 0));
     if (knockout) timers.push(window.setTimeout(() => setKnockedOut(true), 650));
@@ -383,7 +396,9 @@ export default function BattleScene(props: BattleSceneProps) {
       : "idle"
     : knockedOut
       ? "ko"
-      : feedback && !feedback.correct
+      : feedback?.neutral
+        ? "happy"
+        : feedback && !feedback.correct
         ? "taunt"
         : !feedback && turn === "block"
           ? "windup"
@@ -393,10 +408,10 @@ export default function BattleScene(props: BattleSceneProps) {
   const owlPose: OwlPose = feedback ? (feedback.correct ? "cheer" : "wrong") : turn === "block" ? "block" : "idle";
   const playersTurn = !feedback && !inEntrance && !launched;
   const busy = inFlight || feedback !== null || !isOnline || inEntrance;
-  const canHint = !battle.hintUsed && !feedback && !inEntrance && hintFits(interaction);
+  const canHint = !placement && battle.hintAllowed !== false && !battle.hintUsed && !feedback && !inEntrance && hintFits(interaction);
   // The boss holds its projectile until the throw (the throw takes a copy of it).
   const showProjectile = turn === "block" && !inEntrance && (!feedback || launched);
-  const comboLit = battle.combo > 0 ? (superReady(battle.combo) ? 3 : battle.combo % 3) : 0;
+  const comboLit = !placement && battle.combo > 0 ? (superReady(battle.combo) ? 3 : battle.combo % 3) : 0;
   const hpShown = held?.hp ?? battle.bossHpPercent;
   const hitsToGo = Math.max(0, battle.requiredCorrect - (held?.correct ?? battle.correctCount));
   const contentDir = question.contentLanguage === "ar" ? "rtl" : question.contentLanguage === "en" ? "ltr" : undefined;
@@ -422,7 +437,13 @@ export default function BattleScene(props: BattleSceneProps) {
   const hudFont = Math.round(Math.min(30, Math.max(18, 20 * (desktop ? ui * 1.05 : Math.min(1.3, Math.max(1, ui))))));
   const flashTop = geometry.move.top + bandHeight * moveScale * 0.4;
 
-  const healthBar = (
+  // Placement: the same meter, framed as the boss getting to know you (it fills as you go).
+  const knowShown = 100 - hpShown;
+  const healthBar = placement ? (
+    <div ref={hpBarRef} className="mt-1 overflow-hidden rounded-full bg-black/40" style={{ height: Math.round(hudFont * 0.7) }} role="progressbar" aria-label={t.placementMeter(boss)} aria-valuemin={0} aria-valuemax={100} aria-valuenow={knowShown}>
+      <div className="h-full rounded-full transition-[width] duration-300 ease-out" style={{ width: `${knowShown}%`, background: "linear-gradient(180deg,#FDE68A,#F59E0B 60%,#D97706)" }} />
+    </div>
+  ) : (
     <div ref={hpBarRef} className="mt-1 overflow-hidden rounded-full bg-black/40" style={{ height: Math.round(hudFont * 0.7) }} role="progressbar" aria-label={t.power(boss)} aria-valuemin={0} aria-valuemax={100} aria-valuenow={hpShown}>
       <div
         className="h-full rounded-full transition-[width] duration-150 ease-out"
@@ -437,7 +458,7 @@ export default function BattleScene(props: BattleSceneProps) {
     <>
       <div className="flex items-center justify-between gap-2">
         <span className="truncate font-bold uppercase leading-tight tracking-wide" style={{ fontSize: hudFont }}>{boss}</span>
-        <span className="shrink-0 rounded-full bg-[#0B4A26] px-2.5 py-0.5 font-bold leading-tight text-[#D1FAE5]" style={{ fontSize: Math.round(hudFont * 0.7) }}>{t.hitsToGo(formatNumber(hitsToGo, lang))}</span>
+        <span className="shrink-0 rounded-full bg-[#0B4A26] px-2.5 py-0.5 font-bold leading-tight text-[#D1FAE5]" style={{ fontSize: Math.round(hudFont * 0.7) }}>{placement ? t.placementMeterShort : t.hitsToGo(formatNumber(hitsToGo, lang))}</span>
       </div>
       {healthBar}
     </>
@@ -543,13 +564,31 @@ export default function BattleScene(props: BattleSceneProps) {
 
       {/* The owl's life: its shields (and the Super Star pips) in a row under its feet */}
       <div ref={shieldsRef} data-layout="shields" className={`absolute z-[7] flex -translate-x-1/2 items-center gap-1.5 ${inEntrance ? "invisible" : ""}`} style={{ left: geometry.shields.x, top: geometry.shields.top, height: geometry.shields.height }}>
-        <span className={`flex gap-1 rounded-full px-2 py-1 ${GLASS}`} role="img" aria-label={`${t.shields}: ${formatNumber(battle.heartsLeft, lang)}`}>
-          {Array.from({ length: battle.heartsTotal }, (_, i) => (
-            <span key={i} className="block shrink-0" style={{ width: geometry.shields.icon, height: geometry.shields.icon }}>
-              <OwlShieldIcon className="h-full w-full" empty={i >= battle.heartsLeft} />
-            </span>
-          ))}
-        </span>
+        {placement ? (
+          // A row of dots, one per puzzle: done, this one, still to come. No tries.
+          <span className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 ${GLASS}`} role="img" aria-label={t.placementProgress(formatNumber(Math.min(battle.questionCount, question.position + 1), lang), formatNumber(battle.questionCount, lang))}>
+            {Array.from({ length: battle.questionCount }, (_, i) => {
+              const dot = Math.max(8, Math.round(geometry.shields.icon * 0.42));
+              const done = i < (feedback ? question.position + 1 : question.position);
+              const here = !done && i === question.position;
+              return (
+                <span
+                  key={i}
+                  className={`block shrink-0 rounded-full ${done ? "bg-[#FDE68A]" : here ? "bg-white ring-2 ring-[#FDE68A]" : "bg-white/30"}`}
+                  style={{ width: dot, height: dot }}
+                />
+              );
+            })}
+          </span>
+        ) : (
+          <span className={`flex gap-1 rounded-full px-2 py-1 ${GLASS}`} role="img" aria-label={`${t.shields}: ${formatNumber(battle.heartsLeft, lang)}`}>
+            {Array.from({ length: battle.heartsTotal }, (_, i) => (
+              <span key={i} className="block shrink-0" style={{ width: geometry.shields.icon, height: geometry.shields.icon }}>
+                <OwlShieldIcon className="h-full w-full" empty={i >= battle.heartsLeft} />
+              </span>
+            ))}
+          </span>
+        )}
         {comboLit > 0 && (
           <span className={`flex gap-0.5 rounded-full px-2 py-1.5 ${GLASS}`} role="img" aria-label={superReady(battle.combo) ? t.superReady : `${t.superStar} ${formatNumber(comboLit, lang)}`}>
             {[0, 1, 2].map((i) => (
@@ -672,12 +711,18 @@ export default function BattleScene(props: BattleSceneProps) {
       {/* What the old intro screen said, while the boss makes its entrance: the shields, what it takes to win, the lessons, the sound. */}
       {inEntrance && (
         <div className={`absolute inset-x-0 z-30 mx-auto flex w-fit max-w-[calc(100%-24px)] flex-wrap items-center justify-center gap-2 motion-safe:animate-pop-in ${desktop ? "text-xl" : "text-base"}`} style={{ bottom: "calc(env(safe-area-inset-bottom) + 14px)" }}>
-          <span className={`flex items-center gap-1 rounded-full px-3 py-1.5 ${GLASS}`} role="img" aria-label={`${t.shieldsCount(formatNumber(battle.heartsLeft, lang))}, ${t.toWin(formatNumber(battle.requiredCorrect, lang), formatNumber(battle.questionCount, lang))}`}>
-            {Array.from({ length: battle.heartsTotal }, (_, i) => (
-              <OwlShieldIcon key={i} className={desktop ? "h-8 w-8" : "h-6 w-6"} empty={i >= battle.heartsLeft} />
-            ))}
-            <span className="ms-1 font-bold">{t.toWin(formatNumber(battle.requiredCorrect, lang), formatNumber(battle.questionCount, lang))}</span>
-          </span>
+          {placement ? (
+            <span className={`rounded-full px-4 py-2 font-bold ${GLASS}`}>
+              {t.placementPuzzles(formatNumber(battle.questionCount, lang))} · {t.placementNoRush}
+            </span>
+          ) : (
+            <span className={`flex items-center gap-1 rounded-full px-3 py-1.5 ${GLASS}`} role="img" aria-label={`${t.shieldsCount(formatNumber(battle.heartsLeft, lang))}, ${t.toWin(formatNumber(battle.requiredCorrect, lang), formatNumber(battle.questionCount, lang))}`}>
+              {Array.from({ length: battle.heartsTotal }, (_, i) => (
+                <OwlShieldIcon key={i} className={desktop ? "h-8 w-8" : "h-6 w-6"} empty={i >= battle.heartsLeft} />
+              ))}
+              <span className="ms-1 font-bold">{t.toWin(formatNumber(battle.requiredCorrect, lang), formatNumber(battle.questionCount, lang))}</span>
+            </span>
+          )}
           {props.blockLessons[0] && (
             <Link href={`/lessons/${props.blockLessons[0].lessonId}`} className={`rounded-full px-4 py-2 font-semibold text-white ${GLASS}`}>
               {t.practiseLessons}

@@ -594,6 +594,20 @@ export default function TeacherDashboard() {
           </Link>
         </div>
 
+        <Link
+          href="/teacher/impact"
+          className="mb-8 flex items-center gap-3 rounded-2xl border border-gray-100 bg-white px-5 py-4 shadow-sm transition-colors hover:border-emerald-200"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-50 text-sky-700" aria-hidden="true">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18M7 15l4-4 3 3 5-6" /></svg>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold text-gray-900">Learning impact</span>
+            <span className="block text-sm text-gray-500">Growth from the starting boss, Big Challenge results and engagement for your learning paths</span>
+          </span>
+          <span className="text-sm font-semibold text-emerald-700" aria-hidden="true">→</span>
+        </Link>
+
         {/* Recent Activity */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
           <div className="p-6 border-b border-gray-100">

@@ -103,6 +103,7 @@ describe("mergeProgressForSync", () => {
       total_watch_time_seconds: 110,
       completed: true,
       completed_at: "2026-10-14T09:00:00.000Z",
+      completion_source: "offline_sync",
     });
   });
 

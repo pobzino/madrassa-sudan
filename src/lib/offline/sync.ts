@@ -172,6 +172,8 @@ export interface ProgressWrite {
   total_watch_time_seconds: number;
   completed?: true;
   completed_at?: string;
+  /** Sent with a completion so the server marks it as synced from offline (measurement). */
+  completion_source?: "offline_sync";
 }
 
 /** A device timestamp clamped to [now − 14 days, now], so a wrong clock can't move completion far. */
@@ -210,7 +212,9 @@ export function mergeProgressForSync(
   return {
     last_position_seconds: position,
     total_watch_time_seconds: watch,
-    ...(completeNow ? { completed: true as const, completed_at: clampActivityTime(queued.completedAt, now) } : {}),
+    ...(completeNow
+      ? { completed: true as const, completed_at: clampActivityTime(queued.completedAt, now), completion_source: "offline_sync" as const }
+      : {}),
   };
 }
 

@@ -66,6 +66,7 @@ const translations = {
     manageHomework: "إدارة التدريب",
     manageClasses: "إدارة الفصول",
     learningPath: "مسار التعلم",
+    impact: "الأثر",
     studentView: "عرض الطالب",
     admin: "الإدارة",
     // Common
@@ -101,6 +102,7 @@ const translations = {
     manageHomework: "Manage Practice",
     manageClasses: "Manage Classes",
     learningPath: "Learning Path",
+    impact: "Impact",
     studentView: "Student View",
     admin: "Admin",
     // Common
@@ -457,6 +459,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { href: "/teacher/learning-path", label: t.learningPath, icon: <ChartNavIcon className="w-5 h-5" /> },
     { href: "/teacher/homework", label: t.manageHomework, icon: <ClipboardNavIcon className="w-5 h-5" /> },
     { href: "/teacher/cohorts", label: t.manageClasses, icon: <UsersNavIcon className="w-5 h-5" /> },
+    {
+      href: "/teacher/impact",
+      label: t.impact,
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18M7 15l4-4 3 3 5-6" />
+        </svg>
+      ),
+    },
     ...(role === "admin"
       ? [{
           href: "/admin",

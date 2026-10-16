@@ -323,3 +323,44 @@ export function evaluatePath(
 
   return { weeks: results, milestones: milestoneResults, currentStepId, currentWeekId };
 }
+
+/* ------------------------------------------------------------------ placement */
+
+/**
+ * The placement ("Meet your first boss") is a separate published row of the
+ * path (kind 'placement', week 0). It never enters `milestones`, never gates a
+ * week and is never the bird's current step: the path works the same whether
+ * or not it was played.
+ */
+export type PlacementState = "available" | "in_battle" | "completed";
+
+export interface PlacementBattleInput {
+  status: string;
+  supersededAt: string | null;
+  isPreview: boolean;
+}
+
+/** Splits the path's published rows: Big Challenges (week k > 0) and the one placement. */
+export function splitPathMilestones<T extends { kind?: string | null; after_week_number: number }>(rows: readonly T[]): {
+  milestones: T[];
+  placement: T | null;
+} {
+  const isPlacement = (row: T) => row.kind === "placement" || row.after_week_number === 0;
+  return { milestones: rows.filter((row) => !isPlacement(row)), placement: rows.find(isPlacement) ?? null };
+}
+
+/** Completed = a finished, non-preview battle a staff reset hasn't superseded; else an active one = in battle. */
+export function placementState(battles: readonly PlacementBattleInput[]): PlacementState {
+  if (battles.some((b) => b.status === "completed" && !b.isPreview && !b.supersededAt)) return "completed";
+  if (battles.some((b) => b.status === "active")) return "in_battle";
+  return "available";
+}
+
+/**
+ * Every learner may meet the boss once per path, however far along they are
+ * (owner default; a late placement is still captured and the server flags it
+ * as a late baseline). Done means done until staff reset it.
+ */
+export function isPlacementOffered(state: PlacementState): boolean {
+  return state !== "completed";
+}

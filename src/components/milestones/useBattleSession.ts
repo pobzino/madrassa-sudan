@@ -1,20 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { InteractionAnswer } from "@/lib/interactions/types";
 import type { AnswerResult, BattleQuestion, BattleState, BattleTurn, Lang, MilestoneIntroResponse, OwlHint, StartBattleResponse } from "@/lib/milestones/types";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { MilestoneApiError, MilestoneNetworkError, milestoneApi, type Fetcher } from "./api";
 import { answerRequestFor } from "./moves/contract";
-import { superReady, turnOf } from "./turns";
 import { loadIntro, takeEarlyStart, takeWarmBattle } from "./prefetch";
+import { answerEvents, answerFeedback, finishEvents, hintOffered, isPlacementBattle, startEvents, type BattleEvent } from "./battleEvents";
+
+export { isPlacementBattle } from "./battleEvents";
+
+const emit = (events: BattleEvent[]) => events.forEach((e) => trackAnalyticsEvent(e.name, e.props));
 
 /**
  * The battle's data and rules, with no drawing: load or resume, start a new
  * attempt, send answers (idempotent retries), the Owl hint, and analytics.
  * The server decides everything; this only mirrors what it says.
  */
-export type Screen = "loading" | "play" | "won" | "lost" | "abandoned" | "locked" | "not_found" | "error";
+export type Screen =
+  | "loading" | "play" | "won" | "lost" | "abandoned" | "locked" | "not_found" | "error"
+  // Placement ("Meet your first boss"): the intro waits for "Let's play!", the
+  // end shows what the child knows, and a finished one is never played again.
+  | "placement_intro" | "placement_end" | "placement_done";
 export type EntranceKind = "first" | "rematch" | "resume";
 
 export interface Feedback {
@@ -24,6 +32,8 @@ export interface Feedback {
   super: boolean;
   /** This answer ended the battle. */
   final: boolean;
+  /** Placement: every answer gets the same happy reaction (correct is always true here). */
+  neutral?: boolean;
 }
 
 export interface PendingAnswer {
@@ -41,7 +51,7 @@ function applyResult(battle: BattleState, result: AnswerResult): BattleState {
     answeredCount: battle.answeredCount + 1,
     heartsLeft: result.heartsLeft,
     bossHpPercent: result.bossHpPercent,
-    status: result.finished ? (result.passed ? "won" : "lost") : "active",
+    status: result.finished ? (battle.kind === "placement" ? "completed" : result.passed ? "won" : "lost") : "active",
     certificateId: result.certificateId ?? battle.certificateId,
     combo: result.combo,
     phase: result.phase,
@@ -91,15 +101,6 @@ export function useBattleSession({
   const [lockedMessage, setLockedMessage] = useState<string | null>(null);
   const resultRef = useRef<AnswerResult | null>(null);
 
-  const analyticsBase = useMemo(
-    () => ({
-      milestone_id: milestoneId,
-      milestone_level: intro?.milestone.level ?? 1,
-      ...(intro?.milestone.subjectId ? { subject_id: intro.milestone.subjectId } : {}),
-    }),
-    [intro?.milestone.level, intro?.milestone.subjectId, milestoneId]
-  );
-
   const enterBattle = useCallback((state: BattleState) => {
     setBattle(state);
     setQuestion(state.question);
@@ -108,6 +109,7 @@ export function useBattleSession({
     setNetError(false);
     setHint(state.hint);
     if (state.status === "active") setScreen("play");
+    else if (state.status === "completed") setScreen("placement_done");
     else if (state.status === "won") setScreen("won");
     else if (state.status === "lost") setScreen("lost");
     else setScreen("abandoned");
@@ -115,15 +117,8 @@ export function useBattleSession({
 
   const applyStart = useCallback(
     (started: StartBattleResponse, introData: MilestoneIntroResponse | null) => {
-      trackAnalyticsEvent("milestone_battle_start", {
-        milestone_id: milestoneId,
-        milestone_level: introData?.milestone.level ?? 1,
-        ...(introData?.milestone.subjectId ? { subject_id: introData.milestone.subjectId } : {}),
-        resumed: started.resumed,
-        attempt_number: started.battle.attemptNumber,
-        question_count: started.battle.questionCount,
-        preview: started.battle.preview,
-      });
+      // A placement sends placement events only: no answers, no correctness, no scores.
+      emit(startEvents(started, introData, milestoneId));
       setFinal(null);
       enterBattle(started.battle);
       if (started.battle.status === "active") {
@@ -141,6 +136,10 @@ export function useBattleSession({
   );
 
   const handleLoadError = useCallback((error: unknown) => {
+    if (error instanceof MilestoneApiError && error.code === "placement_done") {
+      setScreen("placement_done");
+      return;
+    }
     if (error instanceof MilestoneApiError && error.code === "milestone_locked") {
       setLockedMessage(error.serverMessage);
       setScreen("locked");
@@ -176,6 +175,11 @@ export function useBattleSession({
         if (current.battle.status === "active") callbacks.current.onEntrance("resume");
         return;
       }
+      if (isPlacementBattle(null, introData)) {
+        // Never locked; met once. Otherwise the child chooses "Let's play!" (or "Maybe later").
+        setScreen(introData.state === "completed" && !introData.preview ? "placement_done" : "placement_intro");
+        return;
+      }
       if (introData.state === "locked" && !introData.preview) {
         setScreen("locked");
         return;
@@ -193,29 +197,12 @@ export function useBattleSession({
 
   const finish = useCallback(
     (result: AnswerResult, state: BattleState) => {
-      const scorePercent = state.answeredCount > 0 ? Math.round((100 * state.correctCount) / state.answeredCount) : 0;
-      const common = {
-        ...analyticsBase,
-        attempt_number: state.attemptNumber,
-        question_count: state.questionCount,
-        score_percent: scorePercent,
-        hearts_left: state.heartsLeft,
-        preview: state.preview,
-      };
+      emit(finishEvents(result, state, intro, milestoneId));
       setFinal(result);
-      if (result.passed) {
-        trackAnalyticsEvent("milestone_submit", { ...common, outcome: "won" });
-        trackAnalyticsEvent("milestone_victory", { ...common, first_pass: result.firstPass });
-        if (result.firstPass) trackAnalyticsEvent("milestone_pass", { ...common, first_pass: true });
-        setScreen("won");
-      } else {
-        trackAnalyticsEvent("milestone_submit", { ...common, outcome: "lost" });
-        trackAnalyticsEvent("milestone_defeat", common);
-        setScreen("lost");
-      }
+      setScreen(state.kind === "placement" ? "placement_end" : result.passed ? "won" : "lost");
       callbacks.current.onFinished(result);
     },
-    [analyticsBase]
+    [intro, milestoneId]
   );
 
   /** On to the next question, or the end screen. */
@@ -243,22 +230,10 @@ export function useBattleSession({
       try {
         const result = await milestoneApi.answer(fetcher, battle.battleId, answerRequestFor(question, answer.answer), lang);
         setInFlight(false);
-        const nextFeedback: Feedback = {
-          correct: result.correct,
-          turn: turnOf(question),
-          super: result.correct && superReady(battle.combo),
-          final: result.finished,
-        };
+        const nextFeedback: Feedback = answerFeedback(battle, question, result);
         setBattle(applyResult(battle, result));
         resultRef.current = result;
-        trackAnalyticsEvent("milestone_answer", {
-          milestone_id: milestoneId,
-          attempt_number: battle.attemptNumber,
-          position: answer.position,
-          correct: result.correct,
-          hearts_left: result.heartsLeft,
-          boss_hp_percent: result.bossHpPercent,
-        });
+        emit(answerEvents(battle, result, answer.position, milestoneId));
         setFeedback(nextFeedback);
         callbacks.current.onAnswered(result, nextFeedback, answer);
       } catch (error) {
@@ -300,7 +275,7 @@ export function useBattleSession({
   }, [inFlight, pending, send]);
 
   const askOwl = useCallback(async () => {
-    if (!battle || !question || battle.hintUsed || hintLoading || inFlight || feedback || pending) return;
+    if (!battle || !question || !hintOffered(battle) || hintLoading || inFlight || feedback || pending) return;
     setHintLoading(true);
     try {
       const response = await milestoneApi.hint(fetcher, milestoneId, question.position, lang);
@@ -325,6 +300,11 @@ export function useBattleSession({
     }
   }, [handleLoadError, intro, start]);
 
+  /** Placement intro: "Maybe later". */
+  const dismissPlacement = useCallback(() => {
+    emit([{ name: "placement_dismiss", props: { milestone_id: milestoneId } }]);
+  }, [milestoneId]);
+
   return {
     screen,
     intro,
@@ -343,7 +323,9 @@ export function useBattleSession({
     retry,
     askOwl,
     advance,
+    /** Also the placement intro's "Let's play!" (starts or resumes). */
     playAgain,
+    dismissPlacement,
     reload: load,
   };
 }
