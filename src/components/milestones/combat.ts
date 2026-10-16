@@ -35,8 +35,10 @@ export interface CombatRefs {
   bossBox: () => HTMLElement | null;
   owl: () => OwlHandle | null;
   boss: () => BossHandle | null;
-  /** The layer that shakes. */
-  shell: () => HTMLElement | null;
+  /** What shakes on impact: the characters and the owl's shields (never the HUD or the bubble). */
+  shakeTargets: () => HTMLElement[];
+  /** The boss's rig, inside its box (its hit recoil is reined in so it stays on screen). */
+  bossRig: () => HTMLElement | null;
   /** The boss's HP bar track (its chunk breaks off on a hit). */
   hpBar: () => HTMLElement | null;
   /** The boss's own projectile, drawn where it holds it (block turns): its art and place. */
@@ -143,7 +145,8 @@ export class Combat {
     } else {
       // The owl's dome goes up at once; the boss winds up and throws.
       run.dome = this.dome(run);
-      void this.refs.owl()?.play("block");
+      // (the rigs build their timelines a frame later, so the first frame of the move is never held up)
+      requestAnimationFrame(() => void this.refs.owl()?.play("block"));
       run.from = this.bossHands();
       run.contact = this.domeContact(run.from);
       this.bossWindup(run, windup, options.effort ?? "Hngh!");
@@ -272,9 +275,12 @@ export class Combat {
     return Math.round(owlSize * (desktop ? 0.42 : 0.55) * (big ? 1.2 : 1));
   }
 
+  /** A small jitter: at most 6px on a phone, 10px on a desktop (1.5% of the stage's smaller side). */
   private shakePx(big: boolean) {
-    const w = this.refs.arena()?.clientWidth ?? 400;
-    return Math.max(3, Math.min(12, w * 0.007)) * (big ? 1.6 : 1);
+    const arena = this.refs.arena();
+    const min = Math.min(arena?.clientWidth ?? 400, arena?.clientHeight ?? 800);
+    const cap = this.sizes().desktop ? 10 : 6;
+    return Math.min(cap, min * 0.015) * (big ? 1 : 0.7);
   }
 
   /* -------------------------------------------------------------- helpers */
@@ -376,17 +382,48 @@ export class Combat {
     }
   }
 
+  /** 3-4 fast oscillations decaying to nothing within 160ms, added on top of whatever else moves them. */
   private shake(big: boolean) {
     if (this.reduced()) return;
     const s = this.shakePx(big);
-    this.refs.shell()?.animate([
-      { transform: "translate(0, 0)" },
-      { transform: `translate(${-s}px, ${s * 0.6}px)` },
-      { transform: `translate(${s * 0.9}px, ${-s * 0.5}px)` },
-      { transform: `translate(${-s * 0.6}px, ${-s * 0.3}px)` },
-      { transform: `translate(${s * 0.4}px, ${s * 0.3}px)` },
-      { transform: "translate(0, 0)" },
-    ], { duration: big ? 200 : 140, easing: "linear" });
+    for (const el of this.refs.shakeTargets()) {
+      el.animate([
+        { transform: "translate(0, 0)" },
+        { transform: `translate(${-s}px, ${s * 0.4}px)` },
+        { transform: `translate(${s * 0.75}px, ${-s * 0.3}px)` },
+        { transform: `translate(${-s * 0.5}px, ${s * 0.2}px)` },
+        { transform: `translate(${s * 0.25}px, 0)` },
+        { transform: "translate(0, 0)" },
+      ], { duration: 160, easing: "linear", composite: "add" });
+    }
+  }
+
+  /**
+   * The rig's hit knocks the boss back away from the owl; on a narrow screen
+   * that would carry it off the edge. For the length of the recoil, each frame
+   * nudges the rig back just enough to keep its body on screen (it still
+   * leans and wobbles), then lets go.
+   */
+  private reinRecoil() {
+    const rig = this.refs.bossRig();
+    if (!rig || this.reduced()) return;
+    const body = rig.querySelector<SVGGElement>('[data-part="move"]') ?? rig.querySelector("svg");
+    if (!body) return;
+    const margin = 4;
+    const until = performance.now() + 1100;
+    let offset = 0;
+    const step = () => {
+      const r = body.getBoundingClientRect();
+      const left = r.left - offset;
+      const right = r.right - offset;
+      const over = Math.max(0, right + margin - window.innerWidth);
+      const under = Math.max(0, margin - left);
+      offset = under - over;
+      rig.style.translate = offset ? `${Math.round(offset)}px 0` : "";
+      if (performance.now() < until) requestAnimationFrame(step);
+      else rig.style.translate = "";
+    };
+    requestAnimationFrame(step);
   }
 
   /** Freeze both characters (and our effects) for a beat at the moment of contact. */
@@ -474,7 +511,7 @@ export class Combat {
 
   private bossWindup(run: Run, ms: number, effort: string) {
     const boss = this.refs.bossBox();
-    void this.refs.boss()?.play("throw");
+    requestAnimationFrame(() => void this.refs.boss()?.play("throw"));
     if (!boss) return;
     // A warm glow behind the boss as it charges.
     this.flash(boss, "rgba(255,170,80,0.85)", 0.6);
@@ -649,6 +686,7 @@ export class Combat {
     if (withText) this.pop(at, outcome.text, outcome.big ? "big" : "normal");
     this.hitStop(run, () => {
       void this.refs.boss()?.play(outcome.knockout ? "ko" : "hit");
+      this.reinRecoil();
       this.sparks(at, outcome.big ? 18 : 12, bossSize * (outcome.big ? 0.6 : 0.45));
       this.shake(outcome.big);
       this.chunk(outcome.hpFrom, outcome.hpTo);
