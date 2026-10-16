@@ -12,7 +12,7 @@ import type {
   TreeWeek,
   TreeStep,
 } from "@/lib/lessons/useLearningPath";
-import { MilestoneDisc, milestoneCta, milestoneHref, milestoneLabel } from "./MilestoneNode";
+import { HERO_ROOM_ABOVE, HERO_ROOM_BELOW, HERO_WINDOW, MilestoneHero, milestoneCta, milestoneHref, milestoneLabel } from "./MilestoneNode";
 
 const translations = {
   ar: { startTest: "ابدأ الاختبار", retake: "أعد المحاولة", passed: "ناجح", passMark: "75% للنجاح", open: "افتح", test: "اختبار", practice: "التدريب", practiceRetry: "أعد التدريب", practiceAgain: "تدرّب مرة أخرى", watched: (p: number) => `شاهدت ${p}%`, resume: "أكمل", savedOnPhone: "محفوظ على هذا الهاتف" },
@@ -119,10 +119,9 @@ function SavedBadge() {
   );
 }
 
-function NodeDisc({ node, isCurrent, saved = false, isOnline = true }: { node: TreeNode; isCurrent: boolean; saved?: boolean; isOnline?: boolean }) {
-  if (node.kind === "milestone") {
-    return <MilestoneDisc milestone={node.milestone} isCurrent={isCurrent} isOnline={isOnline} />;
-  }
+function NodeDisc({ node, isCurrent, saved = false }: { node: TreeNode; isCurrent: boolean; saved?: boolean }) {
+  // The Big Challenge is drawn by MilestoneHero, not as a disc.
+  if (node.kind === "milestone") return null;
   if (node.kind === "lesson") {
     const { state } = node.step;
     const completed = state === "completed";
@@ -206,6 +205,20 @@ function EdgeSafeRow({ children }: { children: ReactNode }) {
   );
 }
 
+/** The one curve of `smoothPath` that ends at point `i` (same control points). */
+function segmentPath(pts: { x: number; y: number }[], i: number, reach: number): string {
+  const cap = (v: number) => Math.max(-reach, Math.min(reach, v));
+  const p0 = pts[i - 2] || pts[i - 1];
+  const p1 = pts[i - 1];
+  const p2 = pts[i];
+  const p3 = pts[i + 1] || p2;
+  const c1x = p1.x + cap((p2.x - p0.x) / 6);
+  const c1y = p1.y + cap((p2.y - p0.y) / 6);
+  const c2x = p2.x - cap((p3.x - p1.x) / 6);
+  const c2y = p2.y - cap((p3.y - p1.y) / 6);
+  return `M ${p1.x} ${p1.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
+}
+
 function smoothPath(pts: { x: number; y: number }[], reach: number): string {
   if (pts.length < 2) return "";
   const cap = (v: number) => Math.max(-reach, Math.min(reach, v));
@@ -278,20 +291,42 @@ export default function LearningPathTree({
     if (milestone) nodes.push({ kind: "milestone", id: milestoneNodeId(milestone.id), milestone });
   }
 
-  const placed = nodes.map((node, i) => {
-    const row = Math.floor(i / PER_ROW);
-    const col = i % PER_ROW;
+  // Two nodes a row, serpentine. A Big Challenge is the hero: it takes a row
+  // of its own, centred, with extra room above and below.
+  const placed: Array<{ node: TreeNode; x: number; y: number }> = [];
+  let row = 0;
+  let col = 0;
+  let y = TOP;
+  for (const node of nodes) {
+    if (node.kind === "milestone") {
+      if (col !== 0) {
+        row += 1;
+        col = 0;
+        y += ROW_H;
+      }
+      y += HERO_ROOM_ABOVE;
+      placed.push({ node, x: W / 2, y });
+      y += HERO_ROOM_BELOW;
+      row += 1;
+      continue;
+    }
     const leftToRight = row % 2 === 0;
-    const x = LEFT + (leftToRight ? col : PER_ROW - 1 - col) * COL_GAP;
-    const y = TOP + row * ROW_H;
-    return { node, x, y };
-  });
-
-  const rows = Math.max(1, Math.ceil(nodes.length / PER_ROW));
-  const totalH = TOP + (rows - 1) * ROW_H + BOTTOM;
+    placed.push({ node, x: LEFT + (leftToRight ? col : PER_ROW - 1 - col) * COL_GAP, y });
+    col += 1;
+    if (col === PER_ROW) {
+      col = 0;
+      row += 1;
+      y += ROW_H;
+    }
+  }
+  const last = placed[placed.length - 1];
+  const totalH = (last ? last.y : TOP) + (last?.node.kind === "milestone" ? HERO_ROOM_BELOW : BOTTOM);
   // Cap the turn radius so curves stay inside the node insets (and thus on-screen).
   const turnReach = Math.min(80, Math.max(28, LEFT - 8));
-  const d = smoothPath(placed.map((p) => ({ x: p.x, y: p.y })), turnReach);
+  const points = placed.map((p) => ({ x: p.x, y: p.y }));
+  const d = smoothPath(points, turnReach);
+  // The stretch of road into each Big Challenge turns gold, so you see it coming.
+  const goldRoads = placed.flatMap((p, i) => (p.node.kind === "milestone" && i > 0 ? [segmentPath(points, i, turnReach)] : []));
 
   // Glide offset: from wherever the owl was (previously selected node, or the
   // node before the current one on first load) to the selected node. A CSS
@@ -367,6 +402,9 @@ export default function LearningPathTree({
           </g>
           {/* dashed centre "footsteps" */}
           <path d={d} stroke="#b6bdc9" strokeWidth={3} strokeLinecap="round" strokeDasharray="2 13" />
+          {goldRoads.map((segment, i) => (
+            <path key={i} d={segment} stroke="#F59E0B" strokeWidth={5} strokeLinecap="round" strokeDasharray="4 10" />
+          ))}
         </svg>
 
         {placed.map(({ node, x, y }) => {
@@ -377,6 +415,16 @@ export default function LearningPathTree({
           // row's save control says "Almost ready".
           const saved = offlineReady && node.kind === "lesson" && isLessonDownloaded(node.step.lessonId);
 
+          if (node.kind === "milestone") {
+            return (
+              <div key={node.id} className="absolute" style={{ left: x, top: y }}>
+                {/* On this node the owl is the rigged one, facing off with the boss (MilestoneHero). */}
+                <div className="absolute left-1/2 -translate-x-1/2" style={{ top: -(HERO_WINDOW + 14) / 2 }}>
+                  <MilestoneHero milestone={node.milestone} lang={language} isOnline={isOnline} isCurrent={isSelected} href={href} />
+                </div>
+              </div>
+            );
+          }
           return (
             <div key={node.id} className="absolute" style={{ left: x, top: y }}>
               {/* Soft spotlight glow behind the current node so the owl pops */}
@@ -391,7 +439,7 @@ export default function LearningPathTree({
               )}
               {/* Owl rides the selected node — flies in from where it was */}
               {isSelected && (
-                <div key={selId ?? "owl"} className={`absolute -top-[64px] z-10 -translate-x-1/2 pointer-events-none ${node.kind === "milestone" ? "left-[-56px]" : "left-1/2"}`}>
+                <div key={selId ?? "owl"} className="absolute left-1/2 -top-[64px] z-10 -translate-x-1/2 pointer-events-none">
                   <PathOwl dx={owlDx} dy={owlDy} />
                 </div>
               )}
@@ -406,10 +454,10 @@ export default function LearningPathTree({
                     }}
                     aria-label={saved ? `${label.title} — ${t.savedOnPhone}` : label.title}
                   >
-                    <NodeDisc node={node} isCurrent={isSelected} saved={saved} isOnline={isOnline} />
+                    <NodeDisc node={node} isCurrent={isSelected} saved={saved} />
                   </button>
                 ) : (
-                  <NodeDisc node={node} isCurrent={isSelected} saved={saved} isOnline={isOnline} />
+                  <NodeDisc node={node} isCurrent={isSelected} saved={saved} />
                 )}
               </div>
               {/* Label below (+ Open CTA on the selected node) */}
