@@ -1,13 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Check, Delete, Undo2, X } from "lucide-react";
 import type { BattleTurn, Lang, OwlHint } from "@/lib/milestones/types";
 import type { InteractionAnswer } from "@/lib/interactions/types";
 import { formatNumber, MILESTONE_COPY } from "../copy";
 import { play } from "../motion";
 import type { SkinParts } from "../signatures";
+import { MathText } from "../BattleParts";
 import { pickList, pickText, type PublicInteraction } from "./contract";
+import { layoutCatch, type CatchLayout } from "./catchLayout";
+
+/** How many things the boss throws in a catch move (more than any count asked for). */
+export const CATCH_ITEMS = 8;
 
 /**
  * Every battle move is a shared Interaction re-skinned for the arena and laid
@@ -44,6 +49,12 @@ export interface BattleMoveProps {
   hintButton?: ReactNode;
   /** Height of the targets band, between the boss's ledge and the owl's head (px). */
   bandHeight?: number;
+  /** Catch moves use the whole middle: how far above the band the field starts (px, up to the HUD). */
+  catchRise?: number;
+  /** Catch moves: what the scattered items must stay clear of (screen rects: boss, bubble, owl). */
+  catchAvoid?: () => DOMRect[];
+  /** Changes whenever those areas move or resize (the bubble's text, the HUD), to lay out again. */
+  catchKey?: string;
 }
 
 /** Moves whose prompt lives inside the move itself (the spell scroll). */
@@ -139,18 +150,6 @@ function IconButton({ label, onClick, disabled, children }: { label: string; onC
       {children}
     </button>
   );
-}
-
-/** A tiny seeded random, so a layout stays put across re-renders. */
-function seeded(seed: string) {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i += 1) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
-  return () => {
-    h = Math.imul(h ^ (h >>> 15), 2246822507);
-    h = Math.imul(h ^ (h >>> 13), 3266489909);
-    h ^= h >>> 16;
-    return (h >>> 0) / 4294967296;
-  };
 }
 
 /**
@@ -335,28 +334,39 @@ function DodgeLanes({ lang, disabled, onSubmit }: BattleMoveProps) {
 
 /* ---------------------- tap_to_count: the boss throws them; catch for the owl */
 
-function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, catchTarget, throwFrom, hintButton }: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "tap_to_count" }> }) {
+function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, catchTarget, throwFrom, hintButton, catchRise = 0, catchAvoid, catchKey = "" }: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "tap_to_count" }> }) {
   const t = MILESTONE_COPY[lang];
   // More than any count asked for: the prompt says how many to catch.
-  const total = 8;
+  const total = CATCH_ITEMS;
   const [caught, setCaught] = useState<number[]>([]);
   const fieldRef = useRef<HTMLDivElement>(null);
-  const spots = useMemo(() => {
-    // Scattered, never overlapping (a 72px bubble needs ~23% x 38% of the field).
-    const random = seeded(seed);
-    const placed: Array<{ left: number; top: number; spin: number }> = [];
-    let guard = 0;
-    while (placed.length < total && guard < 600) {
-      guard += 1;
-      const left = 1 + random() * 76;
-      const top = random() * 62;
-      if (placed.every((p) => Math.abs(p.left - left) > 23 || Math.abs(p.top - top) > 38)) placed.push({ left, top, spin: random() * 50 - 25 });
-    }
-    return placed;
-  }, [seed]);
+  const [layout, setLayout] = useState<CatchLayout | null>(null);
+
+  // Lay the bubbles out over the whole field, clear of the owl and its platform.
+  useLayoutEffect(() => {
+    const field = fieldRef.current;
+    if (!field) return;
+    const measure = () => {
+      const box = field.getBoundingClientRect();
+      const margin = 6;
+      const avoid = catchAvoid?.() ?? [];
+      const exclude = avoid.map((r) => ({ left: r.left - box.left - margin, top: r.top - box.top - margin, right: r.right - box.left + margin, bottom: r.bottom - box.top + margin }));
+      // The owl (the last rect) keeps everything under it clear too: its platform.
+      const owl = catchTarget?.();
+      if (owl) exclude.push({ left: owl.left - box.left - margin, top: owl.top + owl.height * 0.08 - box.top - margin, right: owl.right - box.left + margin, bottom: box.height + 1 });
+      setLayout(layoutCatch({ count: total, width: box.width, height: box.height, exclude, seed }));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(field);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed, catchRise, catchKey]);
 
   // They tumble in from the boss and land where they lie.
+  const laidOut = layout !== null;
   useLayoutEffect(() => {
+    if (!laidOut) return;
     const from = throwFrom?.();
     const items = Array.from(fieldRef.current?.querySelectorAll<HTMLElement>("[data-thrown]") ?? []);
     const animations = items.map((el, i) => {
@@ -370,7 +380,7 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
     });
     return () => animations.forEach((a) => a?.cancel());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed]);
+  }, [laidOut, seed]);
 
   const catchOne = (index: number, element: HTMLElement) => {
     if (disabled || caught.includes(index)) return;
@@ -388,10 +398,12 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
   };
 
   const glyph = interaction.emoji || "⭐";
+  const size = layout?.size ?? 64;
   return (
-    <div className="flex h-full flex-col">
-      <div ref={fieldRef} className={`relative ${BAND}`}>
-        {spots.map((spot, index) =>
+    <div className="relative flex h-full flex-col">
+      {/* the whole middle of the arena, from under the HUD down to the action row */}
+      <div ref={fieldRef} className="pointer-events-none absolute inset-x-0" style={{ top: -catchRise, bottom: 76 }}>
+        {layout?.points.map((point, index) =>
           caught.includes(index) ? null : (
             <button
               key={index}
@@ -400,31 +412,29 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
               disabled={disabled}
               onClick={(event) => catchOne(index, event.currentTarget)}
               aria-label={glyph}
-              className={`absolute grid h-[72px] w-[72px] place-items-center leading-none active:scale-90 ${
+              className={`pointer-events-auto absolute grid place-items-center leading-none active:scale-90 ${
                 skin?.thrown === "die"
-                  ? "rounded-[16px] bg-white text-[30px] shadow-[0_5px_0_#C7C2B8]"
+                  ? "rounded-[16px] bg-white shadow-[0_5px_0_#C7C2B8]"
                   : skin?.thrown === "seed"
-                    ? "rounded-[50%] bg-[radial-gradient(circle_at_35%_30%,#E8B880,#A86F37)] text-[30px]"
-                    : "rounded-full border-2 border-white/40 bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.35),rgba(110,231,183,0.12)_55%,rgba(16,185,129,0.18))] text-[34px] shadow-[0_0_18px_rgba(110,231,183,0.45),inset_0_0_12px_rgba(255,255,255,0.15)]"
+                    ? "rounded-[50%] bg-[radial-gradient(circle_at_35%_30%,#E8B880,#A86F37)]"
+                    : "rounded-full border-2 border-white/45 bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.38),rgba(110,231,183,0.14)_55%,rgba(16,185,129,0.2))] shadow-[0_0_18px_rgba(110,231,183,0.5),inset_0_0_12px_rgba(255,255,255,0.18)]"
               }`}
-              style={{ insetInlineStart: `${spot.left}%`, top: `${spot.top}%`, rotate: `${spot.spin}deg` }}
+              style={{ left: point.x, top: point.y, width: size, height: size, fontSize: Math.round(size * 0.46) }}
             >
               <span aria-hidden="true">{glyph}</span>
             </button>
           )
         )}
       </div>
-      <div className="flex shrink-0 ps-[40%] pt-4">
-        <div className="flex h-12 items-center gap-1.5 rounded-full bg-[#FFF8EC] px-4 text-[#1a1a1a] shadow-[0_4px_0_rgba(0,0,0,0.25)]" aria-live="polite">
-          <span className="text-[20px] font-bold leading-none">{t.caught}</span>
-          <span className="text-[26px] font-bold leading-none">{formatNumber(caught.length, lang)}</span>
-        </div>
-      </div>
       <div className={ACTION_ROW}>
         {hintButton}
         <IconButton label={t.undo} onClick={() => setCaught((current) => current.slice(0, -1))} disabled={disabled || caught.length === 0}>
           <Undo2 className="h-6 w-6" aria-hidden="true" />
         </IconButton>
+        <div className="flex h-12 shrink-0 items-center gap-1.5 rounded-full bg-[#FFF8EC] px-3.5 text-[#1a1a1a] shadow-[0_4px_0_rgba(0,0,0,0.25)]" aria-live="polite">
+          <span className="text-[18px] font-bold leading-none">{t.caught}</span>
+          <span className="text-[24px] font-bold leading-none">{formatNumber(caught.length, lang)}</span>
+        </div>
         <ConfirmButton kind={turn === "attack" ? "fire" : "block"} lang={lang} disabled={disabled || caught.length === 0} onClick={(origin) => onSubmit({ type: "tap_to_count", count: caught.length }, origin)} />
       </div>
     </div>
@@ -645,7 +655,7 @@ function SpellScroll({ interaction, lang, hint, numeric, disabled, onSubmit, pro
           <span className="absolute inset-y-2 -end-2 w-4 rounded-full bg-[#E9C98B]" aria-hidden="true" />
           {speaker && <div className="absolute -top-5 end-3">{speaker}</div>}
           <p className="text-center text-[clamp(24px,4dvh,30px)] font-bold leading-snug [unicode-bidi:plaintext]">
-            {before}
+            <MathText text={before} />
             <span
               ref={blankRef}
               data-slot="blank"
@@ -655,7 +665,7 @@ function SpellScroll({ interaction, lang, hint, numeric, disabled, onSubmit, pro
             >
               {fill || "?"}
             </span>
-            {after}
+            <MathText text={after} />
           </p>
         </div>
 

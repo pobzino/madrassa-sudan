@@ -5,6 +5,7 @@ import Link from "next/link";
 import { LoaderCircle } from "lucide-react";
 import type { BossKey, Lang } from "@/lib/milestones/types";
 import { MILESTONE_COPY, speakLine } from "./copy";
+import { splitMath } from "./mathText";
 
 /** The palette of the owner's designs. */
 export const UI = {
@@ -104,6 +105,27 @@ export function OwlShieldBubble({ className = "" }: { className?: string }) {
         <path d="M11 13.4 L13 13.4 L12 15 Z" fill={UI.star} />
       </g>
     </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Maths never breaks across lines ("7 + 5?" stays together).          */
+/* ------------------------------------------------------------------ */
+
+/** Text whose maths expressions never wrap inside themselves. */
+export function MathText({ text }: { text: string }) {
+  return (
+    <>
+      {splitMath(text).map((part, i) =>
+        part.math ? (
+          <span key={i} className="whitespace-nowrap">
+            {part.text}
+          </span>
+        ) : (
+          part.text
+        )
+      )}
+    </>
   );
 }
 

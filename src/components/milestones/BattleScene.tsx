@@ -5,9 +5,7 @@ import Link from "next/link";
 import { RotateCw, X } from "lucide-react";
 import { OwlHead } from "@/components/illustrations";
 import {
-  BOSS_FOOT,
   BossCharacter,
-  OWL_FOOT,
   OwlCharacter,
   type BossHandle,
   type CharacterCue,
@@ -19,7 +17,7 @@ import {
 import type { InteractionAnswer } from "@/lib/interactions/types";
 import type { AnswerResult, BattleQuestion, BattleState, BossKey, Lang, OwlHint } from "@/lib/milestones/types";
 import { BOSS_NAMES } from "@/lib/milestones/rules";
-import { OwlShieldBubble, OwlShieldIcon, Projectile, ReadAloudButton, WifiOffIcon } from "./BattleParts";
+import { MathText, OwlShieldBubble, OwlShieldIcon, Projectile, ReadAloudButton, WifiOffIcon } from "./BattleParts";
 import { milestoneApi, type Fetcher } from "./api";
 import { bossName, formatNumber, MILESTONE_COPY, speakLine } from "./copy";
 import { play, prefersReducedMotion } from "./motion";
@@ -28,6 +26,7 @@ import { hintFits, promptOf } from "./moves/contract";
 import { BOSS_TAUNTS, REMATCH_TAUNT, RESUME_TAUNT, SKIN_PARTS, signatureFor } from "./signatures";
 import { superReady, turnOf } from "./turns";
 import type { EntranceKind, Feedback, PendingAnswer } from "./useBattleSession";
+import { battleGeometry } from "./geometry";
 
 export interface FxEvent {
   key: number;
@@ -113,16 +112,27 @@ export default function BattleScene(props: BattleSceneProps) {
   const signature = signatureFor(bossKey, interaction.type, turn);
 
   // The cast stands on the arena's anchors: feet on the ledge and the platform.
-  const bossSize = Math.round(Math.min(230, Math.max(150, 180 * anchors.boss.scale)));
-  const owlSize = Math.round(bossSize * 0.853);
-  const bossLeft = anchors.boss.x - bossSize * BOSS_FOOT.x;
-  const bossTop = anchors.boss.y - bossSize * BOSS_FOOT.y;
-  const owlLeft = anchors.owl.x - owlSize * OWL_FOOT.x;
-  const owlTop = anchors.owl.y - owlSize * OWL_FOOT.y;
-  const bandTop = anchors.boss.y + 10;
-  const bandHeight = Math.round(Math.max(170, Math.min(240, owlTop + owlSize * 0.12 - bandTop - 8)));
+  const geometry = battleGeometry(typeof window === "undefined" ? 375 : window.innerWidth, typeof window === "undefined" ? 812 : window.innerHeight, anchors);
+  const { bossSize, owlSize, bandTop, bandHeight } = geometry;
+  const bossLeft = geometry.boss.left;
+  const bossTop = geometry.boss.top;
+  const owlLeft = geometry.owl.left;
+  const owlTop = geometry.owl.top;
 
   const arenaRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const [hudBottom, setHudBottom] = useState(124);
+  const shortScreen = typeof window !== "undefined" && window.innerHeight < 720;
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    const measure = () => setHudBottom(Math.round(header.getBoundingClientRect().bottom));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
   const bossBoxRef = useRef<HTMLDivElement>(null);
   const owlBoxRef = useRef<HTMLDivElement>(null);
   const bossRef = useRef<BossHandle>(null);
@@ -450,7 +460,7 @@ export default function BattleScene(props: BattleSceneProps) {
     <div ref={arenaRef} className="absolute inset-0">
       {/* HUD: one dark-glass panel (close, the boss's name, hits to go, health),
           then the shields pill and, once a streak starts, the Super Star pill. */}
-      <header className="absolute inset-x-0 z-10 mx-auto flex max-w-[480px] flex-col gap-2 px-3" style={{ top: "calc(env(safe-area-inset-top) + 12px)" }}>
+      <header ref={headerRef} className="absolute inset-x-0 z-10 mx-auto flex max-w-[480px] flex-col gap-2 px-3" style={{ top: "calc(env(safe-area-inset-top) + 12px)" }}>
         <div className="flex items-center gap-2">
           <Link href={`/milestones/${props.milestoneId}`} aria-label={t.exit} title={t.exit} className={`grid h-14 w-14 shrink-0 place-items-center rounded-full text-white ${GLASS}`}>
             <X className="h-7 w-7" strokeWidth={3.2} aria-hidden="true" />
@@ -471,7 +481,7 @@ export default function BattleScene(props: BattleSceneProps) {
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-between">
+        <div className={`flex items-center gap-2 ${shortScreen ? "justify-start" : "justify-between"}`}>
           <span className={`flex gap-1 rounded-full px-2.5 py-1 ${GLASS}`} role="img" aria-label={`${t.shields}: ${formatNumber(battle.heartsLeft, lang)}`}>
             {Array.from({ length: battle.heartsTotal }, (_, i) => (
               <OwlShieldIcon key={i} className="h-8 w-8" empty={i >= battle.heartsLeft} />
@@ -520,17 +530,19 @@ export default function BattleScene(props: BattleSceneProps) {
 
       {/* The boss speaks the puzzle: a bubble to its left, the tail at its mouth */}
       {(showPrompt || taunt) && (
-        <div className="absolute z-[5]" style={{ left: 12, width: Math.max(150, bossLeft + bossSize * 0.12 - 24), top: bossTop + bossSize * 0.14 }}>
+        <div ref={bubbleRef} className="absolute z-[5]" style={{ left: 12, width: Math.max(150, bossLeft + bossSize * 0.12 - 24), top: Math.max(bossTop + bossSize * 0.14, hudBottom + 8) }}>
           <div className="relative flex items-center gap-2 rounded-[26px] bg-[#FFF8EC] py-3 pe-2.5 ps-4 text-[#1a1a1a] shadow-[0_6px_0_rgba(0,0,0,0.22)] motion-safe:animate-pop-in">
             {taunt ? (
               <p aria-live="polite" className="text-[19px] font-bold leading-snug">{taunt}</p>
             ) : (
               <>
                 <div className="min-w-0 flex-1">
-                  <p className="line-clamp-3 text-[clamp(20px,3dvh,25px)] font-bold leading-tight">{prompt}</p>
+                  <p className="line-clamp-3 text-[clamp(20px,3dvh,25px)] font-bold leading-tight">
+                    <MathText text={prompt} />
+                  </p>
                   {question.content && (
                     <p lang={question.contentLanguage ?? undefined} dir={contentDir} className="break-words text-[clamp(24px,3.8dvh,32px)] font-bold leading-tight text-[#007229] [unicode-bidi:plaintext]">
-                      {question.content}
+                      <MathText text={question.content} />
                     </p>
                   )}
                   {question.imageUrl && (
@@ -585,6 +597,20 @@ export default function BattleScene(props: BattleSceneProps) {
             speaker={speaker}
             skin={signature ? SKIN_PARTS[signature.skin] : null}
             bandHeight={bandHeight}
+            catchRise={Math.max(0, bandTop - hudBottom - 4)}
+            catchKey={`${hudBottom}:${inEntrance ? "entrance" : "play"}:${showPrompt ? prompt : ""}:${bossSize}`}
+            catchAvoid={() => {
+              const rects: DOMRect[] = [];
+              // Layout boxes (offset*), not painted ones: the bubble pops in with a scale.
+              const origin = arenaRef.current?.getBoundingClientRect();
+              const box = (el: HTMLElement | null) => (el && origin ? new DOMRect(origin.left + el.offsetLeft, origin.top + el.offsetTop, el.offsetWidth, el.offsetHeight) : null);
+              const bossBox = box(bossBoxRef.current);
+              // the boss down to its ledge
+              if (bossBox) rects.push(new DOMRect(bossBox.left, bossBox.top, bossBox.width, Math.max(bossBox.height, bandTop - bossBox.top)));
+              const bubbleBox = box(bubbleRef.current);
+              if (bubbleBox) rects.push(bubbleBox);
+              return rects;
+            }}
             catchTarget={() => owlBoxRef.current?.getBoundingClientRect() ?? null}
             throwFrom={() => bossBoxRef.current?.getBoundingClientRect() ?? null}
             hintButton={
