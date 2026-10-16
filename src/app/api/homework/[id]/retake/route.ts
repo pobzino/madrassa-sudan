@@ -19,6 +19,7 @@ import { createClient } from "@/lib/supabase/server";
 import { decideRetake } from "@/lib/homework-grading";
 import { getLearnerContextResult } from "@/lib/server/learner-context";
 import { createOwnedLearnerAdminClient } from "@/lib/server/learner-admin";
+import { isMilestoneAssignment } from "@/lib/server/milestones/guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -45,12 +46,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const { data: assignment } = await supabase
       .from("homework_assignments")
-      .select("id, is_test, is_practice, passing_score, total_points, homework_questions(question_type, correct_answer)")
+      .select("*, homework_questions(question_type, correct_answer)")
       .eq("id", assignmentId)
       .single();
 
     if (!assignment) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+    }
+    // Milestone tests are retaken by starting a new battle.
+    if (isMilestoneAssignment(assignment)) {
+      return NextResponse.json({ error: "use_battle" }, { status: 409 });
     }
 
     const { data: submission } = await supabase

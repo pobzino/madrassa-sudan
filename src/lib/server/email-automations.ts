@@ -124,7 +124,7 @@ async function userIdsIn(db: UntypedClient, table: "email_suppressions" | "email
 }
 
 /** Test-mode inboxes from EMAIL_TEST_RECIPIENT, with "admins" swapped for every approved admin. */
-async function testRecipients(db: UntypedClient) {
+export async function testRecipients(db: UntypedClient) {
   const listed = emailAutomationConfig().testRecipients;
   if (!listed.includes("admins")) return listed;
   const { data: admins, error } = await db.from("profiles").select("id").eq("role", "admin").eq("is_approved", true);

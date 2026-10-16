@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { updateAssignmentSchema, practicePublicationError } from "@/lib/homework.validation";
 import { getLearnerContextResult } from "@/lib/server/learner-context";
+import { isMilestoneAssignment } from "@/lib/server/milestones/guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -85,6 +86,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       if (!teacherAccess) {
+        // Learners play milestones as battles; their questions never come through here.
+        if (isMilestoneAssignment(assignment)) {
+          return NextResponse.json({ error: "use_battle" }, { status: 409 });
+        }
         let studentAccess = false;
         if (assignment.cohort_id) {
           const { data: cohortStudent } = await supabase
@@ -219,6 +224,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     if (!existingAssignment) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+    }
+    // Milestones are edited and removed only through /api/teacher/milestones.
+    if (isMilestoneAssignment(existingAssignment)) {
+      return NextResponse.json({ error: "use_battle" }, { status: 409 });
     }
 
     // Check teacher has access to this cohort. Practices (no cohort) are
@@ -411,12 +420,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     // Get existing assignment
     const { data: existingAssignment } = await supabase
       .from("homework_assignments")
-      .select("cohort_id")
+      .select("*")
       .eq("id", id)
       .single();
 
     if (!existingAssignment) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+    }
+    // Milestones are edited and removed only through /api/teacher/milestones.
+    if (isMilestoneAssignment(existingAssignment)) {
+      return NextResponse.json({ error: "use_battle" }, { status: 409 });
     }
 
     // Check teacher has access to this cohort. Practices (no cohort) are

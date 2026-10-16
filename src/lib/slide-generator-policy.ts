@@ -204,6 +204,22 @@ export function getSlideGeneratorPolicyPrompt({
     "## Interaction Rules",
     "- Every practice slide must include a student interaction via `interaction_type`.",
     "- Activity slides may include a student interaction via `interaction_type` when it improves participation.",
+    ...INTERACTION_FIELD_RULES,
+    "- Explanation slides (`content` or `diagram_description`) may optionally include an `interaction_type` when a quick check-for-understanding deepens the teaching moment; leave all interaction fields null when no check is needed.",
+    "- Title, objectives, and summary slides must set all interaction fields to null.",
+    "- Keep interaction prompts short and grade-appropriate.",
+  ];
+
+  return [globalRules.join("\n"), metadataRules.join("\n"), interactionRules.join("\n"), englishRules, mathRules]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+/**
+ * The per-type companion-field rules for `interaction_*` fields. Shared by
+ * the slide-deck generator and the Big Challenge (milestone) item generator.
+ */
+export const INTERACTION_FIELD_RULES: readonly string[] = [
     "- When `interaction_type` is set, all companion fields for that type must be filled.",
     "- `free_response`: requires `interaction_prompt_ar`/`interaction_prompt_en` and `interaction_expected_answer_ar`/`interaction_expected_answer_en` so the teacher can model a strong answer.",
     "- `choose_correct`: requires `interaction_options_ar` and `interaction_options_en` (2-4 items each), `interaction_correct_index` within range, and `interaction_prompt_ar`/`interaction_prompt_en`.",
@@ -215,15 +231,7 @@ export function getSlideGeneratorPolicyPrompt({
     "- `sort_groups`: requires `interaction_items_ar/en`, `interaction_targets_ar/en`, and `interaction_solution_map` where each item maps to a target index.",
     "- `draw_answer`: requires `interaction_prompt_ar`/`interaction_prompt_en` and a plain-language description of what a correct drawing contains in `interaction_expected_answer_ar` and/or `interaction_expected_answer_en` so the vision grader can judge the student's drawing.",
     "- `drag_drop_label`: reserved for teacher-authored slides that pin labels to an image. Do not emit this interaction type during generation; teachers add hotspots manually after the deck is created.",
-    "- Explanation slides (`content` or `diagram_description`) may optionally include an `interaction_type` when a quick check-for-understanding deepens the teaching moment; leave all interaction fields null when no check is needed.",
-    "- Title, objectives, and summary slides must set all interaction fields to null.",
-    "- Keep interaction prompts short and grade-appropriate.",
-  ];
-
-  return [globalRules.join("\n"), metadataRules.join("\n"), interactionRules.join("\n"), englishRules, mathRules]
-    .filter(Boolean)
-    .join("\n\n");
-}
+];
 
 export function getSlideGeneratorValidationSchemaNotes(subjectKey: SupportedSubjectKey | null): string[] {
   const notes = [

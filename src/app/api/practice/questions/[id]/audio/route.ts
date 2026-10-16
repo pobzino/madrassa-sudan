@@ -1,43 +1,13 @@
-import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
-import {
-  resolvePracticeDisplayLanguages,
-  resolvePracticeQuestionPresentation,
-  type LessonLanguageMode,
-} from "@/lib/practice-language";
+import type { LessonLanguageMode } from "@/lib/practice-language";
+import { NARRATION_QUESTION_COLUMNS, narrateQuestion } from "@/lib/server/question-audio";
 
 export const maxDuration = 120;
 
 const RequestSchema = z.object({ language: z.enum(["ar", "en"]) });
-const AUDIO_BUCKET = "practice-audio";
-const MODEL_ID = "eleven_multilingual_v2";
-const DEFAULT_VOICE_IDS = {
-  ar: "Q6bj3XETB6DxcvoDR9Ao",
-  en: "V6HHcD4lyl4wUm50e7Ml",
-} as const;
-
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
-
-function narrationText(
-  language: "ar" | "en",
-  instruction: string,
-  questionContent: string | null,
-  options: string[]
-) {
-  const prompt = [instruction, questionContent].filter(Boolean).join(" ");
-  if (options.length === 0) return prompt;
-  if (language === "ar") {
-    const labels = ["الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع"];
-    return `${prompt}. ${options.map((option, index) => `${labels[index]}: ${option}`).join(". ")}.`;
-  }
-  const labels = ["A", "B", "C", "D"];
-  return `${prompt}. ${options.map((option, index) => `${labels[index]}: ${option}`).join(". ")}.`;
-}
 
 export async function POST(
   request: NextRequest,
@@ -61,9 +31,7 @@ export async function POST(
   const { id: questionId } = await params;
   const { data: question, error: questionError } = await supabase
     .from("homework_questions")
-    .select(
-      "id, assignment_id, question_text_ar, question_text_en, instruction_ar, instruction_en, question_content, question_content_language, answer_language, options, options_ar, options_en, audio_url_ar, audio_url_en, audio_text_hash_ar, audio_text_hash_en"
-    )
+    .select(NARRATION_QUESTION_COLUMNS)
     .eq("id", questionId)
     .maybeSingle();
   if (questionError || !question) {
@@ -87,119 +55,14 @@ export async function POST(
         .eq("lesson_id", assignment.lesson_id)
         .maybeSingle()
     : { data: null };
-  const practiceLanguages = resolvePracticeDisplayLanguages(
-    slideDeck?.language_mode as LessonLanguageMode,
-    language
-  );
-  const presentation = resolvePracticeQuestionPresentation({
-    defaultAnswerLanguage: practiceLanguages.answerLanguage,
-    instructionLanguage: language,
-    legacyMaterialLanguage: slideDeck?.language_mode as LessonLanguageMode,
-    answerLanguage: question.answer_language,
-    instructionAr: question.instruction_ar,
-    instructionEn: question.instruction_en,
-    questionContent: question.question_content,
-    questionContentLanguage: question.question_content_language,
-    questionTextAr: question.question_text_ar,
-    questionTextEn: question.question_text_en,
-  });
-  const localizedOptions = stringArray(
-    presentation.answerLanguage === "ar"
-      ? question.options_ar ?? question.options
-      : question.options_en ?? question.options
-  );
-  const text = narrationText(
+  const result = await narrateQuestion(
+    createServiceClient(),
+    question,
     language,
-    presentation.instruction,
-    presentation.questionContent,
-    localizedOptions,
-  ).slice(0, 1800);
-  const voiceId =
-    (language === "ar"
-      ? process.env.ELEVENLABS_VOICE_ID_AR
-      : process.env.ELEVENLABS_VOICE_ID_EN) || DEFAULT_VOICE_IDS[language];
-  const hash = createHash("sha256")
-    .update(`${MODEL_ID}:${voiceId}:${text}`)
-    .digest("hex");
-  const cachedUrl = language === "ar" ? question.audio_url_ar : question.audio_url_en;
-  const cachedHash =
-    language === "ar" ? question.audio_text_hash_ar : question.audio_text_hash_en;
-  if (cachedUrl && cachedHash === hash) {
-    return NextResponse.json({ audio_url: cachedUrl, cached: true });
-  }
-
-  const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
-  if (!apiKey) {
-    return NextResponse.json({ error: "Narration is not configured" }, { status: 503 });
-  }
-
-  const speechResponse = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "xi-api-key": apiKey },
-      body: JSON.stringify({
-        text,
-        model_id: MODEL_ID,
-        voice_settings: {
-          stability: 0.58,
-          similarity_boost: 0.78,
-          style: 0.18,
-          use_speaker_boost: true,
-        },
-      }),
-    }
+    slideDeck?.language_mode as LessonLanguageMode,
   );
-  if (!speechResponse.ok) {
-    console.error("ElevenLabs narration failed:", speechResponse.status, await speechResponse.text());
-    return NextResponse.json({ error: "Narration could not be generated" }, { status: 502 });
+  if ("error" in result) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
   }
-
-  const service = createServiceClient();
-  const path = `${questionId}/${language}-${hash.slice(0, 16)}.mp3`;
-  const audio = Buffer.from(await speechResponse.arrayBuffer());
-  const { error: uploadError } = await service.storage.from(AUDIO_BUCKET).upload(path, audio, {
-    contentType: "audio/mpeg",
-    upsert: true,
-    cacheControl: "31536000",
-  });
-  if (uploadError) {
-    console.error("Practice narration upload failed:", uploadError);
-    return NextResponse.json({ error: "Narration could not be saved" }, { status: 500 });
-  }
-
-  const { data: publicUrl } = service.storage.from(AUDIO_BUCKET).getPublicUrl(path);
-  const update =
-    language === "ar"
-      ? { audio_url_ar: publicUrl.publicUrl, audio_text_hash_ar: hash }
-      : { audio_url_en: publicUrl.publicUrl, audio_text_hash_en: hash };
-  // Do not attach old narration if a teacher corrected the prompt/options
-  // while speech generation was running. JSON comparisons are server-side.
-  let cacheUpdate = service
-    .from("homework_questions")
-    .update(update)
-    .eq("id", questionId)
-    .eq("question_text_ar", question.question_text_ar);
-  for (const field of [
-    "question_text_en",
-    "instruction_ar",
-    "instruction_en",
-    "question_content",
-    "question_content_language",
-    "answer_language",
-    "options",
-    "options_ar",
-    "options_en",
-  ] as const) {
-    cacheUpdate = question[field] === null
-      ? cacheUpdate.is(field, null)
-      : cacheUpdate.eq(field, typeof question[field] === "object" ? JSON.stringify(question[field]) : question[field]!);
-  }
-  const { data: updated, error: updateError } = await cacheUpdate.select("id");
-  if (updateError) console.error("Practice narration cache update failed:", updateError);
-  if (!updated?.length) {
-    return NextResponse.json({ error: "Question changed. Reload to hear its current narration." }, { status: 409 });
-  }
-
-  return NextResponse.json({ audio_url: publicUrl.publicUrl, cached: false });
+  return NextResponse.json({ audio_url: result.audioUrl, cached: result.cached });
 }

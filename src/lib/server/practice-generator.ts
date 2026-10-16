@@ -9,7 +9,7 @@ import { recordedLessonSlides } from "@/lib/recorded-lesson-slides";
 
 type PracticeClient = SupabaseClient<Database>;
 
-type GeneratedQuestion = {
+export type GeneratedQuestion = {
   question_type: "multiple_choice" | "true_false" | "short_answer";
   question_text_ar: string;
   question_text_en: string;
@@ -24,7 +24,7 @@ type GeneratedQuestion = {
   correct_answer: string;
 };
 
-type GeneratedPractice = {
+export type GeneratedPractice = {
   title_ar: string;
   title_en: string;
   questions: GeneratedQuestion[];
@@ -146,7 +146,7 @@ function duplicateValues(values: string[]) {
   return normalized.some((value, index) => normalized.indexOf(value) !== index);
 }
 
-const MISSING_CONTEXT_PATTERN =
+export const MISSING_CONTEXT_PATTERN =
   /\b(?:(?:the|this|that|shown|following)\s+(?:picture|image)|(?:picture|image)\s+(?:above|below|shown)|shown|in the lesson)\b|\b(?:this|the|previous)\s+slide\b|\bslide\s+(?:above|below)\b|\b(?:answer|text|item)\s+(?:above|below)\b|\b(?:listen|hear)\s+(?:to|again|carefully|and)\b|الصورة|انظر إلى|استمع (?:إلى|مرة|جيدًا)|تسمع في|أعلاه|أدناه|في الدرس|المعروض/iu;
 const GENERIC_PROMPTS = new Set([
   "what is the correct word",
