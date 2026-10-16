@@ -20,6 +20,7 @@ export interface MilestoneLearnerRequest {
  */
 export async function openMilestoneLearnerRequest(
   request: Request,
+  options: { preview?: boolean } = {},
 ): Promise<{ ok: true; value: MilestoneLearnerRequest } | { ok: false; response: Response }> {
   const supabase = await createClient();
   const resolved = await getLearnerContextResult(request, supabase);
@@ -38,6 +39,7 @@ export async function openMilestoneLearnerRequest(
       ),
     };
   }
-  const preview = context.isSelf && (await getTeacherRole(supabase, context.accountId)) !== null;
+  // Routes that never need it (answering) skip the staff lookup: one less round trip.
+  const preview = options.preview === false ? false : context.isSelf && (await getTeacherRole(supabase, context.accountId)) !== null;
   return { ok: true, value: { context, admin: service.admin, preview } };
 }
