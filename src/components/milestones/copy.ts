@@ -127,7 +127,8 @@ export const MILESTONE_COPY = {
     placementMeter: (boss: string) => `${boss} is getting to know you`,
     placementMeterShort: "Getting to know you",
     placementProgress: (n: string, total: string) => `Puzzle ${n} of ${total}`,
-    placementGotIt: "Got it!",
+    // Per-answer line in a placement: encouraging, never a verdict (it shows after wrong answers too).
+    placementCheers: ["Keep going!", "Next puzzle!", "You're doing great!"],
     placementDoneTitle: (boss: string) => `You met ${boss}! 🎉`,
     placementKnowsYou: (boss: string) => `Now ${boss} knows what you're ready for!`,
     placementKnown: "You already know:",
@@ -263,7 +264,7 @@ export const MILESTONE_COPY = {
     placementMeter: (boss: string) => `${boss} يتعرّف عليك`,
     placementMeterShort: "يتعرّف عليك",
     placementProgress: (n: string, total: string) => `اللغز ${n} من ${total}`,
-    placementGotIt: "تمام!",
+    placementCheers: ["إلى الأمام!", "اللغز التالي!", "هيّا نكمل!"],
     placementDoneTitle: (boss: string) => `تعرّفت على ${boss}! 🎉`,
     placementKnowsYou: (boss: string) => `الآن يعرف ${boss} ما أنت مستعد له!`,
     placementKnown: "أنت تعرف:",

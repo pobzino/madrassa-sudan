@@ -75,6 +75,20 @@ export function moveOwnsPrompt(interaction: PublicInteraction): boolean {
   return interaction.type === "fill_missing_word";
 }
 
+/**
+ * A CSS font size that keeps the longest word of these labels on one line
+ * inside the stone or bubble it sits in (a size container), instead of
+ * breaking "hundreds" into "hundre / ds": at most `base` px, at least `floor`
+ * px, otherwise the container's width minus `pad` px shared over that word's
+ * glyphs (about 0.62 em each in the bold display face). Short labels get a
+ * plain `${base}px`, which is also what an old browser without cqw shows.
+ */
+export function fitLabelSize(labels: readonly string[], base: number, floor: number, pad = 24): string {
+  const longest = Math.max(0, ...labels.flatMap((label) => label.split(/\s+/)).map((word) => word.length));
+  if (longest <= 4) return `${base}px`;
+  return `max(${floor}px, min(${base}px, calc((100cqw - ${pad}px) / ${(0.62 * longest).toFixed(2)})))`;
+}
+
 export default function BattleMove(props: BattleMoveProps) {
   return (
     <div className="h-full" style={{ "--band": `${props.bandHeight ?? 210}px`, "--band-inset": `${props.bandInset ?? 0}px`, "--actions": `${props.actionsHeight ?? 76}px`, "--actions-inset": `${props.actionsInset ?? 0}px` } as CSSProperties}>
@@ -309,11 +323,11 @@ function StarOrbs(props: BattleMoveProps & { interaction: Extract<PublicInteract
             disabled={disabled || gone}
             aria-hidden={gone || undefined}
             onClick={() => choose(index)}
-            className={`absolute grid aspect-square h-[clamp(52px,calc(var(--band)*0.44),100px)] -translate-y-1/2 place-items-center rounded-full text-[clamp(30px,5dvh,40px)] font-bold text-[#1a1a1a] transition-[opacity,scale] duration-300 active:scale-95 ltr:-translate-x-1/2 rtl:translate-x-1/2 ${gone ? "scale-50 opacity-0" : ""}`}
-            style={{ ...ORB_STYLE, insetInlineStart: `${spot.x}%`, top: `${spot.y}%` }}
+            className={`absolute grid aspect-square h-[clamp(52px,calc(var(--band)*0.44),100px)] -translate-y-1/2 place-items-center rounded-full text-[clamp(30px,5dvh,40px)] font-bold text-[#1a1a1a] transition-[opacity,scale] duration-300 [container-type:inline-size] active:scale-95 ltr:-translate-x-1/2 rtl:translate-x-1/2 ${gone ? "scale-50 opacity-0" : ""}`}
+            style={{ ...ORB_STYLE, insetInlineStart: `${spot.x}%`, top: `${spot.y}%`, ...(fitLabelSize(options, 40, 13, 16) === "40px" ? {} : { fontSize: fitLabelSize(options, 40, 13, 16) }) }}
           >
             <span className="pointer-events-none absolute start-[20%] top-[16%] h-3 w-3 rounded-full bg-white/80" aria-hidden="true" />
-            <span className="break-words [unicode-bidi:plaintext]">{option}</span>
+            <span className="break-normal px-1 [unicode-bidi:plaintext]">{option}</span>
           </button>
         );
       })}
@@ -563,10 +577,10 @@ function RuneStones(props: BattleMoveProps & { interaction: Extract<PublicIntera
                 type="button"
                 disabled={disabled || lit}
                 onClick={() => pick(index)}
-                className={`relative min-h-[84px] px-3 py-3 text-[30px] font-bold leading-snug transition-[scale,opacity] active:scale-95 ${skin?.piece ?? RUNE_STONE} ${lit ? "ring-4 ring-[#F59E0B] ring-offset-2 ring-offset-transparent" : ""}`}
-                style={{ rotate: `${[-5, 4, 3, -4, 5, -3][index % 6]}deg`, translate: `0 ${index % 2 ? 10 : -6}px`, borderRadius: RUNE_SHAPES[index % RUNE_SHAPES.length] }}
+                className={`relative min-h-[84px] px-3 py-3 text-[30px] font-bold leading-snug transition-[scale,opacity] [container-type:inline-size] active:scale-95 ${skin?.piece ?? RUNE_STONE} ${lit ? "ring-4 ring-[#F59E0B] ring-offset-2 ring-offset-transparent" : ""}`}
+                style={{ rotate: `${[-5, 4, 3, -4, 5, -3][index % 6]}deg`, translate: `0 ${index % 2 ? 10 : -6}px`, borderRadius: RUNE_SHAPES[index % RUNE_SHAPES.length], fontSize: fitLabelSize(items, 30, 15) }}
               >
-                <span className="break-words [unicode-bidi:plaintext]">{item}</span>
+                <span className="break-normal [unicode-bidi:plaintext]">{item}</span>
                 {lit && (
                   <span className="absolute -end-2 -top-3 grid h-9 w-9 place-items-center rounded-full bg-[#F59E0B] text-xl font-bold text-[#1a1a1a] shadow-[0_0_12px_rgba(245,158,11,0.9)] [text-shadow:none]">
                     {formatNumber(place + 1, lang)}

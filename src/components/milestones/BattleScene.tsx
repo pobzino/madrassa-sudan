@@ -329,6 +329,8 @@ export default function BattleScene(props: BattleSceneProps) {
   // The boss's HP (and hits to go) stay as they were until the hit lands.
   const [held, setHeld] = useState<{ hp: number; correct: number } | null>(null);
   const hpBefore = useRef(battle.bossHpPercent);
+  // Which encouraging line a placement shows next (they rotate).
+  const neutralAnswers = useRef(0);
 
   // 1. The instant the child confirms: wind up and throw.
   const submit = (answer: InteractionAnswer, origin: DOMRect | null) => {
@@ -367,8 +369,12 @@ export default function BattleScene(props: BattleSceneProps) {
     combat.current?.resolve(
       fb.turn,
       fb.neutral
-        ? // The same short "Got it!" and a happy nod for every answer; the meter fills (no HP chunk).
-          { correct: true, big: false, knockout: false, neutral: true, hpFrom: hpBefore.current, hpTo: hpBefore.current, text: t.placementGotIt, missText: t.placementGotIt }
+        ? // A placement: an encouraging line (never a verdict, since it shows after wrong answers too) and a happy nod; the meter fills (no HP chunk).
+          (() => {
+            const cheer = t.placementCheers[neutralAnswers.current % t.placementCheers.length];
+            neutralAnswers.current += 1;
+            return { correct: true, big: false, knockout: false, neutral: true, hpFrom: hpBefore.current, hpTo: hpBefore.current, text: cheer, missText: cheer };
+          })()
         : {
             correct: fb.correct,
             big,
