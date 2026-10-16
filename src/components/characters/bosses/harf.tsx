@@ -1,4 +1,4 @@
-import { Brows, Dust, Eyes, Hand, lidPivots, Mouths, Rim, ShadeDefs, Sparkles, Stars, Steam, Tile, Zzz, bossSpec } from "../parts";
+import { Brows, HandGlow, Dust, Eyes, Hand, lidPivots, Mouths, Rim, ShadeDefs, Sparkles, Stars, Steam, Tile, Zzz, bossSpec } from "../parts";
 import type { BossDef } from "./types";
 
 /** Harf the Letter Dragon: a chubby sky-blue baby dragon with amber horns and a letter tile. */
@@ -70,6 +70,7 @@ function Art({ uid }: { uid: string }) {
             <path d="M72 140 Q100 147 128 140 M68 154 Q100 162 132 154 M74 168 Q100 175 126 168" stroke="#E8CD92" strokeWidth={2.2} strokeLinecap="round" fill="none" />
             <ellipse cx={100} cy={120} rx={68} ry={66} fill={`url(#${uid}-shade)`} />
             <Rim cx={100} cy={120} rx={68} ry={66} from={205} to={300} width={3.4} opacity={0.45} />
+            <ellipse data-part="flash" cx={100} cy={120} rx={69} ry={67} fill="#FFFFFF" opacity={0} />
             <g data-part="head">
               <ellipse cx={56} cy={120} rx={10} ry={6.5} fill="#FF9FB2" opacity={0.8} />
               <ellipse cx={144} cy={120} rx={10} ry={6.5} fill="#FF9FB2" opacity={0.8} />
@@ -83,6 +84,7 @@ function Art({ uid }: { uid: string }) {
               <Steam at={[[64, 24], [136, 24]]} />
             </g>
             <g data-part="armR">
+              <HandGlow uid={uid} cx={100} cy={158} />
               <g data-part="prop">
                 <Tile cx={100} cy={158} glyph="ب" face="#FFF6DD" edge="#007229" ink="#007229" arabic />
               </g>
@@ -91,7 +93,6 @@ function Art({ uid }: { uid: string }) {
             <g data-part="armL">
               <Hand cx={78} cy={160} color={C.dark[0]} />
             </g>
-            <ellipse data-part="flash" cx={100} cy={120} rx={69} ry={67} fill="#FFFFFF" opacity={0} />
           </g>
           <Sparkles at={[[24, 120, 1], [178, 40, 1.3], [176, 112, 0.8]]} />
           <Zzz at={[150, 40]} />

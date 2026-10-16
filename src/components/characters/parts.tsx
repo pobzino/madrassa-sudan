@@ -25,6 +25,11 @@ export function ShadeDefs({ uid }: { uid: string }) {
         <stop offset="0.74" stopColor="#1B1035" stopOpacity="0" />
         <stop offset="1" stopColor="#1B1035" stopOpacity="0.26" />
       </radialGradient>
+      <radialGradient id={`${uid}-handglow`}>
+        <stop offset="0" stopColor="#FFF7CC" stopOpacity="0.95" />
+        <stop offset="0.45" stopColor="#FCD34D" stopOpacity="0.55" />
+        <stop offset="1" stopColor="#F59E0B" stopOpacity="0" />
+      </radialGradient>
       <radialGradient id={`${uid}-ground`}>
         <stop offset="0" stopColor="#000000" stopOpacity="0.34" />
         <stop offset="0.6" stopColor="#000000" stopOpacity="0.16" />
@@ -378,13 +383,16 @@ const BASE_POSES: Record<string, PoseSpec> = {
     brows: "focus",
     lids: 0.18,
     gaze: [-0.9, 0.35],
-    parts: { root: { rotation: 7, x: 6 }, head: { rotation: 4 }, armR: { rotation: -190 }, armL: { rotation: 25 } },
+    fx: ["handglow"],
+    // Leaning back, the prop held up over the throwing shoulder (inside the box), glowing.
+    parts: { root: { rotation: 10, x: 2 }, head: { rotation: 7 }, body: { scaleX: 0.96, scaleY: 1.04 }, armR: { rotation: -231, x: -26, y: -4 }, armL: { rotation: 30 } },
   },
   throw: {
     mouth: "open",
     brows: "up",
     gaze: [-1, 0.5],
-    parts: { root: { rotation: -8, x: -6 }, head: { rotation: -6 }, armR: { rotation: "30_ccw" }, armL: { rotation: -20 } },
+    // The release: an overhand swing that ends forward and low, clear of the face.
+    parts: { root: { rotation: -9, x: -8 }, head: { rotation: -6 }, armR: { rotation: "-11_ccw" }, armL: { rotation: -20 } },
   },
   hit: {
     eyes: "squeeze",
@@ -437,12 +445,23 @@ const BASE_POSES: Record<string, PoseSpec> = {
   },
 };
 
+/** The glow that lights the throwing hand in the windup (sits behind the prop, inside `armR`). */
+export function HandGlow({ uid, cx, cy, r = 34 }: { uid: string; cx: number; cy: number; r?: number }) {
+  return (
+    <g data-fx="handglow" {...HIDDEN}>
+      <circle cx={cx} cy={cy} r={r} fill={`url(#${uid}-handglow)`} />
+    </g>
+  );
+}
+
 export interface BossSpecInput {
   pivots: Record<string, readonly [number, number]>;
   orbit: RigSpec["orbit"];
   tints: RigSpec["tints"];
   propFly?: RigSpec["propFly"];
   gazeRange?: readonly [number, number];
+  /** Contact points; defaults to the middle of the body and the prop in the throwing hand. */
+  points?: RigSpec["points"];
   /** Per-pose overrides; `parts` merge part by part. */
   poses?: Record<string, PoseSpec>;
 }
@@ -481,6 +500,7 @@ export function bossSpec(input: BossSpecInput): RigSpec {
     orbit: input.orbit,
     tints: input.tints,
     propFly: input.propFly ?? { x: -90, y: 30, rotation: -260 },
+    points: input.points ?? { impact: ["body", 100, 122], launch: ["prop", 100, 158] },
     mouthFallback: {},
   };
 }

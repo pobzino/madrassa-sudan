@@ -71,6 +71,8 @@ export const OWL_ACTIONS: readonly OwlAction[] = ["land", "idle", "blink", "talk
 export interface PlayOptions {
   /** For `talk`: how long the mouth flaps, in ms (match the read-aloud clip). Default 1600. */
   durationMs?: number;
+  /** For `hit` and `ko`: freeze on the impact frame for this long (a hitstop), in ms. Try 60-90. */
+  hitstopMs?: number;
 }
 
 /**
@@ -82,9 +84,26 @@ export interface PlayOptions {
  */
 export type CharacterCue = "release" | "impact" | "land" | "shield";
 
+export interface PagePoint {
+  x: number;
+  y: number;
+}
+
 export interface CharacterHandle<A extends string> {
   /** Runs a one-shot action. Resolves when it ends; the character then returns to its current pose's idle. */
   play(action: A, options?: PlayOptions): Promise<void>;
+  /** Freezes the character as it is for `ms`, then carries on (resolves after the freeze). */
+  hitstop(ms: number): Promise<void>;
+  /** Tints the body silhouette with `color` (default white) for ~80 ms; the face stays crisp and the pose is untouched. */
+  flash(color?: string): Promise<void>;
+  /**
+   * Where a projectile should land on this character, in page coordinates
+   * (CSS px including scroll), following the live pose. For the owl in its
+   * `block` pose this is the shield. Null before mount.
+   */
+  impactPoint(): PagePoint | null;
+  /** Where this character's projectile leaves from (the boss's throwing hand, the owl's wing tip), in page coordinates. */
+  launchPoint(): PagePoint | null;
 }
 
 export type BossHandle = CharacterHandle<BossAction>;

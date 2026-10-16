@@ -52,6 +52,10 @@ export function useRig<A extends string>(
     ref,
     () => ({
       play: (action: A, options) => rigRef.current?.play(action, options) ?? Promise.resolve(),
+      hitstop: (ms) => rigRef.current?.hitstop(ms) ?? Promise.resolve(),
+      flash: (color) => rigRef.current?.flash(color) ?? Promise.resolve(),
+      impactPoint: () => rigRef.current?.point("impact") ?? null,
+      launchPoint: () => rigRef.current?.point("launch") ?? null,
     }),
     [],
   );

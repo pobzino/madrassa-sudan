@@ -64,6 +64,7 @@ export const OWL_SPEC: RigSpec = {
   gazeRange: [2, 1.6],
   orbit: { cx: 40, cy: 4, rx: 22, ry: 5 },
   propFly: { x: 70, y: -62, rotation: 300 },
+  points: { impact: ["body", 40, 36], launch: ["root", 76, 26], shield: ["shield", 68, 37] },
   pivots: {
     move: [40, 63],
     root: [40, 63],
@@ -126,7 +127,7 @@ export const OWL_SPEC: RigSpec = {
       brows: "focus",
       gaze: [1, -0.6],
       fx: ["brows"],
-      parts: { root: { rotation: -7, x: -2 }, head: { rotation: -4 }, wingR: { rotation: -150 }, body: { scaleX: 1.04, scaleY: 0.96 } },
+      parts: { root: { rotation: -11, x: -3 }, head: { rotation: -6 }, wingR: { rotation: -150 }, wingL: { rotation: 12 }, body: { scaleX: 1.05, scaleY: 0.95 } },
     },
     _fire: {
       mouth: "open",
@@ -195,6 +196,7 @@ function OwlArt({ uid }: { uid: string }) {
             <ellipse cx={40} cy={38} rx={24} ry={24} fill="#D21034" />
             <ellipse cx={40} cy={38} rx={24} ry={24} fill={`url(#${uid}-shade)`} />
             <Rim cx={40} cy={38} rx={24} ry={24} from={200} to={290} width={1.4} opacity={0.4} />
+            <ellipse data-part="flash" cx={40} cy={38} rx={24} ry={24} fill="#FFFFFF" opacity={0} />
             <g data-part="head">
               <ellipse cx={40} cy={34} rx={18} ry={14} fill={DISC} />
             </g>
@@ -253,7 +255,6 @@ function OwlArt({ uid }: { uid: string }) {
                 </text>
               </g>
             </g>
-            <ellipse data-part="flash" cx={40} cy={38} rx={24} ry={24} fill="#FFFFFF" opacity={0} />
           </g>
           <g data-part="footL">
             <ellipse cx={32} cy={60} rx={4} ry={2.5} fill="#F59E0B" />
