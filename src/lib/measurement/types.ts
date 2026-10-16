@@ -1,5 +1,6 @@
 // Shared between server routes and app UI. Owner: server builder. No server-only imports.
 import type { BattleInteractionType, MilestoneKind } from "@/lib/milestones/types";
+import type { LearnerAvatar } from "@/lib/learners/types";
 
 // ---------- skills and tags ----------
 export type Difficulty = 1 | 2 | 3;
@@ -86,7 +87,12 @@ export interface ImpactQuery {
   pathId: string | null;
   split: ImpactSplit;
 }
-export interface ImpactScope { kind: "all" | "own_paths"; pathIds: string[] }
+/**
+ * The learners a report covers (owner rule, school / class based): "all" (approved admins: every learner),
+ * "school" (a school's classes; id null = all the viewer's schools), "class" (one class; id null = all the
+ * viewer's classes). "own_paths" is kept for compatibility and no longer returned. Every path is in pathIds.
+ */
+export interface ImpactScope { kind: "all" | "own_paths" | "school" | "class"; pathIds: string[]; id?: string | null; label?: string | null }
 
 /** `group` is "all" or a band of the split. A suppressed row has `learners` and every number null. */
 export interface ImpactRowBase { group: string; learners: number | null; suppressed: boolean }
@@ -137,7 +143,11 @@ export interface PaceRow extends ImpactRowBase {
 export interface PlacementCoverageRow extends ImpactRowBase {
   subjectId: string;
   startedPath: number | null; placementsCompleted: number | null; validBaselines: number | null;
+  /** Owner rule: anyone may play the placement once; after more than PLACEMENT_MAX_PRIOR_LESSONS lessons it is "late" (shown to the family, never a baseline). */
+  lateBaselines?: number | null;
 }
+/** First tries across every boss of the scope (the headline tile). */
+export interface BossOverallRow extends ImpactRowBase { firstTryPassRate: number | null; medianFirstTryScore: number | null }
 export interface ImpactReport {
   generatedAt: string;
   query: ImpactQuery;
@@ -153,8 +163,9 @@ export interface ImpactReport {
   retention: RetentionRow[];
   pace: PaceRow[];
   placement: PlacementCoverageRow[];
+  bossesOverall?: BossOverallRow[];
 }
-/** GET /api/teacher/measurement/impact */
+/** GET /api/teacher/measurement/impact?...&scope=all|school:<id>|class:<id> */
 export interface ImpactResponse { report: ImpactReport }
 
 // ---------- funder export (admin) ----------
@@ -186,5 +197,89 @@ export interface RetagResponse { tagged: number; disputed: number; unchanged: nu
 
 export type MeasurementErrorCode =
   | "unauthorized" | "impact_forbidden" | "invalid_query" | "learner_forbidden"
-  | "reset_forbidden" | "not_found" | "service_unavailable";
+  | "reset_forbidden" | "not_found" | "service_unavailable"
+  | "invalid_code" | "already_member" | "class_forbidden";
 export interface MeasurementError { error: MeasurementErrorCode; message?: string }
+
+// ---------- schools and classes (owner rule: progress visibility is school / class based) ----------
+// Who may see a child's progress: the owning parent (or the adult self account) and approved admins
+// always; approved teachers only for approved, active members of their own classes; approved school
+// admins for classes in their school. Children in no class: admins + family only. Enforced by the server
+// (public.can_view_learner_progress); the app only asks. Aggregates suppress groups < MIN_CELL_SIZE;
+// a teacher's own named class roster is not suppressed.
+
+// parent / adult self: a child's classes
+export type ClassMembershipStatus = "pending" | "active";
+export interface LearnerClass {
+  cohortId: string;
+  name: string;
+  schoolName: string | null;
+  teacherNames: string[];
+  status: ClassMembershipStatus;
+  joinedAt: string | null;
+}
+/** GET /api/learners/[learnerId]/classes (owner parent or adult self). */
+export interface LearnerClassesResponse { classes: LearnerClass[] }
+/** POST /api/learners/classes/join: only the family enrols a child (pending until the teacher approves). */
+export interface JoinClassRequest { code: string; learnerId: string }
+export interface JoinClassResponse { cohortId: string; name: string; status: ClassMembershipStatus }
+/** POST /api/learners/classes/leave: access stops at once. Response { ok: true }. */
+export interface LeaveClassRequest { cohortId: string; learnerId: string }
+export type ClassErrorCode = "invalid_code" | "already_member" | "learner_forbidden" | "not_found" | "unauthorized" | "service_unavailable";
+
+// teacher: one class's progress
+export interface ClassSubjectBands {
+  subjectId: string;
+  nameEn: string | null;
+  nameAr: string | null;
+  /** Children per current band; null when the class has fewer than MIN_CELL_SIZE children with a band. */
+  bands: Record<LevelBand, number> | null;
+}
+export interface ClassChildProgress {
+  learnerId: string;
+  name: string;
+  avatar: LearnerAvatar | null;
+  subjects: Array<{ subjectId: string; nameEn: string | null; nameAr: string | null; baseline: LevelBand | null; current: LevelBand | null }>;
+  skillsLearnedThisMonth: number;
+  lastActiveAt: string | null;
+}
+/** GET /api/teacher/cohorts/[id]/progress (the class's approved teachers, its school's admins, approved admins). */
+export interface ClassProgressResponse {
+  cohort: { id: string; name: string; schoolName: string | null };
+  /** Whole-class figures; each is null when fewer than MIN_CELL_SIZE children (small-group rule). */
+  aggregates: { learners: number; activeThisMonth: number | null; skillsLearnedThisMonth: number | null; subjects: ClassSubjectBands[] };
+  children: ClassChildProgress[];
+  /** Join requests waiting for the teacher (also shown on the class's Students tab). */
+  pending?: Array<{ requestId: string; learnerId: string; childName: string; parentName: string | null; requestedAt: string }>;
+}
+/** POST /api/teacher/cohorts/[id]/requests/[requestId] (a class teacher or an approved admin). */
+export interface ClassRequestDecision { decision: "approve" | "decline" }
+export interface ClassRequestDecisionResponse { requestId: string; status: "active" | "declined" }
+
+// school admin: overview
+export interface SchoolClassRow {
+  cohortId: string;
+  name: string;
+  teacherNames: string[];
+  learners: number | null;
+  activeThisMonth: number | null;
+  /** Median growth (level points) from starting boss to latest Big Challenge. */
+  medianGrowth: number | null;
+  suppressed: boolean;
+}
+/** GET /api/school/overview[?school_id=] (approved school admins; approved admins pass school_id). */
+export interface SchoolOverviewResponse {
+  school: { id: string; name: string };
+  /** School-wide totals (small-group rule applies). */
+  totals?: { classes: number; learners: number | null; activeThisMonth: number | null; suppressed: boolean };
+  classes: SchoolClassRow[];
+}
+
+// impact scope switcher
+export interface ImpactScopeOption { kind: "all" | "school" | "class"; id: string | null; label: string }
+/** GET /api/teacher/measurement/scopes: what this viewer may switch between. */
+export interface ImpactScopesResponse { options: ImpactScopeOption[] }
+/** The impact query's `scope` param: "all", "school:<id>" or "class:<id>". */
+export function scopeParam(option: Pick<ImpactScopeOption, "kind" | "id">): string {
+  return option.kind === "all" || !option.id ? "all" : `${option.kind}:${option.id}`;
+}
