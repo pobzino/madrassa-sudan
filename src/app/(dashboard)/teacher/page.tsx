@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { OwlTutorIcon } from "@/components/illustrations";
-import { Users, BookOpen, ClipboardList, PenLine, Plus, School, CheckSquare, FileText, UserCircle } from "lucide-react";
+import { Users, BookOpen, ClipboardList, PenLine, Plus, Route, School, CheckSquare, FileText, UserCircle } from "lucide-react";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import { useTourState } from "@/hooks/useTourState";
@@ -556,7 +556,7 @@ export default function TeacherDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
           <Link
             href="/teacher/homework/create"
             className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-2xl p-6 hover:opacity-90 transition-opacity"
@@ -573,6 +573,15 @@ export default function TeacherDashboard() {
             <BookOpen className="w-8 h-8 mb-3" />
             <h3 className="font-semibold text-lg mb-1">Manage Lessons</h3>
             <p className="text-purple-100 text-sm">Edit lessons and content blocks</p>
+          </Link>
+
+          <Link
+            href="/teacher/learning-path"
+            className="bg-gradient-to-r from-[#007229] to-[#005a20] text-white rounded-2xl p-6 hover:opacity-90 transition-opacity"
+          >
+            <Route className="w-8 h-8 mb-3" />
+            <h3 className="font-semibold text-lg mb-1">Learning Path</h3>
+            <p className="text-emerald-100 text-sm">Weeks, Big Challenges and the starting boss</p>
           </Link>
 
           <Link
