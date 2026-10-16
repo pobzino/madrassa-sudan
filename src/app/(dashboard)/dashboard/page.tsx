@@ -210,6 +210,14 @@ export default function DashboardPage() {
                 {t.continueLearning}
                 <span className="text-lg leading-none">{isRtl ? "←" : "→"}</span>
               </Link>
+              {/* The Big Challenge bosses this learner has beaten */}
+              <Link
+                href="/boss-book"
+                className="inline-flex items-center gap-2 mt-5 ms-2 px-5 py-3 bg-white/85 hover:bg-white text-[#B45309] font-bold font-fredoka rounded-2xl shadow-sm transition-all hover:-translate-y-0.5"
+              >
+                <span aria-hidden="true">🏆</span>
+                {isRtl ? "كتاب الوحوش" : "Boss Book"}
+              </Link>
             </div>
           </div>
 

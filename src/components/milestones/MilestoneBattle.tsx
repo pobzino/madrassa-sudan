@@ -1,0 +1,194 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import type { LearnerAvatar } from "@/lib/learners/types";
+import type { AnswerResult, Lang } from "@/lib/milestones/types";
+import ArenaBackdrop from "./ArenaBackdrop";
+import BattleScene, { type FxEvent } from "./BattleScene";
+import { MessageScreen, SoCloseScreen, VictoryScreen } from "./BattleEndScreens";
+import { NeedsInternetCard } from "./BattleParts";
+import type { Fetcher } from "./api";
+import { bossName, formatNumber, MILESTONE_COPY } from "./copy";
+import { useBattleFeedback } from "./motion";
+import { useBattleSession, type EntranceKind, type Feedback, type PendingAnswer } from "./useBattleSession";
+
+/**
+ * The Big Challenge boss battle: a full-bleed arena over the dashboard, online
+ * only, server-authoritative. Composition only: the session hook holds the
+ * data and rules, BattleScene draws the fight, the end screens finish it.
+ */
+export interface MilestoneBattleProps {
+  milestoneId: string;
+  lang: Lang;
+  fetcher: Fetcher;
+  isOnline: boolean;
+  learner: { name: string; avatar: LearnerAvatar | null } | null;
+}
+
+export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, learner }: MilestoneBattleProps) {
+  const t = MILESTONE_COPY[lang];
+  const sounds = useBattleFeedback();
+  const [entrance, setEntrance] = useState<EntranceKind | null>(null);
+  const [fxEvent, setFxEvent] = useState<FxEvent | null>(null);
+  const [bigConfetti, setBigConfetti] = useState(0);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const advanceTimer = useRef<number | null>(null);
+  const advanceRef = useRef<() => void>(() => undefined);
+
+  const onAnswered = useCallback(
+    (result: AnswerResult, feedback: Feedback, pending: PendingAnswer) => {
+      setFxEvent({ key: Date.now(), result, feedback, origin: pending.origin });
+      const big = feedback.super || (result.finished && result.passed);
+      if (result.correct) {
+        sounds.right(big);
+        // A right answer carries straight on once the hit has landed.
+        if (advanceTimer.current) window.clearTimeout(advanceTimer.current);
+        advanceTimer.current = window.setTimeout(() => advanceRef.current(), result.finished ? 1600 : 1300);
+      } else {
+        sounds.wrong();
+      }
+    },
+    [sounds]
+  );
+  const onFinished = useCallback(
+    (result: AnswerResult) => {
+      setFxEvent(null);
+      if (result.passed) {
+        sounds.celebrate();
+        setBigConfetti((n) => n + 1);
+      }
+    },
+    [sounds]
+  );
+
+  const session = useBattleSession({ milestoneId, lang, fetcher, onEntrance: setEntrance, onAnswered, onFinished });
+  useEffect(() => {
+    advanceRef.current = () => {
+      advanceTimer.current = null;
+      setFxEvent(null);
+      session.advance();
+    };
+  }, [session]);
+  useEffect(
+    () => () => {
+      if (advanceTimer.current) window.clearTimeout(advanceTimer.current);
+    },
+    []
+  );
+
+  const { screen, intro, battle, question } = session;
+  const bossKey = intro?.milestone.bossKey ?? "puzzle_owlet";
+  const level = intro?.milestone.level ?? 1;
+  const powered = screen === "play" && battle?.phase === 2;
+  const fontStyle: CSSProperties = {
+    fontFamily: lang === "ar" ? "var(--font-cairo), var(--font-fredoka), sans-serif" : "var(--font-fredoka), system-ui, sans-serif",
+  };
+
+  const shell = (children: ReactNode, dim = false) => (
+    <div
+      dir={lang === "ar" ? "rtl" : "ltr"}
+      lang={lang}
+      translate="no"
+      className="notranslate fixed inset-0 z-[60] h-[100dvh] overflow-hidden bg-[#08361C] text-white"
+      style={fontStyle}
+    >
+      <ArenaBackdrop bossKey={bossKey} powered={powered} className="absolute inset-0 h-full w-full" />
+      {dim && <div className="absolute inset-0 bg-[#1a1a1a]/35" aria-hidden="true" />}
+      <div
+        ref={shellRef}
+        className="relative mx-auto h-full w-full max-w-[480px]"
+        style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+
+  if (screen === "loading" || (screen === "play" && (!question || !battle))) {
+    if (!isOnline) return shell(<div className="flex h-full items-center justify-center px-5"><NeedsInternetCard lang={lang} bossLabel={bossName(bossKey, lang, true)} /></div>, true);
+    return shell(<MessageScreen lang={lang} bossKey={bossKey} level={level} title={t.loading} loading />);
+  }
+
+  if (screen === "error" && !isOnline) {
+    return shell(<div className="flex h-full items-center justify-center px-5"><NeedsInternetCard lang={lang} bossLabel={bossName(bossKey, lang, true)} /></div>, true);
+  }
+
+  if (screen === "locked" || screen === "not_found" || screen === "abandoned" || screen === "error") {
+    const title =
+      screen === "locked"
+        ? session.lockedMessage ?? t.lockedTitle(formatNumber(intro?.milestone.firstWeekNumber ?? 1, lang), formatNumber(intro?.milestone.afterWeekNumber ?? 4, lang))
+        : screen === "not_found"
+          ? t.notFound
+          : screen === "abandoned"
+            ? t.gameReset
+            : t.somethingWrong;
+    const action =
+      screen === "abandoned"
+        ? { label: t.startFresh, onClick: () => void session.playAgain(), disabled: session.restarting }
+        : screen === "error"
+          ? { label: t.retry, onClick: () => void session.reload() }
+          : null;
+    return shell(<MessageScreen lang={lang} bossKey={bossKey} level={level} title={title} action={action} />, true);
+  }
+
+  if (screen === "won") {
+    return shell(
+      <VictoryScreen
+        lang={lang}
+        bossKey={bossKey}
+        level={level}
+        burst={bigConfetti}
+        stars={session.final?.stars ?? intro?.certificate?.stars ?? null}
+        certificateId={session.final?.certificateId ?? battle?.certificateId ?? intro?.certificate?.id ?? null}
+        firstPass={session.final?.firstPass ?? false}
+        preview={battle?.preview ?? false}
+        learner={learner}
+      />,
+      true
+    );
+  }
+
+  if (screen === "lost") {
+    return shell(
+      <SoCloseScreen
+        lang={lang}
+        bossKey={bossKey}
+        level={level}
+        blockLessons={intro?.blockLessons ?? []}
+        isOnline={isOnline}
+        restarting={session.restarting}
+        onPlayAgain={() => void session.playAgain()}
+      />,
+      true
+    );
+  }
+
+  if (!question || !battle) return null;
+  return shell(
+    <BattleScene
+      milestoneId={milestoneId}
+      lang={lang}
+      bossKey={bossKey}
+      level={level}
+      battle={battle}
+      question={question}
+      feedback={session.feedback}
+      pending={session.pending}
+      inFlight={session.inFlight}
+      isOnline={isOnline}
+      netError={session.netError}
+      hint={session.hint}
+      hintLoading={session.hintLoading}
+      fxEvent={fxEvent}
+      entrance={entrance}
+      muted={sounds.muted}
+      fetcher={fetcher}
+      shellRef={shellRef}
+      onEntranceEnd={() => setEntrance(null)}
+      onSubmit={session.submit}
+      onAskOwl={() => void session.askOwl()}
+      onRetry={session.retry}
+      onNext={() => advanceRef.current()}
+    />
+  );
+}

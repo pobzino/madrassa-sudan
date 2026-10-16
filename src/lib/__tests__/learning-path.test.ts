@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   evaluatePath,
   isTestPassed,
+  milestoneNodeId,
   type PathInput,
   type StudentProgressInput,
   type TestResultInput,
@@ -209,5 +210,146 @@ describe('per-step practice gating', () => {
     const result = evaluatePath(PATH, progress({ l1: true }));
     expect(result.weeks[0].steps[0].state).toBe('completed');
     expect(result.weeks[0].steps[0].practiceState).toBe('none');
+  });
+});
+
+describe('milestones (Big Challenge after every 4 weeks)', () => {
+  // Eight one-lesson weeks (no week tests), lesson ids l1..l8.
+  const weeks = Array.from({ length: 8 }, (_, i) => ({
+    id: `w${i + 1}`,
+    weekNumber: i + 1,
+    testAssignmentId: null,
+    steps: [{ id: `s${i + 1}`, lessonId: `l${i + 1}`, sequence: 1 }],
+  }));
+  const PATH_8: PathInput = { weeks, milestones: [{ id: 'm4', afterWeekNumber: 4 }] };
+  const doneThrough = (n: number) =>
+    Object.fromEntries(Array.from({ length: n }, (_, i) => [`l${i + 1}`, true as const]));
+  const withMilestones = (
+    base: StudentProgressInput,
+    extra: Pick<StudentProgressInput, 'passedMilestoneIds' | 'activeBattleMilestoneIds'>
+  ): StudentProgressInput => ({ ...base, ...extra });
+
+  it('keeps the milestone locked until week 4 is completed', () => {
+    const r = evaluatePath(PATH_8, progress(doneThrough(3)));
+    expect(r.milestones).toEqual([{ id: 'm4', afterWeekNumber: 4, state: 'locked' }]);
+    expect(r.weeks[4].state).toBe('locked');
+    expect(r.currentStepId).toBe('s4');
+  });
+
+  it('opens the milestone after week 4 and keeps week 5 locked; the bird waits there', () => {
+    const r = evaluatePath(PATH_8, progress(doneThrough(4)));
+    expect(r.weeks[3].state).toBe('completed');
+    expect(r.milestones[0].state).toBe('available');
+    expect(r.weeks[4].state).toBe('locked');
+    expect(r.weeks[4].steps[0].state).toBe('locked');
+    expect(r.currentStepId).toBe(milestoneNodeId('m4'));
+    expect(r.currentStepId).toBe('milestone-m4');
+    expect(r.currentWeekId).toBe('w4');
+  });
+
+  it('shows an active battle as in_battle and still gates week 5', () => {
+    const r = evaluatePath(
+      PATH_8,
+      withMilestones(progress(doneThrough(4)), { activeBattleMilestoneIds: ['m4'] })
+    );
+    expect(r.milestones[0].state).toBe('in_battle');
+    expect(r.weeks[4].state).toBe('locked');
+    expect(r.currentStepId).toBe('milestone-m4');
+  });
+
+  it('passing the milestone unlocks week 5 and moves the bird on', () => {
+    const r = evaluatePath(
+      PATH_8,
+      withMilestones(progress(doneThrough(4)), { passedMilestoneIds: ['m4'], activeBattleMilestoneIds: ['m4'] })
+    );
+    expect(r.milestones[0].state).toBe('passed');
+    expect(r.weeks[4].state).toBe('available');
+    expect(r.weeks[4].steps[0].state).toBe('available');
+    expect(r.currentStepId).toBe('s5');
+    expect(r.currentWeekId).toBe('w5');
+  });
+
+  it('a passed milestone without the block completed shows passed but does not unlock week 5', () => {
+    const r = evaluatePath(
+      PATH_8,
+      withMilestones(progress(doneThrough(3)), { passedMilestoneIds: ['m4'] })
+    );
+    expect(r.milestones[0].state).toBe('passed');
+    expect(r.weeks[3].state).toBe('available');
+    expect(r.weeks[4].state).toBe('locked');
+    expect(r.currentStepId).toBe('s4');
+  });
+
+  it('later lesson progress cannot skip past an unpassed milestone', () => {
+    const r = evaluatePath(PATH_8, progress(doneThrough(8)));
+    expect(r.milestones[0].state).toBe('available');
+    expect(r.weeks.slice(4).map((w) => w.state)).toEqual(['locked', 'locked', 'locked', 'locked']);
+    expect(r.currentStepId).toBe('milestone-m4');
+  });
+
+  it('respects the week test before opening the milestone', () => {
+    const tested: PathInput = {
+      weeks: weeks.map((w) => (w.weekNumber === 4 ? { ...w, testAssignmentId: 't4' } : w)),
+      milestones: [{ id: 'm4', afterWeekNumber: 4 }],
+    };
+    const before = evaluatePath(tested, progress(doneThrough(4)));
+    expect(before.milestones[0].state).toBe('locked');
+    expect(before.currentStepId).toBe('test-w4');
+
+    const after = evaluatePath(tested, progress(doneThrough(4), { t4: passingTest }));
+    expect(after.milestones[0].state).toBe('available');
+    expect(after.currentStepId).toBe('milestone-m4');
+  });
+
+  it('unlockAll opens every milestone and week without changing progress', () => {
+    const r = evaluatePath(PATH_8, progress({}), { unlockAll: true });
+    expect(r.milestones[0].state).toBe('available');
+    expect(r.weeks.every((w) => w.state !== 'locked')).toBe(true);
+    expect(r.weeks[4].steps[0].state).toBe('available');
+
+    const battling = evaluatePath(
+      PATH_8,
+      withMilestones(progress({}), { activeBattleMilestoneIds: ['m4'] }),
+      { unlockAll: true }
+    );
+    expect(battling.milestones[0].state).toBe('in_battle');
+  });
+
+  it('omits a milestone whose week does not exist', () => {
+    const r = evaluatePath(
+      { weeks: weeks.slice(0, 6), milestones: [{ id: 'm4', afterWeekNumber: 4 }, { id: 'm8', afterWeekNumber: 8 }] },
+      progress(doneThrough(4))
+    );
+    expect(r.milestones.map((m) => m.id)).toEqual(['m4']);
+  });
+
+  it('chains milestones: week 9 needs milestone 8 as well', () => {
+    const nine = [...weeks, { id: 'w9', weekNumber: 9, testAssignmentId: null, steps: [{ id: 's9', lessonId: 'l9', sequence: 1 }] }];
+    const r = evaluatePath(
+      { weeks: nine, milestones: [{ id: 'm8', afterWeekNumber: 8 }, { id: 'm4', afterWeekNumber: 4 }] },
+      withMilestones(progress(doneThrough(8)), { passedMilestoneIds: ['m4'] })
+    );
+    expect(r.milestones.map((m) => [m.id, m.state])).toEqual([['m4', 'passed'], ['m8', 'available']]);
+    expect(r.weeks[8].state).toBe('locked');
+    expect(r.currentStepId).toBe('milestone-m8');
+  });
+
+  it('with no milestones the output matches the original engine exactly', () => {
+    const cases: Array<[PathInput, StudentProgressInput]> = [
+      [PATH, progress({})],
+      [PATH, progress({ l1: true, l2: true })],
+      [PATH, progress({ l1: true, l2: true }, { test1: passingTest })],
+      [{ weeks }, progress(doneThrough(5))],
+    ];
+    for (const [path, prog] of cases) {
+      const withEmpty = evaluatePath({ ...path, milestones: [] }, prog);
+      const without = evaluatePath({ weeks: path.weeks }, prog);
+      expect(withEmpty).toEqual(without);
+      expect(without.milestones).toEqual([]);
+    }
+    // Without milestones nothing gates week 5.
+    const r = evaluatePath({ weeks }, progress(doneThrough(4)));
+    expect(r.weeks[4].state).toBe('available');
+    expect(r.currentStepId).toBe('s5');
   });
 });

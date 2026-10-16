@@ -13,12 +13,19 @@
  *    is available once step K-1 is completed.
  *  - A week's test is `locked` until all its lessons are completed, then
  *    `available` / `failed` / `passed`.
+ *  - Milestones ("Big Challenge") sit after week k (k = 4, 8, 12...). One counts
+ *    only when week k exists. It is `passed` once the learner holds its
+ *    certificate; otherwise it opens (`available`, or `in_battle` with an active
+ *    battle) once week k is available and completed, and is `locked` before.
+ *    Week k+1 is available only when week k is completed AND its milestone (if
+ *    any) is passed. Review mode (`unlockAll`) opens every milestone.
  */
 
 export type StepState = "locked" | "available" | "in_progress" | "completed";
 export type WeekState = "locked" | "available" | "in_progress" | "completed";
 export type WeekTestState = "none" | "locked" | "available" | "failed" | "passed";
 export type StepPracticeState = "none" | "locked" | "available" | "failed" | "passed";
+export type MilestoneState = "locked" | "available" | "in_battle" | "passed";
 
 export interface PathStepInput {
   id: string;
@@ -35,8 +42,15 @@ export interface PathWeekInput {
   steps: PathStepInput[];
 }
 
+export interface PathMilestoneInput {
+  id: string;
+  afterWeekNumber: number;
+}
+
 export interface PathInput {
   weeks: PathWeekInput[];
+  /** Published milestones only. */
+  milestones?: PathMilestoneInput[];
 }
 
 /** Per-lesson completion (lesson_progress.completed) and whether it was started. */
@@ -58,6 +72,10 @@ export interface StudentProgressInput {
   lessonCompletion: Record<string, LessonProgressInput | undefined>;
   /** assignmentId -> latest submission result. Missing -> not attempted. */
   testResults: Record<string, TestResultInput | undefined>;
+  /** Milestones the learner holds a certificate for. */
+  passedMilestoneIds?: readonly string[];
+  /** Milestones with an active (resumable) battle. */
+  activeBattleMilestoneIds?: readonly string[];
 }
 
 /**
@@ -88,12 +106,23 @@ export interface WeekResult {
   steps: StepResult[];
 }
 
+export interface MilestoneResult {
+  id: string;
+  afterWeekNumber: number;
+  state: MilestoneState;
+}
+
 export interface PathEvaluation {
   weeks: WeekResult[];
+  /** Milestones whose week exists, in week order. */
+  milestones: MilestoneResult[];
   /** Step (or test node) the bird should perch on; null if everything is done. */
   currentStepId: string | null;
   currentWeekId: string | null;
 }
+
+/** Tree node id of a milestone (the bird perches on it like a step). */
+export const milestoneNodeId = (milestoneId: string) => `milestone-${milestoneId}`;
 
 export function isTestPassed(result: TestResultInput | undefined): boolean {
   if (!result) return false;
@@ -164,6 +193,17 @@ export function evaluatePath(
   let previousWeekCompleted = true; // week 1 has no predecessor → "completed"
   let currentStepId: string | null = null;
   let currentWeekId: string | null = null;
+
+  // One milestone per week number (the DB keys them uniquely); the first wins.
+  const milestoneByWeek = new Map<number, PathMilestoneInput>();
+  for (const milestone of path.milestones ?? []) {
+    if (!milestoneByWeek.has(milestone.afterWeekNumber)) {
+      milestoneByWeek.set(milestone.afterWeekNumber, milestone);
+    }
+  }
+  const passedMilestones = new Set(progress.passedMilestoneIds ?? []);
+  const activeBattles = new Set(progress.activeBattleMilestoneIds ?? []);
+  const milestoneResults: MilestoneResult[] = [];
 
   const results: WeekResult[] = weeks.map((week) => {
     const weekAvailable = unlockAll || previousWeekCompleted;
@@ -243,7 +283,33 @@ export function evaluatePath(
     else if (lessonsDone || anyStepProgress) state = "in_progress";
     else state = "available";
 
-    previousWeekCompleted = completed;
+    // The milestone after this week, if one is published for it.
+    const milestone = milestoneByWeek.get(week.weekNumber);
+    let milestoneState: MilestoneState | null = null;
+    if (milestone) {
+      if (passedMilestones.has(milestone.id)) milestoneState = "passed";
+      else if (unlockAll || completed) {
+        milestoneState = activeBattles.has(milestone.id) ? "in_battle" : "available";
+      } else milestoneState = "locked";
+      milestoneResults.push({
+        id: milestone.id,
+        afterWeekNumber: milestone.afterWeekNumber,
+        state: milestoneState,
+      });
+      // Week done and the challenge open: the bird waits at the challenge
+      // before anything in the next week.
+      if (
+        currentStepId === null &&
+        completed &&
+        (milestoneState === "available" || milestoneState === "in_battle")
+      ) {
+        currentStepId = milestoneNodeId(milestone.id);
+        currentWeekId = week.id;
+      }
+    }
+
+    previousWeekCompleted =
+      completed && (milestoneState === null || milestoneState === "passed" || unlockAll);
 
     return {
       id: week.id,
@@ -255,5 +321,5 @@ export function evaluatePath(
     };
   });
 
-  return { weeks: results, currentStepId, currentWeekId };
+  return { weeks: results, milestones: milestoneResults, currentStepId, currentWeekId };
 }

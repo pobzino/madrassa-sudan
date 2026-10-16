@@ -5,8 +5,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
+import MilestoneBlockCard from "@/components/milestones/MilestoneBlockCard";
+import { MILESTONE_WEEKS_PER_BLOCK, type TeacherMilestoneListResponse } from "@/lib/milestones/types";
 
 const LESSONS_PER_WEEK = 2;
+/** A Big Challenge follows every 4 weeks: every 8 ordered lessons. */
+const LESSONS_PER_BLOCK = MILESTONE_WEEKS_PER_BLOCK * LESSONS_PER_WEEK;
+
+const MILESTONE_ERRORS: Record<string, string> = {
+  unpublish_first: "Unpublish it first: a live challenge can't be regenerated.",
+  block_incomplete: "All 4 weeks need lessons before a challenge can be drafted.",
+  generation_failed: "The AI couldn't draft enough good questions. Try again.",
+  pool_too_small: "Not enough auto-marked questions for the battle size yet.",
+  publish_forbidden: "Only an approved admin or the path's teacher can publish this.",
+};
 
 interface SubjectRow {
   id: string;
@@ -36,6 +48,57 @@ export default function LearningPathEditorPage() {
   // lessonId -> saved step + its practice; used for the Generate/Vet controls.
   const [stepByLesson, setStepByLesson] = useState<Record<string, StepPracticeInfo>>({});
   const [generatingFor, setGeneratingFor] = useState<string | null>(null);
+  const [milestones, setMilestones] = useState<TeacherMilestoneListResponse | null>(null);
+  const [milestoneBusy, setMilestoneBusy] = useState<number | null>(null);
+  const [generatingBlock, setGeneratingBlock] = useState<number | null>(null);
+
+  const loadMilestones = useCallback(async (subjectId: string) => {
+    if (!subjectId) return;
+    try {
+      const res = await fetch(`/api/teacher/milestones?subject_id=${encodeURIComponent(subjectId)}`, { cache: "no-store" });
+      setMilestones(res.ok ? ((await res.json()) as TeacherMilestoneListResponse) : null);
+    } catch {
+      setMilestones(null);
+    }
+  }, []);
+
+  const generateMilestone = async (afterWeekNumber: number) => {
+    if (!milestones?.pathId) return;
+    const existing = milestones.blocks.find((b) => b.afterWeekNumber === afterWeekNumber)?.milestone;
+    if (existing && !window.confirm("Replace this draft's questions with a newly generated set?")) return;
+    setGeneratingBlock(afterWeekNumber);
+    try {
+      const res = await fetch("/api/teacher/milestones/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path_id: milestones.pathId, after_week_number: afterWeekNumber }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) toast.error(MILESTONE_ERRORS[data.error] ?? `Generation failed: ${data.message ?? data.error ?? "unknown error"}`);
+      else toast.success("Big Challenge draft ready: review it before publishing");
+    } catch {
+      toast.error("Generation failed");
+    } finally {
+      setGeneratingBlock(null);
+      await loadMilestones(selectedSubject);
+    }
+  };
+
+  const setMilestoneLive = async (afterWeekNumber: number, live: boolean) => {
+    const m = milestones?.blocks.find((b) => b.afterWeekNumber === afterWeekNumber)?.milestone;
+    if (!m) return;
+    if (!live && !window.confirm("Unpublish this Big Challenge? Any battles children are playing now will be reset.")) return;
+    setMilestoneBusy(afterWeekNumber);
+    try {
+      const res = await fetch(`/api/teacher/milestones/${m.id}/${live ? "publish" : "unpublish"}`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) toast.error(MILESTONE_ERRORS[data.error] ?? `Failed: ${data.message ?? data.error ?? "unknown error"}`);
+      else toast.success(live ? "Big Challenge published" : "Big Challenge unpublished");
+    } finally {
+      setMilestoneBusy(null);
+      await loadMilestones(selectedSubject);
+    }
+  };
 
   // Load subjects that actually have published lessons.
   useEffect(() => {
@@ -138,8 +201,11 @@ export default function LearningPathEditorPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedSubject) void loadPath(selectedSubject);
-  }, [selectedSubject, loadPath]);
+    if (!selectedSubject) return;
+    void loadPath(selectedSubject);
+    const timer = window.setTimeout(() => void loadMilestones(selectedSubject), 0);
+    return () => window.clearTimeout(timer);
+  }, [selectedSubject, loadPath, loadMilestones]);
 
   const move = (index: number, delta: number) => {
     setOrdered((prev) => {
@@ -232,6 +298,7 @@ export default function LearningPathEditorPage() {
       } else {
         toast.success("Learning path saved");
         setDirty(false);
+        await loadMilestones(selectedSubject);
       }
     } catch {
       toast.error("Save failed");
@@ -254,7 +321,7 @@ export default function LearningPathEditorPage() {
         <h1 className="text-xl font-bold text-gray-900">Learning Path</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           Set the order students move through lessons. Every {LESSONS_PER_WEEK} lessons make a week,
-          and each week ends with its test.
+          and each week ends with its test. Every 4 weeks end with a Big Challenge.
         </p>
       </div>
 
@@ -385,6 +452,18 @@ export default function LearningPathEditorPage() {
                           </svg>
                         </button>
                       </div>
+                      {(i + 1) % LESSONS_PER_BLOCK === 0 && (
+                        <MilestoneBlockCard
+                          afterWeekNumber={(i + 1) / LESSONS_PER_WEEK}
+                          block={milestones?.blocks.find((b) => b.afterWeekNumber === (i + 1) / LESSONS_PER_WEEK) ?? null}
+                          disabled={dirty}
+                          generating={generatingBlock === (i + 1) / LESSONS_PER_WEEK}
+                          busy={generatingBlock !== null || milestoneBusy !== null}
+                          onGenerate={() => void generateMilestone((i + 1) / LESSONS_PER_WEEK)}
+                          onPublish={() => void setMilestoneLive((i + 1) / LESSONS_PER_WEEK, true)}
+                          onUnpublish={() => void setMilestoneLive((i + 1) / LESSONS_PER_WEEK, false)}
+                        />
+                      )}
                     </li>
                   );
                 })}

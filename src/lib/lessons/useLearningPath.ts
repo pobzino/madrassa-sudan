@@ -14,6 +14,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   evaluatePath,
+  type MilestoneState,
   type PathInput,
   type StudentProgressInput,
   type StepPracticeState,
@@ -23,6 +24,8 @@ import {
 } from "@/lib/learning-path";
 import { watchedPercent } from "@/lib/lessons/watched-percent";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
+import { BOSS_KEYS, type BossKey } from "@/lib/milestones/types";
+import { milestoneLevel, requiredCorrect } from "@/lib/milestones/rules";
 
 interface PathRow {
   id: string;
@@ -43,6 +46,32 @@ interface StepRow {
   lesson_id: string;
   sequence: number;
   practice_assignment_id: string | null;
+}
+
+interface MilestoneRow {
+  id: string;
+  after_week_number: number;
+  title_ar: string;
+  title_en: string | null;
+  boss_key: string;
+  battle_question_count: number;
+  status: string;
+}
+
+/** A "Big Challenge" after week k of the path, resolved for this learner. */
+export interface TreeMilestone {
+  id: string;
+  afterWeekNumber: number;
+  firstWeekNumber: number;
+  level: number;
+  title: string;
+  bossKey: BossKey;
+  state: MilestoneState;
+  certificateId: string | null;
+  stars: 1 | 2 | 3 | null;
+  /** Battle size N and the correct answers needed to win (display only). */
+  questionCount: number;
+  requiredCorrect: number;
 }
 
 export interface TreeStep {
@@ -77,6 +106,8 @@ export interface SubjectLearningPath {
   pathId: string;
   title: string;
   weeks: TreeWeek[];
+  /** Published milestones whose week exists, in week order. */
+  milestones: TreeMilestone[];
   currentStepId: string | null;
 }
 
@@ -125,6 +156,41 @@ export async function loadSubjectLearningPath(
     .returns<StepRow[]>();
 
   const steps = stepRows ?? [];
+
+  // Published milestones, then this learner's certificates and active battles.
+  // Read explicitly by learner id (not through RLS alone) so the server can
+  // call this with a service client and get the same answer. A missing table
+  // or a failed read means "no milestones" rather than a broken tree.
+  const { data: milestoneData } = await db
+    .from("learning_path_milestones")
+    .select("id, after_week_number, title_ar, title_en, boss_key, battle_question_count, status")
+    .eq("path_id", pathRow.id)
+    .eq("status", "published")
+    .order("after_week_number", { ascending: true })
+    .returns<MilestoneRow[]>();
+  const milestoneRows = milestoneData ?? [];
+  const milestoneIds = milestoneRows.map((m) => m.id);
+  const [{ data: certificateRows }, { data: battleRows }] = await Promise.all([
+    milestoneIds.length
+      ? db
+          .from("learner_certificates")
+          .select("id, milestone_id, stars")
+          .eq("learner_id", userId)
+          .in("milestone_id", milestoneIds)
+          .returns<Array<{ id: string; milestone_id: string; stars: number }>>()
+      : Promise.resolve({ data: [] as Array<{ id: string; milestone_id: string; stars: number }> }),
+    milestoneIds.length
+      ? db
+          .from("milestone_battles")
+          .select("milestone_id")
+          .eq("learner_id", userId)
+          .eq("status", "active")
+          .in("milestone_id", milestoneIds)
+          .returns<Array<{ milestone_id: string }>>()
+      : Promise.resolve({ data: [] as Array<{ milestone_id: string }> }),
+  ]);
+  const certificateByMilestone = new Map((certificateRows ?? []).map((c) => [c.milestone_id, c]));
+
   const lessonIds = Array.from(new Set(steps.map((s) => s.lesson_id)));
   const practiceIds = steps
     .map((s) => s.practice_assignment_id)
@@ -223,6 +289,7 @@ export async function loadSubjectLearningPath(
         practiceAssignmentId: s.practice_assignment_id,
       })),
     })),
+    milestones: milestoneRows.map((m) => ({ id: m.id, afterWeekNumber: m.after_week_number })),
   };
 
   const lessonCompletion: StudentProgressInput["lessonCompletion"] = {};
@@ -248,7 +315,36 @@ export async function loadSubjectLearningPath(
     }
   }
 
-  const evaluation = evaluatePath(pathInput, { lessonCompletion, testResults }, options);
+  const evaluation = evaluatePath(
+    pathInput,
+    {
+      lessonCompletion,
+      testResults,
+      passedMilestoneIds: [...certificateByMilestone.keys()],
+      activeBattleMilestoneIds: (battleRows ?? []).map((b) => b.milestone_id),
+    },
+    options
+  );
+
+  const treeMilestones: TreeMilestone[] = evaluation.milestones.map((result) => {
+    const row = milestoneRows.find((m) => m.id === result.id)!;
+    const certificate = certificateByMilestone.get(result.id);
+    const stars = certificate && [1, 2, 3].includes(certificate.stars) ? (certificate.stars as 1 | 2 | 3) : null;
+    const questionCount = row.battle_question_count;
+    return {
+      id: result.id,
+      afterWeekNumber: result.afterWeekNumber,
+      firstWeekNumber: result.afterWeekNumber - 3,
+      level: milestoneLevel(result.afterWeekNumber),
+      title: (language === "ar" ? row.title_ar : row.title_en) || row.title_ar,
+      bossKey: (BOSS_KEYS as readonly string[]).includes(row.boss_key) ? (row.boss_key as BossKey) : "puzzle_owlet",
+      state: result.state,
+      certificateId: certificate?.id ?? null,
+      stars,
+      questionCount,
+      requiredCorrect: requiredCorrect(questionCount),
+    };
+  });
 
   // Merge engine state with lesson metadata for rendering.
   const treeWeeks: TreeWeek[] = evaluation.weeks.map((weekResult) => {
@@ -296,6 +392,7 @@ export async function loadSubjectLearningPath(
     pathId: pathRow.id,
     title: (language === "ar" ? pathRow.title_ar : pathRow.title_en) || pathRow.title_ar,
     weeks: treeWeeks,
+    milestones: treeMilestones,
     currentStepId: evaluation.currentStepId,
   };
 }
