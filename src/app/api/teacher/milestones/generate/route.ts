@@ -70,6 +70,7 @@ export async function POST(request: Request) {
     return milestoneJson({ milestone: await teacherMilestoneRow(staff.admin, row), skippedLessons: result.skippedLessons, droppedItems: result.droppedItems });
   } catch (error) {
     if (error instanceof MilestoneRouteError) return milestoneError(error.code, error.status, { message: error.message });
+    if ((error as { code?: string })?.code === "ai_timeout") return milestoneError("generation_failed", 504, { message: (error as Error).message });
     console.error("Milestone generation failed:", error);
     return milestoneError("generation_failed", 502);
   }

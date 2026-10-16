@@ -14,8 +14,8 @@ export function isModelUnavailableError(error: unknown): boolean {
  * (no silent SDK retries with backoff).
  */
 export const MILESTONE_CALL_OPTIONS = {
-  generate: { timeout: 16_000, maxRetries: 0 },
-  verify: { timeout: 10_000, maxRetries: 0 },
+  generate: { timeout: 18_000, maxRetries: 0 },
+  verify: { timeout: 8_000, maxRetries: 0 },
 } as const;
 
 /** Runs one model call and logs its model, duration and outcome (one JSON line). */
@@ -31,10 +31,14 @@ export async function timedMilestoneCall<T>(step: "generate" | "verify", model: 
     return result;
   } catch (error) {
     const e = error as { status?: number; code?: string; name?: string; message?: string };
+    const ms = Date.now() - started;
     console.error(JSON.stringify({
-      event: "milestone_ai_call", step, model, ms: Date.now() - started, ok: false,
+      event: "milestone_ai_call", step, model, ms, ok: false,
       status: e?.status, code: e?.code, name: e?.name, message: String(e?.message ?? "").slice(0, 200),
     }));
+    if (e?.name === "APIConnectionTimeoutError" || /timed out/i.test(String(e?.message ?? ""))) {
+      throw Object.assign(new Error(`The AI (${model}) did not answer within ${Math.round(ms / 1000)} s.`), { code: "ai_timeout", model, ms, cause: error });
+    }
     throw error;
   }
 }

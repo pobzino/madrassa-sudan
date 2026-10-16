@@ -192,6 +192,9 @@ function trimPlacementPool(pool: PoolItem[], size: number): PoolItem[] {
 
 type PlanArgs = Pick<GenerateMilestonePoolArgs, "admin" | "pathId" | "afterWeekNumber" | "poolSize" | "kind">;
 
+/** Which lessons' deck content a plan loads: all (one-shot generation), one (a lesson step) or none (plan / finish). */
+type DeckScope = { decks: "all" } | { decks: "one"; lessonId: string } | { decks: "none" };
+
 type LessonSource = { lessonId: string; content: string };
 
 /** Everything the steps need, recomputed from the database on every request (nothing is trusted from the client). */
@@ -225,7 +228,10 @@ export interface LessonPoolResult {
 }
 
 /** 1. The source weeks, their steps in path order, lessons, decks. */
-async function loadPoolPlan({ admin, pathId, afterWeekNumber: requestedWeek, poolSize: requestedPoolSize, kind = "milestone" }: PlanArgs): Promise<PoolPlan> {
+async function loadPoolPlan(
+  { admin, pathId, afterWeekNumber: requestedWeek, poolSize: requestedPoolSize, kind = "milestone" }: PlanArgs,
+  scope: DeckScope = { decks: "all" },
+): Promise<PoolPlan> {
   const placement = kind === "placement";
   const afterWeekNumber = placement ? 0 : requestedWeek;
   const poolSize = placement ? PLACEMENT_DEFAULT_POOL_SIZE : requestedPoolSize;
@@ -305,18 +311,33 @@ async function loadPoolPlan({ admin, pathId, afterWeekNumber: requestedWeek, poo
     ? samplePlacementLessons(orderedLessonIds.map((lessonId) => ({ lessonId, skillKey: defaultSkillOf(lessonId) }))).map((lesson) => lesson.lessonId)
     : orderedLessonIds;
 
-  const { data: sims } = await admin
-    .from("lesson_sims")
-    .select("lesson_id, deck_snapshot, recorded_at")
-    .in("lesson_id", lessonIds)
-    .order("recorded_at", { ascending: false })
-    .returns<Array<{ lesson_id: string; deck_snapshot: unknown }>>();
+  // Which lessons have a recorded deck (its first slide's type only, never the decks), and
+  // the full deck for the lessons this call generates from.
+  type SimRow = { lesson_id: string; deck_snapshot?: unknown; first_slide_type?: string | null; recorded_at?: string };
+  const contentIds = scope.decks === "all" ? lessonIds : scope.decks === "one" ? lessonIds.filter((id) => id === scope.lessonId) : [];
+  const [{ data: simFlags }, { data: simDecks }] = await Promise.all([
+    admin
+      .from("lesson_sims")
+      .select("lesson_id, first_slide_type:deck_snapshot->0->>type, recorded_at")
+      .in("lesson_id", lessonIds)
+      .order("recorded_at", { ascending: false })
+      .returns<SimRow[]>(),
+    contentIds.length
+      ? admin
+          .from("lesson_sims")
+          .select("lesson_id, deck_snapshot, recorded_at")
+          .in("lesson_id", contentIds)
+          .order("recorded_at", { ascending: false })
+          .returns<SimRow[]>()
+      : Promise.resolve({ data: [] as SimRow[] }),
+  ]);
+  const hasDeck = (sim: SimRow) => sim.first_slide_type != null || (Array.isArray(sim.deck_snapshot) && sim.deck_snapshot.length > 0);
+  const withDeck = new Set<string>();
+  for (const sim of simFlags ?? []) if (hasDeck(sim)) withDeck.add(sim.lesson_id);
   const latestDeck = new Map<string, Slide[]>();
-  for (const sim of sims ?? []) {
+  for (const sim of simDecks ?? []) {
     if (latestDeck.has(sim.lesson_id)) continue;
-    if (Array.isArray(sim.deck_snapshot) && sim.deck_snapshot.length > 0) {
-      latestDeck.set(sim.lesson_id, sim.deck_snapshot as Slide[]);
-    }
+    if (Array.isArray(sim.deck_snapshot) && sim.deck_snapshot.length > 0) latestDeck.set(sim.lesson_id, sim.deck_snapshot as Slide[]);
   }
 
   const skippedLessons: string[] = [];
@@ -324,7 +345,9 @@ async function loadPoolPlan({ admin, pathId, afterWeekNumber: requestedWeek, poo
   for (const lessonId of lessonIds) {
     const deck = latestDeck.get(lessonId);
     const content = deck ? extractSlideContent(deck) : "";
-    if (content.trim()) sources.push({ lessonId, content });
+    // Loaded decks are judged by their text; unloaded ones by the flag (the same rule the one-shot path applies once loaded).
+    const usable = deck ? Boolean(content.trim()) : withDeck.has(lessonId) && !contentIds.includes(lessonId);
+    if (usable) sources.push({ lessonId, content });
     else skippedLessons.push(lessonId);
   }
   if (!sources.length) {
@@ -612,7 +635,7 @@ function signatureMatches(expected: string, given: string): boolean {
 
 /** Step 1: the lessons that will be generated, in order. */
 export async function planMilestonePool(args: PlanArgs): Promise<{ lessons: Array<{ lessonId: string; titleEn: string; titleAr: string }>; skippedLessons: string[] }> {
-  const plan = await loadPoolPlan(args);
+  const plan = await loadPoolPlan(args, { decks: "none" });
   return {
     lessons: plan.sources.map(({ lessonId }) => {
       const lesson = plan.lessonById.get(lessonId);
@@ -628,7 +651,7 @@ export type SignedLessonPoolResult = LessonPoolResult & { signature: string };
 export async function generateMilestonePoolLesson(
   args: PlanArgs & { lessonId: string; generate?: LessonItemGenerator; verify?: ItemVerifier },
 ): Promise<SignedLessonPoolResult> {
-  const plan = await loadPoolPlan(args);
+  const plan = await loadPoolPlan(args, { decks: "one", lessonId: args.lessonId });
   const lessonIndex = plan.sources.findIndex((source) => source.lessonId === args.lessonId);
   if (lessonIndex < 0) throw new MilestoneRouteError("block_incomplete", 400, "That lesson is not part of this Big Challenge.");
   const result = await runLesson(plan, lessonIndex, args.generate ?? generateLessonItems, args.verify ?? verifyItemsWithModel);
@@ -639,7 +662,7 @@ export async function generateMilestonePoolLesson(
 export async function finishMilestonePool(
   args: PlanArgs & { actorId: string; results: ReadonlyArray<Partial<SignedLessonPoolResult> | null | undefined> },
 ): Promise<GenerateMilestonePoolResult> {
-  const plan = await loadPoolPlan(args);
+  const plan = await loadPoolPlan(args, { decks: "none" });
   const byLesson = new Map<string, LessonPoolResult>();
   for (const given of args.results) {
     if (!given || typeof given.lessonId !== "string" || !Array.isArray(given.kept) || !Array.isArray(given.dropped)) continue;

@@ -101,6 +101,7 @@ export default function LearningPathEditorPage() {
       const results: unknown[] = new Array(plan.lessons.length).fill(null);
       let done = 0;
       let next = 0;
+      let lastLessonError = "";
       const worker = async () => {
         while (next < plan.lessons.length) {
           const index = next;
@@ -109,8 +110,8 @@ export default function LearningPathEditorPage() {
           for (let attempt = 0; attempt < 2 && results[index] === null; attempt += 1) {
             try {
               results[index] = await step({ step: "lesson", lesson_id: plan.lessons[index].lessonId });
-            } catch {
-              /* retried once, then skipped */
+            } catch (error) {
+              lastLessonError = error instanceof Error ? error.message : "lesson step failed";
             }
           }
           done += 1;
@@ -119,8 +120,14 @@ export default function LearningPathEditorPage() {
       };
       toast.loading(`Writing questions: 0 of ${plan.lessons.length} lessons`, { id: progress });
       await Promise.all(Array.from({ length: Math.min(4, plan.lessons.length) }, worker));
+      const failed = results.filter((result) => result === null).length;
+      if (failed === plan.lessons.length) throw new Error(`No lesson's questions came back. ${lastLessonError}`);
       toast.loading("Saving the draft...", { id: progress });
-      await step({ step: "finish", results });
+      try {
+        await step({ step: "finish", results });
+      } catch (error) {
+        throw new Error(`${error instanceof Error ? error.message : "Saving failed."}${failed ? ` ${failed} of ${plan.lessons.length} lessons failed: ${lastLessonError}` : ""}`);
+      }
       toast.success(placement ? "Starting boss draft ready: review the tags before publishing" : "Big Challenge draft ready: review it before publishing", { id: progress });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Generation failed", { id: progress });
