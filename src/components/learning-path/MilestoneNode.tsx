@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import ConfettiBurst from "@/components/practice/ConfettiBurst";
+import { PathOwl, pathOwlFlightMs } from "@/components/learning-path/PathOwl";
 import { ARENAS, BossCharacter, OWL_FOOT, OwlCharacter, type BossHandle, type OwlHandle } from "@/components/characters";
 import { bossName, formatNumber } from "@/components/milestones/copy";
 import type { TreeMilestone } from "@/lib/lessons/useLearningPath";
@@ -110,6 +111,7 @@ export function MilestoneHero({
   isCurrent,
   href,
   onSelect,
+  owlFrom,
 }: {
   milestone: TreeMilestone;
   lang: "ar" | "en";
@@ -118,6 +120,8 @@ export function MilestoneHero({
   href: string | null;
   /** Like a lesson node: the first tap brings the owl here; only the button opens the battle. */
   onSelect?: () => void;
+  /** Where the path owl was before it was sent here (node centre offset), so it can fly over. */
+  owlFrom?: { dx: number; dy: number; key: string } | null;
 }) {
   const t = COPY[lang];
   const { state, bossKey } = milestone;
@@ -138,6 +142,13 @@ export function MilestoneHero({
   const [bossSays, setBossSays] = useState<string | null>(null);
   const [owlSays, setOwlSays] = useState<string | null>(null);
   const [confetti, setConfetti] = useState(0);
+  // The owl flies in from the previous node exactly like it does between lessons
+  // (the path's own flying owl), then the rigged owl takes over on landing.
+  const W = HERO_WINDOW + 14;
+  const owlSpot = { left: -OWL_SIZE + 6, top: W * 0.86 - OWL_SIZE * OWL_FOOT.y };
+  // Owl centre relative to the window centre (the node's point on the path).
+  const owlOffset = { x: owlSpot.left + OWL_SIZE / 2 - W / 2, y: owlSpot.top + OWL_SIZE / 2 - W / 2 };
+  const [flight, setFlight] = useState<{ dx: number; dy: number; key: string } | null>(null);
   const isActive = useSyncExternalStore(subscribe, () => activeNode === milestone.id, () => false);
   const reduceMotion = useSyncExternalStore(
     (cb) => {
@@ -148,6 +159,19 @@ export function MilestoneHero({
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     () => true
   );
+
+  const flightKey = isCurrent && owlFrom ? owlFrom.key : null;
+  useLayoutEffect(() => {
+    if (!flightKey || !owlFrom || reduceMotion) return;
+    // The path owl rides 32px above a lesson node's centre.
+    const dx = owlFrom.dx - owlOffset.x;
+    const dy = owlFrom.dy - 32 - owlOffset.y;
+    if (Math.hypot(owlFrom.dx, owlFrom.dy) < 1) return;
+    setFlight({ dx, dy, key: flightKey });
+    const landed = window.setTimeout(() => setFlight(null), pathOwlFlightMs(dx, dy));
+    return () => window.clearTimeout(landed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flightKey, reduceMotion]);
 
   // On screen? Only then is the boss mounted and animated.
   useEffect(() => {
@@ -183,7 +207,7 @@ export function MilestoneHero({
   const animate = isActive && !reduceMotion;
   const owlHere = (isCurrent || passed) && !locked;
   const awake = !locked && !passed && (isCurrent || state === "in_battle");
-  const facingOff = isActive && isCurrent && awake && isOnline;
+  const facingOff = isActive && isCurrent && awake && isOnline && !flight;
   // Reduced motion: a still face-off with one line, no loop.
   const stillLine = facingOff && reduceMotion ? t.faceOff[0][0] : null;
   useEffect(() => {
@@ -199,9 +223,7 @@ export function MilestoneHero({
     const cycle = () => {
       const [bossLine, owlLine] = t.faceOff[round % t.faceOff.length];
       round += 1;
-      // 1. the owl hops onto its spot, facing the boss
-      void owlRef.current?.play("land");
-      // 2. the boss notices: leans in, taunts
+      // 1. (the owl has already flown in and landed, once) 2. the boss notices: leans in, taunts
       at(900, () => {
         move(bossBoxRef.current, [{ transform: "rotate(0deg) translateX(0)" }, { transform: "rotate(-7deg) translateX(-6px)" }, { transform: "rotate(-7deg) translateX(-6px)", offset: 0.8 }, { transform: "rotate(0deg) translateX(0)" }], 1900);
         void bossRef.current?.play("taunt");
@@ -391,11 +413,20 @@ export function MilestoneHero({
         </span>
 
         {/* Amowl, standing on this node beside the window */}
+        {flight && (
+          <div
+            key={flight.key}
+            className="pointer-events-none absolute z-20"
+            style={{ left: owlSpot.left + OWL_SIZE / 2 - 32, top: owlSpot.top + OWL_SIZE / 2 - 32 }}
+          >
+            <PathOwl dx={flight.dx} dy={flight.dy} />
+          </div>
+        )}
         {owlHere && visible && (
           <div
             ref={owlBoxRef}
             className="absolute z-[5]"
-            style={{ width: OWL_SIZE, height: OWL_SIZE, left: -OWL_SIZE + 6, top: (HERO_WINDOW + 14) * 0.86 - OWL_SIZE * OWL_FOOT.y, transformOrigin: "50% 100%" }}
+            style={{ width: OWL_SIZE, height: OWL_SIZE, left: owlSpot.left, top: owlSpot.top, transformOrigin: "50% 100%", opacity: flight ? 0 : 1 }}
           >
             <OwlCharacter ref={owlRef} pose={passed ? "cheer" : "idle"} size={OWL_SIZE} glow={Boolean(href) && animate && awake} />
             {owlSays && (
