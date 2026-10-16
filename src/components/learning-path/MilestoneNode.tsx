@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSy
 import Link from "next/link";
 import ConfettiBurst from "@/components/practice/ConfettiBurst";
 import { PathOwl, pathOwlFlightMs } from "@/components/learning-path/PathOwl";
+import { usePrefetchBattle } from "@/components/milestones/usePrefetchBattle";
 import { ARENAS, BossCharacter, OWL_FOOT, OwlCharacter, type BossHandle, type OwlHandle } from "@/components/characters";
 import { bossName, formatNumber } from "@/components/milestones/copy";
 import type { TreeMilestone } from "@/lib/lessons/useLearningPath";
@@ -150,6 +151,13 @@ export function MilestoneHero({
   // Owl centre relative to the window centre (the node's point on the path).
   const owlOffset = { x: owlSpot.left + OWL_SIZE / 2 - W / 2, y: owlSpot.top + OWL_SIZE / 2 - W / 2 };
   const [flight, setFlight] = useState<{ dx: number; dy: number; key: string } | null>(null);
+
+  // Selected and open: load the battle in the background so Battle! is instant.
+  const { prefetchBattle, startBattle } = usePrefetchBattle();
+  const fightable = (state === "available" || state === "in_battle") && isOnline;
+  useEffect(() => {
+    if (isCurrent && fightable) prefetchBattle(milestone.id, bossKey);
+  }, [isCurrent, fightable, milestone.id, bossKey, prefetchBattle]);
   const isActive = useSyncExternalStore(subscribe, () => activeNode === milestone.id, () => false);
   const reduceMotion = useSyncExternalStore(
     (cb) => {
@@ -489,6 +497,9 @@ export function MilestoneHero({
       {href && isCurrent && (
         <Link
           href={href}
+          onClick={() => {
+            if (fightable) startBattle(milestone.id);
+          }}
           className={`mt-2 inline-flex h-12 items-center justify-center rounded-full px-7 font-fredoka text-[18px] font-bold shadow-[0_5px_0_rgba(0,0,0,0.2),inset_0_3px_0_rgba(255,255,255,0.35)] ${
             passed
               ? "bg-[linear-gradient(180deg,#FDE68A,#F59E0B_55%,#D97706)] text-[#3B1D00]"
