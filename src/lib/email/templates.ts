@@ -312,3 +312,63 @@ export function volunteerImpactEmail(
     args,
   );
 }
+
+/**
+ * Sent once, the first time a child passes a Big Challenge (milestone test).
+ * Transactional: it celebrates the child by name and links to the certificate.
+ * Child profiles carry no gender, so the wording stays neutral.
+ */
+export function milestonePassedEmail(
+  args: Base & {
+    childName: string;
+    subjectName: string;
+    /** e.g. "weeks 1–4" / "الأسابيع ١–٤" */
+    weeksLabel: string;
+    stars: 1 | 2 | 3;
+    certificateUrl: string;
+    bossName?: string | null;
+  },
+): RenderedEmail {
+  const { language, name, siteUrl, childName, subjectName, weeksLabel, stars, certificateUrl, bossName } = args;
+  const first = firstName(name);
+  const child = childName.trim();
+  const starRow = "⭐".repeat(stars);
+  if (language === "ar") {
+    const who = child || "طفلكم";
+    return render(
+      bossName ? `🏆 فوز رائع لـ${who} على ${bossName}!` : `🏆 فوز رائع لـ${who} في التحدي الكبير!`,
+      {
+        language,
+        preheader: `شهادة جديدة في ${subjectName} (${weeksLabel}).`,
+        hero: { art: "celebrate", alt: "بومة آمال ترقص فرحاً" },
+        heading: first ? `خبر سعيد يا ${first}!` : "خبر سعيد!",
+        paragraphs: [
+          `فوز جديد لـ${who} في التحدي الكبير: ${subjectName} (${weeksLabel}).`,
+          bossName ? `هُزم ${bossName} في هذه الجولة، والشهادة جاهزة: ${starRow}` : `الشهادة جاهزة: ${starRow}`,
+        ],
+        closingParagraphs: ["هذا إنجاز يستحق الاحتفال. شاهدوا الشهادة معاً وشجّعوا الدروس القادمة."],
+        cta: { label: "شاهد الشهادة", url: certificateUrl },
+        secondaryLink: { label: "تابع مسار التعلّم", url: `${siteUrl}/lessons` },
+      },
+      args,
+    );
+  }
+  const who = child || "Your child";
+  return render(
+    bossName ? `🏆 ${who} beat ${bossName} and earned a certificate!` : `🏆 ${who} beat the Big Challenge!`,
+    {
+      language,
+      preheader: `A new certificate in ${subjectName}, ${weeksLabel}.`,
+      hero: { art: "celebrate", alt: "The Amal owl dancing" },
+      heading: first ? `Great news, ${first}!` : "Great news!",
+      paragraphs: [
+        `${who} beat the Big Challenge in ${subjectName}, ${weeksLabel}.`,
+        bossName ? `${bossName} is defeated, and the certificate is ready: ${starRow}` : `The certificate is ready: ${starRow}`,
+      ],
+      closingParagraphs: ["That's worth celebrating. Look at the certificate together and cheer on the next lessons."],
+      cta: { label: "See the certificate", url: certificateUrl },
+      secondaryLink: { label: "Keep learning", url: `${siteUrl}/lessons` },
+    },
+    args,
+  );
+}

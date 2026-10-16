@@ -60,3 +60,31 @@ export function remindersOnMessage(language: EmailLanguage): PushMessage {
     ? { title: "تم تفعيل التذكيرات ✓", body: "سنخبركم عندما يحين وقت التعلّم.", url: "/dashboard", tag: "welcome", lang: language }
     : { title: "Reminders are on ✓", body: "We'll let you know when it's time to learn.", url: "/dashboard", tag: "welcome", lang: language };
 }
+
+/**
+ * Sent to the family the first time a child passes a Big Challenge. The child
+ * profile has no gender, so the wording stays neutral in both languages.
+ */
+export function milestonePassedMessage(
+  language: EmailLanguage,
+  args: { childName: string; subjectName: string; weeksLabel: string; certificateId: string; bossName?: string | null },
+): PushMessage {
+  const { childName, subjectName, weeksLabel, certificateId, bossName } = args;
+  const base = { url: `/certificates/${certificateId}`, tag: `milestone-${certificateId}`, image: "/icons/icon-512.png", lang: language };
+  const name = childName.trim();
+  if (language === "ar") {
+    // "A great win for <name> over <boss>": a noun phrase, so no gendered verb.
+    const over = bossName ? ` على ${bossName}` : " في التحدي الكبير";
+    return {
+      ...base,
+      title: name ? `🏆 فوز رائع لـ${name}${over}!` : `🏆 فوز رائع${over}!`,
+      body: `التحدي الكبير في ${subjectName} (${weeksLabel}) والشهادة جاهزة. اضغطوا لرؤيتها.`,
+    };
+  }
+  const who = name || "Your child";
+  return {
+    ...base,
+    title: bossName ? `🏆 ${who} beat ${bossName} and earned a certificate!` : `🏆 ${who} beat the Big Challenge!`,
+    body: `Big Challenge in ${subjectName}, ${weeksLabel}. Tap to see the certificate.`,
+  };
+}

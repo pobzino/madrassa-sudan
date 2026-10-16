@@ -27,6 +27,7 @@ import {
   passMarkPoints,
   type GradableQuestion,
 } from "@/lib/homework-grading";
+import { isMilestoneAssignment } from "@/lib/server/milestones/guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -98,6 +99,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (assignmentError || !assignment) {
       return NextResponse.json({ error: "Assignment not found or not published" }, { status: 404 });
+    }
+
+    // Milestone tests are played as battles, graded one answer at a time.
+    if (isMilestoneAssignment(assignment)) {
+      return NextResponse.json({ error: "use_battle" }, { status: 409 });
     }
 
     // Practice assignments are global (cohort_id is null) — any signed-in
@@ -476,13 +482,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     // Verify assignment exists and is published
     const { data: assignment } = await supabase
       .from("homework_assignments")
-      .select("cohort_id, is_published, homework_questions(id)")
+      .select("*, homework_questions(id)")
       .eq("id", assignmentId)
       .eq("is_published", true)
       .single();
 
     if (!assignment) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+    }
+    if (isMilestoneAssignment(assignment)) {
+      return NextResponse.json({ error: "use_battle" }, { status: 409 });
     }
 
     // Practice assignments have no cohort; enrollment only applies otherwise.
