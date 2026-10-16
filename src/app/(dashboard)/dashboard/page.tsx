@@ -168,10 +168,10 @@ export default function DashboardPage() {
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8" dir={isRtl ? "rtl" : "ltr"}>
           {/* Welcome Banner — illustrated "learning world" hero */}
-          <div className="relative mb-8 rounded-3xl overflow-hidden shadow-sm min-h-[230px] sm:min-h-[260px]">
+          <div className="relative mb-8 rounded-3xl overflow-hidden shadow-sm min-h-[350px] sm:min-h-[260px]">
             <HeroScene mirrored={isRtl} />
 
-            <LearnerSwitcher className={`absolute top-4 z-20 ${isRtl ? "left-4" : "right-4"}`} />
+            <LearnerSwitcher className={`relative z-20 m-4 sm:absolute sm:top-4 sm:m-0 ${isRtl ? "sm:left-4" : "sm:right-4"}`} />
 
             {/* Owl mascot */}
             <div className={`absolute -bottom-1 z-10 ${isRtl ? "left-1 sm:left-10" : "right-1 sm:right-10"}`}>
@@ -179,14 +179,14 @@ export default function DashboardPage() {
             </div>
 
             <div
-              className={`relative z-10 w-[calc(100%-7rem)] max-w-2xl p-5 sm:w-[calc(100%-13rem)] sm:p-10 ${
+              className={`relative z-10 w-[calc(100%-5rem)] max-w-2xl p-5 sm:w-[calc(100%-13rem)] sm:p-10 ${
                 isRtl ? "ml-auto" : "mr-auto"
               }`}
             >
-              <h1 className="text-3xl sm:text-4xl font-bold font-fredoka text-gray-800">
+              <h1 className="text-2xl min-[380px]:text-3xl sm:text-4xl font-bold font-fredoka text-gray-800">
                 {t.welcomeBack}, <span className="text-[#007229]">{firstName}</span>! 👋
               </h1>
-              <p className="text-gray-600 text-base sm:text-lg font-fredoka mt-1">{t.welcomeSubtitle}</p>
+              <p className="text-gray-600 text-sm min-[380px]:text-base sm:text-lg font-fredoka mt-1">{t.welcomeSubtitle}</p>
 
               {/* Quick stats */}
               <div className="flex flex-wrap gap-2.5 sm:gap-3 mt-5">
