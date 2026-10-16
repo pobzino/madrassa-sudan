@@ -1,5 +1,5 @@
 import { leaf } from "../arenas/shapes";
-import { Brows, Dust, Eyes, Hand, lidPivots, Mouths, Rim, ShadeDefs, Sparkles, Stars, Steam, Zzz, bossSpec } from "../parts";
+import { Brows, HandGlow, Dust, Eyes, Hand, lidPivots, Mouths, Rim, ShadeDefs, Sparkles, Stars, Steam, Zzz, bossSpec } from "../parts";
 import type { BossDef } from "./types";
 
 /**
@@ -64,6 +64,7 @@ function Art({ uid }: { uid: string }) {
             <ellipse cx={100} cy={122} rx={66} ry={64} fill={`url(#${uid}-shade)`} />
             <Rim cx={100} cy={122} rx={66} ry={64} from={205} to={300} width={3.4} opacity={0.45} />
             <path d="M56 92 a2 2 0 1 0 4 0a2 2 0 1 0 -4 0Z M64 84 a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0 -3.2 0Z M140 140 a2 2 0 1 0 4 0a2 2 0 1 0 -4 0Z" fill="#FFFFFF" opacity={0.4} />
+            <ellipse data-part="flash" cx={100} cy={122} rx={67} ry={65} fill="#FFFFFF" opacity={0} />
             <g data-part="head">
               {/* a red karkadeh flower */}
               <path d={PETALS} fill="#E23D5A" />
@@ -77,6 +78,7 @@ function Art({ uid }: { uid: string }) {
               <Steam at={[[62, 56], [138, 50]]} />
             </g>
             <g data-part="armR">
+              <HandGlow uid={uid} cx={100} cy={160} />
               <g data-part="prop">
                 <rect x={95} y={136} width={10} height={14} fill="#E0F7FF" />
                 <rect x={93} y={133} width={14} height={6} rx={2} fill="#B07B4A" />
@@ -91,7 +93,6 @@ function Art({ uid }: { uid: string }) {
             <g data-part="armL">
               <Hand cx={78} cy={160} color={C.dark[0]} />
             </g>
-            <ellipse data-part="flash" cx={100} cy={122} rx={67} ry={65} fill="#FFFFFF" opacity={0} />
           </g>
           <Sparkles at={[[24, 110, 1], [180, 70, 1.3], [178, 140, 0.8]]} />
           <Zzz at={[152, 46]} />

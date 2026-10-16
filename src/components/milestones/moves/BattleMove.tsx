@@ -54,6 +54,14 @@ export interface BattleMoveProps {
   hintButton?: ReactNode;
   /** Height of the targets band, between the boss's ledge and the owl's head (px). */
   bandHeight?: number;
+  /** The band's left inset (px): beside the owl when a long question fills the space above it. */
+  bandInset?: number;
+  /** The band's width (px), for laying out its targets. */
+  bandWidth?: number;
+  /** The bottom action row's height (px). */
+  actionsHeight?: number;
+  /** The action row's left inset (px). */
+  actionsInset?: number;
   /** Catch moves use the whole middle: how far above the band the field starts (px, up to the HUD). */
   catchRise?: number;
   /** Catch moves: what the scattered items must stay clear of (screen rects: boss, bubble, owl). */
@@ -69,7 +77,7 @@ export function moveOwnsPrompt(interaction: PublicInteraction): boolean {
 
 export default function BattleMove(props: BattleMoveProps) {
   return (
-    <div className="h-full" style={{ "--band": `${props.bandHeight ?? 210}px` } as CSSProperties}>
+    <div className="h-full" style={{ "--band": `${props.bandHeight ?? 210}px`, "--band-inset": `${props.bandInset ?? 0}px`, "--actions": `${props.actionsHeight ?? 76}px`, "--actions-inset": `${props.actionsInset ?? 0}px` } as CSSProperties}>
       <MoveBody {...props} />
     </div>
   );
@@ -111,20 +119,26 @@ const RUNE_STONE =
 const RUNE_SHAPES = ["42% 58% 52% 48% / 46% 40% 60% 54%", "56% 44% 46% 54% / 52% 58% 42% 48%", "48% 52% 60% 40% / 40% 52% 48% 60%", "60% 40% 44% 56% / 56% 46% 54% 44%"];
 
 /** The move's targets: the band between the boss and the owl. */
-const BAND = "h-[var(--band,210px)] shrink-0";
+const BAND = "h-[var(--band,210px)] shrink-0 ml-[var(--band-inset,0px)]";
 /** The bottom row: small round icons (hint, undo), then the one big button. */
-const ACTION_ROW = "mt-auto flex h-[76px] shrink-0 items-center gap-3";
+/** The bottom row; never wider than a comfortable reach, centred in the space it has. */
+const ACTION_ROW = "mt-auto ml-[var(--actions-inset,0px)] flex h-[var(--actions,76px)] w-[calc(100%-var(--actions-inset,0px))] max-w-[620px] shrink-0 items-center gap-2.5 self-center";
 
 function rectOf(element: Element | null): DOMRect | null {
   return element ? element.getBoundingClientRect() : null;
 }
 
-/** Attacks fly at the boss; blocks gather in front of the owl as a shield in the move's motif. */
+/**
+ * Every signature effect leads INTO the owl: the pieces gather at its wing,
+ * and the owl's throw (combat.ts) carries them to the boss. On block turns
+ * the shield forms around the owl in the move's motif.
+ */
 function aimOf(props: Pick<BattleMoveProps, "turn" | "throwFrom" | "catchTarget">, motif: fx.ShieldMotif, glyph?: string): DOMRect | null {
-  if (props.turn === "attack") return props.throwFrom?.() ?? null;
   const owl = props.catchTarget?.() ?? null;
-  fx.formShield(motif, owl, glyph);
-  return owl;
+  if (props.turn === "block") fx.formShield(motif, owl, glyph);
+  if (!owl) return null;
+  const size = owl.width * 0.3;
+  return new DOMRect(owl.left + owl.width * 0.8 - size / 2, owl.top + owl.height * 0.5 - size / 2, size, size);
 }
 
 type ConfirmKind = "fire" | "block" | "cast";
@@ -145,7 +159,7 @@ function ConfirmButton({ kind, lang, disabled, onClick }: { kind: ConfirmKind; l
       type="button"
       disabled={disabled}
       onClick={() => onClick(rectOf(ref.current))}
-      className={`h-[68px] min-w-0 flex-1 rounded-full text-[28px] font-bold transition-transform active:translate-y-1 active:shadow-none disabled:bg-none disabled:bg-[#9CA3AF] disabled:text-white/90 disabled:shadow-[0_6px_0_#6B7280] disabled:[text-shadow:none] disabled:active:translate-y-0 ${colours}`}
+      className={`h-[calc(var(--actions,76px)-8px)] min-w-0 flex-1 rounded-full text-[clamp(22px,calc(var(--actions,76px)*0.37),28px)] font-bold transition-transform active:translate-y-1 active:shadow-none disabled:bg-none disabled:bg-[#9CA3AF] disabled:text-white/90 disabled:shadow-[0_6px_0_#6B7280] disabled:[text-shadow:none] disabled:active:translate-y-0 ${colours}`}
     >
       {kind === "fire" ? t.fire : kind === "block" ? t.block : t.cast}
     </button>
@@ -160,7 +174,7 @@ function IconButton({ label, onClick, disabled, children }: { label: string; onC
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[#FFF8EC] text-[#007229] shadow-[0_4px_0_rgba(0,0,0,0.25)] disabled:opacity-0"
+      className="grid h-[min(56px,calc(var(--actions,76px)-8px))] w-[min(56px,calc(var(--actions,76px)-8px))] shrink-0 place-items-center rounded-full bg-[#FFF8EC] text-[#007229] shadow-[0_4px_0_rgba(0,0,0,0.25)] disabled:opacity-0"
     >
       {children}
     </button>
@@ -214,7 +228,9 @@ function useDragPiece(onDrop: (slot: string) => void, disabled: boolean) {
 /* ------------------------------ choose_correct: star orbs circling the owl */
 
 /** Orbs floating in a zigzag across the band between the owl and the boss (never touching). */
-function orbArc(count: number): Array<{ x: number; y: number }> {
+function orbArc(count: number, narrow = false): Array<{ x: number; y: number }> {
+  // A narrow band (beside the owl): a plain 2 x 2 grid, so no two orbs touch.
+  if (narrow && count > 2) return [{ x: 27, y: 26 }, { x: 73, y: 26 }, { x: 27, y: 74 }, { x: 73, y: 74 }].slice(0, count);
   if (count <= 2) return [{ x: 30, y: 50 }, { x: 70, y: 50 }];
   if (count === 3) return [{ x: 20, y: 30 }, { x: 50, y: 72 }, { x: 80, y: 30 }];
   return [{ x: 20, y: 25 }, { x: 80, y: 25 }, { x: 36, y: 76 }, { x: 64, y: 76 }];
@@ -226,7 +242,7 @@ function StarOrbs(props: BattleMoveProps & { interaction: Extract<PublicInteract
   const hidden = hint?.hideOptionIds ?? [];
   const round = options.every((option) => option.trim().length <= 9);
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
-  const spots = orbArc(options.length);
+  const spots = orbArc(options.length, (props.bandWidth ?? 400) < 280);
   // The chosen orb charges and launches with a comet trail; the others pop.
   const choose = (index: number) => {
     const origin = rectOf(refs.current[index]);
@@ -251,7 +267,7 @@ function StarOrbs(props: BattleMoveProps & { interaction: Extract<PublicInteract
     // Longer answers: glowing pills stacked in the open space past the owl.
     return (
       <div className="flex h-full flex-col">
-       <div className={`${BAND} flex flex-col justify-center gap-2`}>
+       <div data-layout="moves" className={`${BAND} flex flex-col justify-center gap-2`}>
         {options.map((option, index) => {
           const gone = hidden.includes(index);
           return (
@@ -272,14 +288,14 @@ function StarOrbs(props: BattleMoveProps & { interaction: Extract<PublicInteract
           );
         })}
        </div>
-       <div className={ACTION_ROW}>{hintButton}</div>
+       <div data-layout="actions" className={ACTION_ROW}>{hintButton}</div>
       </div>
     );
   }
 
   return (
     <div className="flex h-full flex-col">
-     <div className={`relative ${BAND}`}>
+     <div data-layout="moves" className={`relative ${BAND}`}>
       {options.map((option, index) => {
         const gone = hidden.includes(index);
         const spot = spots[index];
@@ -293,7 +309,7 @@ function StarOrbs(props: BattleMoveProps & { interaction: Extract<PublicInteract
             disabled={disabled || gone}
             aria-hidden={gone || undefined}
             onClick={() => choose(index)}
-            className={`absolute grid aspect-square h-[min(100px,calc(var(--band)*0.44))] -translate-y-1/2 place-items-center rounded-full text-[clamp(30px,5dvh,40px)] font-bold text-[#1a1a1a] transition-[opacity,scale] duration-300 active:scale-95 ltr:-translate-x-1/2 rtl:translate-x-1/2 ${gone ? "scale-50 opacity-0" : ""}`}
+            className={`absolute grid aspect-square h-[clamp(52px,calc(var(--band)*0.44),100px)] -translate-y-1/2 place-items-center rounded-full text-[clamp(30px,5dvh,40px)] font-bold text-[#1a1a1a] transition-[opacity,scale] duration-300 active:scale-95 ltr:-translate-x-1/2 rtl:translate-x-1/2 ${gone ? "scale-50 opacity-0" : ""}`}
             style={{ ...ORB_STYLE, insetInlineStart: `${spot.x}%`, top: `${spot.y}%` }}
           >
             <span className="pointer-events-none absolute start-[20%] top-[16%] h-3 w-3 rounded-full bg-white/80" aria-hidden="true" />
@@ -302,7 +318,7 @@ function StarOrbs(props: BattleMoveProps & { interaction: Extract<PublicInteract
         );
       })}
      </div>
-     <div className={ACTION_ROW}>{hintButton}</div>
+     <div data-layout="actions" className={ACTION_ROW}>{hintButton}</div>
     </div>
   );
 }
@@ -335,7 +351,7 @@ function DodgeLanes(props: BattleMoveProps) {
     choose(lang === "ar" ? dx > 0 : dx < 0);
   };
   return (
-    <div className={`grid grid-cols-2 items-center gap-5 px-1 ${BAND}`} onPointerDown={onPointerDown} onPointerUp={onPointerUp} style={{ touchAction: "pan-y" }}>
+    <div data-layout="moves" className={`grid grid-cols-2 items-center gap-5 px-1 ${BAND}`} onPointerDown={onPointerDown} onPointerUp={onPointerUp} style={{ touchAction: "pan-y" }}>
       {[true, false].map((value) => (
         <button
           key={String(value)}
@@ -452,8 +468,9 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
   };
   const fire = (origin: DOMRect | null) => {
     // Everything caught fires as a volley (or rings the owl as its shield).
-    const aim = aimOf({ turn, throwFrom, catchTarget }, "catch", interaction.emoji || "⭐");
-    if (turn === "attack") fx.volley(interaction.emoji || "⭐", caught.length, catchTarget?.() ?? null, aim);
+    aimOf({ turn, throwFrom, catchTarget }, "catch", interaction.emoji || "⭐");
+    // They ride along with the owl's throw.
+    if (turn === "attack") fx.volley(interaction.emoji || "⭐", caught.length, catchTarget?.() ?? null, throwFrom?.() ?? null);
     onSubmit({ type: "tap_to_count", count: caught.length }, origin);
   };
 
@@ -462,13 +479,13 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
   return (
     <div className="relative flex h-full flex-col">
       {/* the whole middle of the arena, from under the HUD down to the action row */}
-      <div ref={fieldRef} className="pointer-events-none absolute inset-x-0" style={{ top: -catchRise, bottom: 76 }}>
+      <div ref={fieldRef} className="pointer-events-none absolute inset-x-0" style={{ top: -catchRise, bottom: "var(--actions, 76px)" }}>
         {layout?.points.map((point, index) =>
           caught.includes(index) ? null : (
             <button
               key={index}
               type="button"
-              data-thrown=""
+              data-thrown="" data-layout="moves"
               disabled={disabled}
               onClick={(event) => catchOne(index, event.currentTarget)}
               aria-label={glyph}
@@ -486,7 +503,7 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
           )
         )}
       </div>
-      <div className={ACTION_ROW}>
+      <div data-layout="actions" className={ACTION_ROW}>
         {hintButton}
         <IconButton label={t.undo} onClick={() => setCaught((current) => current.slice(0, -1))} disabled={disabled || caught.length === 0}>
           <Undo2 className="h-6 w-6" aria-hidden="true" />
@@ -494,7 +511,7 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
         <div ref={counterRef} className="flex h-12 shrink-0 items-center gap-1.5 rounded-full bg-[#FFF8EC] px-3.5 text-[#1a1a1a] shadow-[0_4px_0_rgba(0,0,0,0.25)]" aria-live="polite">
           <span className="text-[18px] font-bold leading-none">{t.caught}</span>
           <span className="text-[24px] font-bold leading-none">{formatNumber(caught.length, lang)}</span>
-          {goal !== null && <span className="text-[16px] font-bold leading-none text-[#6B7280]">/ {formatNumber(goal, lang)}</span>}
+          {goal != null && <span className="text-[16px] font-bold leading-none text-[#6B7280]">/ {formatNumber(goal, lang)}</span>}
         </div>
         <ConfirmButton kind={turn === "attack" ? "fire" : "block"} lang={lang} disabled={disabled || caught.length === 0} onClick={fire} />
       </div>
@@ -531,7 +548,7 @@ function RuneStones(props: BattleMoveProps & { interaction: Extract<PublicIntera
   };
   return (
     <div className="flex h-full flex-col">
-      <div className={`flex items-center ${BAND}`}>
+      <div data-layout="moves" className={`flex items-center ${BAND}`}>
         <div className={`relative grid w-full gap-x-6 gap-y-7 px-2 ${items.length > 4 ? "grid-cols-3" : "grid-cols-2"}`}>
           <div ref={links} className="pointer-events-none absolute inset-0" aria-hidden="true" />
           {items.map((item, index) => {
@@ -560,7 +577,7 @@ function RuneStones(props: BattleMoveProps & { interaction: Extract<PublicIntera
           })}
         </div>
       </div>
-      <div className={ACTION_ROW}>
+      <div data-layout="actions" className={ACTION_ROW}>
         {hintButton}
         <IconButton label={t.undo} onClick={() => setPicked((current) => current.slice(0, -1))} disabled={disabled || picked.length === 0}>
           <Undo2 className="h-6 w-6" aria-hidden="true" />
@@ -622,7 +639,7 @@ function PlacePieces(props: BattleMoveProps & { interaction: Extract<PublicInter
 
   return (
     <div className="flex h-full flex-col">
-      <div className={`flex flex-col justify-center gap-4 ${BAND}`}>
+      <div data-layout="moves" className={`flex flex-col justify-center gap-4 ${BAND}`}>
         {/* the piece to place right now: drag it, or tap where it goes */}
         <div className="flex min-h-[72px] items-center justify-center">
           {hasCurrent ? (
@@ -701,7 +718,7 @@ function PlacePieces(props: BattleMoveProps & { interaction: Extract<PublicInter
         )}
       </div>
 
-      <div className={ACTION_ROW}>
+      <div data-layout="actions" className={ACTION_ROW}>
         {hintButton}
         <IconButton label={t.undo} onClick={() => setMade((list) => list.slice(0, -1))} disabled={disabled || made.length === 0}>
           <Undo2 className="h-6 w-6" aria-hidden="true" />
@@ -761,7 +778,7 @@ function SpellScroll(props: BattleMoveProps & { interaction: Extract<PublicInter
 
   return (
     <div className="flex h-full flex-col">
-      <div className={`flex flex-col justify-center gap-4 ${BAND}`}>
+      <div data-layout="moves" className={`flex flex-col justify-center gap-4 ${BAND}`}>
         {/* the spell scroll */}
         <div ref={scrollRef} className="relative mx-2 rounded-[18px] bg-[#FEF3C7] px-5 pb-4 pt-5 text-[#1a1a1a] shadow-[0_6px_0_#D6B77A]">
           <span className="absolute inset-y-2 -start-2 w-4 rounded-full bg-[#E9C98B]" aria-hidden="true" />
@@ -823,7 +840,7 @@ function SpellScroll(props: BattleMoveProps & { interaction: Extract<PublicInter
           </div>
         )}
       </div>
-      <div className={ACTION_ROW}>
+      <div data-layout="actions" className={ACTION_ROW}>
         {hintButton}
         <ConfirmButton kind="cast" lang={lang} disabled={disabled || !ready} onClick={submit} />
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import Link from "next/link";
 import { RotateCw, Volume2, VolumeX, X } from "lucide-react";
 import { OwlHead } from "@/components/illustrations";
@@ -17,7 +17,7 @@ import {
 import type { InteractionAnswer } from "@/lib/interactions/types";
 import type { AnswerResult, BattleQuestion, BattleState, BossKey, Lang, MilestoneIntroResponse, OwlHint } from "@/lib/milestones/types";
 import { BOSS_NAMES } from "@/lib/milestones/rules";
-import { MathText, OwlShieldBubble, OwlShieldIcon, Projectile, ReadAloudButton, WifiOffIcon } from "./BattleParts";
+import { MathText, OwlShieldIcon, Projectile, ReadAloudButton, WifiOffIcon } from "./BattleParts";
 import { milestoneApi, type Fetcher } from "./api";
 import { bossName, formatNumber, MILESTONE_COPY, speakLine } from "./copy";
 import { play, prefersReducedMotion } from "./motion";
@@ -28,6 +28,7 @@ import { superReady, turnOf } from "./turns";
 import type { EntranceKind, Feedback, PendingAnswer } from "./useBattleSession";
 import { battleGeometry, layoutModeFor, type BattleLayoutMode } from "./geometry";
 import { clearFx } from "./moves/fx";
+import { Combat, type CombatSizes } from "./combat";
 
 export interface FxEvent {
   key: number;
@@ -41,10 +42,12 @@ type EntranceStep = 0 | 1 | 2 | 3;
 
 const STAR_PATH = "M12 2.5 l2.9 6 6.6 .8 -4.9 4.6 1.3 6.5 -5.9 -3.3 -5.9 3.3 1.3 -6.5 -4.9 -4.6 6.6 -.8 z";
 
+/** A character's visible art inside its box, as a style. */
+const artBox = (a: { left: number; top: number; right: number; bottom: number }, b: { left: number; top: number }) => ({ left: a.left - b.left, top: a.top - b.top, width: a.right - a.left, height: a.bottom - a.top });
+
 /** Translucent dark-green panels for the HUD. */
 const GLASS = "bg-[#052814]/70 ring-1 ring-white/15 backdrop-blur-sm shadow-[0_4px_0_rgba(0,0,0,0.25)]";
 
-const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
 /** The viewport, kept current on resize and rotation. */
 function subscribeViewport(callback: () => void) {
@@ -92,13 +95,6 @@ function useCues() {
   return { onCue, waitFor };
 }
 
-/** The first visible reaction to a move, started the instant the child confirms. */
-interface Launch {
-  key: number;
-  turn: "attack" | "block";
-  origin: DOMRect | null;
-}
-
 interface BattleSceneProps {
   anchors: { boss: PlacedAnchor; owl: PlacedAnchor };
   milestoneId: string;
@@ -143,7 +139,9 @@ export default function BattleScene(props: BattleSceneProps) {
   // The layout for this screen (phone or desktop) and the question's length.
   const { width, height } = useViewport();
   const geometry = battleGeometry({ width, height, anchors, prompt: moveOwnsPrompt(interaction) ? "" : prompt, lang });
-  const desktop = geometry.mode === "desktop";
+  const desktop = geometry.mode === "landscape";
+  const ui = geometry.ui;
+  const hudBottom = geometry.hud.bottom;
   const { bossSize, owlSize, bandHeight, moveScale } = geometry;
   const bossLeft = geometry.boss.left;
   const bossTop = geometry.boss.top;
@@ -151,37 +149,25 @@ export default function BattleScene(props: BattleSceneProps) {
   const owlTop = geometry.owl.top;
 
   const arenaRef = useRef<HTMLDivElement>(null);
-  const headerRef = useRef<HTMLElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
-  const [hudBottom, setHudBottom] = useState(84);
-  useLayoutEffect(() => {
-    const header = headerRef.current;
-    if (!header) return;
-    const measure = () => setHudBottom(Math.round(header.getBoundingClientRect().bottom));
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(header);
-    return () => observer.disconnect();
-  }, []);
   const bossBoxRef = useRef<HTMLDivElement>(null);
   const owlBoxRef = useRef<HTMLDivElement>(null);
   const bossRef = useRef<BossHandle>(null);
   const owlRef = useRef<OwlHandle>(null);
-  const blastRef = useRef<HTMLDivElement>(null);
   const projectileRef = useRef<HTMLDivElement>(null);
-  const shieldRef = useRef<HTMLDivElement>(null);
-  const powRef = useRef<HTMLDivElement>(null);
+  const hpBarRef = useRef<HTMLDivElement>(null);
   const flashRef = useRef<HTMLDivElement>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
   const thudRef = useRef<HTMLDivElement>(null);
   const bossCues = useCues();
   const owlCues = useCues();
-  const [projectileGone, setProjectileGone] = useState(false);
   const [knockedOut, setKnockedOut] = useState(false);
   const [flash, setFlash] = useState<{ key: number; text: string; grumpy: boolean } | null>(null);
   const [step, setStep] = useState<EntranceStep | null>(entrance ? (entrance === "resume" ? 2 : 0) : null);
-  const [launch, setLaunch] = useState<Launch | null>(null);
-  const launchAnimations = useRef<Animation[]>([]);
+  /** The child has confirmed this turn's move (it's in flight). */
+  const [launched, setLaunched] = useState(false);
+  /** The move's outcome has played out (only then does a miss offer "Next"). */
+  const [settled, setSettled] = useState(false);
   // Signature effects fly in a layer of their own: clear it when the battle closes.
   useEffect(() => () => clearFx(), []);
   const previousPhase = useRef(battle.phase);
@@ -268,8 +254,9 @@ export default function BattleScene(props: BattleSceneProps) {
     const grumpy = battle.phase === 2 && previousPhase.current === 1;
     previousPhase.current = battle.phase;
     const id = window.setTimeout(() => {
-      setProjectileGone(false);
-      setLaunch(null);
+      setLaunched(false);
+      setSettled(false);
+      setHeld(null);
       setFlash({ key: Date.now(), text: signature ? signature.name[lang] : turn === "attack" ? t.turnAttack : t.turnBlock, grumpy });
       if (grumpy) void bossRef.current?.play("powered");
     }, 0);
@@ -301,229 +288,85 @@ export default function BattleScene(props: BattleSceneProps) {
   }, [flash]);
 
   // --------------------------------------------------------- the effects
-  // Positions inside the arena, from the boxes the cast stands in.
-  const spots = useCallback(() => {
-    const arena = arenaRef.current?.getBoundingClientRect();
-    const owl = owlBoxRef.current?.getBoundingClientRect();
-    const target = bossBoxRef.current?.getBoundingClientRect();
-    if (!arena || !owl || !target) return null;
-    return {
-      arena,
-      target,
-      owlX: owl.left + owl.width / 2 - arena.left,
-      owlY: owl.top + owl.height * 0.5 - arena.top,
-      bossX: target.left + target.width / 2 - arena.left,
-      bossY: target.top + target.height * 0.5 - arena.top,
-      owl,
-    };
-  }, []);
-
-  // 1. The instant the child confirms: the owl fires (attack) or raises its
-  //    shield while the boss throws (block). Stars or the projectile fly most
-  //    of the way and wait there for the server's answer.
-  const submit = (answer: InteractionAnswer, origin: DOMRect | null) => {
-    setLaunch({ key: Date.now(), turn, origin });
-    props.onSubmit(answer, origin);
-  };
-  useLayoutEffect(() => {
-    if (!launch) return;
-    const at = spots();
-    if (!at) return;
-    const animations: Animation[] = [];
-    const add = (animation: Animation | null) => {
-      if (animation) animations.push(animation);
-    };
-    if (launch.turn === "attack") {
-      void owlRef.current?.play("fire");
-      const from = launch.origin ?? at.owl;
-      const fromX = from.left + from.width / 2 - at.arena.left;
-      const fromY = from.top + from.height / 2 - at.arena.top;
-      const holdX = fromX + (at.bossX - fromX) * 0.72;
-      const holdY = fromY + (at.bossY - fromY) * 0.72;
-      Array.from(blastRef.current?.children ?? []).forEach((child, i) => {
-        const el = child as HTMLElement;
-        el.style.left = `${fromX}px`;
-        el.style.top = `${fromY}px`;
-        const spread = (i - 3) * 8;
-        add(
-          play(el, [
-            { transform: "translate(-50%, -50%) scale(0.5)", opacity: 0 },
-            { transform: `translate(calc(-50% + ${(holdX - fromX) * 0.55}px), calc(-50% + ${(holdY - fromY) * 0.55 - 30 + spread}px)) scale(1.15)`, opacity: 1, offset: 0.55 },
-            { transform: `translate(calc(-50% + ${holdX - fromX + spread}px), calc(-50% + ${holdY - fromY + spread * 0.4}px)) scale(1)`, opacity: 1 },
-          ], { duration: 480, delay: i * 25, easing: "ease-out", fill: "forwards" })
-        );
-      });
-    } else {
-      void owlRef.current?.play("block");
-      void bossRef.current?.play("throw");
-      add(
-        play(shieldRef.current, [
-          { transform: "translate(-50%, -50%) scale(0)", opacity: 0 },
-          { transform: "translate(-50%, -50%) scale(1.1)", opacity: 1, offset: 0.6 },
-          { transform: "translate(-50%, -50%) scale(1)", opacity: 1 },
-        ], { duration: 320, easing: "ease-out", fill: "forwards" })
-      );
-      const projectile = projectileRef.current?.getBoundingClientRect() ?? at.target;
-      const px = projectile.left + projectile.width / 2 - at.arena.left;
-      const py = projectile.top + projectile.height / 2 - at.arena.top;
-      add(
-        play(projectileRef.current, [
-          { transform: "translate(0, 0) rotate(0deg)" },
-          { transform: `translate(${(at.owlX - px) * 0.6}px, ${(at.owlY - py) * 0.6}px) rotate(160deg)` },
-        ], { duration: 520, easing: "ease-out", fill: "forwards" })
-      );
-    }
-    launchAnimations.current = animations;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [launch]);
-
-  // If the answer never left (no connection), the launch fizzles out.
+  // One fixed, fast timeline per move (see combat.ts): wind-up, flight, and
+  // contact, resolved by the server's answer without ever freezing.
+  const combat = useRef<Combat | null>(null);
+  const sizes = useRef<CombatSizes>({ owlSize, bossSize, desktop });
   useEffect(() => {
-    if (!launch || !netError) return;
-    launchAnimations.current.forEach((animation) => animation.cancel());
-    launchAnimations.current = [];
-    const id = window.setTimeout(() => setLaunch(null), 0);
-    return () => window.clearTimeout(id);
-  }, [launch, netError]);
+    sizes.current = { owlSize, bossSize, desktop };
+  }, [owlSize, bossSize, desktop]);
+  useEffect(() => {
+    const engine = new Combat(
+      {
+        arena: () => arenaRef.current,
+        owlBox: () => owlBoxRef.current,
+        bossBox: () => bossBoxRef.current,
+        owl: () => owlRef.current,
+        boss: () => bossRef.current,
+        shell: () => shellRef.current,
+        hpBar: () => hpBarRef.current,
+        bossProjectile: () => projectileRef.current,
+      },
+      () => sizes.current
+    );
+    combat.current = engine;
+    return () => engine.dispose();
+  }, [shellRef]);
 
-  // 2. The server's answer resolves it: a hit or a fizzle past (attack), a
-  //    bounce back or a bonk (block). Without a launch (a resync), the whole
-  //    move plays from the start.
+  // The boss's HP (and hits to go) stay as they were until the hit lands.
+  const [held, setHeld] = useState<{ hp: number; correct: number } | null>(null);
+  const hpBefore = useRef(battle.bossHpPercent);
+
+  // 1. The instant the child confirms: wind up and throw.
+  const submit = (answer: InteractionAnswer, origin: DOMRect | null) => {
+    hpBefore.current = battle.bossHpPercent;
+    // The dodge roll is the owl's wind-up on attack turns.
+    const dodge = interaction.type === "true_false" && turn === "attack";
+    combat.current?.start(turn, {
+      windupMs: dodge ? 220 : 130,
+      skipOwlWindup: dodge,
+      effort: t.effort,
+      onImpact: () => setHeld(null),
+      onSettled: () => setSettled(true),
+    });
+    // The answer leaves now; React's re-render waits its turn so the throw's first frames aren't held up.
+    startTransition(() => {
+      props.onSubmit(answer, origin);
+      setLaunched(true);
+      setHeld({ hp: battle.bossHpPercent, correct: battle.correctCount });
+    });
+  };
+
+  // If the answer never left (no connection), the throw fizzles out.
+  useEffect(() => {
+    if (!netError) return;
+    combat.current?.abort();
+    const id = window.setTimeout(() => setHeld(null), 0);
+    return () => window.clearTimeout(id);
+  }, [netError]);
+
+  // 2. The server's answer resolves it, the moment it arrives.
   useEffect(() => {
     if (!fxEvent) return;
-    const at = spots();
-    if (!at) return;
-    let cancelled = false;
-    const animations: Array<Animation | null> = [];
     const { feedback: fb, result } = fxEvent;
-    const big = fb.super || (result.finished && result.passed);
     const knockout = result.finished && result.passed;
-    const launched = launchAnimations.current;
-    launchAnimations.current = [];
-    // Keep where the launch got to, then carry on from there.
-    launched.forEach((animation) => {
-      try {
-        animation.commitStyles();
-      } catch {
-        // detached element
-      }
-      animation.cancel();
+    const big = fb.super || knockout;
+    combat.current?.resolve(fb.turn, {
+      correct: fb.correct,
+      big,
+      knockout,
+      hpFrom: hpBefore.current,
+      hpTo: result.bossHpPercent,
+      text: knockout ? t.burstKo : fb.turn === "attack" ? (fb.super ? t.burstSuper : t.burstPow) : t.burstBlocked,
+      missText: fb.turn === "attack" ? t.nearly : t.burstBonk,
     });
-    const { target, owlX, owlY, bossX, bossY } = at;
-
-    const pow = () => {
-      const el = powRef.current;
-      if (!el) return;
-      el.style.left = `${bossX - target.width * 0.32}px`;
-      el.style.top = `${bossY + target.height * 0.1}px`;
-      animations.push(
-        play(el, [
-          { transform: "translate(-50%, -50%) scale(0.2)", opacity: 0 },
-          { transform: `translate(-50%, -50%) scale(${big ? 1.4 : 1.05})`, opacity: 1, offset: 0.35 },
-          { transform: `translate(-50%, -50%) scale(${big ? 1.3 : 1})`, opacity: 1, offset: 0.8 },
-          { transform: "translate(-50%, -50%) scale(1)", opacity: 0 },
-        ], { duration: 800, easing: "ease-out", fill: "both" })
-      );
-    };
-    const hitBoss = async () => {
-      void bossRef.current?.play(knockout ? "ko" : "hit");
-      await bossCues.waitFor("impact", 180);
-      if (cancelled) return;
-      pow();
-      if (big) animations.push(shake(7));
-      if (knockout) setKnockedOut(true);
-    };
-    const starsTo = (endX: number, endY: number, fade: boolean, duration: number) =>
-      Array.from(blastRef.current?.children ?? []).forEach((child, i) => {
-        const el = child as HTMLElement;
-        const fromX = parseFloat(el.style.left || "0");
-        const fromY = parseFloat(el.style.top || "0");
-        const current = el.style.transform || "translate(-50%, -50%) scale(0.5)";
-        const spread = (i - 3) * (big ? 12 : 6);
-        animations.push(
-          play(el, [
-            { transform: current, opacity: launched.length ? 1 : 0 },
-            { transform: `translate(calc(-50% + ${endX - fromX + spread}px), calc(-50% + ${endY - fromY + spread * 0.4}px)) scale(${big ? 1.5 : 0.8})`, opacity: fade ? 0 : 0.2 },
-          ], { duration, delay: i * 20, easing: "ease-in", fill: "forwards" })
-        );
-      });
-
-    const run = async () => {
-      if (fb.turn === "attack") {
-        if (!launched.length) {
-          // No launch (a resync): set the stars off from the owl first.
-          void owlRef.current?.play("fire");
-          Array.from(blastRef.current?.children ?? []).forEach((child) => {
-            const el = child as HTMLElement;
-            el.style.left = `${owlX}px`;
-            el.style.top = `${owlY}px`;
-          });
-        }
-        if (fb.correct) {
-          starsTo(bossX, bossY, false, big ? 420 : 220);
-          await sleep(big ? 380 : 200);
-          if (!cancelled) await hitBoss();
-        } else {
-          // They fizzle past, over the boss's head; a cheeky bonk back.
-          starsTo(bossX + target.width * 0.7, bossY - target.height * 0.9, true, 420);
-          await sleep(380);
-          if (cancelled) return;
-          void bossRef.current?.play("taunt");
-          void owlRef.current?.play("wrong");
-          animations.push(shake(2));
-        }
-        return;
-      }
-      if (!launched.length) {
-        void bossRef.current?.play("throw");
-        await bossCues.waitFor("release", 480);
-        if (cancelled) return;
-      }
-      const projectile = projectileRef.current;
-      const box = projectile?.getBoundingClientRect();
-      const base = projectile?.offsetParent?.getBoundingClientRect();
-      const current = projectile?.style.transform || "translate(0, 0)";
-      // The projectile's resting spot (before any transform), in the arena.
-      const restX = box && base ? projectile!.offsetLeft + base.left - at.arena.left + box.width / 2 : bossX;
-      const restY = box && base ? projectile!.offsetTop + base.top - at.arena.top + box.height / 2 : bossY;
-      const done = () => setProjectileGone(true);
-      if (fb.correct) {
-        void owlRef.current?.play("block");
-        await owlCues.waitFor("shield", 200);
-        if (cancelled) return;
-        const back = play(projectile, [
-          { transform: current },
-          { transform: `translate(${(owlX - restX) * 0.85}px, ${(owlY - restY) * 0.85}px) rotate(220deg)`, offset: 0.3 },
-          { transform: `translate(${bossX - restX}px, ${bossY - restY}px) rotate(420deg) scale(0.5)`, opacity: 0 },
-        ], { duration: big ? 760 : 640, easing: "ease-in-out", fill: "forwards" });
-        animations.push(back);
-        if (back) back.onfinish = done;
-        else done();
-        animations.push(play(shieldRef.current, [{ transform: "translate(-50%, -50%) scale(1)", opacity: 1 }, { transform: "translate(-50%, -50%) scale(1.15)", opacity: 0 }], { duration: 700, easing: "ease-out", fill: "forwards" }));
-        await sleep((big ? 760 : 640) * 0.8);
-        if (!cancelled) await hitBoss();
-      } else {
-        const land = play(projectile, [
-          { transform: current },
-          { transform: `translate(${owlX - restX}px, ${owlY - restY}px) rotate(260deg) scale(0.9)`, opacity: 1, offset: 0.6 },
-          { transform: `translate(${owlX - restX}px, ${owlY - restY + 20}px) rotate(300deg) scale(0.5)`, opacity: 0 },
-        ], { duration: 420, easing: "ease-in", fill: "forwards" });
-        animations.push(land);
-        if (land) land.onfinish = done;
-        else done();
-        animations.push(play(shieldRef.current, [{ opacity: 1 }, { opacity: 0 }], { duration: 250, fill: "forwards" }));
-        await sleep(260);
-        if (cancelled) return;
-        void owlRef.current?.play("wrong");
-        animations.push(shake(2));
-      }
-    };
-    void run();
-    return () => {
-      cancelled = true;
-      animations.forEach((a) => a?.cancel());
-    };
-  }, [bossCues, fxEvent, owlCues, shake, spots]);
+    const timers: number[] = [];
+    if (!fb.correct) timers.push(window.setTimeout(() => setHeld(null), 0));
+    if (knockout) timers.push(window.setTimeout(() => setKnockedOut(true), 650));
+    return () => timers.forEach((id) => window.clearTimeout(id));
+    // Once per answer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fxEvent]);
 
   // ------------------------------------------------------------------ view
   const inEntrance = Boolean(entrance);
@@ -542,29 +385,19 @@ export default function BattleScene(props: BattleSceneProps) {
             ? "powered"
             : "idle";
   const owlPose: OwlPose = feedback ? (feedback.correct ? "cheer" : "wrong") : turn === "block" ? "block" : "idle";
-  const playersTurn = !feedback && !inEntrance && !launch;
+  const playersTurn = !feedback && !inEntrance && !launched;
   const busy = inFlight || feedback !== null || !isOnline || inEntrance;
   const canHint = !battle.hintUsed && !feedback && !inEntrance && hintFits(interaction);
-  const showProjectile = turn === "block" && !projectileGone && !inEntrance;
+  // The boss holds its projectile until the throw (the throw takes a copy of it).
+  const showProjectile = turn === "block" && !inEntrance && (!feedback || launched);
   const comboLit = battle.combo > 0 ? (superReady(battle.combo) ? 3 : battle.combo % 3) : 0;
-  const hitsToGo = Math.max(0, battle.requiredCorrect - battle.correctCount);
+  const hpShown = held?.hp ?? battle.bossHpPercent;
+  const hitsToGo = Math.max(0, battle.requiredCorrect - (held?.correct ?? battle.correctCount));
   const contentDir = question.contentLanguage === "ar" ? "rtl" : question.contentLanguage === "en" ? "ltr" : undefined;
   const fullName = BOSS_NAMES[bossKey][lang];
   const subtitle = fullName.startsWith(boss) ? fullName.slice(boss.length).trim() : "";
-  const burst = feedback
-    ? feedback.correct
-      ? feedback.final
-        ? t.burstKo
-        : feedback.turn === "attack"
-          ? feedback.super
-            ? t.burstSuper
-            : t.burstPow
-          : t.burstBlocked
-      : feedback.turn === "attack"
-        ? t.burstWhoosh
-        : t.burstBonk
-    : null;
-  const bossLine = feedback ? (feedback.final && feedback.correct ? null : feedback.correct ? t.ouch : t.burstBonk) : flash?.grumpy ? t.grumpy : null;
+  // Impact words pop at the contact point (combat.ts); only the powered-up grumble is said here.
+  const bossLine = !feedback && flash?.grumpy ? t.grumpy : null;
   const showPrompt = !feedback && !inEntrance && !moveOwnsPrompt(interaction);
   const talk = (ms: number) => void bossRef.current?.play("talk", { durationMs: ms });
   const speaker = (
@@ -579,16 +412,16 @@ export default function BattleScene(props: BattleSceneProps) {
     />
   );
   const { bubble } = geometry;
-  // Very short phones: the owl's row of shields shrinks a step.
-  const compact = !desktop && height < 700;
+  // HUD type: readable on a small phone, never giant on a big screen.
+  const hudFont = Math.round(Math.min(30, Math.max(18, 20 * (desktop ? ui * 1.05 : Math.min(1.3, Math.max(1, ui))))));
   const flashTop = geometry.move.top + bandHeight * moveScale * 0.4;
 
   const healthBar = (
-    <div className="mt-1 h-3.5 overflow-hidden rounded-full bg-black/40" role="progressbar" aria-label={t.power(boss)} aria-valuemin={0} aria-valuemax={100} aria-valuenow={battle.bossHpPercent}>
+    <div ref={hpBarRef} className="mt-1 overflow-hidden rounded-full bg-black/40" style={{ height: Math.round(hudFont * 0.7) }} role="progressbar" aria-label={t.power(boss)} aria-valuemin={0} aria-valuemax={100} aria-valuenow={hpShown}>
       <div
-        className="h-full rounded-full transition-[width] duration-700 ease-out"
+        className="h-full rounded-full transition-[width] duration-150 ease-out"
         style={{
-          width: `${battle.bossHpPercent}%`,
+          width: `${hpShown}%`,
           background: powered ? "linear-gradient(180deg,#FB7185,#D21034 60%,#F59E0B)" : "linear-gradient(180deg,#F05A73,#D21034 60%,#A01028)",
         }}
       />
@@ -597,8 +430,8 @@ export default function BattleScene(props: BattleSceneProps) {
   const bossPanelInner = (
     <>
       <div className="flex items-center justify-between gap-2">
-        <span className={`truncate font-bold uppercase tracking-wide ${desktop ? "text-[26px]" : "text-[20px]"}`}>{boss}</span>
-        <span className={`shrink-0 rounded-full bg-[#0B4A26] px-2.5 py-0.5 font-bold text-[#D1FAE5] ${desktop ? "text-[17px]" : "text-[14px]"}`}>{t.hitsToGo(formatNumber(hitsToGo, lang))}</span>
+        <span className="truncate font-bold uppercase leading-tight tracking-wide" style={{ fontSize: hudFont }}>{boss}</span>
+        <span className="shrink-0 rounded-full bg-[#0B4A26] px-2.5 py-0.5 font-bold leading-tight text-[#D1FAE5]" style={{ fontSize: Math.round(hudFont * 0.7) }}>{t.hitsToGo(formatNumber(hitsToGo, lang))}</span>
       </div>
       {healthBar}
     </>
@@ -606,28 +439,34 @@ export default function BattleScene(props: BattleSceneProps) {
 
   return (
     <div ref={arenaRef} className="absolute inset-0">
-      {/* HUD. Phone: close + the boss's panel across the top. Desktop: close top-left, the boss's panel over the boss. */}
-      <header ref={headerRef} className={`absolute z-10 flex items-center gap-2 ${desktop ? "left-6" : "inset-x-0 mx-auto max-w-[480px] px-3"}`} style={{ top: `calc(env(safe-area-inset-top) + ${desktop ? 24 : 12}px)` }}>
-        <Link href="/lessons" aria-label={t.exit} title={t.exit} className={`grid h-14 w-14 shrink-0 place-items-center rounded-full text-white ${GLASS}`}>
-          <X className="h-7 w-7" strokeWidth={3.2} aria-hidden="true" />
-        </Link>
-        {!desktop && <div className={`min-w-0 flex-1 rounded-[22px] px-4 pb-2.5 pt-1.5 ${GLASS}`}>{bossPanelInner}</div>}
-      </header>
-      {desktop && geometry.bossPanel && (
-        <div className={`absolute z-10 rounded-[22px] px-5 pb-3 pt-2 ${GLASS}`} style={{ left: geometry.bossPanel.left, top: geometry.bossPanel.top, width: geometry.bossPanel.right - geometry.bossPanel.left }}>
-          {bossPanelInner}
-        </div>
-      )}
+      {/* HUD: the close button, and the boss's name and health (top row on portrait screens, above the boss on landscape ones). */}
+      <Link
+        href="/lessons"
+        aria-label={t.exit}
+        title={t.exit}
+        className={`absolute z-10 grid place-items-center rounded-full text-white ${GLASS}`}
+        style={{ left: geometry.close.left, top: geometry.close.top, width: geometry.close.right - geometry.close.left, height: geometry.close.bottom - geometry.close.top }}
+      >
+        <X style={{ width: hudFont * 1.4, height: hudFont * 1.4 }} strokeWidth={3.2} aria-hidden="true" />
+      </Link>
+      <div
+        data-layout="hud"
+        className={`absolute z-10 flex flex-col justify-center rounded-[22px] px-4 ${GLASS}`}
+        style={{ left: geometry.hud.left, top: geometry.hud.top, width: geometry.hud.right - geometry.hud.left, height: geometry.hud.bottom - geometry.hud.top }}
+      >
+        {bossPanelInner}
+      </div>
 
       {/* The boss on its ledge */}
       <div ref={bossBoxRef} className="absolute" style={{ left: bossLeft, top: bossTop, width: bossSize, height: bossSize }}>
+        <div data-layout="boss" className="pointer-events-none absolute" style={artBox(geometry.bossArt, geometry.boss)} aria-hidden="true" />
         {bossMounted && <BossCharacter ref={bossRef} bossKey={bossKey} pose={bossPose} size={bossSize} enter={inEntrance} onCue={bossCues.onCue} title={BOSS_NAMES[bossKey][lang]} />}
         {inEntrance &&
           [0, 1, 2, 3].map((i) => (
             <span key={i} data-dust="" className="absolute bottom-[4%] h-8 w-8 rounded-full bg-[#F5E6C8] opacity-0" style={{ left: `${30 + i * 12}%` }} aria-hidden="true" />
           ))}
         {showProjectile && (
-          <div ref={projectileRef} className="pointer-events-none absolute -left-[6%] top-[22%]" aria-hidden="true">
+          <div ref={projectileRef} className="pointer-events-none invisible absolute -left-[6%] top-[22%]" aria-hidden="true">
             <Projectile bossKey={bossKey} big={powered} />
           </div>
         )}
@@ -646,6 +485,7 @@ export default function BattleScene(props: BattleSceneProps) {
           style={{ left: bubble.rect.left, width: bubble.rect.right - bubble.rect.left, top: taunt && !desktop ? Math.max(bossTop + bossSize * 0.14, hudBottom + 8) : bubble.rect.top }}
         >
           <div
+            data-layout="bubble"
             className="relative flex items-start gap-2 rounded-[26px] bg-[#FFF8EC] py-3 pe-2.5 ps-4 text-[#1a1a1a] shadow-[0_6px_0_rgba(0,0,0,0.22)] motion-safe:animate-pop-in"
             style={bubble.scroll && !taunt ? { maxHeight: bubble.height + 4 } : undefined}
           >
@@ -653,9 +493,9 @@ export default function BattleScene(props: BattleSceneProps) {
               <p aria-live="polite" className={`font-bold leading-snug ${desktop ? "text-[28px]" : "text-[19px]"}`}>{taunt}</p>
             ) : (
               <>
-                <div className={`min-w-0 flex-1 self-stretch ${bubble.scroll ? "overflow-y-auto overscroll-contain pe-1 [scrollbar-color:#B45309_transparent] [scrollbar-width:thin]" : ""}`} style={bubble.scroll ? { maxHeight: bubble.height - 24 } : undefined} tabIndex={bubble.scroll ? 0 : undefined}>
+                <div data-layout="bubble" className={`min-w-0 flex-1 self-stretch ${bubble.scroll ? "overflow-y-auto overscroll-contain pe-1 [scrollbar-color:#B45309_transparent] [scrollbar-width:thin]" : ""}`} style={bubble.scroll ? { maxHeight: bubble.height - 24 } : undefined} tabIndex={bubble.scroll ? 0 : undefined}>
                   {bubble.placement === "wide" && <div className="ms-1.5" style={{ float: "inline-end" }}>{speaker}</div>}
-                  <p className="font-bold" style={{ fontSize: bubble.fontSize, lineHeight: 1.2 }}>
+                  <p className="font-bold" style={{ fontSize: bubble.fontSize, lineHeight: 1.2, paddingBottom: lang === "ar" ? "0.35em" : undefined }}>
                     <MathText text={prompt} />
                   </p>
                   {question.content && (
@@ -671,7 +511,8 @@ export default function BattleScene(props: BattleSceneProps) {
                 {bubble.placement !== "wide" && <div className="shrink-0 self-center">{speaker}</div>}
               </>
             )}
-            {/* the tail points at the boss */}
+          </div>
+          {/* the tail points at the boss */}
             {bubble.placement === "beside" || (taunt && !desktop) ? (
               <span className="absolute -right-3 top-[38%] h-0 w-0 border-y-[10px] border-l-[16px] border-y-transparent border-l-[#FFF8EC]" aria-hidden="true" />
             ) : bubble.placement === "top" ? (
@@ -683,26 +524,28 @@ export default function BattleScene(props: BattleSceneProps) {
             ) : (
               <span className="absolute -top-3 right-[22%] h-0 w-0 border-x-[10px] border-b-[14px] border-x-transparent border-b-[#FFF8EC]" aria-hidden="true" />
             )}
-          </div>
         </div>
       )}
 
       {/* The owl on its platform, glowing on your turn */}
       <div ref={owlBoxRef} className="absolute z-[4]" style={{ left: owlLeft, top: owlTop, width: owlSize, height: owlSize }}>
+        <div data-layout="owl" className="pointer-events-none absolute" style={artBox(geometry.owlArt, geometry.owl)} aria-hidden="true" />
         <OwlCharacter ref={owlRef} pose={owlPose} size={owlSize} glow={playersTurn} onCue={owlCues.onCue} />
       </div>
 
       {/* The owl's life: its shields (and the Super Star pips) in a row under its feet */}
-      <div className={`absolute z-[7] flex -translate-x-1/2 items-center gap-1.5 ${inEntrance ? "invisible" : ""}`} style={{ left: Math.max(geometry.shields.x, (comboLit > 0 ? 96 : 54) * (desktop ? 1.3 : 1) + 6), top: geometry.shields.top }}>
+      <div data-layout="shields" className={`absolute z-[7] flex -translate-x-1/2 items-center gap-1.5 ${inEntrance ? "invisible" : ""}`} style={{ left: geometry.shields.x, top: geometry.shields.top, height: geometry.shields.height }}>
         <span className={`flex gap-1 rounded-full px-2 py-1 ${GLASS}`} role="img" aria-label={`${t.shields}: ${formatNumber(battle.heartsLeft, lang)}`}>
           {Array.from({ length: battle.heartsTotal }, (_, i) => (
-            <OwlShieldIcon key={i} className={desktop ? "h-8 w-8" : compact ? "h-5 w-5" : "h-6 w-6"} empty={i >= battle.heartsLeft} />
+            <span key={i} className="block shrink-0" style={{ width: geometry.shields.icon, height: geometry.shields.icon }}>
+              <OwlShieldIcon className="h-full w-full" empty={i >= battle.heartsLeft} />
+            </span>
           ))}
         </span>
         {comboLit > 0 && (
           <span className={`flex gap-0.5 rounded-full px-2 py-1.5 ${GLASS}`} role="img" aria-label={superReady(battle.combo) ? t.superReady : `${t.superStar} ${formatNumber(comboLit, lang)}`}>
             {[0, 1, 2].map((i) => (
-              <svg key={i} viewBox="0 0 24 24" className={`${desktop ? "h-6 w-6" : compact ? "h-4 w-4" : "h-5 w-5"} ${superReady(battle.combo) ? "drop-shadow-[0_0_6px_rgba(245,158,11,0.9)]" : ""}`} aria-hidden="true">
+              <svg key={i} viewBox="0 0 24 24" className={superReady(battle.combo) ? "drop-shadow-[0_0_6px_rgba(245,158,11,0.9)]" : ""} style={{ width: geometry.shields.icon - 4, height: geometry.shields.icon - 4 }} aria-hidden="true">
                 <path d={STAR_PATH} fill={i < comboLit ? "#F59E0B" : "none"} stroke={i < comboLit ? "#F59E0B" : "rgba(255,255,255,0.6)"} strokeWidth={1.8} strokeLinejoin="round" />
               </svg>
             ))}
@@ -724,7 +567,7 @@ export default function BattleScene(props: BattleSceneProps) {
         }}
       >
         {feedback ? (
-          feedback.correct ? null : (
+          feedback.correct || (launched && !settled) ? null : (
             <div className="flex h-full flex-col items-center justify-end gap-3 motion-safe:animate-pop-in">
               <p className="text-center text-[24px] font-bold [text-shadow:0_2px_0_rgba(0,0,0,0.45)]">{t.nearlyLine}</p>
               <button
@@ -745,26 +588,33 @@ export default function BattleScene(props: BattleSceneProps) {
             turn={turn}
             hint={hint}
             numeric={question.numericAnswer}
-            disabled={busy || Boolean(pending) || Boolean(launch)}
+            disabled={busy || Boolean(pending) || launched}
             onSubmit={submit}
             seed={question.questionId}
             prompt={prompt}
             speaker={speaker}
             skin={signature ? SKIN_PARTS[signature.skin] : null}
             bandHeight={bandHeight}
-            catchRise={desktop ? 0 : Math.max(0, geometry.move.top - hudBottom - 4)}
+            bandInset={geometry.bandInset}
+            bandWidth={(geometry.move.right - geometry.move.left) / moveScale - geometry.bandInset}
+            actionsHeight={geometry.actionsHeight}
+            actionsInset={geometry.actionsInset}
+            catchRise={desktop ? 0 : Math.max(0, geometry.move.top - hudBottom - 4) / moveScale}
             catchKey={`${hudBottom}:${inEntrance ? "entrance" : "play"}:${showPrompt ? prompt : ""}:${bossSize}:${geometry.mode}`}
             catchAvoid={() => {
               if (desktop) return [];
-              const rects: DOMRect[] = [];
-              // Layout boxes (offset*), not painted ones: the bubble pops in with a scale.
+              // From the layout, not the painted boxes (the bubble pops in with a scale).
               const origin = arenaRef.current?.getBoundingClientRect();
-              const box = (el: HTMLElement | null) => (el && origin ? new DOMRect(origin.left + el.offsetLeft, origin.top + el.offsetTop, el.offsetWidth, el.offsetHeight) : null);
-              const bossBox = box(bossBoxRef.current);
-              if (bossBox) rects.push(new DOMRect(bossBox.left, bossBox.top, bossBox.width, Math.max(bossBox.height, geometry.move.top - bossBox.top)));
-              const bubbleBox = box(bubbleRef.current);
-              if (bubbleBox) rects.push(bubbleBox);
-              return rects;
+              const ox = origin?.left ?? 0;
+              const oy = origin?.top ?? 0;
+              const r = (x: { left: number; top: number; right: number; bottom: number }) => new DOMRect(ox + x.left, oy + x.top, x.right - x.left, x.bottom - x.top);
+              const sh = geometry.shields;
+              return [
+                r({ ...geometry.bossArt, bottom: Math.max(geometry.bossArt.bottom, geometry.move.top) }),
+                r(bubble.rect),
+                r({ ...geometry.owlArt, bottom: height }),
+                r({ left: sh.x - sh.width / 2, top: sh.top, right: sh.x + sh.width / 2, bottom: sh.top + sh.height }),
+              ];
             }}
             catchTarget={() => owlBoxRef.current?.getBoundingClientRect() ?? null}
             owlBox={() => owlBoxRef.current}
@@ -777,7 +627,7 @@ export default function BattleScene(props: BattleSceneProps) {
                   disabled={hintLoading || busy}
                   aria-label={t.owlHint}
                   title={t.owlHint}
-                  className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[#FFF8EC] shadow-[0_4px_0_rgba(0,0,0,0.25)] disabled:opacity-50"
+                  className="grid h-[min(56px,calc(var(--actions,76px)-8px))] w-[min(56px,calc(var(--actions,76px)-8px))] shrink-0 place-items-center rounded-full bg-[#FFF8EC] shadow-[0_4px_0_rgba(0,0,0,0.25)] disabled:opacity-50"
                 >
                   <OwlHead className="h-9 w-9" />
                 </button>
@@ -787,34 +637,7 @@ export default function BattleScene(props: BattleSceneProps) {
         )}
       </div>
 
-      {/* effects layers */}
-      <div ref={shieldRef} className="pointer-events-none absolute z-[7] opacity-0" style={{ left: owlLeft + owlSize * 0.95, top: owlTop + owlSize * 0.45 }} aria-hidden="true">
-        <OwlShieldBubble className={desktop ? "h-28 w-28" : "h-20 w-20"} />
-      </div>
-      <div ref={blastRef} key={launch?.key ?? fxEvent?.key ?? 0} className="pointer-events-none absolute inset-0 z-[8]" aria-hidden="true">
-        {(launch?.turn === "attack" || (!launch && fxEvent?.feedback.turn === "attack")) &&
-          Array.from({ length: fxEvent?.feedback.super || fxEvent?.result.finished ? 9 : 6 }, (_, i) => (
-            <svg key={i} viewBox="0 0 24 24" className={`absolute opacity-0 ${desktop ? "h-10 w-10" : "h-7 w-7"} drop-shadow-[0_0_8px_rgba(245,158,11,0.95)]`}>
-              <path d={STAR_PATH} fill="#F59E0B" />
-            </svg>
-          ))}
-      </div>
-      <div ref={powRef} className="pointer-events-none absolute z-[8] opacity-0" aria-hidden="true">
-        <svg viewBox="0 0 120 80" className={`${desktop ? "h-24 w-36" : "h-16 w-24"} overflow-visible`}>
-          <path d="M60 2 L70 22 L94 10 L88 32 L116 36 L92 50 L104 72 L78 62 L66 80 L56 62 L28 74 L36 52 L6 44 L32 32 L22 10 L48 22 Z" fill="#FDE68A" />
-        </svg>
-      </div>
-
-      {/* the burst ("Pow!") or the big turn flash */}
-      {burst && (
-        <p
-          aria-live="polite"
-          className={`pointer-events-none absolute left-1/2 z-[9] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-bold leading-none motion-safe:animate-pop-in [text-shadow:0_4px_0_rgba(0,0,0,0.4)] ${desktop ? "text-[80px]" : "text-[clamp(40px,7dvh,56px)]"} ${feedback?.correct ? "text-[#FDE68A]" : "text-white"}`}
-          style={{ top: flashTop }}
-        >
-          {burst}
-        </p>
-      )}
+      {/* the big turn flash (impact words pop where things hit: combat.ts) */}
       {flash && !feedback && (
         <div ref={flashRef} aria-live="polite" className="pointer-events-none absolute left-1/2 z-[9] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap" style={{ top: flashTop }}>
           <span className={`font-bold leading-none [text-shadow:0_4px_0_rgba(0,0,0,0.45)] ${desktop ? "text-[84px]" : "text-[clamp(40px,7.5dvh,58px)]"} ${turn === "attack" ? "text-[#FDE68A]" : "text-white"}`}>{flash.text}</span>

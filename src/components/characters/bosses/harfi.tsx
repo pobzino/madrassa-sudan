@@ -1,4 +1,4 @@
-import { Brows, Dust, Eyes, Hand, lidPivots, Mouths, Rim, ShadeDefs, Sparkles, Stars, Steam, Tile, Zzz, bossSpec } from "../parts";
+import { Brows, HandGlow, Dust, Eyes, Hand, lidPivots, Mouths, Rim, ShadeDefs, Sparkles, Stars, Steam, Tile, Zzz, bossSpec } from "../parts";
 import type { BossDef } from "./types";
 
 /**
@@ -58,6 +58,7 @@ function Art({ uid }: { uid: string }) {
             <ellipse cx={100} cy={152} rx={56} ry={36} fill={C.main[0]} data-tint="main" />
             <ellipse cx={100} cy={164} rx={34} ry={20} fill={C.light[0]} data-tint="light" />
             <ellipse cx={100} cy={152} rx={56} ry={36} fill={`url(#${uid}-shade)`} />
+            <ellipse data-part="flash" cx={100} cy={120} rx={60} ry={70} fill="#FFFFFF" opacity={0} />
             <g data-part="head">
               <g transform="translate(-8 0)">
               <g data-part="earL">
@@ -71,6 +72,7 @@ function Art({ uid }: { uid: string }) {
               <ellipse cx={100} cy={88} rx={47} ry={41} fill={C.main[0]} data-tint="main" />
               <ellipse cx={100} cy={88} rx={47} ry={41} fill={`url(#${uid}-shade)`} />
               <Rim cx={100} cy={88} rx={47} ry={41} from={205} to={300} width={3} opacity={0.45} />
+              <ellipse data-part="flash" cx={100} cy={88} rx={47} ry={41} fill="#FFFFFF" opacity={0} />
               <g data-part="tuft">
                 <path d="M84 52 a8 8 0 0 1 12 -8 a9 9 0 0 1 14 2 a7 7 0 0 1 4 10 Q100 50 84 52Z" fill={C.dark[0]} data-tint="dark" />
               </g>
@@ -91,6 +93,7 @@ function Art({ uid }: { uid: string }) {
               </g>
             </g>
             <g data-part="armR">
+              <HandGlow uid={uid} cx={100} cy={158} />
               <g data-part="prop">
                 <Tile cx={100} cy={158} glyph="ح" face="#FFE9A8" edge="#E39A10" ink="#7A3E12" arabic />
               </g>
@@ -99,7 +102,6 @@ function Art({ uid }: { uid: string }) {
             <g data-part="armL">
               <Hand cx={78} cy={160} color={C.dark[0]} />
             </g>
-            <ellipse data-part="flash" cx={100} cy={120} rx={60} ry={70} fill="#FFFFFF" opacity={0} />
           </g>
           <Sparkles at={[[24, 110, 1], [178, 50, 1.3], [180, 150, 0.8]]} />
           <Zzz at={[150, 40]} />

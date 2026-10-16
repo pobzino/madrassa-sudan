@@ -34,7 +34,7 @@ export interface PartVars {
 export type EyeVariant = "open" | "happy" | "spiral" | "closed" | "squeeze";
 export type MouthVariant = "closed" | "smile" | "open" | "o" | "laugh" | "grumpy" | "wavy" | "smirk";
 export type BrowSet = "neutral" | "up" | "grumpy" | "worried" | "cheeky" | "focus";
-export type FxName = "trail" | "stars" | "steam" | "zzz" | "sparkles" | "shield" | "blush" | "brows" | "think";
+export type FxName = "handglow" | "trail" | "stars" | "steam" | "zzz" | "sparkles" | "shield" | "blush" | "brows" | "think";
 
 export interface PoseSpec {
   parts?: Record<string, PartVars>;
@@ -66,6 +66,12 @@ export interface RigSpec {
   tints?: Record<string, readonly [string, string]>;
   /** Where a thrown prop flies, relative to the hand. */
   propFly?: { x: number; y: number; rotation: number };
+  /**
+   * Contact points, as [part, x, y] in that part's drawing coordinates:
+   * where projectiles land (`impact`, plus `shield` while the owl blocks)
+   * and where they leave from (`launch`).
+   */
+  points?: { impact: readonly [string, number, number]; launch: readonly [string, number, number]; shield?: readonly [string, number, number] };
   mouthFallback?: Partial<Record<MouthVariant, MouthVariant>>;
   eyeFallback?: Partial<Record<EyeVariant, EyeVariant>>;
 }
@@ -152,7 +158,7 @@ export class Rig {
     this.animParts = Object.keys(spec.pivots).filter((name) => !SPECIAL.has(name));
 
     // Effects scale about their own centres; named parts then get their explicit pivots.
-    const fx = ["stars", "steam", "zzz", "sparkles", "dust", "think", "trail"].flatMap((name) => this.fxEls(name));
+    const fx = ["stars", "steam", "zzz", "sparkles", "dust", "think", "trail", "handglow"].flatMap((name) => this.fxEls(name));
     if (fx.length) gsap.set(fx, { transformOrigin: "50% 50%" });
     for (const [name, [x, y]] of Object.entries(spec.pivots)) {
       const els = this.q(name);
@@ -194,7 +200,7 @@ export class Rig {
       this.stopIdle();
       this.settle?.kill();
       this.settle = null;
-      const tl = this.reduced ? this.buildReduced(action) : this.buildAction(action);
+      const tl = this.reduced ? this.buildReduced(action) : this.buildAction(action, false, options);
       const running: Running = { tl, resolve };
       this.action = running;
       tl.eventCallback("onComplete", () => {
@@ -234,6 +240,48 @@ export class Rig {
     });
     if (this.hiddenTab) tl.pause();
     this.glowAnims.push(tl);
+  }
+
+  /**
+   * Freezes the character exactly as it is for `ms` (actions, idle loops,
+   * blinks, everything), then carries on. For impact frames.
+   */
+  hitstop(ms: number): Promise<void> {
+    const anims: Anim[] = [this.action?.tl, this.settle, this.blinkRun?.tl, this.talkRun?.tl, ...this.idle, ...this.glowAnims].filter(
+      (a): a is Anim => Boolean(a) && !(a as Anim).paused(),
+    );
+    for (const anim of anims) anim.pause();
+    return new Promise((resolve) => {
+      window.setTimeout(() => {
+        if (!this.destroyed && !this.hiddenTab) for (const anim of anims) anim.resume();
+        resolve();
+      }, Math.max(0, ms));
+    });
+  }
+
+  /** Tints the body silhouette with `color` (about 40% for ~80 ms), without touching the pose. */
+  flash(color = "#FFFFFF", peak = 0.4): Promise<void> {
+    return new Promise((resolve) => {
+      const tl = gsap.timeline({ onComplete: () => resolve() });
+      if (this.reduced) {
+        tl.set(this.q("flash"), { fill: color, opacity: peak * 0.6 }).to(this.q("flash"), { opacity: 0, duration: 0.15 }, 0.05);
+      } else {
+        this.addFlash(tl, color, 0, peak);
+      }
+    });
+  }
+
+  /** A contact point in page coordinates (CSS px including scroll), following the live pose. */
+  point(kind: "impact" | "launch"): { x: number; y: number } | null {
+    const points = this.spec.points;
+    if (!points) return null;
+    let entry = points[kind];
+    if (kind === "impact" && points.shield && this.pose === "block") entry = points.shield;
+    const el = this.q(entry[0])[0] as SVGGraphicsElement | undefined;
+    const m = el?.getScreenCTM();
+    if (!m) return null;
+    const p = new DOMPoint(entry[1], entry[2]).matrixTransform(m);
+    return { x: p.x + window.scrollX, y: p.y + window.scrollY };
   }
 
   /** Total length of an action in seconds (for tests and the dev gallery). */
@@ -449,6 +497,14 @@ export class Rig {
     if (this.destroyed) return;
     this.stopIdle();
     this.settle?.kill();
+    // Directional swings (e.g. the overhand throw) can leave a part past a full
+    // turn; fold it back so the way home is the short one.
+    for (const part of this.animParts) {
+      for (const el of this.q(part)) {
+        const r = Number(gsap.getProperty(el, "rotation")) || 0;
+        if (Math.abs(r) >= 360) gsap.set(el, { rotation: r - 360 * Math.trunc(r / 360) });
+      }
+    }
     const tl = gsap.timeline({ onComplete: () => this.startIdle() });
     // Reset the action-only parts.
     this.to(tl, "move", { ...IDENTITY, duration: this.reduced ? 0 : 0.3, ease: "power2.out" }, 0);
@@ -607,9 +663,12 @@ export class Rig {
         this.keep(gsap.to(this.q("head"), { rotation: head + 4, duration: 0.64, ease: "sine.inOut", yoyo: true, repeat: -1 }));
         break;
       }
-      case "windup":
+      case "windup": {
         this.keep(gsap.to(this.q("move"), { x: 1.2 * u, duration: 0.05, ease: "none", yoyo: true, repeat: -1 }));
+        const glow = this.fxEls("handglow");
+        if (glow.length) this.keep(gsap.fromTo(glow, { scale: 0.9 }, { scale: 1.15, duration: 0.35, ease: "sine.inOut", yoyo: true, repeat: -1 }));
         break;
+      }
       case "hit":
         this.keep(gsap.to(this.q("move"), { x: 0.8 * u, duration: 0.06, ease: "none", yoyo: true, repeat: -1, repeatDelay: 0.5 }));
         break;
@@ -762,7 +821,7 @@ export class Rig {
     return tl;
   }
 
-  private buildAction(action: string, paused = false): gsap.core.Timeline {
+  private buildAction(action: string, paused = false, options: PlayOptions = {}): gsap.core.Timeline {
     const tl = gsap.timeline({ paused });
     const u = this.spec.unit;
     const f = this.spec.facing;
@@ -798,9 +857,12 @@ export class Rig {
       }
 
       case "windup": {
-        squash(0, 1.05, 0.95, 0.12, "power2.in");
-        this.addPose(tl, "windup", 0.42, "power2.out", 0.1);
-        this.to(tl, "move", { x: 1.5 * u, duration: 0.045, ease: "none", yoyo: true, repeat: 7 }, ">");
+        // A fast, readable lean back (150 ms) with the throwing hand lit, then a short hold.
+        this.addPose(tl, "windup", 0.15, "power3.out", 0);
+        squash(0, 0.95, 1.05, 0.15, "power3.out");
+        squash(0.15, 1, 1, 0.2, "power2.out");
+        this.glowHand(tl, 0);
+        tl.to({}, { duration: 0.25 }, 0.15);
         break;
       }
 
@@ -808,8 +870,17 @@ export class Rig {
       case "fire": {
         const wind = action === "fire" ? "_fireWind" : "windup";
         const release = action === "fire" ? "_fire" : "throw";
-        this.addPose(tl, wind, 0.26, "power2.out", 0);
-        tl.addLabel("snap", 0.4);
+        // Anticipation: the owl pulls back for 120 ms; a boss winds up for 150 ms
+        // (skipped when it is already holding its windup pose).
+        const wound = action === "throw" && this.pose === "windup";
+        const pull = wound ? 0 : action === "fire" ? 0.12 : 0.15;
+        if (pull > 0) {
+          this.addPose(tl, wind, pull, "power3.out", 0);
+          squash(0, 0.95, 1.05, pull, "power3.out");
+        }
+        if (action === "throw") this.glowHand(tl, 0);
+        tl.addLabel("snap", pull + 0.03);
+        tl.call(() => this.setFx(this.poseSpec(release).fx), undefined, "snap+=0.04");
         this.addPose(tl, release, 0.13, "power4.out", "snap");
         this.to(tl, "move", { x: f * 8 * u, duration: 0.13, ease: "power3.out" }, "snap");
         this.cue(tl, "release", "snap+=0.05");
@@ -857,12 +928,12 @@ export class Rig {
       case "hit": {
         this.cue(tl, "impact", 0);
         this.addPose(tl, "hit", 0, "none", 0);
-        squash(0, 1.26, 0.76, 0.07);
-        this.to(tl, "flash", { opacity: 0.85, duration: 0.04 }, 0);
-        this.to(tl, "flash", { opacity: 0, duration: 0.24 }, 0.07);
+        squash(0, 1.12, 0.88, 0.06);
+        this.addFlash(tl, "#FFF1D6", 0);
+        if (options.hitstopMs) this.addHitstop(tl, 0.06, options.hitstopMs);
         // A clear recoil: knocked back and leaning away, then a wobbly recovery.
-        this.to(tl, "move", { x: -f * 14 * u, y: 2 * u, rotation: -f * 13, duration: 0.1, ease: "power3.out" }, 0);
-        this.to(tl, "move", { x: -f * 11 * u, rotation: -f * 10, duration: 0.14, ease: "sine.out" }, 0.1);
+        this.to(tl, "move", { x: -f * 10 * u, y: 2 * u, rotation: -f * 11, duration: 0.1, ease: "power3.out" }, 0);
+        this.to(tl, "move", { x: -f * 8 * u, rotation: -f * 8, duration: 0.14, ease: "sine.out" }, 0.1);
         this.to(tl, "move", { x: 0, y: 0, rotation: 0, duration: 0.7, ease: "elastic.out(1, 0.4)" }, 0.24);
         const hitBody = this.poseSpec("hit").parts?.body ?? {};
         squash(0.08, hitBody.scaleX ?? 1, hitBody.scaleY ?? 1, 0.5, "elastic.out(1, 0.35)");
@@ -884,15 +955,15 @@ export class Rig {
       case "ko": {
         this.cue(tl, "impact", 0);
         this.addPose(tl, "hit", 0, "none", 0);
-        squash(0, 1.22, 0.78, 0.06);
-        this.to(tl, "flash", { opacity: 0.9, duration: 0.04 }, 0);
-        this.to(tl, "flash", { opacity: 0, duration: 0.3 }, 0.08);
+        squash(0, 1.13, 0.87, 0.06);
+        this.addFlash(tl, "#FFF1D6", 0);
+        if (options.hitstopMs) this.addHitstop(tl, 0.06, options.hitstopMs);
         this.to(tl, "move", { x: -f * 20 * u, rotation: -f * 6, duration: 0.12, ease: "power2.out" }, 0);
         squash(0.1, 1, 1, 0.16);
         // The topple: hang for a beat, then flop over and bounce.
         this.addPose(tl, "ko", 0.42, "power2.in", 0.3);
         this.to(tl, "move", { x: 0, rotation: 0, duration: 0.42, ease: "power2.in" }, 0.3);
-        squash(0.72, 1.16, 0.82, 0.07);
+        squash(0.72, 1.12, 0.88, 0.07);
         this.to(tl, "move", { y: -9 * u, duration: 0.14, ease: "power2.out" }, 0.74);
         this.to(tl, "move", { y: 0, duration: 0.14, ease: "power2.in" }, 0.88);
         const koBody = this.poseSpec("ko").parts?.body ?? {};
@@ -966,11 +1037,11 @@ export class Rig {
         this.to(tl, "browR", { ...this.spec.brows.up[1], duration: 0 }, 0);
         this.to(tl, "move", { y: -280 * u, x: 0, rotation: 0, duration: 0 }, 0);
         this.to(tl, "shadow", { scale: 0.2, opacity: 0.2, duration: 0 }, 0);
-        squash(0, 0.86, 1.2, 0);
+        squash(0, 0.9, 1.14, 0);
         this.to(tl, "move", { y: 0, duration: 0.42, ease: "power3.in" }, 0.05);
         this.to(tl, "shadow", { scale: 1, opacity: 1, duration: 0.42, ease: "power3.in" }, 0.05);
         this.cue(tl, "land", 0.47);
-        squash(0.47, 1.28, 0.72, 0.07);
+        squash(0.47, 1.15, 0.86, 0.07);
         this.dustBurst(tl, 0.47);
         squash(0.54, 1, 1, 0.65, "elastic.out(1, 0.32)");
         tl.call(() => this.setMouth("smile"), undefined, 0.7);
@@ -1042,6 +1113,36 @@ export class Rig {
         this.addPose(tl, this.pose, 0.3, "power2.out", 0);
     }
     return tl;
+  }
+
+  /**
+   * A hit flash: a tint over the body silhouette only (the face and hands sit
+   * above it and stay crisp), a warm 40% for about 80 ms, then fading out.
+   */
+  private addFlash(tl: gsap.core.Timeline, color: string, position: number, peak = 0.4) {
+    const flash = this.q("flash");
+    if (!flash.length) return;
+    tl.set(flash, { fill: color }, position);
+    tl.to(flash, { opacity: peak, duration: 0.03, ease: "power1.out" }, position);
+    tl.to(flash, { opacity: peak * 0.85, duration: 0.05, ease: "none" }, position + 0.03);
+    tl.to(flash, { opacity: 0, duration: 0.14, ease: "power1.in" }, position + 0.08);
+  }
+
+  /** Freezes the action timeline at `position` for `ms` (a game-feel hitstop on impact). */
+  private addHitstop(tl: gsap.core.Timeline, position: number, ms: number) {
+    tl.addPause(position, () => {
+      window.setTimeout(() => {
+        if (!this.destroyed) tl.resume();
+      }, ms);
+    });
+  }
+
+  /** The throwing hand lights up (bosses). */
+  private glowHand(tl: gsap.core.Timeline, position: number) {
+    const glow = this.fxEls("handglow");
+    if (!glow.length) return;
+    tl.set(this.fxGroup("handglow"), { autoAlpha: 1 }, position);
+    tl.fromTo(glow, { scale: 0.3, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.15, ease: "back.out(2.5)", immediateRender: false }, position);
   }
 
   private burstStars(tl: gsap.core.Timeline, position: number) {

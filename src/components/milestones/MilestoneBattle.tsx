@@ -36,8 +36,6 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
   const t = MILESTONE_COPY[lang];
   const viewport = useViewport();
   const mode = layoutModeFor(viewport.width, viewport.height);
-  // A landscape screen too small for the desktop layout gets a phone-shaped stage.
-  const staged = mode === "phone" && viewport.width > viewport.height;
   // The boss we're about to fight, remembered from the path or the intro, for the loading line.
   const rememberedBoss = useSyncExternalStore(noSubscribe, () => recallBoss(milestoneId), () => null);
   const sounds = useBattleFeedback();
@@ -109,13 +107,10 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
       style={fontStyle}
     >
       {/* Phones and tablets in portrait fill the screen with the portrait arena;
-          desktops get the landscape arena and their own layout; a small
-          landscape screen gets a phone-shaped stage, centred. */}
-      <div
-        className={`relative mx-auto h-full overflow-hidden ${staged ? "shadow-[0_0_60px_rgba(0,0,0,0.45)]" : ""}`}
-        style={{ width: staged ? "min(100vw, calc(100dvh * 0.62))" : "100%" }}
-      >
-      <ArenaBackdrop bossKey={bossKey} orientation={mode === "desktop" ? "landscape" : "portrait"}>
+          everything wider (phones on their side, tablets, desktops) gets the
+          landscape arena and its own layout. */}
+      <div className="relative mx-auto h-full w-full overflow-hidden">
+      <ArenaBackdrop bossKey={bossKey} orientation={mode}>
         {(anchors) => (
           <>
             {/* phase 2: the arena warms as the boss powers up */}

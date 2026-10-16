@@ -1,51 +1,48 @@
 import type { Rect } from "./moves/catchLayout";
 
 /**
- * The battle's layout, pure so it can be tested at real screen sizes.
+ * The battle's layout, pure so it can be tested at every screen size.
  *
- *  - phone (and tablet portrait): the cast stands on the portrait arena's
- *    anchors; the boss's health is in a top panel; the question bubble sits
- *    beside the boss (or, if it won't fit there, full width under the ledge);
- *    the move's targets fill the band between the ledge and the owl.
- *  - desktop (landscape, 1024px and wider): the owl in the left third, the
- *    boss in the right third, the boss's health over the boss, a big question
- *    bubble centred at the top, the targets in the wide central band and one
- *    action button bottom-centre.
+ * Two arrangements, both fluid (sizes come from the stage, with clamps so
+ * nothing gets tiny on a small phone or giant on a 2560px screen):
+ *
+ *  - portrait (phones, portrait tablets): the portrait arena. The boss's
+ *    health is in a top panel; the question bubble sits beside the boss, or
+ *    full width under its ledge; the targets fill the band between the ledge
+ *    and the owl's head, or, when a long question leaves no room there, the
+ *    space beside the owl. One action row along the bottom.
+ *  - landscape (phones on their side, landscape tablets, desktops): the
+ *    landscape arena. Owl on the left, boss on the right, the boss's health
+ *    top-right above it, the bubble across the top, the targets and the
+ *    action row in the middle between the two.
  *
  * The owl's shields (its "life") always sit in a small row under its feet.
+ * Nothing may overlap: the targets keep clear of the characters' visible art
+ * (not just their boxes), the bubble, the HUD and the shields.
  */
 export const BOSS_FOOT_Y = 0.94;
 export const BOSS_FOOT_X = 0.5;
 export const OWL_FOOT_Y = 0.869;
 export const OWL_FOOT_X = 0.5;
-/** The move column: max width and side padding (phone). */
-export const COLUMN_MAX = 480;
+
+/** Where the art actually is inside each character's square box (fractions; measured). */
+export const BOSS_ART = { left: 0.06, top: 0.14, right: 0.94, bottom: 0.99 } as const;
+export const OWL_ART = { left: 0.1, top: 0.13, right: 0.9, bottom: 0.97 } as const;
+
 export const COLUMN_PAD = 12;
-/** The bottom action row (one big button, small icons, the "Caught N" pill). */
-export const ACTION_ROW_H = 76;
-/** Kept for callers: the "Caught N" pill sits in the action row. */
-export const PILL_ROW_H = 0;
-export const BOTTOM_GAP = 10;
-/** The phone HUD (close button + boss panel, one row) ends about here. */
-export const HUD_BOTTOM = 84;
-/** The shields-and-combo row under the owl. */
-export const SHIELD_ROW_H = 34;
-/** The targets' band (phone): its usual minimum, and how far a long question may squeeze it. */
-export const MIN_BAND = 150;
-export const LONG_PROMPT_MIN_BAND = 120;
-/** Desktop scales the move (targets and type) up by this much. */
-export const DESKTOP_MOVE_SCALE = 1.2;
+/** Smallest band of targets: 4 orbs at 48px+ need this much (unscaled px). */
+export const MIN_BAND = 112;
+/** Kept for the tests' name: a long question may squeeze the band down to the minimum. */
+export const LONG_PROMPT_MIN_BAND = MIN_BAND;
 
-export type BattleLayoutMode = "phone" | "desktop";
+export type BattleLayoutMode = "portrait" | "landscape";
 
-/** Desktop is a real landscape layout; narrower or portrait screens use the phone layout. */
+/** Landscape for anything wider than it is tall-ish (phones on their side, tablets, desktops). */
 export function layoutModeFor(width: number, height: number): BattleLayoutMode {
-  return width >= 1024 && width > height ? "desktop" : "phone";
+  return width / Math.max(1, height) >= 0.9 ? "landscape" : "portrait";
 }
 
-/** The cast's size on the landscape arenas, in arena units (scaled by the anchors). */
-export const DESKTOP_BOSS_UNITS = 278;
-export const DESKTOP_OWL_UNITS = 232;
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /* ------------------------------------------------------------ the bubble */
 
@@ -54,13 +51,12 @@ export interface BubbleFit {
   fontSize: number;
   /** Estimated height of the bubble, px (padding included). */
   height: number;
-  /** Beside the boss, or full width under the ledge (phone, long prompts). */
+  /** Beside the boss, full width under its ledge, or across the top (landscape). */
   placement: "beside" | "wide" | "top";
-  /** The text can't fit even at the smallest size: the bubble scrolls. */
+  /** The text can't fit even at the smallest size: the bubble scrolls (last resort). */
   scroll: boolean;
-  /** The bubble's box (height = the estimate, never more than allowed). */
   rect: Rect;
-  /** Desktop: where the tail leaves the bubble's bottom (px from its left) and its tilt toward the boss (deg, + = right). */
+  /** Landscape: where the tail leaves the bubble's bottom (px from its left) and its tilt toward the boss (deg). */
   tail?: { x: number; angle: number };
 }
 
@@ -71,6 +67,8 @@ const BUBBLE_PAD_Y = 24;
 const BUBBLE_PAD_X = 30;
 /** The replay-audio button beside the text. */
 const SPEAKER_W = 56;
+/** The smallest question text anywhere. */
+export const MIN_BUBBLE_FONT = 18;
 
 /**
  * Lines a text needs at a font size and width (words never split). With a
@@ -84,7 +82,7 @@ export function estimateLines(text: string, fontSize: number, width: number, lan
   let lines = 1;
   let used = 0;
   // Maths never wraps ("7 + 5?" is one unbreakable run), so count it as one word.
-  const words = text.replace(/\s*([+\-−×÷=<>])\s*/g, "\u00a0$1\u00a0").split(/[ \t\r\n]+/).filter(Boolean);
+  const words = text.replace(/\s*([+\-−×÷=<>])\s*/g, " $1 ").split(/[ \t\r\n]+/).filter(Boolean);
   for (const word of words) {
     const len = word.length;
     if (used === 0) used = len;
@@ -110,43 +108,64 @@ export function bubbleHeightFor(text: string, fontSize: number, bubbleWidth: num
     placement === "wide"
       ? estimateLines(text, fontSize, bubbleWidth - BUBBLE_PAD_X, lang, SPEAKER_FLOAT)
       : estimateLines(text, fontSize, bubbleWidth - BUBBLE_PAD_X - SPEAKER_W, lang);
-  return Math.ceil(Math.max(lines * fontSize * LINE_HEIGHT, placement === "wide" ? SPEAKER_FLOAT.height : 0) + BUBBLE_PAD_Y);
+  // Arabic glyphs stand taller than their line: a little room under the last line.
+  const tall = lang === "ar" ? fontSize * 0.35 : 0;
+  return Math.ceil(Math.max(lines * fontSize * LINE_HEIGHT + tall, placement === "wide" ? SPEAKER_FLOAT.height : 44) + BUBBLE_PAD_Y);
 }
 
-function fitIn(text: string, lang: "ar" | "en", box: { width: number; maxHeight: number }, sizes: number[]) {
+/** The largest of `sizes` at which the text fits `maxHeight`, or null. */
+function fitFont(text: string, lang: "ar" | "en", width: number, maxHeight: number, sizes: number[], placement: BubbleFit["placement"]) {
   for (const fontSize of sizes) {
-    const lines = estimateLines(text, fontSize, box.width - BUBBLE_PAD_X - SPEAKER_W, lang);
-    const height = Math.ceil(lines * fontSize * LINE_HEIGHT + BUBBLE_PAD_Y);
-    if (height <= box.maxHeight) return { fontSize, height, fits: true };
+    const height = bubbleHeightFor(text, fontSize, width, lang, placement);
+    if (height <= maxHeight) return { fontSize, height };
   }
-  const fontSize = sizes[sizes.length - 1];
-  const lines = estimateLines(text, fontSize, box.width - BUBBLE_PAD_X - SPEAKER_W, lang);
-  return { fontSize, height: Math.ceil(lines * fontSize * LINE_HEIGHT + BUBBLE_PAD_Y), fits: false };
+  return null;
 }
+
+/** Font sizes to try, largest first, stepping down to the smallest allowed. */
+const steps = (from: number, scale: number) => {
+  const top = Math.max(MIN_BUBBLE_FONT, Math.round(from * scale));
+  const out: number[] = [];
+  for (let size = top; size > MIN_BUBBLE_FONT; size -= Math.max(1, Math.round(top * 0.08))) out.push(size);
+  out.push(MIN_BUBBLE_FONT);
+  return out;
+};
 
 /* --------------------------------------------------------------- geometry */
 
 export interface BattleGeometry {
   mode: BattleLayoutMode;
+  /** The UI's scale on this screen (type, HUD, icons): about 0.85 on a small phone, up to 1.5. */
+  ui: number;
   bossSize: number;
   owlSize: number;
+  /** The characters' square boxes. */
   boss: Rect;
   owl: Rect;
-  /** Where the boss's name + health panel goes (desktop: over the boss). Null on phone (top HUD). */
-  bossPanel: Rect | null;
-  /** The shields row under the owl: its centre x and top y. */
-  shields: { x: number; top: number };
+  /** Where their art actually is (what nothing may cover). */
+  bossArt: Rect;
+  owlArt: Rect;
+  /** The close button and the HUD panel with the boss's name and health. */
+  close: Rect;
+  hud: Rect;
+  /** The shields row under the owl: its centre x, top y and height. */
+  shields: { x: number; top: number; height: number; width: number; icon: number };
   bubble: BubbleFit;
   /** The move area (targets + action row), screen px. */
   move: Rect;
   /** Height of the targets band, in the move's own (unscaled) px. */
   bandHeight: number;
-  /** The move's scale (desktop is bigger). */
+  /** The band's left inset inside the move area (unscaled px): it sits beside the owl on a crowded phone. */
+  bandInset: number;
+  /** The bottom action row's height (unscaled px). */
+  actionsHeight: number;
+  /** The action row's left inset (unscaled px): past the owl's shields on a tall tablet. */
+  actionsInset: number;
+  /** The move's scale (bigger on tablets and desktops). */
   moveScale: number;
   /**
    * The catch field, in its own coordinates (0,0 = its top-left, unscaled
-   * px): from under the HUD (phone) or the bubble (desktop) down to the
-   * action row, with the boss, the bubble and the owl to avoid.
+   * px), with the boss, the bubble, the owl and its shields to avoid.
    */
   catchField: { top: number; width: number; height: number; exclude: Rect[] };
 }
@@ -166,155 +185,268 @@ export interface GeometryInput {
 
 export function battleGeometry(input: GeometryInput): BattleGeometry {
   const mode = input.mode ?? layoutModeFor(input.width, input.height);
-  return mode === "desktop" ? desktopGeometry(input) : phoneGeometry(input);
+  return mode === "landscape" ? landscapeGeometry(input) : portraitGeometry(input);
 }
 
-function phoneGeometry({ width, height, anchors, prompt = "", lang = "en", safeTop = 0, safeBottom = 0 }: GeometryInput): BattleGeometry {
-  const bossSize = Math.round(Math.min(230, Math.max(150, 180 * anchors.boss.scale)));
-  const owlSize = Math.round(bossSize * 0.853);
-  const bossLeft = anchors.boss.x - bossSize * BOSS_FOOT_X;
-  const bossTop = anchors.boss.y - bossSize * BOSS_FOOT_Y;
-  const owlLeft = anchors.owl.x - owlSize * OWL_FOOT_X;
-  const owlTop = anchors.owl.y - owlSize * OWL_FOOT_Y;
-  const hudBottom = safeTop + HUD_BOTTOM;
-  const ledge = anchors.boss.y + 10;
-  // The targets' band ends just above the owl's head.
-  const bandBottom = owlTop + owlSize * 0.12 - 8;
+const box = (cx: number, footY: number, size: number, footX: number, footYf: number): Rect => {
+  const left = cx - size * footX;
+  const top = footY - size * footYf;
+  return { left, top, right: left + size, bottom: top + size };
+};
+const art = (r: Rect, f: { left: number; top: number; right: number; bottom: number }): Rect => {
+  const s = r.right - r.left;
+  return { left: r.left + s * f.left, top: r.top + s * f.top, right: r.left + s * f.right, bottom: r.top + s * f.bottom };
+};
 
-  const columnWidth = Math.min(width, COLUMN_MAX);
-  const columnLeft = (width - columnWidth) / 2 + COLUMN_PAD;
-  const columnRight = (width + columnWidth) / 2 - COLUMN_PAD;
-  const moveBottom = height - safeBottom - BOTTOM_GAP;
-  const fieldBottom = moveBottom - ACTION_ROW_H - PILL_ROW_H;
+/** The shields (and Super Star pips) row: its size on this screen. */
+function shieldsRow(ui: number, compact: boolean) {
+  const icon = Math.round((compact ? 20 : 24) * Math.max(1, ui));
+  const height = icon + 10;
+  // 3 shields + padding, a gap, the 3-pip combo pill
+  const width = Math.round(3 * icon + 2 * 4 + 16 + 6 + (3 * (icon - 4) + 2 * 2 + 16));
+  return { icon, height, width };
+}
 
-  // The bubble: beside the boss if the question fits there (it may grow up
-  // to the HUD), else full width under the boss (tucking up over its ledge,
-  // never its face, as far as it needs), with the font stepping down and the
-  // targets' band giving a little. Only if all that fails does it scroll,
-  // always showing at least three lines.
-  const besideTop = Math.max(bossTop + bossSize * 0.14, hudBottom + 8);
-  const beside = { left: 12, right: Math.max(162, bossLeft + bossSize * 0.12 - 12) };
-  const besideSizes = [25, 23, 21, 20];
-  const besideFit = fitIn(prompt, lang, { width: beside.right - beside.left, maxHeight: ledge - 6 - besideTop }, besideSizes);
-  const tallTop = hudBottom + 8;
-  const tallFit = besideFit.fits ? besideFit : fitIn(prompt, lang, { width: beside.right - beside.left, maxHeight: ledge - 6 - tallTop }, besideSizes);
+function portraitGeometry({ width, height, anchors, prompt = "", lang = "en", safeTop = 0, safeBottom = 0 }: GeometryInput): BattleGeometry {
+  const ui = clamp(width / 390, 0.86, 1.45);
+  const short = height < 700;
+  const tiny = height < 600;
+  const moveScale = clamp(ui, 1, 1.45);
+
+  // HUD: the close button and the boss's panel in one row along the top.
+  const hudH = Math.round(58 * clamp(ui, 1, 1.3));
+  const hudTop = safeTop + 12;
+  const hudBottom = hudTop + hudH;
+  const close: Rect = { left: COLUMN_PAD, top: hudTop, right: COLUMN_PAD + hudH, bottom: hudBottom };
+
+  // The bottom action row and the gap under it.
+  const actionsHeight = tiny ? 56 : short ? 62 : 76;
+  const bottomGap = tiny ? 6 : 10;
+  const moveBottom = height - safeBottom - bottomGap;
+  const actionsTop = moveBottom - actionsHeight * moveScale;
+
+  // The boss on its ledge: as big as fits under the HUD.
+  const bossFoot = anchors.boss.y;
+  const fitUnderHud = (bossFoot - hudBottom - 6) / (BOSS_FOOT_Y - BOSS_ART.top);
+  const bossSize = Math.round(clamp(Math.min(width * 0.48, height * 0.3, fitUnderHud), 110, 330));
+  // (nudged in from the edge so the hit recoil never clips)
+  const boss = box(anchors.boss.x - Math.max(10, Math.round(bossSize * 0.12)), bossFoot, bossSize, BOSS_FOOT_X, BOSS_FOOT_Y);
+  const bossArt = art(boss, BOSS_ART);
+
+  // The owl, with its shields under its feet and the action row under them.
+  const row = shieldsRow(ui, short);
+  let owlSize = Math.round(bossSize * 0.853);
+  const owlFoot = anchors.owl.y;
+  const owl = box(anchors.owl.x, owlFoot, owlSize, OWL_FOOT_X, OWL_FOOT_Y);
+  const owlArt = art(owl, OWL_ART);
+  owlSize = owl.right - owl.left;
+  const shieldsX = clamp(anchors.owl.x, row.width / 2 + 6, width - row.width / 2 - 6);
+  // Shields just under the feet. If the action row is in the way and there's
+  // room beside them (tablets), the row moves over; else the shields sit just
+  // above the row.
+  const underFeet = Math.round(Math.min(owlFoot + 2, moveBottom - row.height));
+  const rowInset = (Math.max(shieldsX + row.width / 2, owlArt.right) + 12 - COLUMN_PAD) / moveScale;
+  const roomBeside = (width - 2 * COLUMN_PAD) / moveScale - rowInset;
+  // (also when the row would cover the owl itself, as on a tall tablet)
+  const crowded = underFeet + row.height > actionsTop - 2 || actionsTop < owlArt.bottom - 12;
+  const actionsInset = crowded && roomBeside >= 280 ? Math.round(rowInset) : 0;
+  const shieldsTop = actionsInset ? underFeet : Math.round(Math.min(owlFoot + 2, actionsTop - row.height - 3));
+  const shields = { x: shieldsX, top: shieldsTop, height: row.height, width: row.width, icon: row.icon };
+
+  // The column the targets use.
+  const columnLeft = COLUMN_PAD;
+  const columnRight = width - COLUMN_PAD;
+  const ledge = Math.max(bossArt.bottom, bossFoot) + 4;
+  const bandBottom = owlArt.top - 6;
+
+  // The bubble: beside the boss if it fits there (growing up to the HUD), else
+  // full width under the ledge.
+  const beside = { left: COLUMN_PAD, right: Math.max(150, bossArt.left - 12) };
+  const besideTop = Math.max(boss.top + bossSize * 0.18, hudBottom + 10);
+  const besideSizes = steps(25, clamp(ui, 1, 1.3));
+  const fitBeside =
+    fitFont(prompt, lang, beside.right - beside.left, ledge - 6 - besideTop, besideSizes, "beside") ??
+    fitFont(prompt, lang, beside.right - beside.left, ledge - 6 - (hudBottom + 10), besideSizes, "beside");
   let bubble: BubbleFit;
-  let bandTop = ledge;
-  if (besideFit.fits || tallFit.fits) {
-    const fit = besideFit.fits ? besideFit : tallFit;
-    const top = besideFit.fits ? besideTop : tallTop;
-    bubble = { fontSize: fit.fontSize, height: fit.height, placement: "beside", scroll: false, rect: { ...beside, top, bottom: top + fit.height } };
+  let bandTop: number;
+  let bandInset = 0;
+  let bandH: number;
+  // Beside the owl: from the bubble down to the shields, right of the owl's art.
+  const sideBottom = shieldsTop - 6;
+  const sideInset = Math.max(0, owlArt.right + 10 - columnLeft) / moveScale;
+  if (fitBeside) {
+    const top = Math.max(hudBottom + 10, Math.min(besideTop, ledge - 6 - fitBeside.height));
+    bubble = { fontSize: fitBeside.fontSize, height: fitBeside.height, placement: "beside", scroll: false, rect: { ...beside, top, bottom: top + fitBeside.height } };
+    bandTop = ledge;
+    bandH = (bandBottom - bandTop) / moveScale;
+    if (bandH < MIN_BAND) {
+      bandInset = sideInset;
+      bandH = (sideBottom - bandTop) / moveScale;
+    }
   } else {
     const wide = { left: columnLeft, right: columnRight };
-    const wideW = wide.right - wide.left;
-    const sizes = [24, 22, 20, 18];
-    const highest = Math.max(hudBottom + 8, bossTop + bossSize * 0.55);
-    let placed: { fontSize: number; height: number; top: number } | null = null;
-    for (const minBand of [MIN_BAND, 136, LONG_PROMPT_MIN_BAND]) {
-      const room = bandBottom - minBand - 10 - highest;
-      const fontSize = sizes.find((size) => bubbleHeightFor(prompt, size, wideW, lang, "wide") <= room);
-      if (fontSize === undefined) continue;
-      const h = bubbleHeightFor(prompt, fontSize, wideW, lang, "wide");
-      placed = { fontSize, height: h, top: Math.min(ledge, bandBottom - minBand - 10 - h) };
-      break;
+    const wideSizes = steps(24, clamp(ui, 1, 1.3));
+    const top = ledge;
+    // Room above the owl's head first; else the targets move beside the owl.
+    const above = fitFont(prompt, lang, wide.right - wide.left, bandBottom - top - 8 - MIN_BAND * moveScale, wideSizes, "wide");
+    // Else beside the owl, down to its shields; else beside the owl and its
+    // shields, down to the action row.
+    const shieldsRight = shieldsX + row.width / 2;
+    const sides = [
+      { inset: sideInset, bottom: sideBottom },
+      { inset: Math.max(0, Math.max(owlArt.right, shieldsRight) + 10 - columnLeft) / moveScale, bottom: actionsTop - 4 },
+    ].filter((side) => (columnRight - columnLeft) / moveScale - side.inset >= 130);
+    let side: { inset: number; bottom: number } | null = null;
+    let fitSide: { fontSize: number; height: number } | null = null;
+    if (!above) {
+      for (const option of sides) {
+        fitSide = fitFont(prompt, lang, wide.right - wide.left, option.bottom - top - 8 - MIN_BAND * moveScale, wideSizes, "wide");
+        if (fitSide) {
+          side = option;
+          break;
+        }
+      }
     }
-    if (placed) {
-      bubble = { fontSize: placed.fontSize, height: placed.height, placement: "wide", scroll: false, rect: { ...wide, top: placed.top, bottom: placed.top + placed.height } };
-    } else {
-      const fontSize = sizes[sizes.length - 1];
-      const minVisible = Math.ceil(3 * fontSize * LINE_HEIGHT + BUBBLE_PAD_Y);
-      const h = Math.max(minVisible, bandBottom - LONG_PROMPT_MIN_BAND - 10 - highest);
-      bubble = { fontSize, height: h, placement: "wide", scroll: true, rect: { ...wide, top: highest, bottom: highest + h } };
+    const last = sides[sides.length - 1] ?? { inset: sideInset, bottom: sideBottom };
+    const anyFit = above ?? fitSide;
+    const fit = anyFit ?? { fontSize: wideSizes[wideSizes.length - 1], height: Math.max(Math.ceil(3 * MIN_BUBBLE_FONT * LINE_HEIGHT + BUBBLE_PAD_Y), last.bottom - top - 8 - MIN_BAND * moveScale) };
+    bubble = { fontSize: fit.fontSize, height: fit.height, placement: "wide", scroll: !anyFit, rect: { ...wide, top, bottom: top + fit.height } };
+    bandTop = bubble.rect.bottom + 8;
+    if (above) bandH = (bandBottom - bandTop) / moveScale;
+    else {
+      const chosen = side ?? last;
+      bandInset = chosen.inset;
+      bandH = (chosen.bottom - bandTop) / moveScale;
     }
-    bandTop = bubble.rect.bottom + 10;
   }
-  const bandHeight = Math.round(Math.max(LONG_PROMPT_MIN_BAND, Math.min(240, bandBottom - bandTop)));
+  const bandHeight = Math.round(clamp(bandH, 40, 300));
 
-  const fieldTop = hudBottom;
-  const field = { top: fieldTop, width: columnRight - columnLeft, height: Math.max(0, fieldBottom - fieldTop) };
+  // The catch field: from under the HUD to the action row, the whole column.
+  const fieldTop = hudBottom + 4;
+  const field = { top: fieldTop, width: (columnRight - columnLeft) / moveScale, height: Math.max(0, (actionsTop - 4 - fieldTop) / moveScale) };
   const margin = 6;
-  const toField = (r: Rect): Rect => ({ left: r.left - columnLeft - margin, top: r.top - fieldTop - margin, right: r.right - columnLeft + margin, bottom: r.bottom - fieldTop + margin });
-  const bossZone = toField({ left: bossLeft, top: bossTop, right: bossLeft + bossSize, bottom: ledge });
-  const bubbleZone = toField(bubble.rect);
-  const owlZone = { ...toField({ left: owlLeft, top: owlTop + owlSize * 0.08, right: owlLeft + owlSize, bottom: fieldBottom }), bottom: field.height + 1 };
+  const toField = (r: Rect): Rect => ({
+    left: (r.left - columnLeft) / moveScale - margin,
+    top: (r.top - fieldTop) / moveScale - margin,
+    right: (r.right - columnLeft) / moveScale + margin,
+    bottom: (r.bottom - fieldTop) / moveScale + margin,
+  });
+  const shieldsRect: Rect = { left: shields.x - row.width / 2, top: shields.top, right: shields.x + row.width / 2, bottom: shields.top + row.height };
+  const exclude = [
+    toField({ ...bossArt, bottom: Math.max(bossArt.bottom, ledge) }),
+    toField(bubble.rect),
+    { ...toField(owlArt), bottom: field.height + 1 },
+    toField(shieldsRect),
+  ];
 
   return {
-    mode: "phone",
+    mode: "portrait",
+    ui,
     bossSize,
     owlSize,
-    boss: { left: bossLeft, top: bossTop, right: bossLeft + bossSize, bottom: bossTop + bossSize },
-    owl: { left: owlLeft, top: owlTop, right: owlLeft + owlSize, bottom: owlTop + owlSize },
-    bossPanel: null,
-    // On the front of the owl's platform, just below its top edge (under the feet, not over the owl).
-    // (On very short screens it may only rise to clear the action row's buttons.)
-    shields: { x: anchors.owl.x, top: Math.min(anchors.owl.y + 6, moveBottom - ACTION_ROW_H + 10 - SHIELD_ROW_H) },
+    boss,
+    owl,
+    bossArt,
+    owlArt,
+    close,
+    hud: { left: close.right + 8, top: hudTop, right: width - COLUMN_PAD, bottom: hudBottom },
+    shields,
     bubble,
     move: { left: columnLeft, right: columnRight, top: bandTop, bottom: moveBottom },
     bandHeight,
-    moveScale: 1,
-    catchField: { ...field, exclude: [bossZone, bubbleZone, owlZone] },
+    bandInset: Math.round(bandInset),
+    actionsHeight,
+    actionsInset,
+    moveScale,
+    catchField: { ...field, exclude },
   };
 }
 
-function desktopGeometry({ width, height, anchors, prompt = "", lang = "en", safeTop = 0, safeBottom = 0 }: GeometryInput): BattleGeometry {
-  const pad = 24;
-  // Anchors come from the landscape arena: owl in the left third, boss on its ledge in the right third.
-  const bossSize = Math.round(DESKTOP_BOSS_UNITS * anchors.boss.scale);
-  const owlSize = Math.round(DESKTOP_OWL_UNITS * anchors.owl.scale);
-  const { boss, owl } = anchors;
-  const bossLeft = boss.x - bossSize * BOSS_FOOT_X;
-  const bossTop = boss.y - bossSize * BOSS_FOOT_Y;
-  const owlLeft = owl.x - owlSize * OWL_FOOT_X;
-  const owlTop = owl.y - owlSize * OWL_FOOT_Y;
-  const scale = DESKTOP_MOVE_SCALE;
+function landscapeGeometry({ width, height, anchors, prompt = "", lang = "en", safeTop = 0, safeBottom = 0 }: GeometryInput): BattleGeometry {
+  const ui = clamp(height / 760, 0.8, 1.5);
+  const short = height < 500;
+  const moveScale = clamp(ui, 1, 1.45);
+  const pad = Math.round(clamp(height * 0.025, 10, 28));
 
-  // The question, big and centred at the top between them.
-  const bubbleW = Math.min(720, width * 0.46);
+  // The cast, sized from the stage's height (about a quarter of it each), on the arena's anchors.
+  const charSize = Math.round(clamp(Math.min(height * (short ? 0.33 : 0.29), width * 0.22), 110, 460));
+  const bossSize = charSize;
+  const owlSize = Math.round(charSize * 0.95);
+  const boss = box(anchors.boss.x, anchors.boss.y, bossSize, BOSS_FOOT_X, BOSS_FOOT_Y);
+  const owl = box(anchors.owl.x, anchors.owl.y, owlSize, OWL_FOOT_X, OWL_FOOT_Y);
+  const bossArt = art(boss, BOSS_ART);
+  const owlArt = art(owl, OWL_ART);
+
+  // HUD: close top-left; the boss's name and health top-right, above the boss.
+  const closeSize = Math.round(56 * clamp(ui, 0.86, 1.25));
+  const close: Rect = { left: pad, top: safeTop + pad, right: pad + closeSize, bottom: safeTop + pad + closeSize };
+  const panelW = Math.round(clamp(300 * ui, 220, 440));
+  const panelH = Math.round(clamp(66 * ui, 54, 96));
+  const panelRight = Math.min(width - pad, (boss.left + boss.right) / 2 + panelW / 2);
+  const hud: Rect = { left: panelRight - panelW, top: safeTop + pad, right: panelRight, bottom: safeTop + pad + panelH };
+
+  // The shields row under the owl.
+  const row = shieldsRow(ui, short);
+  const shieldsX = clamp(anchors.owl.x, row.width / 2 + 6, width - row.width / 2 - 6);
+  const actionsHeight = short ? 58 : 76;
+  const bottom = height - safeBottom - (short ? 6 : pad);
+  const shields = { x: shieldsX, top: Math.round(Math.min(anchors.owl.y + 2, bottom - row.height)), height: row.height, width: row.width, icon: row.icon };
+
+  // The bubble across the top, between the close button and the boss's panel.
+  const region = { left: close.right + 14, right: hud.left - 14 };
+  const maxW = Math.min(region.right - region.left, 780 * ui);
   const bubbleTop = safeTop + pad;
-  const bubbleMax = Math.round(height * 0.3);
-  const fit = fitIn(prompt, lang, { width: bubbleW, maxHeight: bubbleMax }, [38, 34, 30, 27, 24]);
-  const bubbleH = Math.min(fit.height, bubbleMax);
+  const sizes = steps(38, ui * 0.95);
+  const room = Math.max(80, Math.min(height * 0.4, Math.min(bossArt.top, owlArt.top) - 16 - bubbleTop));
+  const fit = fitFont(prompt, lang, maxW, room, sizes, "top");
+  const bubbleH = fit ? fit.height : room;
+  // As wide as its text needs (short questions get a compact bubble), centred when it can be.
+  const oneLine = prompt.length * (fit?.fontSize ?? MIN_BUBBLE_FONT) * CHAR_EM[lang] + BUBBLE_PAD_X + SPEAKER_W + 8;
+  const bubbleW = Math.round(clamp(oneLine, Math.min(maxW, 260 * ui), maxW));
+  const centered = width / 2 - bubbleW / 2;
+  const bubbleLeft = clamp(centered, region.left, region.right - bubbleW);
   const bubble: BubbleFit = {
-    fontSize: fit.fontSize,
+    fontSize: fit?.fontSize ?? sizes[sizes.length - 1],
     height: bubbleH,
     placement: "top",
-    scroll: !fit.fits,
-    rect: { left: (width - bubbleW) / 2, right: (width + bubbleW) / 2, top: bubbleTop, bottom: bubbleTop + bubbleH },
+    scroll: !fit,
+    rect: { left: bubbleLeft, right: bubbleLeft + bubbleW, top: bubbleTop, bottom: bubbleTop + bubbleH },
   };
-  // The tail points at the boss.
-  const tailX = Math.max(40, Math.min(bubbleW - 40, boss.x - bubble.rect.left));
-  const tailAngle = (Math.atan2(boss.x - (bubble.rect.left + tailX), Math.max(40, bossTop + bossSize * 0.2 - bubble.rect.bottom)) * 180) / Math.PI;
-  bubble.tail = { x: tailX, angle: Math.round(Math.max(-65, Math.min(65, tailAngle))) };
+  const tailX = clamp((boss.left + boss.right) / 2 - bubble.rect.left, 40, bubbleW - 40);
+  const tailAngle = (Math.atan2((boss.left + boss.right) / 2 - (bubble.rect.left + tailX), Math.max(40, bossArt.top - bubble.rect.bottom)) * 180) / Math.PI;
+  bubble.tail = { x: tailX, angle: Math.round(clamp(tailAngle, -65, 65)) };
 
-  // The boss's name and health, over the boss (and clear of the bubble).
-  const panelW = Math.min(380, bossSize * 1.25);
-  const panelLeft = Math.min(width - pad - panelW, boss.x - panelW / 2);
-  const overlapsBubble = panelLeft < bubble.rect.right;
-  const panelTop = Math.max(safeTop + pad, bossTop - 86, overlapsBubble ? bubble.rect.bottom + 12 : 0);
-  const bossPanel = { left: panelLeft, right: panelLeft + panelW, top: panelTop, bottom: panelTop + 70 };
-
-  // The move: the wide central band between the owl and the boss.
-  const moveLeft = Math.max(owlLeft + owlSize + 8, width * 0.29);
-  // Clear of the boss and of its health panel above it.
-  const moveRight = Math.min(bossLeft - 8, bossPanel.left - 16, width * 0.71);
-  const moveTop = bubble.rect.bottom + 18;
-  const moveBottom = height - safeBottom - pad;
-  const unscaledH = (moveBottom - moveTop) / scale;
-  const bandHeight = Math.round(Math.max(170, Math.min(360, unscaledH - ACTION_ROW_H - 12)));
-  const field = { top: moveTop, width: (moveRight - moveLeft) / scale, height: Math.max(0, unscaledH - ACTION_ROW_H) };
+  // The move: between the owl (and its shields) and the boss, under the bubble.
+  const shieldsRight = shields.x + row.width / 2;
+  const moveLeft = Math.max(owlArt.right, shieldsRight) + 12;
+  const moveRight = bossArt.left - 12;
+  // Keep the targets centred on the screen when there's room on both sides.
+  const half = Math.min(width / 2 - moveLeft, moveRight - width / 2);
+  const centredMove = half > 200 * moveScale ? { left: width / 2 - half, right: width / 2 + half } : { left: moveLeft, right: moveRight };
+  const moveTop = Math.max(bubble.rect.bottom, hud.bottom) + 14;
+  const unscaledH = (bottom - moveTop) / moveScale;
+  const bandHeight = Math.round(clamp(unscaledH - actionsHeight - 10, 60, 380));
+  const field = { top: moveTop, width: (centredMove.right - centredMove.left) / moveScale, height: Math.max(0, unscaledH - actionsHeight) };
 
   return {
-    mode: "desktop",
+    mode: "landscape",
+    ui,
     bossSize,
     owlSize,
-    boss: { left: bossLeft, top: bossTop, right: bossLeft + bossSize, bottom: bossTop + bossSize },
-    owl: { left: owlLeft, top: owlTop, right: owlLeft + owlSize, bottom: owlTop + owlSize },
-    bossPanel,
-    shields: { x: owl.x, top: owl.y + 2 },
+    boss,
+    owl,
+    bossArt,
+    owlArt,
+    close,
+    hud,
+    shields,
     bubble,
-    move: { left: moveLeft, right: moveRight, top: moveTop, bottom: moveBottom },
+    move: { left: centredMove.left, right: centredMove.right, top: moveTop, bottom },
     bandHeight,
-    moveScale: scale,
+    bandInset: 0,
+    actionsHeight,
+    actionsInset: 0,
+    moveScale,
     // The band lies between the two, so nothing in it needs avoiding.
     catchField: { ...field, exclude: [] },
   };

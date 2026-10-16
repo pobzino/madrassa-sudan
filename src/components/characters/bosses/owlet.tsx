@@ -1,4 +1,4 @@
-import { Brows, Dust, Eyes, Hand, lidPivots, Mouths, Rim, ShadeDefs, Sparkles, Stars, Steam, Zzz, bossSpec } from "../parts";
+import { Brows, HandGlow, Dust, Eyes, Hand, lidPivots, Mouths, Rim, ShadeDefs, Sparkles, Stars, Steam, Zzz, bossSpec } from "../parts";
 import type { BossDef } from "./types";
 
 /**
@@ -62,8 +62,10 @@ function Art({ uid }: { uid: string }) {
             <path d="M84 158 l5 5 l5 -5 M106 158 l5 5 l5 -5 M95 168 l5 5 l5 -5" stroke="#B8CCF5" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
             <ellipse cx={100} cy={128} rx={60} ry={58} fill={`url(#${uid}-shade)`} />
             <Rim cx={100} cy={128} rx={60} ry={58} from={205} to={300} width={3.2} opacity={0.45} />
+            <ellipse data-part="flash" cx={100} cy={128} rx={61} ry={59} fill="#FFFFFF" opacity={0} />
             <g data-part="head">
               <path d={FACE} fill={C.light[0]} data-tint="light" />
+              <path data-part="flash" d={FACE} fill="#FFFFFF" opacity={0} />
               <circle cx={80} cy={106} r={18} fill={C.dark[0]} data-tint="dark" />
               <circle cx={120} cy={106} r={18} fill={C.dark[0]} data-tint="dark" />
               <Eyes e={EYES} uid={uid} />
@@ -74,6 +76,7 @@ function Art({ uid }: { uid: string }) {
               <Steam at={[[50, 46], [150, 46]]} />
             </g>
             <g data-part="armR">
+              <HandGlow uid={uid} cx={100} cy={160} />
               <g data-part="prop">
                 <path d="M86 146 H95 C95 139 105 139 105 146 H114 V155 C121 155 121 165 114 165 V174 H86 V165 C93 165 93 155 86 155Z" fill="#22C55E" />
                 <path d="M88 148 H93 M90 150 V156" stroke="#FFFFFF" strokeOpacity={0.55} strokeWidth={2.4} strokeLinecap="round" />
@@ -83,7 +86,6 @@ function Art({ uid }: { uid: string }) {
             <g data-part="armL">
               <Hand cx={80} cy={162} color={C.dark[0]} rx={10} ry={9} />
             </g>
-            <ellipse data-part="flash" cx={100} cy={128} rx={61} ry={59} fill="#FFFFFF" opacity={0} />
           </g>
           <Sparkles at={[[30, 120, 1], [172, 60, 1.2], [172, 150, 0.8]]} />
           <Zzz at={[148, 60]} />

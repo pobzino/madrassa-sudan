@@ -1,4 +1,4 @@
-import { Brows, Dust, Eyes, Hand, lidPivots, Mouths, ShadeDefs, Sparkles, Stars, Steam, Zzz, bossSpec } from "../parts";
+import { Brows, HandGlow, Dust, Eyes, Hand, lidPivots, Mouths, ShadeDefs, Sparkles, Stars, Steam, Zzz, bossSpec } from "../parts";
 import type { BossDef } from "./types";
 
 /** Wordy the Word Dragon: a pear-shaped teal bookworm of a dragon, with round glasses, orange frills and an open book. */
@@ -57,6 +57,7 @@ function Art({ uid }: { uid: string }) {
             <path d="M72 138 Q100 145 128 138 M66 152 Q100 160 134 152 M70 168 Q100 176 130 168" stroke="#F2C9A0" strokeWidth={2.2} strokeLinecap="round" fill="none" />
             <path d={BODY} fill={`url(#${uid}-shade)`} />
             <path d="M64 70 C74 54 90 47 104 46" stroke="#FFFFFF" strokeOpacity={0.45} strokeWidth={3.4} strokeLinecap="round" fill="none" />
+            <path data-part="flash" d={BODY} fill="#FFFFFF" opacity={0} />
             <g data-part="head">
               <g data-part="tuft">
                 <ellipse cx={86} cy={46} rx={5} ry={8} fill="#FFC48A" transform="rotate(-18 86 46)" />
@@ -79,6 +80,7 @@ function Art({ uid }: { uid: string }) {
               <Steam at={[[40, 72], [160, 72]]} />
             </g>
             <g data-part="armR">
+              <HandGlow uid={uid} cx={100} cy={164} />
               <g data-part="prop">
                 <path d="M68 148 L100 155 L132 148 L132 178 L100 185 L68 178Z" fill="#007229" />
                 <path d="M71 146 Q86 143 100 151 L100 180 Q86 173 71 175Z" fill="#FFFDF5" />
@@ -90,7 +92,6 @@ function Art({ uid }: { uid: string }) {
             <g data-part="armL">
               <Hand cx={72} cy={164} color={C.dark[0]} />
             </g>
-            <path data-part="flash" d={BODY} fill="#FFFFFF" opacity={0} />
           </g>
           <Sparkles at={[[22, 130, 1], [180, 44, 1.3], [178, 118, 0.8]]} />
           <Zzz at={[152, 40]} />

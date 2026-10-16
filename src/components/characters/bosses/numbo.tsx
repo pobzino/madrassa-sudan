@@ -1,4 +1,4 @@
-import { Brows, Dust, Eyes, lidPivots, Mouths, Rim, ShadeDefs, Sparkles, Stars, Steam, Zzz, bossSpec } from "../parts";
+import { Brows, HandGlow, Dust, Eyes, lidPivots, Mouths, Rim, ShadeDefs, Sparkles, Stars, Steam, Zzz, bossSpec } from "../parts";
 import type { BossDef } from "./types";
 
 /** Numbo the Number Giant: a round purple bear-giant hugging a gold "?" coin. */
@@ -56,6 +56,7 @@ function Art({ uid }: { uid: string }) {
             <ellipse cx={100} cy={146} rx={47} ry={38} fill={C.light[0]} data-tint="light" />
             <ellipse cx={100} cy={116} rx={73} ry={70} fill={`url(#${uid}-shade)`} />
             <Rim cx={100} cy={116} rx={73} ry={70} from={205} to={300} width={3.5} opacity={0.45} />
+            <ellipse data-part="flash" cx={100} cy={116} rx={74} ry={71} fill="#FFFFFF" opacity={0} />
             <g data-part="head">
               <ellipse cx={58} cy={124} rx={11} ry={7} fill="#FF9FB2" opacity={0.85} />
               <ellipse cx={142} cy={124} rx={11} ry={7} fill="#FF9FB2" opacity={0.85} />
@@ -68,6 +69,7 @@ function Art({ uid }: { uid: string }) {
               <Steam at={[[50, 34], [150, 34]]} />
             </g>
             <g data-part="armR">
+              <HandGlow uid={uid} cx={100} cy={158} />
               <g data-part="prop">
                 <circle cx={100} cy={158} r={21} fill="#E39A10" />
                 <circle cx={100} cy={156.5} r={19} fill="#FFC83D" />
@@ -92,7 +94,6 @@ function Art({ uid }: { uid: string }) {
               <ellipse cx={78} cy={160} rx={11} ry={10} fill={C.dark[0]} data-tint="dark" />
               <ellipse cx={76} cy={156} rx={5} ry={3} fill="#FFFFFF" opacity={0.18} />
             </g>
-            <ellipse data-part="flash" cx={100} cy={116} rx={74} ry={71} fill="#FFFFFF" opacity={0} />
           </g>
           <g data-part="footL">
             <ellipse cx={70} cy={181} rx={21} ry={11} fill={C.dark[0]} data-tint="dark" />

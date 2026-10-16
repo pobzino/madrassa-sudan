@@ -26,21 +26,19 @@ declare global {
   interface Window {
     /** Playwright hook: run an action and get back how long it took. */
     __chars?: {
-      play: (id: string, action: string, durationMs?: number) => Promise<number>;
+      play: (id: string, action: string, durationMs?: number, hitstopMs?: number) => Promise<number>;
+      handle: (id: string) => BossHandle | OwlHandle | null;
       ids: () => string[];
     };
   }
 }
 
-const registry = new Map<string, BossHandle | OwlHandle>();
+// Refs, not handles: some characters mount after this effect (inside the arena).
+const registry = new Map<string, React.RefObject<BossHandle | OwlHandle | null>>();
 
 function useRegister(id: string, handle: React.RefObject<BossHandle | OwlHandle | null>) {
   useEffect(() => {
-    // A proxy, since some characters mount after this effect (inside the arena).
-    registry.set(id, {
-      play: (action: string, options?: { durationMs?: number }) =>
-        (handle.current as BossHandle | null)?.play(action as BossAction, options) ?? Promise.resolve(),
-    });
+    registry.set(id, handle);
     return () => {
       registry.delete(id);
     };
@@ -95,6 +93,8 @@ function BossCard({ bossKey }: { bossKey: BossKey }) {
       <Buttons items={POSES} active={pose} onPick={setPose} tone="pose" />
       <p style={label}>Play</p>
       <Buttons items={BOSS_ACTIONS} onPick={play} tone="action" />
+      <p style={label}>Game feel</p>
+      <Buttons items={["flash", "flash red", "hitstop 300ms", "hit + hitstop"] as const} onPick={(v) => (v === "flash" ? ref.current?.flash() : v === "flash red" ? ref.current?.flash("#FF5A6E") : v === "hitstop 300ms" ? ref.current?.hitstop(300) : ref.current?.play("hit", { hitstopMs: 80 }))} tone="action" />
       <p style={{ ...label, minHeight: 18 }}>{log}</p>
     </section>
   );
@@ -120,6 +120,8 @@ function OwlCard() {
       <Buttons items={OWL_POSES} active={pose} onPick={setPose} tone="pose" />
       <p style={label}>Play</p>
       <Buttons items={OWL_ACTIONS} onPick={play} tone="action" />
+      <p style={label}>Game feel</p>
+      <Buttons items={["flash", "hitstop 300ms"] as const} onPick={(v) => (v === "flash" ? ref.current?.flash() : ref.current?.hitstop(300))} tone="action" />
       <p style={{ ...label, minHeight: 18 }}>{log}</p>
     </section>
   );
@@ -193,11 +195,12 @@ export default function CharacterGallery({ shot, bossKey, pose, orient }: { shot
   useEffect(() => {
     window.__chars = {
       ids: () => Array.from(registry.keys()),
-      play: async (id, action, durationMs) => {
-        const handle = registry.get(id);
+      handle: (id) => registry.get(id)?.current ?? null,
+      play: async (id, action, durationMs, hitstopMs) => {
+        const handle = registry.get(id)?.current;
         if (!handle) throw new Error(`no character ${id}`);
         const t = performance.now();
-        await (handle as BossHandle).play(action as BossAction, { durationMs });
+        await (handle as BossHandle).play(action as BossAction, { durationMs, hitstopMs });
         return Math.round(performance.now() - t);
       },
     };
