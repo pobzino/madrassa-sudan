@@ -18,8 +18,12 @@ interface Point {
 
 const LAYER_ID = "battle-fx-layer";
 const AMBER = "#F59E0B";
+/** Signature lead-ins gather at the owl this fast, so its throw follows at once. */
+const LEAD_MS = 200;
 
 export const centerOf = (r: DOMRect): Point => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+/** Decorations wait a frame, so the move's own first frame is never held up. */
+const later = (fn: () => void) => (typeof requestAnimationFrame === "function" ? requestAnimationFrame(() => fn()) : fn());
 const reduced = () => prefersReducedMotion();
 
 function layer(): HTMLElement | null {
@@ -190,15 +194,19 @@ export function orbLaunch(chosen: HTMLElement | null, others: Array<HTMLElement 
       return;
     }
     el.animate([{ transform: "scale(1)", opacity: 1 }, { transform: "scale(1.35)", opacity: 0.8, offset: 0.6 }, { transform: "scale(1.5)", opacity: 0 }], { duration: 240, delay: i * 40, fill: "forwards", easing: "ease-out" });
-    burst(at, { count: 6, radius: 34, color: "rgba(255,255,255,0.85)", delay: 120 + i * 40, size: 8 });
+    later(() => burst(at, { count: 6, radius: 34, color: "rgba(255,255,255,0.85)", delay: 100 + i * 40, size: 8 }));
   });
   if (!chosen || !target) return;
   const from = centerOf(chosen.getBoundingClientRect());
   const to = centerOf(target);
   const size = chosen.getBoundingClientRect().width;
-  flyGhost(chosen, to, { duration: 820, charge: true, spin: 360, endScale: 0.35, arc: 40 });
+  flyGhost(chosen, to, { duration: LEAD_MS + 60, charge: true, spin: 360, endScale: 0.35, arc: 20 });
   if (reduced()) return;
   // The comet trail: fading copies of the orb's glow following the same path.
+  later(() => cometTrail(from, to, size));
+}
+
+function cometTrail(from: Point, to: Point, size: number) {
   for (let i = 1; i <= 4; i++) {
     const dot = spawn(from, size * (0.7 - i * 0.1), {
       borderRadius: "50%",
@@ -210,7 +218,7 @@ export function orbLaunch(chosen: HTMLElement | null, others: Array<HTMLElement 
       { transform: "translate(0, 0)", opacity: 0, offset: 0.3 },
       { transform: `translate(${(to.x - from.x) * 0.5}px, ${(to.y - from.y) * 0.5 - 40}px)`, opacity: 0.75 - i * 0.12, offset: 0.62 },
       { transform: `translate(${to.x - from.x}px, ${to.y - from.y}px) scale(0.4)`, opacity: 0 },
-    ], { duration: 820, delay: i * 45, easing: "ease-in-out" });
+    ], { duration: LEAD_MS + 60, delay: i * 18, easing: "ease-in-out" });
   }
 }
 
@@ -230,11 +238,15 @@ export function dodgeRoll(owl: HTMLElement | null, chosen: DOMRect | null, other
         { transform: `translateX(${side * reach}px) translateY(-14px) rotate(${side * 360}deg)`, offset: 0.55, easing: "ease-in-out" },
         { transform: `translateX(${side * reach * 0.8}px) rotate(${side * 360}deg)`, offset: 0.75 },
         { transform: `translateX(0) rotate(${side * 360}deg)` },
-      ], { duration: 760, easing: "ease-out" });
+      ], { duration: 420, easing: "ease-out" });
     }
   }
   if (reduced()) return;
   // The whoosh: streaks racing through the lane the owl just left, from the far side.
+  later(() => whoosh(other, side));
+}
+
+function whoosh(other: DOMRect, side: number) {
   const c = centerOf(other);
   for (let i = 0; i < 4; i++) {
     const y = other.top + other.height * (0.22 + i * 0.18);
@@ -277,16 +289,17 @@ export function volley(glyph: string, count: number, from: DOMRect | null, to: D
   if (!from || !to || count <= 0 || reduced()) return;
   const a = { x: from.left + from.width * 0.7, y: from.top + from.height * 0.45 };
   const b = centerOf(to);
-  const stagger = Math.min(60, 480 / count);
+  const stagger = Math.min(30, 160 / count);
   for (let i = 0; i < count; i++) {
-    const el = spawn(a, 40, { fontSize: "30px", lineHeight: "1", filter: "drop-shadow(0 0 8px rgba(253,230,138,0.9))" }, glyph);
+    const glyphSize = Math.round(Math.max(30, from.width * 0.2));
+    const el = spawn(a, glyphSize * 1.3, { fontSize: `${glyphSize}px`, lineHeight: "1", filter: "drop-shadow(0 0 8px rgba(253,230,138,0.9))" }, glyph);
     if (!el) continue;
     const wobble = ((i % 3) - 1) * 24;
     run(el, [
       { transform: "translate(0, 0) scale(0.5)", opacity: 0 },
       { transform: `translate(${(b.x - a.x) * 0.5}px, ${(b.y - a.y) * 0.5 - 60 + wobble}px) scale(1.1)`, opacity: 1, offset: 0.5 },
       { transform: `translate(${b.x - a.x + wobble}px, ${b.y - a.y}px) scale(0.6)`, opacity: 0.2 },
-    ], { duration: 460, delay: i * stagger, easing: "ease-in-out" });
+    ], { duration: 350, delay: 150 + i * stagger, easing: "cubic-bezier(0.35, 0.1, 0.75, 1)" });
   }
 }
 
@@ -324,7 +337,7 @@ export function linkStones(overlay: HTMLElement | null, stones: Array<HTMLElemen
 
 /** sequence_order confirm: the chain flashes in order, then a beam fires from the last stone. */
 export function chainBeam(stones: Array<HTMLElement | null>, order: number[], target: DOMRect | null) {
-  const stagger = Math.min(90, 420 / Math.max(1, order.length));
+  const stagger = Math.min(30, 120 / Math.max(1, order.length));
   order.forEach((index, i) => squash(stones[index], "pulse", i * stagger));
   const last = stones[order[order.length - 1]];
   if (!last || !target || reduced()) return;
@@ -346,7 +359,7 @@ export function chainBeam(stones: Array<HTMLElement | null>, order: number[], ta
     { transform: `rotate(${angle}rad) scaleX(0)`, opacity: 1 },
     { transform: `rotate(${angle}rad) scaleX(1)`, opacity: 1, offset: 0.4 },
     { transform: `rotate(${angle}rad) scaleX(1) scaleY(0.2)`, opacity: 0 },
-  ], { duration: 520, delay: order.length * stagger, easing: "ease-out" });
+  ], { duration: LEAD_MS, delay: order.length * stagger, easing: "ease-out" });
 }
 
 /** match_pairs: a matched piece snaps into its slot with a spark. */
@@ -360,7 +373,7 @@ export function snapSpark(slot: HTMLElement | null) {
 export function pairsFly(slots: Array<HTMLElement | null>, target: DOMRect | null) {
   if (!target) return;
   const to = centerOf(target);
-  slots.forEach((slot, i) => flyGhost(slot, to, { duration: 600, delay: i * 80, endScale: 0.35, arc: 50, hide: false, spin: i % 2 ? 20 : -20 }));
+  slots.forEach((slot, i) => flyGhost(slot, to, { duration: LEAD_MS, delay: i * 30, endScale: 0.35, arc: 20, hide: false, spin: i % 2 ? 20 : -20 }));
 }
 
 /** sort_groups: the piece flies into its basket, which gulps it. */
@@ -374,8 +387,8 @@ export function intoBasket(piece: HTMLElement | null, basket: HTMLElement | null
 export function basketsBurst(baskets: Array<HTMLElement | null>) {
   baskets.forEach((basket, i) => {
     if (!basket) return;
-    squash(basket, "bump", i * 70);
-    burst(centerOf(basket.getBoundingClientRect()), { count: 7, radius: 60, star: true, delay: 120 + i * 70 });
+    squash(basket, "bump", i * 25);
+    burst(centerOf(basket.getBoundingClientRect()), { count: 7, radius: 60, star: true, delay: 30 + i * 25 });
   });
 }
 
@@ -403,14 +416,14 @@ export function scrollSpell(scroll: HTMLElement | null, target: DOMRect | null) 
     { transform: "translate(0, 0) scale(1.05, 1.05)", opacity: 1, offset: 0.18 },
     { transform: "translate(0, 0) scale(0.5, 0.12)", opacity: 1, offset: 0.45, easing: "ease-in" },
     { transform: `translate(${dx}px, ${dy}px) scale(0.12, 0.1) rotate(540deg)`, opacity: 0.1 },
-  ], { duration: 900, easing: "ease-out" });
+  ], { duration: LEAD_MS + 80, easing: "ease-out" });
   // a glowing spell ball where the scroll rolled up, flying along with it
   const ball = spawn(from, 46, { borderRadius: "50%", background: "radial-gradient(circle, #FFFBEA, #FDE68A 45%, rgba(245,158,11,0) 72%)" });
   if (ball) run(ball, [
     { transform: "translate(0, 0) scale(0.2)", opacity: 0 },
     { transform: "translate(0, 0) scale(1.2)", opacity: 1, offset: 0.45 },
     { transform: `translate(${to.x - from.x}px, ${to.y - from.y}px) scale(0.6)`, opacity: 0.2 },
-  ], { duration: 900, easing: "ease-in-out" });
+  ], { duration: LEAD_MS + 80, easing: "ease-in-out" });
 }
 
 /** drag_drop_label: the label stamps onto the picture. */
@@ -424,8 +437,8 @@ export function stampLabel(spot: HTMLElement | null) {
 export function labelsFire(spots: Array<HTMLElement | null>, target: DOMRect | null) {
   spots.forEach((spot, i) => {
     if (!spot) return;
-    squash(spot, "pulse", i * 70);
-    burst(centerOf(spot.getBoundingClientRect()), { count: 5, radius: 28, star: true, delay: i * 70, size: 18 });
+    squash(spot, "pulse", i * 25);
+    burst(centerOf(spot.getBoundingClientRect()), { count: 5, radius: 28, star: true, delay: i * 25, size: 18 });
   });
   if (target) pairsFly(spots, target);
 }
@@ -435,8 +448,14 @@ export function labelsFire(spots: Array<HTMLElement | null>, target: DOMRect | n
 /** Block turns: the shield forms in front of the owl in the move's own motif. */
 export function formShield(motif: ShieldMotif, owl: DOMRect | null, glyph = "⭐") {
   if (!owl) return;
-  const size = Math.round(owl.width * 0.95);
-  const at = { x: owl.left + owl.width * 0.92, y: owl.top + owl.height * 0.45 };
+  // A frame later: the dome and the boss's wind-up start first.
+  requestAnimationFrame(() => buildShield(motif, owl, glyph));
+}
+
+function buildShield(motif: ShieldMotif, owl: DOMRect, glyph: string) {
+  // The motif rings the owl's dome (1.4x the owl).
+  const size = Math.round(owl.width * 1.45);
+  const at = { x: owl.left + owl.width * 0.5, y: owl.top + owl.height * 0.56 };
   const root = spawn(at, size, { zIndex: "1" });
   if (!root) return;
   const part = (style: Partial<CSSStyleDeclaration>, text = "") => {
