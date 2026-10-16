@@ -7,6 +7,7 @@ import type { MilestoneIntroResponse } from "@/lib/milestones/types";
 import { bossHpPercent } from "@/lib/milestones/rules";
 import { openMilestoneLearnerRequest } from "@/lib/server/milestones/context";
 import {
+  isPlacement,
   loadActiveBattle,
   loadBlockLessons,
   loadCertificateFor,
@@ -17,7 +18,7 @@ import {
   parseLang,
   toMilestoneSummary,
 } from "@/lib/server/milestones/load";
-import { heartsLeftFor } from "@/lib/server/milestones/present";
+import { battleHpPercent, heartsLeftFor } from "@/lib/server/milestones/present";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,50 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!loaded) return milestoneError("milestone_not_found", 404);
     const { row, path, subject } = loaded;
     const learnerId = context.learnerId;
+
+    if (isPlacement(row)) {
+      // A placement never locks: completed (non-superseded, non-preview), in battle, or available.
+      const [activeBattle, { data: done }, attempts] = await Promise.all([
+        loadActiveBattle(admin, learnerId, row.id),
+        admin
+          .from("milestone_battles")
+          .select("id")
+          .eq("learner_id", learnerId)
+          .eq("milestone_id", row.id)
+          .eq("status", "completed")
+          .eq("is_preview", false)
+          .is("superseded_at", null)
+          .limit(1)
+          .returns<Array<{ id: string }>>(),
+        admin
+          .from("milestone_battles")
+          .select("id", { count: "exact", head: true })
+          .eq("learner_id", learnerId)
+          .eq("milestone_id", row.id),
+      ]);
+      const state = activeBattle ? "in_battle" : (done ?? []).length && !preview ? "completed" : "available";
+      const body: MilestoneIntroResponse = {
+        milestone: toMilestoneSummary(row, path),
+        subjectNameAr: subject?.name_ar ?? null,
+        subjectNameEn: subject?.name_en ?? null,
+        state,
+        lockedReason: null,
+        activeBattle: activeBattle
+          ? {
+              battleId: activeBattle.id,
+              answeredCount: activeBattle.answered_count,
+              heartsLeft: heartsLeftFor(activeBattle),
+              bossHpPercent: battleHpPercent(activeBattle),
+            }
+          : null,
+        certificate: null,
+        attempts: attempts.count ?? 0,
+        blockLessons: [],
+        preview,
+        kind: "placement",
+      };
+      return milestoneJson(body);
+    }
 
     const [engineState, activeBattle, certificate, attempts, blockLessons] = await Promise.all([
       milestoneStateFor(admin, row, path, learnerId),
@@ -74,6 +119,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       attempts: attempts.count ?? 0,
       blockLessons,
       preview,
+      kind: "milestone",
     };
     return milestoneJson(body);
   } catch (error) {

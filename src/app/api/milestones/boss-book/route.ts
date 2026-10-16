@@ -11,7 +11,7 @@ import { isBossKey, milestoneError, milestoneJson } from "@/lib/server/milestone
 export const dynamic = "force-dynamic";
 
 type CertRow = { id: string; boss_key: string; subject_id: string | null; after_week_number: number; stars: number; awarded_at: string };
-type BattleRow = { milestone_id: string; started_at: string };
+type BattleRow = { milestone_id: string; started_at: string; kind?: string | null };
 type MilestoneRow = { id: string; boss_key: string; path_id: string; after_week_number: number };
 type SubjectRow = { id: string; name_ar: string | null; name_en: string | null };
 
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   const learnerId = context.learnerId;
 
   try {
-    const [{ data: certificates }, { data: battles }] = await Promise.all([
+    const [{ data: certificates }, { data: allBattles }] = await Promise.all([
       admin
         .from("learner_certificates")
         .select("id, boss_key, subject_id, after_week_number, stars, awarded_at")
@@ -36,12 +36,14 @@ export async function GET(request: Request) {
         .returns<CertRow[]>(),
       admin
         .from("milestone_battles")
-        .select("milestone_id, started_at")
+        .select("milestone_id, started_at, kind")
         .eq("learner_id", learnerId)
         .eq("is_preview", false)
         .order("started_at", { ascending: false })
         .returns<BattleRow[]>(),
     ]);
+    // The starting boss (placement) is not in the Boss Book (phase 1).
+    const battles = (allBattles ?? []).filter((battle) => battle.kind !== "placement");
 
     const milestoneIds = [...new Set((battles ?? []).map((battle) => battle.milestone_id))];
     const { data: milestones } = milestoneIds.length

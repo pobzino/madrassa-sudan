@@ -28,7 +28,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const { data, error } = await staff.admin.rpc("publish_milestone", { p_milestone_id: id, p_actor: staff.userId });
   if (error || !data) {
     const mapped = mapMilestoneRpcError(error);
-    return mapped.code === "publish_forbidden" ? publishForbiddenResponse() : milestoneError(mapped.code, mapped.status);
+    if (mapped.code === "publish_forbidden") return publishForbiddenResponse();
+    // A starting boss needs a balanced pool: say so in words.
+    return milestoneError(mapped.code, mapped.status, mapped.code === "pool_unbalanced" ? { message: mapped.message } : {});
   }
   return milestoneJson({ milestone: await teacherMilestoneRow(staff.admin, data as MilestoneRow) });
 }

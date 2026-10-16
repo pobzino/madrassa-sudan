@@ -14,6 +14,7 @@ import { openMilestoneLearnerRequest } from "@/lib/server/milestones/context";
 import { owlHintFor } from "@/lib/server/milestones/interactions";
 import {
   battleStateFor,
+  isPlacement,
   loadActiveBattle,
   loadBattle,
   loadBattleQuestion,
@@ -45,8 +46,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const loaded = await loadMilestoneForLearner(admin, id, { preview });
     if (!loaded) return milestoneError("milestone_not_found", 404);
+    // A placement has no Owl Hint (and its battles may never carry one).
+    if (isPlacement(loaded.row)) return milestoneError("hint_unavailable", 409);
     const battle = await loadActiveBattle(admin, context.learnerId, id);
     if (!battle) return milestoneError("battle_not_found", 404);
+    if (battle.kind === "placement") return milestoneError("hint_unavailable", 409);
     if (position !== battle.answered_count) {
       return milestoneError("position_mismatch", 409, { battle: await battleStateFor(admin, battle, lang) });
     }

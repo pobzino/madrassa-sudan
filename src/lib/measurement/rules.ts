@@ -9,6 +9,28 @@ import {
   type SkillSubjectKey,
 } from "@/lib/measurement/types";
 
+/**
+ * The caveats printed on the impact page and in the funder export's notes
+ * (spec §3.6; the export's SQL carries the same text). {date} = when the
+ * offline marker started.
+ */
+export const MEASUREMENT_CAVEATS = {
+  en: [
+    "Bosses stop early (win or out of tries), so a boss's first try sees 9-12 items, and skill rates use the items actually answered.",
+    "A placement covers weeks 1-12, partly before teaching. Growth is \"before teaching -> first try after teaching\" on the same skills, not a controlled study.",
+    "Each child answers about 12 items per occasion. Individual skill results are rough; group results with at least 5 children are reported.",
+    "The offline mode uses a server-side marker that started {date}. Earlier completions count as unknown.",
+    "Ages are the ages given at signup.",
+  ],
+  ar: [
+    "تتوقف التحديات مبكراً (فوز أو نفاد المحاولات)، لذا ترى المحاولة الأولى ٩–١٢ سؤالاً، وتُحسب نسب المهارات من الأسئلة التي أُجيبت فعلاً.",
+    "يغطي التحدي الأول الأسابيع ١–١٢، وبعضها قبل التعليم. النمو هو «قبل التعليم ← أول محاولة بعده» على المهارات نفسها، وليس دراسة مضبوطة.",
+    "يجيب كل طفل عن ١٢ سؤالاً تقريباً في كل مرة. نتائج المهارة للطفل الواحد تقريبية؛ نعرض نتائج المجموعات التي تضم ٥ أطفال على الأقل.",
+    "يعتمد نمط «دون اتصال» على علامة في الخادم بدأت {date}. الإكمالات السابقة غير معروفة.",
+    "الأعمار هي الأعمار المذكورة عند التسجيل.",
+  ],
+} as const;
+
 /** level_score >= 70 -> "confident"; >= 40 -> "on_the_way"; else "getting_started" (same rule as the SQL). */
 export function levelBandFor(score: number): LevelBand {
   if (score >= LEVEL_BAND_MIN.confident) return "confident";

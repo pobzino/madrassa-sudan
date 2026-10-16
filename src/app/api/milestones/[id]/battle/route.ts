@@ -5,12 +5,14 @@
 
 import { isUuid } from "@/lib/learners/types";
 import { BOSS_SIGNATURE_TYPES, drawBattleQuestions } from "@/lib/milestones/rules";
+import { drawPlacementQuestions } from "@/lib/measurement/rules";
 import { battleInteractionFor } from "@/lib/server/milestones/interactions";
 import type { GetBattleResponse, StartBattleResponse } from "@/lib/milestones/types";
 import { openMilestoneLearnerRequest } from "@/lib/server/milestones/context";
 import {
   battleStateFor,
   isBossKey,
+  isPlacement,
   loadActiveBattle,
   loadBlockLessons,
   loadMilestoneForLearner,
@@ -21,6 +23,9 @@ import {
   milestoneLockedMessage,
   milestoneUnlockedFor,
   parseLang,
+  type MilestoneAdminClient,
+  type MilestoneRow,
+  type PathRow,
 } from "@/lib/server/milestones/load";
 import type { MilestoneBattleRow } from "@/lib/server/milestones/present";
 
@@ -48,6 +53,66 @@ export async function GET(request: Request, { params }: RouteContext) {
   }
 }
 
+/**
+ * A placement ("Meet your first boss"): never locked; the 12 items follow the
+ * difficulty plan (4 easy, 4 medium, 4 hard; skills round-robin, earlier weeks
+ * first); no "recently seen" preference and no signature-turn reordering.
+ */
+async function startPlacement(
+  admin: MilestoneAdminClient,
+  row: MilestoneRow,
+  path: PathRow,
+  learnerId: string,
+  preview: boolean,
+  lang: "ar" | "en",
+) {
+  const active = await loadActiveBattle(admin, learnerId, row.id);
+  if (active) {
+    const resumed: StartBattleResponse = { battle: await battleStateFor(admin, active, lang), resumed: true };
+    return milestoneJson(resumed);
+  }
+  // The pool and each lesson's week, in parallel (one query: weeks with their steps embedded).
+  const [pool, { data: weeks }] = await Promise.all([
+    loadPool(admin, row.assignment_id),
+    admin
+      .from("learning_path_weeks")
+      .select("week_number, learning_path_steps(lesson_id)")
+      .eq("path_id", path.id)
+      .returns<Array<{ week_number: number; learning_path_steps?: Array<{ lesson_id: string }> | null }>>(),
+  ]);
+  const weekOfLesson = new Map<string, number>();
+  for (const week of weeks ?? []) {
+    for (const step of week.learning_path_steps ?? []) {
+      weekOfLesson.set(step.lesson_id, Math.min(week.week_number, weekOfLesson.get(step.lesson_id) ?? 99));
+    }
+  }
+  const drawn = drawPlacementQuestions(
+    pool.map((question) => ({
+      id: question.id,
+      skillKey: question.skill_key ?? null,
+      difficulty: question.difficulty === 1 || question.difficulty === 2 || question.difficulty === 3 ? question.difficulty : null,
+      sourceWeek: question.source_lesson_id ? weekOfLesson.get(question.source_lesson_id) ?? 99 : 99,
+      sourceLessonId: question.source_lesson_id,
+    })),
+    row.battle_question_count,
+  );
+  if (drawn.length === 0) return milestoneError("service_unavailable", 503);
+
+  const { data, error } = await admin.rpc("start_milestone_battle", {
+    p_milestone_id: row.id,
+    p_learner_id: learnerId,
+    p_question_ids: drawn.map((question) => question.id),
+    p_preview: preview,
+  });
+  if (error || !data) {
+    const mapped = mapMilestoneRpcError(error, { lang, bossKey: isBossKey(row.boss_key) ? row.boss_key : null });
+    return milestoneError(mapped.code, mapped.status, mapped.code === "placement_done" ? { message: mapped.message } : {});
+  }
+  const result = data as { battle: MilestoneBattleRow; resumed: boolean };
+  const response: StartBattleResponse = { battle: await battleStateFor(admin, result.battle, lang), resumed: result.resumed === true };
+  return milestoneJson(response);
+}
+
 export async function POST(request: Request, { params }: RouteContext) {
   const { id } = await params;
   const opened = await openMilestoneLearnerRequest(request);
@@ -62,6 +127,8 @@ export async function POST(request: Request, { params }: RouteContext) {
     const loaded = await loadMilestoneForLearner(admin, id, { preview });
     if (!loaded) return milestoneError("milestone_not_found", 404);
     const { row, path } = loaded;
+
+    if (isPlacement(row)) return startPlacement(admin, row, path, learnerId, preview, lang);
 
     if (!preview && !(await milestoneUnlockedFor(admin, row, path, learnerId))) {
       return milestoneError("milestone_locked", 409, { message: milestoneLockedMessage(lang, row.after_week_number) });

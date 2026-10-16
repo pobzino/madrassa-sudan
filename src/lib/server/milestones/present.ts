@@ -6,7 +6,7 @@ import {
   type LessonLanguageMode,
 } from "@/lib/practice-language";
 import { battlePhase, battleTurn, bossHpPercent } from "@/lib/milestones/rules";
-import type { BattleQuestion, BattleState, BattleStatus, Lang, OwlHint } from "@/lib/milestones/types";
+import type { BattleQuestion, BattleState, BattleStatus, Lang, MilestoneKind, OwlHint } from "@/lib/milestones/types";
 import { cachedNarrationUrl, questionNarration, type NarratableQuestion } from "@/lib/server/question-audio";
 import {
   battleInteractionFor,
@@ -34,6 +34,9 @@ export interface MilestonePoolQuestion extends NarratableQuestion {
   display_order: number;
   /** The item as a shared Interaction (with its key). Null on legacy MC/TF/short rows. */
   interaction: unknown;
+  /** Measurement tags (null = untagged). */
+  skill_key?: string | null;
+  difficulty?: number | null;
 }
 
 /** A milestone_battles row (§1.2). */
@@ -58,6 +61,20 @@ export interface MilestoneBattleRow {
   /** The one Owl Hint: which position it was used on (null = unused). */
   hint_used_question_index: number | null;
   hint_used_at: string | null;
+  /** Absent on rows read before the measurement migration: "milestone". */
+  kind?: MilestoneKind;
+  /** Placement only: set when staff re-placed the learner. */
+  superseded_at?: string | null;
+}
+
+export function isPlacementBattle(row: Pick<MilestoneBattleRow, "kind">): boolean {
+  return row.kind === "placement";
+}
+
+/** A placement's meter: down one step per answer, whatever the verdict. */
+export function placementHpPercent(row: Pick<MilestoneBattleRow, "question_count" | "answered_count">): number {
+  if (row.question_count <= 0) return 0;
+  return Math.max(0, Math.round((100 * (row.question_count - row.answered_count)) / row.question_count));
 }
 
 function normalizeDigits(value: string) {
@@ -151,8 +168,15 @@ export function battleDisplayOptions(
   return toBattleQuestion(question, battleId, 0, lang, languageMode)?.options ?? [];
 }
 
-export function heartsLeftFor(row: Pick<MilestoneBattleRow, "hearts_total" | "wrong_count">) {
+export function heartsLeftFor(row: Pick<MilestoneBattleRow, "hearts_total" | "wrong_count" | "kind">) {
+  // A placement has no tries: the UI hides them, and they never run out.
+  if (row.kind === "placement") return row.hearts_total;
   return Math.max(0, row.hearts_total - row.wrong_count);
+}
+
+/** The boss meter of any battle kind. */
+export function battleHpPercent(row: Pick<MilestoneBattleRow, "kind" | "correct_count" | "required_correct" | "question_count" | "answered_count">) {
+  return row.kind === "placement" ? placementHpPercent(row) : bossHpPercent(row.correct_count, row.required_correct);
 }
 
 export function battleStateFromRow(
@@ -161,7 +185,8 @@ export function battleStateFromRow(
   certificateId: string | null,
   extras: { combo?: number; hint?: OwlHint | null } = {},
 ): BattleState {
-  const hp = bossHpPercent(row.correct_count, row.required_correct);
+  const placement = row.kind === "placement";
+  const hp = battleHpPercent(row);
   const active = row.status === "active";
   return {
     battleId: row.id,
@@ -178,10 +203,12 @@ export function battleStateFromRow(
     answeredCount: row.answered_count,
     bossHpPercent: hp,
     question: active ? question : null,
-    certificateId,
-    combo: extras.combo ?? 0,
+    certificateId: placement ? null : certificateId,
+    combo: placement ? 0 : extras.combo ?? 0,
     phase: battlePhase(hp),
     hintUsed: row.hint_used_question_index !== null && row.hint_used_question_index !== undefined,
-    hint: active && row.hint_used_question_index === row.answered_count ? extras.hint ?? null : null,
+    hint: active && !placement && row.hint_used_question_index === row.answered_count ? extras.hint ?? null : null,
+    kind: placement ? "placement" : "milestone",
+    hintAllowed: !placement,
   };
 }

@@ -14,7 +14,8 @@ import {
   type ProgressActivity,
   type StreakState,
 } from "@/lib/email/digest";
-import type { ChildWeeklySummary } from "@/lib/email/templates";
+import type { ChildSkillsDigest, ChildWeeklySummary } from "@/lib/email/templates";
+import type { LearnerProgressSummary } from "@/lib/measurement/types";
 import type { EmailLanguage } from "@/lib/email/render";
 import { emailAutomationConfig, RESEND_BATCH_LIMIT, sendEmails, type OutgoingEmail } from "@/lib/email/send";
 import {
@@ -260,6 +261,8 @@ export type WeeklyFamily = {
   childSummaries: ChildWeeklySummary[];
   /** Learned in the four weeks before this one, so a quiet week counts as lapsing. */
   learnedBefore: boolean;
+  /** Skills the family's children learned this month (MEASUREMENT_DIGEST_ENABLED only). */
+  skillsLearned?: number;
 };
 
 /** Each parent account's week. Loaded once and shared by the Sunday email and push runs. */
@@ -348,19 +351,30 @@ export async function loadWeeklyFamilies(window: PeriodWindow): Promise<WeeklyFa
     streakBy.get(id) ?? null,
   );
 
+  // Learning measurement (behind MEASUREMENT_DIGEST_ENABLED): one extra call per 2000 children.
+  const childIds = [...ownerByLearner.entries()].filter(([learnerId, ownerId]) => learnerId !== ownerId).map(([learnerId]) => learnerId);
+  const skillsByLearner = measurementDigestEnabled() ? await loadChildSkillDigests(db, childIds, window.end) : new Map<string, ChildSkillsDigest>();
+
   return parents.map((parent) => {
     const learnerIds = [...ownerByLearner.entries()].filter(([, ownerId]) => ownerId === parent.id).map(([learnerId]) => learnerId);
     const memberIds = learnerIds.includes(parent.id) ? learnerIds : [parent.id, ...learnerIds];
     const summary = emptySummary();
     const childSummaries: ChildWeeklySummary[] = [];
     let learnedBefore = false;
+    let skillsLearned = 0;
     for (const learnerId of memberIds) {
       addSummary(summary, summaryForLearner(learnerId));
       const rows = progressBy.get(learnerId) ?? [];
       learnedBefore ||= rows.some((row) => Date.parse(row.updated_at) < window.start.getTime());
       if (learnerId !== parent.id) {
         const profile = learnerById.get(learnerId);
-        childSummaries.push({ name: profile?.learner_name?.trim() || profile?.full_name?.trim() || "Learner", summary: summaryForLearner(learnerId) });
+        const skills = skillsByLearner.get(learnerId);
+        skillsLearned += skills?.learned.length ?? 0;
+        childSummaries.push({
+          name: profile?.learner_name?.trim() || profile?.full_name?.trim() || "Learner",
+          summary: summaryForLearner(learnerId),
+          ...(skills ? { skills } : {}),
+        });
       }
     }
     return {
@@ -368,8 +382,43 @@ export async function loadWeeklyFamilies(window: PeriodWindow): Promise<WeeklyFa
       summary,
       childSummaries,
       learnedBefore,
+      ...(skillsByLearner.size ? { skillsLearned } : {}),
     };
   });
+}
+
+export function measurementDigestEnabled() {
+  return process.env.MEASUREMENT_DIGEST_ENABLED === "true";
+}
+
+const SUMMARY_CHUNK = 2000;
+
+/**
+ * Each child's skills learned this month and growth since the starting boss,
+ * from measurement_learner_summaries (bands only). Children with no data get
+ * no entry, so nothing is added for them.
+ */
+export async function loadChildSkillDigests(db: UntypedClient, learnerIds: string[], now: Date): Promise<Map<string, ChildSkillsDigest>> {
+  const digests = new Map<string, ChildSkillsDigest>();
+  for (const ids of chunk(learnerIds, SUMMARY_CHUNK)) {
+    if (!ids.length) continue;
+    const { data, error } = await db.rpc("measurement_learner_summaries", { p_learner_ids: ids, p_now: now.toISOString() });
+    if (error) throw new Error(error.message);
+    for (const summary of (data ?? []) as LearnerProgressSummary[]) {
+      const digest = childSkillDigest(summary);
+      if (digest) digests.set(summary.learnerId, digest);
+    }
+  }
+  return digests;
+}
+
+/** Growth is listed only with a valid baseline and a current band that differs (or both "confident"). */
+export function childSkillDigest(summary: LearnerProgressSummary): ChildSkillsDigest | null {
+  const learned = summary.skillsLearned.map((chip) => ({ skillKey: chip.skillKey, familyLabelEn: chip.familyLabelEn, familyLabelAr: chip.familyLabelAr }));
+  const growth = summary.subjects
+    .filter((subject) => subject.baseline?.valid && subject.current && (subject.baseline.band !== subject.current.band || subject.current.band === "confident"))
+    .map((subject) => ({ subjectNameEn: subject.subjectNameEn, subjectNameAr: subject.subjectNameAr, from: subject.baseline!.band, to: subject.current!.band }));
+  return learned.length || growth.length ? { learned, growth } : null;
 }
 
 /** Sunday's summary of the past week for each family, or a nudge if they've lapsed recently. */

@@ -11,6 +11,7 @@ import type { TeacherMilestoneDetail } from "@/lib/milestones/types";
 import { interactionShape, type BattleInteraction } from "@/lib/server/milestones/interactions";
 import {
   isBossKey,
+  isPlacement,
   loadBlockLessons,
   milestoneError,
   milestoneJson,
@@ -18,8 +19,11 @@ import {
   type MilestoneAdminClient,
   type MilestoneRow,
 } from "@/lib/server/milestones/load";
+import { PLACEMENT_QUESTION_COUNT, PLACEMENT_SOURCE_WEEKS } from "@/lib/measurement/types";
+import { assessableSkills, loadSubjectSkills } from "@/lib/server/measurement/skills";
 import {
   isValidBattleQuestionCount,
+  teacherTagWrite,
   loadMilestoneRow,
   loadTeacherQuestions,
   openStaffRequest,
@@ -35,16 +39,30 @@ export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+const PLACEMENT_WEEKS = Array.from({ length: PLACEMENT_SOURCE_WEEKS }, (_, i) => i + 1);
+
+async function pathSubject(admin: MilestoneAdminClient, pathId: string) {
+  const { data } = await admin.from("learning_paths").select("subject_id").eq("id", pathId).maybeSingle<{ subject_id: string }>();
+  return data?.subject_id ?? null;
+}
+
+async function subjectSkills(admin: MilestoneAdminClient, pathId: string) {
+  const subjectId = await pathSubject(admin, pathId);
+  return subjectId ? (await loadSubjectSkills(admin, subjectId)).skills : [];
+}
+
 async function detail(admin: MilestoneAdminClient, row: MilestoneRow, lang: "ar" | "en"): Promise<TeacherMilestoneDetail> {
-  const [milestone, questions, lessons] = await Promise.all([
+  const [milestone, questions, lessons, skills] = await Promise.all([
     teacherMilestoneRow(admin, row),
     loadTeacherQuestions(admin, row.assignment_id),
-    loadBlockLessons(admin, row.path_id, row.after_week_number, lang),
+    loadBlockLessons(admin, row.path_id, row.after_week_number, lang, isPlacement(row) ? PLACEMENT_WEEKS : undefined),
+    subjectSkills(admin, row.path_id).catch(() => []),
   ]);
   return {
     milestone,
     questions,
     lessons: lessons.map((lesson) => ({ id: lesson.lessonId, title: lesson.title, weekNumber: lesson.weekNumber })),
+    skills: assessableSkills(skills),
   };
 }
 
@@ -91,6 +109,9 @@ export async function PUT(request: Request, { params }: RouteContext) {
       milestoneUpdate.title_en = typeof body.titleEn === "string" && body.titleEn.trim() ? body.titleEn.trim() : null;
     }
     if (body.battleQuestionCount !== undefined) {
+      if (isPlacement(row) && body.battleQuestionCount !== PLACEMENT_QUESTION_COUNT) {
+        return milestoneError("invalid_answer", 400, { message: "A starting boss always has 12 questions." });
+      }
       if (!isValidBattleQuestionCount(body.battleQuestionCount)) {
         return milestoneError("invalid_answer", 400, { message: "The battle size must be 8 to 16 questions." });
       }
@@ -108,6 +129,13 @@ export async function PUT(request: Request, { params }: RouteContext) {
         const result = validateTeacherQuestion(raw, index);
         if ("error" in result) return milestoneError("invalid_answer", 400, { message: result.error });
         incoming.push(result.item);
+      }
+
+      // Tags: a skill must be one of the subject's assessable skills.
+      if (incoming.some((question) => typeof question.skill_key === "string")) {
+        const allowed = new Set(assessableSkills(await subjectSkills(admin, row.path_id)).map((skill) => skill.skillKey));
+        const bad = incoming.findIndex((question) => typeof question.skill_key === "string" && !allowed.has(question.skill_key));
+        if (bad >= 0) return milestoneError("invalid_answer", 400, { message: `Question ${bad + 1}: unknown skill for this subject.` });
       }
 
       const existing = await loadTeacherQuestions(admin, row.assignment_id);
@@ -129,7 +157,9 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
       const removedIds = existing.map((question) => question.id!).filter((qid) => !incomingIds.includes(qid));
       for (const question of incoming) {
-        const write = questionWriteRow(row.assignment_id, question);
+        // Tag edits are allowed while published (they don't change the item's shape).
+        const stored = question.id ? existingById.get(question.id) ?? null : null;
+        const write = questionWriteRow(row.assignment_id, question, teacherTagWrite(question, stored, now));
         const { error } = question.id
           ? await admin.from("homework_questions").update(write).eq("id", question.id).eq("assignment_id", row.assignment_id)
           : await admin.from("homework_questions").insert(write);
@@ -162,6 +192,11 @@ export async function PUT(request: Request, { params }: RouteContext) {
     }
     const { error: updateError } = await admin.from("learning_path_milestones").update(milestoneUpdate).eq("id", row.id);
     if (updateError) throw new Error(updateError.message);
+    if (body.questions !== undefined) {
+      // Tag corrections apply to history (measurement item snapshots and level scores).
+      const { error: refreshError } = await admin.rpc("measurement_refresh_tags", { p_milestone_id: row.id });
+      if (refreshError) console.error("measurement_refresh_tags failed:", refreshError.message);
+    }
 
     const updated = await loadMilestoneRow(admin, row.id);
     if (!updated) return milestoneError("milestone_not_found", 404);

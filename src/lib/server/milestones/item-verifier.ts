@@ -1,6 +1,7 @@
 import "server-only";
 
 import { AI_MODEL_FAST, getOpenAIClient } from "@/lib/ai/openai-client";
+import type { Difficulty, TagSource } from "@/lib/measurement/types";
 import {
   interactionPerms,
   toPublicInteraction,
@@ -22,6 +23,10 @@ export interface ItemVerdict {
   matchesKey: boolean;
   flags: VerifyFlag[];
   reason: string;
+  /** The verifier's blind difficulty estimate (1-3), when given. */
+  difficulty?: Difficulty | null;
+  /** The skill the verifier thinks the item checks, when given. */
+  skillKey?: string | null;
 }
 
 export interface VerifyRequest {
@@ -29,6 +34,8 @@ export interface VerifyRequest {
   lessonTitleEn: string;
   subjectName: string;
   gradeLevel: number;
+  /** The subject's assessable skills (for the skill_key estimate). */
+  skills?: Array<{ key: string; label: string }>;
 }
 
 export type ItemVerifier = (request: VerifyRequest) => Promise<ItemVerdict[]>;
@@ -77,32 +84,34 @@ export function describeForChild(item: BattleInteraction, index: number): string
   return JSON.stringify(shown);
 }
 
-const VERDICT_SCHEMA = {
-  type: "object",
-  properties: {
-    verdicts: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          index: { type: "integer" },
-          child_answer: { type: "string" },
-          matches_key: { type: "boolean" },
-          ambiguous: { type: "boolean" },
-          wrong_key: { type: "boolean" },
-          needs_picture: { type: "boolean" },
-          incomplete_prompt: { type: "boolean" },
-          too_hard: { type: "boolean" },
-          reason: { type: "string" },
-        },
-        required: ["index", "child_answer", "matches_key", "ambiguous", "wrong_key", "needs_picture", "incomplete_prompt", "too_hard", "reason"],
-        additionalProperties: false,
+/** The verdict schema; adds the blind `difficulty` (1-3) and `skill_key` (one of the subject's skills). */
+export function verdictSchema(skillKeys: readonly string[] = []) {
+  const keys = [...new Set(skillKeys.filter(Boolean))];
+  const properties = {
+    index: { type: "integer" },
+    child_answer: { type: "string" },
+    matches_key: { type: "boolean" },
+    ambiguous: { type: "boolean" },
+    wrong_key: { type: "boolean" },
+    needs_picture: { type: "boolean" },
+    incomplete_prompt: { type: "boolean" },
+    too_hard: { type: "boolean" },
+    reason: { type: "string" },
+    difficulty: { type: "integer", enum: [1, 2, 3] },
+    skill_key: keys.length ? { type: "string", enum: keys } : { type: "string" },
+  };
+  return {
+    type: "object",
+    properties: {
+      verdicts: {
+        type: "array",
+        items: { type: "object", properties, required: Object.keys(properties), additionalProperties: false },
       },
     },
-  },
-  required: ["verdicts"],
-  additionalProperties: false,
-} as const;
+    required: ["verdicts"],
+    additionalProperties: false,
+  } as const;
+}
 
 /** The default verifier: one structured call on the fast model per lesson's items. */
 export const verifyItemsWithModel: ItemVerifier = async (request) => {
@@ -127,6 +136,8 @@ For each item set:
 - incomplete_prompt: the prompt is missing words, the rule to follow, or doesn't make sense on its own.
 - too_hard: well beyond a 7-year-old at this grade.
 - reason: one short sentence when any flag is true or matches_key is false, else "".
+- difficulty: how hard the item is for this grade (1 = recall: one step, a taught fact; 2 = apply: one step on a fresh example or a familiar two-step; 3 = stretch: two or more steps or a new context).
+- skill_key: the skill the item checks${request.skills?.length ? `, one of: ${request.skills.map((skill) => `${skill.key} (${skill.label})`).join("; ")}` : ""}.
 Trace-a-letter items (type "trace_letter") have nothing to choose: the child traces the letter shown. Set child_answer to "trace" and matches_key to true; only judge the prompt: it must make sense on its own and ask the child to trace (write) exactly that letter (incomplete_prompt otherwise).
 Return one verdict per item, using its index.`;
 
@@ -136,7 +147,10 @@ Return one verdict per item, using its index.`;
       { role: "system", content: "You are a strict, careful reviewer of children's quiz items. When in doubt, flag." },
       { role: "user", content: prompt },
     ],
-    response_format: { type: "json_schema", json_schema: { name: "milestone_item_verdicts", strict: true, schema: VERDICT_SCHEMA } },
+    response_format: {
+      type: "json_schema",
+      json_schema: { name: "milestone_item_verdicts", strict: true, schema: verdictSchema((request.skills ?? []).map((skill) => skill.key)) },
+    },
   });
   const text = completion.choices[0]?.message?.content;
   if (!text) throw new Error("Big Challenge verification returned no content.");
@@ -147,8 +161,27 @@ Return one verdict per item, using its index.`;
     matchesKey: verdict.matches_key === true,
     flags: VERIFY_FLAGS.filter((flag) => verdict[flag] === true),
     reason: String(verdict.reason ?? ""),
+    // The tag estimates, only when the model gave them.
+    ...(verdict.difficulty === 1 || verdict.difficulty === 2 || verdict.difficulty === 3 ? { difficulty: verdict.difficulty } : {}),
+    ...(typeof verdict.skill_key === "string" && verdict.skill_key ? { skillKey: verdict.skill_key } : {}),
   }));
 };
+
+/**
+ * The stored tags of a generated item: difficulty = the verifier's blind estimate
+ * when present, else the generator's; skill = the generator's. Disputed when the
+ * two disagree on the skill or by two difficulty steps. The drop rules
+ * (applyVerdicts) are not affected.
+ */
+export function mergeTags(
+  generated: { skillKey: string | null; difficulty: Difficulty | null },
+  verdict: Pick<ItemVerdict, "difficulty" | "skillKey"> | null | undefined,
+): { skillKey: string | null; difficulty: Difficulty | null; tagSource: TagSource } {
+  const difficulty = verdict?.difficulty ?? generated.difficulty ?? null;
+  const skillDispute = Boolean(verdict?.skillKey && generated.skillKey && verdict.skillKey !== generated.skillKey);
+  const difficultyDispute = Boolean(verdict?.difficulty && generated.difficulty && Math.abs(verdict.difficulty - generated.difficulty) === 2);
+  return { skillKey: generated.skillKey, difficulty, tagSource: skillDispute || difficultyDispute ? "model_disputed" : "model" };
+}
 
 export interface DroppedItem {
   prompt: string;

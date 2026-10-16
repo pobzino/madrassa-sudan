@@ -33,7 +33,34 @@ export function streakReminderMessage(language: EmailLanguage, streakDays: numbe
 }
 
 /** Sunday's summary, or a gentle nudge after a quiet week. */
-export function weeklySummaryMessage(language: EmailLanguage, summary: WeeklySummary): PushMessage {
+export function weeklySummaryMessage(language: EmailLanguage, summary: WeeklySummary, options: { skillsLearned?: number } = {}): PushMessage {
+  const message = weeklySummaryBase(language, summary);
+  const skills = options.skillsLearned ?? 0;
+  if (skills <= 0 || !hadActivity(summary)) return message;
+  // Learning-measurement suffix (MEASUREMENT_DIGEST_ENABLED only): a count of new skills, never a score.
+  const suffix = language === "ar" ? ` · ${number(language, skills)} مهارات جديدة هذا الشهر` : ` · ${skills} new ${skills === 1 ? "skill" : "skills"} this month`;
+  return { ...message, body: `${message.body}${suffix}` };
+}
+
+/** Sent the first time a child plays the starting boss. No score, no test. */
+export function placementDoneMessage(language: EmailLanguage, args: { childName: string; bossName: string; subjectName: string }): PushMessage {
+  const name = args.childName.trim();
+  const base = { url: "/progress", tag: "placement", image: "/icons/icon-512.png", lang: language };
+  if (language === "ar") {
+    return {
+      ...base,
+      title: name ? `تعرّف ${name} على ${args.bossName}! 🎉` : `تعرّف طفلكم على ${args.bossName}! 🎉`,
+      body: `صار آمال يعرف من أين يبدأ في ${args.subjectName}.`,
+    };
+  }
+  return {
+    ...base,
+    title: `${name || "Your child"} met ${args.bossName}! 🎉`,
+    body: `Amal now knows where to start in ${args.subjectName}.`,
+  };
+}
+
+function weeklySummaryBase(language: EmailLanguage, summary: WeeklySummary): PushMessage {
   const n = (value: number) => number(language, value);
   const daysLearned = summary.activeDays.filter(Boolean).length;
   if (!hadActivity(summary)) {

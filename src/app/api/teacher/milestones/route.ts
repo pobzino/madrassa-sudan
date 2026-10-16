@@ -22,7 +22,7 @@ export async function GET(request: Request) {
       .eq("subject_id", subjectId)
       .eq("is_published", true)
       .maybeSingle<{ id: string }>();
-    if (!path) return milestoneJson({ pathId: null, blocks: [] } satisfies TeacherMilestoneListResponse);
+    if (!path) return milestoneJson({ pathId: null, blocks: [], placement: null } satisfies TeacherMilestoneListResponse);
 
     const [{ data: weeks }, { data: milestones }] = await Promise.all([
       admin
@@ -54,7 +54,10 @@ export async function GET(request: Request) {
 
     const weekByNumber = new Map(weekList.map((week) => [week.week_number, week]));
     const maxWeek = Math.max(0, ...weekList.map((week) => week.week_number));
-    const milestoneByWeek = new Map((milestones ?? []).map((row) => [row.after_week_number, row]));
+    // Blocks are Big Challenges only; the placement ("Meet your first boss") is returned on its own.
+    const blockMilestones = (milestones ?? []).filter((row) => row.kind !== "placement");
+    const placementRow = (milestones ?? []).find((row) => row.kind === "placement") ?? null;
+    const milestoneByWeek = new Map(blockMilestones.map((row) => [row.after_week_number, row]));
 
     const blocks: TeacherMilestoneBlock[] = [];
     for (let k = MILESTONE_WEEKS_PER_BLOCK; k <= maxWeek; k += MILESTONE_WEEKS_PER_BLOCK) {
@@ -70,7 +73,11 @@ export async function GET(request: Request) {
         milestone: milestone ? await teacherMilestoneRow(admin, milestone) : null,
       });
     }
-    return milestoneJson({ pathId: path.id, blocks } satisfies TeacherMilestoneListResponse);
+    return milestoneJson({
+      pathId: path.id,
+      blocks,
+      placement: placementRow ? await teacherMilestoneRow(admin, placementRow) : null,
+    } satisfies TeacherMilestoneListResponse);
   } catch (error) {
     console.error("Teacher milestone list failed:", error);
     return milestoneError("service_unavailable", 500);

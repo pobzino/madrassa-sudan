@@ -65,7 +65,12 @@ export async function runWeeklySummaryPushes({
   for (const family of families ?? (await loadWeeklyFamilies(window))) {
     if (!subscribers.has(family.id)) continue;
     if (!hadActivity(family.summary) && !family.learnedBefore) continue;
-    messages.set(family.id, weeklySummaryMessage(languageOf(family.preferred_language), family.summary));
+    messages.set(
+      family.id,
+      family.skillsLearned
+        ? weeklySummaryMessage(languageOf(family.preferred_language), family.summary, { skillsLearned: family.skillsLearned })
+        : weeklySummaryMessage(languageOf(family.preferred_language), family.summary),
+    );
   }
   return deliver(db, report, messages, dryRun);
 }

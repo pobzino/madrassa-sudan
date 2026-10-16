@@ -1,3 +1,4 @@
+import type { LevelBand } from "@/lib/measurement/types";
 import { renderEmail, type EmailContent, type EmailLanguage, type RenderedEmail, type RenderOptions } from "./render";
 
 type Base = { language: EmailLanguage; name: string | null } & RenderOptions;
@@ -118,7 +119,47 @@ export type WeeklySummary = {
   activeDays: boolean[];
 };
 
-export type ChildWeeklySummary = { name: string; summary: WeeklySummary };
+/** Skills from the learning-measurement summary (only when MEASUREMENT_DIGEST_ENABLED): names and bands, never scores. */
+export type ChildSkillsDigest = {
+  learned: Array<{ skillKey: string; familyLabelEn: string; familyLabelAr: string }>;
+  growth: Array<{ subjectNameEn: string | null; subjectNameAr: string | null; from: LevelBand; to: LevelBand }>;
+};
+export type ChildWeeklySummary = { name: string; summary: WeeklySummary; skills?: ChildSkillsDigest };
+
+/** Level band words for families (mirrored in the app copy). */
+export const LEVEL_BAND_LABELS: Record<EmailLanguage, Record<LevelBand, string>> = {
+  en: { getting_started: "Getting started", on_the_way: "On the way", confident: "Confident" },
+  ar: { getting_started: "في البداية", on_the_way: "في الطريق", confident: "واثق" },
+};
+
+/** At most 3 skill names, then "+N more" (Arabic digits in Arabic). */
+export function skillsLearnedLine(language: EmailLanguage, labels: readonly string[]): string | null {
+  if (!labels.length) return null;
+  const shown = labels.slice(0, 3);
+  const extra = labels.length - shown.length;
+  if (language === "ar") {
+    return `مهارات تعلّمها هذا الشهر: ${shown.join("، ")}${extra > 0 ? ` (+${formatNumber("ar", extra)} أخرى)` : ""}`;
+  }
+  return `Skills learned this month: ${shown.join(", ")}${extra > 0 ? ` (+${extra} more)` : ""}`;
+}
+
+/** "Since starting: Maths — Getting started → On the way". */
+export function growthLine(language: EmailLanguage, growth: ChildSkillsDigest["growth"]): string | null {
+  if (!growth.length) return null;
+  const labels = LEVEL_BAND_LABELS[language];
+  const parts = growth.map((row) => {
+    const subject = (language === "ar" ? row.subjectNameAr || row.subjectNameEn : row.subjectNameEn || row.subjectNameAr) || "";
+    return language === "ar" ? `${subject} — ${labels[row.from]} ← ${labels[row.to]}` : `${subject} — ${labels[row.from]} → ${labels[row.to]}`;
+  });
+  return language === "ar" ? `منذ البداية: ${parts.join("، ")}` : `Since starting: ${parts.join(", ")}`;
+}
+
+function childSkillLines(language: EmailLanguage, child: ChildWeeklySummary): string[] {
+  if (!child.skills) return [];
+  const learned = skillsLearnedLine(language, child.skills.learned.map((chip) => (language === "ar" ? chip.familyLabelAr : chip.familyLabelEn)));
+  const growth = growthLine(language, child.skills.growth);
+  return [learned, growth].filter((line): line is string => Boolean(line)).map((line) => `${child.name}: ${line}`);
+}
 
 export function hadActivity(summary: WeeklySummary) {
   return summary.lessonsStarted + summary.lessonsCompleted + summary.practiceTried > 0 || summary.activeDays.some(Boolean);
@@ -146,6 +187,8 @@ export function weeklyProgressEmail(
       : `${n(child.lessonsStarted)} ${child.lessonsStarted === 1 ? "lesson" : "lessons"} started, ${n(child.lessonsCompleted)} completed, ${n(child.practicePassed)} Practice ${child.practicePassed === 1 ? "set" : "sets"} passed`;
     return `${childName}: ${activity}`;
   });
+  // Learning-measurement lines (flag on only): under the activity lines, for children with data.
+  childLines.push(...childSummaries.flatMap((child) => childSkillLines(language, child)));
 
   if (language === "ar") {
     const footer = {
@@ -368,6 +411,45 @@ export function milestonePassedEmail(
       closingParagraphs: ["That's worth celebrating. Look at the certificate together and cheer on the next lessons."],
       cta: { label: "See the certificate", url: certificateUrl },
       secondaryLink: { label: "Keep learning", url: `${siteUrl}/lessons` },
+    },
+    args,
+  );
+}
+
+/**
+ * Sent once, the first time a child plays the starting boss ("Meet your first
+ * boss"). Only to families who opted in to email updates. No score, no test:
+ * Amal now knows where the child is starting.
+ */
+export function placementDoneEmail(args: Base & { childName: string; bossName: string; subjectName: string }): RenderedEmail {
+  const { language, name, siteUrl, childName, bossName, subjectName } = args;
+  const first = firstName(name);
+  const child = childName.trim();
+  if (language === "ar") {
+    const who = child || "طفلكم";
+    return render(
+      `تعرّف ${who} على ${bossName}! 🎉`,
+      {
+        language,
+        preheader: `صار آمال يعرف من أين يبدأ في ${subjectName}.`,
+        hero: { art: "welcome", alt: "بومة آمال تلوّح بجناحها" },
+        heading: first ? `خبر جميل يا ${first}: تعرّف ${who} على ${bossName}! 🎉` : `تعرّف ${who} على ${bossName}! 🎉`,
+        paragraphs: [`صار آمال يعرف من أين يبدأ ${who} في ${subjectName}. سنشجّع كل مهارة جديدة يتعلّمها ${who}، وستجدونها في ملخص يوم الأحد.`],
+        cta: { label: `شاهد مهارات ${who}`, url: `${siteUrl}/progress` },
+      },
+      args,
+    );
+  }
+  const who = child || "Your child";
+  return render(
+    `${who} met ${bossName}! 🎉`,
+    {
+      language,
+      preheader: `Amal now knows where to start in ${subjectName}.`,
+      hero: { art: "welcome", alt: "The Amal owl waving hello" },
+      heading: first ? `Good news, ${first}: ${who} met ${bossName}! 🎉` : `${who} met ${bossName}! 🎉`,
+      paragraphs: [`Amal now knows where to start in ${subjectName}. We'll cheer on every new skill ${who} learns. You'll see them in your Sunday summary.`],
+      cta: { label: `See ${who}'s skills`, url: `${siteUrl}/progress` },
     },
     args,
   );

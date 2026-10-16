@@ -28,7 +28,9 @@ import {
   type MilestoneAdminClient,
 } from "@/lib/server/milestones/load";
 import { notifyMilestonePassed } from "@/lib/server/milestones/notify";
-import { heartsLeftFor, servedItem, toBattleQuestion, type MilestoneBattleRow } from "@/lib/server/milestones/present";
+import { notifyPlacementDone } from "@/lib/server/measurement/notify";
+import { placementOutcome } from "@/lib/measurement/rules";
+import { battleHpPercent, heartsLeftFor, servedItem, toBattleQuestion, type MilestoneBattleRow } from "@/lib/server/milestones/present";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +48,23 @@ type RecordResult = {
   replay: boolean;
   certificate_id: string | null;
   first_pass: boolean;
+  /** Placement only, once completed (also on a replay). */
+  placement_skills?: Array<{ skill_key: string | null; family_label_en: string | null; family_label_ar: string | null; answered: number; correct: number }> | null;
+  /** This answer completed the learner's first ever placement of this milestone. */
+  placement_first?: boolean;
 };
+
+/** A placement battle's subject (for the outcome's skill chips): milestone -> path. */
+async function placementSubjectId(admin: MilestoneAdminClient, milestoneId: string): Promise<string | null> {
+  const { data: milestone } = await admin
+    .from("learning_path_milestones")
+    .select("path_id")
+    .eq("id", milestoneId)
+    .maybeSingle<{ path_id: string }>();
+  if (!milestone) return null;
+  const { data: path } = await admin.from("learning_paths").select("subject_id").eq("id", milestone.path_id).maybeSingle<{ subject_id: string }>();
+  return path?.subject_id ?? null;
+}
 
 async function nextQuestion(admin: MilestoneAdminClient, battle: MilestoneBattleRow, lang: "ar" | "en"): Promise<BattleQuestion | null> {
   if (battle.status !== "active") return null;
@@ -86,8 +104,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
       ? Promise.all([
           loadBattleQuestion(early, battle, battle.answered_count),
           battle.answered_count + 1 < battle.question_count ? loadBattleQuestion(early, battle, battle.answered_count + 1) : Promise.resolve(null),
-          priorResults(early, battle.id),
-        ])
+          // A placement has no combo; it needs its subject instead (same depth: no extra sequential round trip).
+          battle.kind === "placement" ? Promise.resolve([] as boolean[]) : priorResults(early, battle.id),
+          battle.kind === "placement" ? placementSubjectId(early, battle.milestone_id) : Promise.resolve(null),
+        ] as const)
       : null,
   );
   prefetch.catch(() => undefined);
@@ -104,7 +124,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
   try {
     const battle = await battlePromise;
     if (!battle || battle.learner_id !== context.learnerId) return milestoneError("battle_not_found", 404);
-    const [currentLoaded, nextLoaded, prior] = (await prefetch) ?? [null, null, []];
+    const [currentLoaded, nextLoaded, prior, prefetchedSubject] = (await prefetch) ?? [null, null, [] as boolean[], null];
 
     const isReplay = position < battle.answered_count;
     if (!isReplay) {
@@ -147,6 +167,41 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
     const recorded = data as RecordResult;
     const row = recorded.battle;
     const finished = row.status !== "active";
+
+    if (row.kind === "placement" || battle.kind === "placement") {
+      // Placement: every answer gets the same reaction; the outcome names skills, never numbers.
+      const placementFirst = recorded.placement_first === true && !recorded.replay && !row.is_preview;
+      if (placementFirst) {
+        after(() => notifyPlacementDone(admin, row.id).then(
+          () => undefined,
+          (notifyError) => console.error("Placement note failed:", notifyError),
+        ));
+      }
+      const subjectId = prefetchedSubject ?? (row.status === "completed" ? await placementSubjectId(admin, row.milestone_id) : null);
+      const hp = battleHpPercent({ ...row, kind: "placement" });
+      const result: AnswerResult = {
+        correct: recorded.is_correct === true,
+        heartsLeft: row.hearts_total,
+        bossHpPercent: hp,
+        finished,
+        passed: false,
+        replay: recorded.replay === true,
+        next: finished
+          ? null
+          : !recorded.replay && nextLoaded && row.answered_count === battle.answered_count + 1
+            ? toBattleQuestion(nextLoaded.question, row.id, row.answered_count, lang, nextLoaded.languageMode)
+            : await nextQuestion(admin, row, lang),
+        certificateId: null,
+        firstPass: placementFirst,
+        stars: null,
+        combo: 0,
+        phase: battlePhase(hp),
+        neutral: true,
+        placement: row.status === "completed" ? placementOutcome(recorded.placement_skills ?? [], subjectId ?? "") : null,
+      };
+      return milestoneJson(result);
+    }
+
     const passed = row.status === "won";
     const certificateId = passed && !row.is_preview ? recorded.certificate_id ?? null : null;
     const firstPass = recorded.first_pass === true && !recorded.replay && certificateId !== null;

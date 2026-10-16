@@ -4,6 +4,7 @@ import { slideToInteraction } from "@/lib/interactions/adapters";
 import { TRACE_LETTERS } from "@/lib/interactions/trace-letter";
 import { AI_MODEL, getOpenAIClient } from "@/lib/ai/openai-client";
 import type { BattleInteractionType } from "@/lib/milestones/types";
+import type { Difficulty } from "@/lib/measurement/types";
 import type { Slide } from "@/lib/slides.types";
 import { INTERACTION_FIELD_RULES } from "@/lib/slide-generator-policy";
 import { MISSING_CONTEXT_PATTERN } from "@/lib/server/practice-generator";
@@ -108,6 +109,12 @@ export interface LessonItemRequest {
   types: GeneratedItemType[];
   /** The letters this lesson teaches, when it does (trace_letter items use one of them). */
   letters?: LessonLetters | null;
+  /** The subject's assessable skills (each item is tagged with one). */
+  skills?: Array<{ key: string; label: string }>;
+  /** The lesson's own skill: preferred when it fits; the fallback for a missing / unknown tag. */
+  defaultSkillKey?: string;
+  /** One difficulty per item, in order (placement only). */
+  difficultyPlan?: Difficulty[];
 }
 
 /** Returns raw items in the flat interaction_* shape (validated by the caller). */
@@ -139,17 +146,53 @@ const ITEM_FIELDS = {
   interaction_trace_case: nullable({ type: "string", enum: ["upper", "lower"] }),
 } as const;
 
-const ITEMS_SCHEMA = {
-  type: "object",
-  properties: {
-    items: {
-      type: "array",
-      items: { type: "object", properties: ITEM_FIELDS, required: Object.keys(ITEM_FIELDS), additionalProperties: false },
+/**
+ * The structured-output schema for one request: the interaction fields plus two
+ * required tags, `skill_key` (one of the subject's assessable skills) and
+ * `difficulty` (1 recall, 2 apply, 3 stretch).
+ */
+export function itemsSchema(skillKeys: readonly string[]) {
+  const keys = [...new Set(skillKeys.filter(Boolean))];
+  const fields = {
+    ...ITEM_FIELDS,
+    skill_key: keys.length ? { type: "string", enum: keys } : { type: "string" },
+    difficulty: { type: "integer", enum: [1, 2, 3] },
+  };
+  return {
+    type: "object",
+    properties: {
+      items: {
+        type: "array",
+        items: { type: "object", properties: fields, required: Object.keys(fields), additionalProperties: false },
+      },
     },
-  },
-  required: ["items"],
-  additionalProperties: false,
-} as const;
+    required: ["items"],
+    additionalProperties: false,
+  } as const;
+}
+
+/** The difficulty scale shared by the generator, the verifier, the tagger and the teacher UI. */
+export const DIFFICULTY_SCALE = [
+  "1 = recall: one step, a taught example or fact.",
+  "2 = apply: one step on a fresh example, or a familiar two-step.",
+  "3 = stretch: two or more steps, or transfer to a new context, still inside the taught content.",
+];
+
+/** The SKILLS / DIFFICULTY part of the generation prompt. */
+export function tagPrompt(request: Pick<LessonItemRequest, "skills" | "defaultSkillKey" | "difficultyPlan">): string {
+  const skills = request.skills ?? [];
+  const lines: string[] = [];
+  if (skills.length) {
+    lines.push(`SKILLS (pick the one each item checks; prefer ${request.defaultSkillKey ?? skills[0].key} when it fits)`);
+    for (const skill of skills) lines.push(`- ${skill.key}: ${skill.label}`);
+    lines.push("");
+  }
+  lines.push("DIFFICULTY (set each item's difficulty honestly)", ...DIFFICULTY_SCALE.map((line) => `- ${line}`));
+  if (request.difficultyPlan?.length) {
+    lines.push("", `DIFFICULTY, IN ORDER: ${request.difficultyPlan.join(", ")}`, "Make each item that hard.");
+  }
+  return lines.join("\n");
+}
 
 const CHILD_RULES = [
   "- Items are for a Sudanese child aged roughly 5-12 playing alone on a phone. Keep every prompt short, kind and clear.",
@@ -202,6 +245,8 @@ ${request.content}
 ITEM TYPES, IN ORDER
 ${plan}
 ${request.letters?.letters.length ? `\nLETTERS TAUGHT (trace_letter uses one of these)\n${request.letters.letters.join(" ")}\n` : ""}
+${tagPrompt(request)}
+
 FIELD RULES
 ${INTERACTION_FIELD_RULES.filter((rule) => !/free_response|draw_answer|drag_drop_label|trace_letter/.test(rule)).join("\n")}
 
@@ -219,7 +264,10 @@ Before answering, silently check every answer, translation and distractor.`;
       { role: "system", content: "You are a rigorous bilingual primary-education game designer. Accuracy and child clarity come first." },
       { role: "user", content: prompt },
     ],
-    response_format: { type: "json_schema", json_schema: { name: "milestone_items", strict: true, schema: ITEMS_SCHEMA } },
+    response_format: {
+      type: "json_schema",
+      json_schema: { name: "milestone_items", strict: true, schema: itemsSchema((request.skills ?? []).map((skill) => skill.key).concat(request.defaultSkillKey ?? [])) },
+    },
   });
   const text = completion.choices[0]?.message?.content;
   if (!text) throw new Error("Big Challenge generation returned no content.");
@@ -238,7 +286,10 @@ export function toGeneratedInteraction(raw: unknown, context?: { letters?: Lesso
  * quality), with the reason when it fails. With a lesson `context`, a
  * trace_letter item must trace a letter that lesson teaches.
  */
-export function checkGeneratedItem(raw: unknown, context?: { letters?: LessonLetters | null }): { interaction: BattleInteraction } | { reason: string; prompt: string } {
+export function checkGeneratedItem(
+  raw: unknown,
+  context?: { letters?: LessonLetters | null; skillKeys?: readonly string[]; defaultSkillKey?: string },
+): { interaction: BattleInteraction; skillKey?: string | null; difficulty?: Difficulty | null } | { reason: string; prompt: string } {
   const flat = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const prompt = String(flat.interaction_prompt_en ?? flat.interaction_prompt_ar ?? "");
   const traced = flat.interaction_type === "trace_letter"
@@ -263,7 +314,27 @@ export function checkGeneratedItem(raw: unknown, context?: { letters?: LessonLet
     }
   }
   const issue = itemQualityIssue(checked.interaction);
-  return issue ? { reason: issue, prompt } : checked;
+  if (issue) return { reason: issue, prompt };
+  // Tags never drop an item: an unknown / missing skill becomes the lesson's default, a bad difficulty null.
+  // (No tag and no skill context -> no tag keys, as before.)
+  const tags = generatedTags(flat, context);
+  return {
+    interaction: checked.interaction,
+    ...(tags.skillKey !== null ? { skillKey: tags.skillKey } : {}),
+    ...(tags.difficulty !== null ? { difficulty: tags.difficulty } : {}),
+  };
+}
+
+/** The item's skill / difficulty tags, with the fallbacks (pure). */
+export function generatedTags(
+  flat: Record<string, unknown>,
+  context?: { skillKeys?: readonly string[]; defaultSkillKey?: string },
+): { skillKey: string | null; difficulty: Difficulty | null } {
+  const raw = typeof flat.skill_key === "string" ? flat.skill_key.trim() : "";
+  const known = context?.skillKeys;
+  const skillKey = raw && (!known || known.includes(raw)) ? raw : context?.defaultSkillKey ?? (raw || null);
+  const difficulty = flat.difficulty === 1 || flat.difficulty === 2 || flat.difficulty === 3 ? flat.difficulty : null;
+  return { skillKey, difficulty };
 }
 
 function textsOf(interaction: BattleInteraction): string[] {
