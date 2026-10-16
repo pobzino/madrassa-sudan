@@ -13,6 +13,9 @@ export function classifyAnalyticsSection(path: string): AnalyticsSection {
     path === "/dashboard" ||
     path.startsWith("/lessons") ||
     path.startsWith("/practice") ||
+    path.startsWith("/milestones") ||
+    path.startsWith("/certificates") ||
+    path.startsWith("/boss-book") ||
     path.startsWith("/homework") ||
     path.startsWith("/progress") ||
     path.startsWith("/diagnostic") ||

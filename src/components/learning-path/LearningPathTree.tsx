@@ -5,11 +5,14 @@ import Link from "next/link";
 import { PathOwl } from "./PathOwl";
 import DownloadButton from "@/components/lessons/DownloadButton";
 import { useOffline } from "@/contexts/OfflineContext";
+import { milestoneNodeId } from "@/lib/learning-path";
 import type {
   SubjectLearningPath,
+  TreeMilestone,
   TreeWeek,
   TreeStep,
 } from "@/lib/lessons/useLearningPath";
+import { MilestoneDisc, milestoneCta, milestoneHref, milestoneLabel } from "./MilestoneNode";
 
 const translations = {
   ar: { startTest: "ابدأ الاختبار", retake: "أعد المحاولة", passed: "ناجح", passMark: "75% للنجاح", open: "افتح", test: "اختبار", practice: "التدريب", practiceRetry: "أعد التدريب", practiceAgain: "تدرّب مرة أخرى", watched: (p: number) => `شاهدت ${p}%`, resume: "أكمل", savedOnPhone: "محفوظ على هذا الهاتف" },
@@ -18,7 +21,8 @@ const translations = {
 
 type TreeNode =
   | { kind: "lesson"; id: string; step: TreeStep }
-  | { kind: "test"; id: string; week: TreeWeek };
+  | { kind: "test"; id: string; week: TreeWeek }
+  | { kind: "milestone"; id: string; milestone: TreeMilestone };
 
 // Cleaner serpentine: 2 nodes per row, generous spacing. Flows across a row,
 // curves down, then back — "horizontal, then down". The diamond test node marks
@@ -115,7 +119,10 @@ function SavedBadge() {
   );
 }
 
-function NodeDisc({ node, isCurrent, saved = false }: { node: TreeNode; isCurrent: boolean; saved?: boolean }) {
+function NodeDisc({ node, isCurrent, saved = false, isOnline = true }: { node: TreeNode; isCurrent: boolean; saved?: boolean; isOnline?: boolean }) {
+  if (node.kind === "milestone") {
+    return <MilestoneDisc milestone={node.milestone} isCurrent={isCurrent} isOnline={isOnline} />;
+  }
   if (node.kind === "lesson") {
     const { state } = node.step;
     const completed = state === "completed";
@@ -228,7 +235,7 @@ export default function LearningPathTree({
 }) {
   const t = translations[language];
   const current = currentStepId ?? path.currentStepId;
-  const { isLessonDownloaded, offlineReady } = useOffline();
+  const { isLessonDownloaded, offlineReady, isOnline } = useOffline();
 
   // The owl follows the tapped node; until the student taps, it sits on the
   // current progress node. A tap selects a node (owl glides there) and reveals
@@ -266,6 +273,9 @@ export default function LearningPathTree({
   for (const week of path.weeks) {
     for (const step of week.steps) nodes.push({ kind: "lesson", id: step.id, step });
     if (week.testAssignmentId) nodes.push({ kind: "test", id: `test-${week.id}`, week });
+    // The Big Challenge after this week (weeks 4, 8, 12...).
+    const milestone = (path.milestones ?? []).find((m) => m.afterWeekNumber === week.weekNumber);
+    if (milestone) nodes.push({ kind: "milestone", id: milestoneNodeId(milestone.id), milestone });
   }
 
   const placed = nodes.map((node, i) => {
@@ -296,6 +306,7 @@ export default function LearningPathTree({
   const owlDy = fromPlaced && selPlaced ? fromPlaced.y - selPlaced.y : 0;
 
   const labelFor = (node: TreeNode) => {
+    if (node.kind === "milestone") return milestoneLabel(node.milestone, language, isOnline);
     if (node.kind === "lesson") {
       // Part-way through: say how far, so a half-watched lesson is obvious at a
       // glance instead of looking identical to an untouched one.
@@ -314,12 +325,14 @@ export default function LearningPathTree({
   };
   // Call-to-action shown on the selected node to actually open the lesson/test.
   const ctaFor = (node: TreeNode): string => {
+    if (node.kind === "milestone") return milestoneCta(node.milestone, language);
     if (node.kind === "lesson") return isPartlyWatched(node.step) ? t.resume : t.open;
     if (node.week.testState === "failed") return t.retake;
     if (node.week.testState === "passed") return t.open;
     return t.startTest;
   };
   const hrefFor = (node: TreeNode): string | null => {
+    if (node.kind === "milestone") return milestoneHref(node.milestone, isOnline);
     if (node.kind === "lesson") {
       return node.step.state === "locked" ? null : `/lessons/${node.step.lessonId}`;
     }
@@ -393,10 +406,10 @@ export default function LearningPathTree({
                     }}
                     aria-label={saved ? `${label.title} — ${t.savedOnPhone}` : label.title}
                   >
-                    <NodeDisc node={node} isCurrent={isSelected} saved={saved} />
+                    <NodeDisc node={node} isCurrent={isSelected} saved={saved} isOnline={isOnline} />
                   </button>
                 ) : (
-                  <NodeDisc node={node} isCurrent={isSelected} saved={saved} />
+                  <NodeDisc node={node} isCurrent={isSelected} saved={saved} isOnline={isOnline} />
                 )}
               </div>
               {/* Label below (+ Open CTA on the selected node) */}
