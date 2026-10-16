@@ -334,6 +334,15 @@ function DodgeLanes({ lang, disabled, onSubmit }: BattleMoveProps) {
 
 /* ---------------------- tap_to_count: the boss throws them; catch for the owl */
 
+/** The CSS zoom an element is drawn at (screen px per layout px). */
+function zoomOf(element: HTMLElement): number {
+  const width = element.offsetWidth;
+  if (!width) return 1;
+  const z = element.getBoundingClientRect().width / width;
+  // Only whole zoom steps matter here, not a transform in flight.
+  return Number.isFinite(z) && z > 0.5 && z < 3 ? Math.round(z * 20) / 20 : 1;
+}
+
 function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, catchTarget, throwFrom, hintButton, catchRise = 0, catchAvoid, catchKey = "" }: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "tap_to_count" }> }) {
   const t = MILESTONE_COPY[lang];
   // More than any count asked for: the prompt says how many to catch.
@@ -348,13 +357,22 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
     if (!field) return;
     const measure = () => {
       const box = field.getBoundingClientRect();
+      // Screen rects -> the field's own (unzoomed) pixels: the desktop move is zoomed.
+      const z = zoomOf(field);
+      const width = box.width / z;
+      const height = box.height / z;
       const margin = 6;
-      const avoid = catchAvoid?.() ?? [];
-      const exclude = avoid.map((r) => ({ left: r.left - box.left - margin, top: r.top - box.top - margin, right: r.right - box.left + margin, bottom: r.bottom - box.top + margin }));
-      // The owl (the last rect) keeps everything under it clear too: its platform.
+      const local = (r: { left: number; top: number; right: number; bottom: number }) => ({
+        left: (r.left - box.left) / z - margin,
+        top: (r.top - box.top) / z - margin,
+        right: (r.right - box.left) / z + margin,
+        bottom: (r.bottom - box.top) / z + margin,
+      });
+      const exclude = (catchAvoid?.() ?? []).map(local);
+      // The owl keeps everything under it clear too: its platform.
       const owl = catchTarget?.();
-      if (owl) exclude.push({ left: owl.left - box.left - margin, top: owl.top + owl.height * 0.08 - box.top - margin, right: owl.right - box.left + margin, bottom: box.height + 1 });
-      setLayout(layoutCatch({ count: total, width: box.width, height: box.height, exclude, seed }));
+      if (owl) exclude.push({ ...local({ left: owl.left, top: owl.top + owl.height * 0.08, right: owl.right, bottom: owl.bottom }), bottom: height + 1 });
+      setLayout(layoutCatch({ count: total, width, height, exclude, seed }));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -371,8 +389,9 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
     const items = Array.from(fieldRef.current?.querySelectorAll<HTMLElement>("[data-thrown]") ?? []);
     const animations = items.map((el, i) => {
       const box = el.getBoundingClientRect();
-      const dx = from ? from.left + from.width / 2 - (box.left + box.width / 2) : 0;
-      const dy = from ? from.top + from.height / 2 - (box.top + box.height / 2) : -200;
+      const z = zoomOf(el);
+      const dx = from ? (from.left + from.width / 2 - (box.left + box.width / 2)) / z : 0;
+      const dy = from ? (from.top + from.height / 2 - (box.top + box.height / 2)) / z : -200;
       return play(el, [
         { transform: `translate(${dx}px, ${dy}px) rotate(-200deg) scale(0.4)`, opacity: 0 },
         { transform: "translate(0, 0) rotate(0deg) scale(1)", opacity: 1 },
@@ -386,10 +405,11 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
     if (disabled || caught.includes(index)) return;
     const from = element.getBoundingClientRect();
     const to = catchTarget?.();
+    const z = zoomOf(element);
     const animation = to
       ? play(element, [
           { transform: "translate(0, 0) scale(1)", opacity: 1 },
-          { transform: `translate(${to.left + to.width / 2 - (from.left + from.width / 2)}px, ${to.top + to.height / 2 - (from.top + from.height / 2)}px) scale(0.35)`, opacity: 0.2 },
+          { transform: `translate(${(to.left + to.width / 2 - (from.left + from.width / 2)) / z}px, ${(to.top + to.height / 2 - (from.top + from.height / 2)) / z}px) scale(0.35)`, opacity: 0.2 },
         ], { duration: 420, easing: "ease-in", fill: "forwards" })
       : null;
     const done = () => setCaught((current) => [...current, index]);

@@ -1,5 +1,6 @@
 "use client";
 
+import AmalLoading from "@/components/AmalLoading";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { BOSS_KEYS, type BossBookEntry, type BossBookResponse, type Lang } from "@/lib/milestones/types";
@@ -83,9 +84,11 @@ export default function BossBook({ lang, fetcher }: { lang: Lang; fetcher: Fetch
       </header>
 
       {!ordered ? (
-        <p className="py-16 text-center text-xl font-semibold text-gray-600" role={failed ? undefined : "status"}>
-          {failed ? t.error : t.loading}
-        </p>
+        failed ? (
+          <p className="py-16 text-center text-xl font-semibold text-gray-600">{t.error}</p>
+        ) : (
+          <AmalLoading message={t.loading} dir={lang === "ar" ? "rtl" : "ltr"} />
+        )
       ) : (
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {ordered.map((entry) => {

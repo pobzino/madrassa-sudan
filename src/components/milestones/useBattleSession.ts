@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InteractionAnswer } from "@/lib/interactions/types";
-import type { AnswerResult, BattleQuestion, BattleState, BattleTurn, Lang, MilestoneIntroResponse, OwlHint } from "@/lib/milestones/types";
+import type { AnswerResult, BattleQuestion, BattleState, BattleTurn, Lang, MilestoneIntroResponse, OwlHint, StartBattleResponse } from "@/lib/milestones/types";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { MilestoneApiError, MilestoneNetworkError, milestoneApi, type Fetcher } from "./api";
 import { answerRequestFor } from "./moves/contract";
 import { superReady, turnOf } from "./turns";
+import { loadIntro, takeEarlyStart } from "./prefetch";
 
 /**
  * The battle's data and rules, with no drawing: load or resume, start a new
@@ -112,9 +113,8 @@ export function useBattleSession({
     else setScreen("abandoned");
   }, []);
 
-  const start = useCallback(
-    async (introData: MilestoneIntroResponse | null) => {
-      const started = await milestoneApi.startBattle(fetcher, milestoneId, lang);
+  const applyStart = useCallback(
+    (started: StartBattleResponse, introData: MilestoneIntroResponse | null) => {
       trackAnalyticsEvent("milestone_battle_start", {
         milestone_id: milestoneId,
         milestone_level: introData?.milestone.level ?? 1,
@@ -130,7 +130,14 @@ export function useBattleSession({
         callbacks.current.onEntrance(started.resumed ? "resume" : started.battle.attemptNumber > 1 ? "rematch" : "first");
       }
     },
-    [enterBattle, fetcher, lang, milestoneId]
+    [enterBattle, milestoneId]
+  );
+
+  const start = useCallback(
+    async (introData: MilestoneIntroResponse | null) => {
+      applyStart(await milestoneApi.startBattle(fetcher, milestoneId, lang), introData);
+    },
+    [applyStart, fetcher, lang, milestoneId]
   );
 
   const handleLoadError = useCallback((error: unknown) => {
@@ -147,8 +154,18 @@ export function useBattleSession({
   const load = useCallback(async () => {
     setScreen((current) => (current === "won" || current === "lost" ? current : "loading"));
     try {
+      // Pressing Play on the intro already started (or resumed) the battle.
+      const early = takeEarlyStart(milestoneId);
+      if (early) {
+        const [introData, started] = await Promise.all([loadIntro(fetcher, milestoneId, lang), early.catch(() => null)]);
+        setIntro(introData);
+        if (started) {
+          applyStart(started, introData);
+          return;
+        }
+      }
       const [introData, current] = await Promise.all([
-        milestoneApi.intro(fetcher, milestoneId, lang),
+        loadIntro(fetcher, milestoneId, lang),
         milestoneApi.getBattle(fetcher, milestoneId, lang),
       ]);
       setIntro(introData);
@@ -165,7 +182,7 @@ export function useBattleSession({
     } catch (error) {
       handleLoadError(error);
     }
-  }, [enterBattle, fetcher, handleLoadError, lang, milestoneId, start]);
+  }, [applyStart, enterBattle, fetcher, handleLoadError, lang, milestoneId, start]);
 
   useEffect(() => {
     const id = window.setTimeout(() => void load(), 0);

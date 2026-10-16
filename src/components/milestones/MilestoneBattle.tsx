@@ -1,15 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import type { LearnerAvatar } from "@/lib/learners/types";
 import type { AnswerResult, Lang } from "@/lib/milestones/types";
 import { ArenaBackdrop, type PlacedAnchor } from "@/components/characters";
-import BattleScene, { type FxEvent } from "./BattleScene";
+import AmalLoading from "@/components/AmalLoading";
+import BattleScene, { useViewport, type FxEvent } from "./BattleScene";
 import { MessageScreen, SoCloseScreen, VictoryScreen } from "./BattleEndScreens";
 import { NeedsInternetCard } from "./BattleParts";
 import type { Fetcher } from "./api";
 import { bossName, formatNumber, MILESTONE_COPY } from "./copy";
+import { layoutModeFor } from "./geometry";
 import { useBattleFeedback } from "./motion";
+import { recallBoss } from "./prefetch";
 import { useBattleSession, type EntranceKind, type Feedback, type PendingAnswer } from "./useBattleSession";
 
 /**
@@ -25,8 +28,16 @@ export interface MilestoneBattleProps {
   learner: { name: string; avatar: LearnerAvatar | null } | null;
 }
 
+const noSubscribe = () => () => undefined;
+
 export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, learner }: MilestoneBattleProps) {
   const t = MILESTONE_COPY[lang];
+  const viewport = useViewport();
+  const mode = layoutModeFor(viewport.width, viewport.height);
+  // A landscape screen too small for the desktop layout gets a phone-shaped stage.
+  const staged = mode === "phone" && viewport.width > viewport.height;
+  // The boss we're about to fight, remembered from the path or the intro, for the loading line.
+  const rememberedBoss = useSyncExternalStore(noSubscribe, () => recallBoss(milestoneId), () => null);
   const sounds = useBattleFeedback();
   const [entrance, setEntrance] = useState<EntranceKind | null>(null);
   const [fxEvent, setFxEvent] = useState<FxEvent | null>(null);
@@ -77,7 +88,7 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
   );
 
   const { screen, intro, battle, question } = session;
-  const bossKey = intro?.milestone.bossKey ?? "puzzle_owlet";
+  const bossKey = intro?.milestone.bossKey ?? rememberedBoss ?? "puzzle_owlet";
   const level = intro?.milestone.level ?? 1;
   const powered = screen === "play" && battle?.phase === 2;
   const fontStyle: CSSProperties = {
@@ -94,13 +105,14 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
       className="notranslate fixed inset-0 z-[60] h-[100dvh] overflow-hidden bg-[radial-gradient(ellipse_at_center,#0B4A26,#04200F)] text-white"
       style={fontStyle}
     >
-      {/* Phones fill the screen; wider screens get a phone-shaped stage, centred,
-          so the arena, its anchors and the moves keep their tested layout. */}
+      {/* Phones and tablets in portrait fill the screen with the portrait arena;
+          desktops get the landscape arena and their own layout; a small
+          landscape screen gets a phone-shaped stage, centred. */}
       <div
-        className="relative mx-auto h-full overflow-hidden md:shadow-[0_0_60px_rgba(0,0,0,0.45)]"
-        style={{ width: "min(100vw, calc(100dvh * 0.62))" }}
+        className={`relative mx-auto h-full overflow-hidden ${staged ? "shadow-[0_0_60px_rgba(0,0,0,0.45)]" : ""}`}
+        style={{ width: staged ? "min(100vw, calc(100dvh * 0.62))" : "100%" }}
       >
-      <ArenaBackdrop bossKey={bossKey}>
+      <ArenaBackdrop bossKey={bossKey} orientation={mode === "desktop" ? "landscape" : "portrait"}>
         {(anchors) => (
           <>
             {/* phase 2: the arena warms as the boss powers up */}
@@ -127,7 +139,14 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
 
   if (screen === "loading" || (screen === "play" && (!question || !battle))) {
     if (!isOnline) return shell(<div className="flex h-full items-center justify-center px-5"><NeedsInternetCard lang={lang} bossLabel={bossName(bossKey, lang, true)} /></div>, true);
-    return shell(<MessageScreen lang={lang} bossKey={bossKey} level={level} title={t.loading} loading />);
+    // The normal Amal loader (rarely seen: Play on the intro already started the battle).
+    return (
+      <AmalLoading
+        fullScreen
+        dir={lang === "ar" ? "rtl" : "ltr"}
+        message={intro || rememberedBoss ? t.gettingReady(bossName(bossKey, lang, true)) : t.loading}
+      />
+    );
   }
 
   if (screen === "error" && !isOnline) {

@@ -20,7 +20,7 @@ import {
 import { getCachedProfile, getCachedUser } from "@/lib/supabase/auth-cache";
 import { createClient } from "@/lib/supabase/client";
 import LearnerPicker from "@/components/learners/LearnerPicker";
-import { OwlThinking } from "@/components/illustrations";
+import AmalLoading from "@/components/AmalLoading";
 import { cacheValidatedLearnerSelection } from "@/lib/offline/learner";
 
 export const LEARNER_CHANGED_EVENT = "amal:learner-changed";
@@ -266,17 +266,10 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
   return (
     <LearnerContext.Provider value={value}>
       {loading && !accountId ? (
-        <div className="min-h-[40vh] flex flex-col items-center justify-center px-6 text-center" role="status" aria-live="polite" dir={language === "ar" ? "rtl" : "ltr"}>
-          <OwlThinking className="w-20 h-20 mb-3" />
-          <p className="text-lg font-bold font-fredoka text-gray-800">
-            {language === "ar" ? "نجهّز مساحة التعلّم..." : "Getting your learning space ready..."}
-          </p>
-          <div className="mt-4 flex items-center gap-1.5" aria-hidden="true">
-            {[0, 1, 2].map((dot) => (
-              <span key={dot} className="h-2 w-2 rounded-full bg-[#007229] animate-bounce" style={{ animationDelay: `${dot * 0.15}s` }} />
-            ))}
-          </div>
-        </div>
+        <AmalLoading
+          message={language === "ar" ? "نجهّز مساحة التعلّم..." : "Getting your learning space ready..."}
+          dir={language === "ar" ? "rtl" : "ltr"}
+        />
       ) : error && !activeLearner ? (
         <div className="min-h-[40vh] max-w-lg mx-auto px-5 flex flex-col items-center justify-center text-center" role="alert" dir={language === "ar" ? "rtl" : "ltr"}>
           <p className="mb-4 text-gray-700">{language === "ar" ? "تعذّر تحميل ملفات المتعلّمين. حاول مرة أخرى." : "Couldn’t load learners. Try again."}</p>

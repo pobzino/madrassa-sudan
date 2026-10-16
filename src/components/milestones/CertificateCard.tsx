@@ -1,5 +1,6 @@
 "use client";
 
+import AmalLoading from "@/components/AmalLoading";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BookOpen, Printer } from "lucide-react";
@@ -73,18 +74,15 @@ export default function CertificateCard({ certificateId, lang, fetcher }: { cert
 
   const font = { fontFamily: lang === "ar" ? "var(--font-cairo), var(--font-fredoka), sans-serif" : "var(--font-fredoka), system-ui, sans-serif" };
 
+  if (state === "loading") return <AmalLoading message={t.loading} dir={lang === "ar" ? "rtl" : "ltr"} className="min-h-[60vh]" />;
   if (state !== "ready" || !view) {
     return (
       <div dir={lang === "ar" ? "rtl" : "ltr"} className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center" style={font}>
-        <FitOwl pose={state === "loading" ? "think" : "wrong"} className="h-32 w-32" />
-        <p className="text-xl font-semibold text-gray-700" role={state === "loading" ? "status" : undefined}>
-          {state === "loading" ? t.loading : state === "not_found" ? t.notFound : t.error}
-        </p>
-        {state !== "loading" && (
-          <Link href="/lessons" className="font-semibold text-[#007229] underline-offset-4 hover:underline">
-            {t.back}
-          </Link>
-        )}
+        <FitOwl pose="wrong" className="h-32 w-32" />
+        <p className="text-xl font-semibold text-gray-700">{state === "not_found" ? t.notFound : t.error}</p>
+        <Link href="/lessons" className="font-semibold text-[#007229] underline-offset-4 hover:underline">
+          {t.back}
+        </Link>
       </div>
     );
   }
