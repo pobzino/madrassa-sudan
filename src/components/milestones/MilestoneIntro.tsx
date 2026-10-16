@@ -53,13 +53,20 @@ export default function MilestoneIntro({ milestoneId, lang, fetcher, isOnline }:
     <div
       dir={lang === "ar" ? "rtl" : "ltr"}
       lang={lang}
-      className="fixed inset-0 z-[60] h-[100dvh] overflow-hidden bg-[#08361C] text-white"
+      className="fixed inset-0 z-[60] h-[100dvh] overflow-hidden bg-[radial-gradient(ellipse_at_center,#0B4A26,#04200F)] text-white"
       style={{ fontFamily: lang === "ar" ? "var(--font-cairo), var(--font-fredoka), sans-serif" : "var(--font-fredoka), system-ui, sans-serif" }}
     >
-      <ArenaBackdrop bossKey={bossKey} className="absolute inset-0 h-full w-full" />
-      <div className="absolute inset-0 bg-[#052814]/30" aria-hidden="true" />
-      <div className="relative mx-auto h-full w-full max-w-[480px]" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {children}
+      {/* Phones fill the screen; wider screens get a phone-shaped stage, centred,
+          so the arena, its anchors and the moves keep their tested layout. */}
+      <div
+        className="relative mx-auto h-full overflow-hidden md:shadow-[0_0_60px_rgba(0,0,0,0.45)]"
+        style={{ width: "min(100vw, calc(100dvh * 0.62))" }}
+      >
+        <ArenaBackdrop bossKey={bossKey} className="absolute inset-0 h-full w-full" />
+        <div className="absolute inset-0 bg-[#052814]/30" aria-hidden="true" />
+        <div className="relative mx-auto h-full w-full" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+          {children}
+        </div>
       </div>
     </div>
   );

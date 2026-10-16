@@ -91,9 +91,15 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
       dir={lang === "ar" ? "rtl" : "ltr"}
       lang={lang}
       translate="no"
-      className="notranslate fixed inset-0 z-[60] h-[100dvh] overflow-hidden bg-[#08361C] text-white"
+      className="notranslate fixed inset-0 z-[60] h-[100dvh] overflow-hidden bg-[radial-gradient(ellipse_at_center,#0B4A26,#04200F)] text-white"
       style={fontStyle}
     >
+      {/* Phones fill the screen; wider screens get a phone-shaped stage, centred,
+          so the arena, its anchors and the moves keep their tested layout. */}
+      <div
+        className="relative mx-auto h-full overflow-hidden md:shadow-[0_0_60px_rgba(0,0,0,0.45)]"
+        style={{ width: "min(100vw, calc(100dvh * 0.62))" }}
+      >
       <ArenaBackdrop bossKey={bossKey}>
         {(anchors) => (
           <>
@@ -115,6 +121,7 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
           </>
         )}
       </ArenaBackdrop>
+      </div>
     </div>
   );
 
