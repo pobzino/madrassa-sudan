@@ -155,7 +155,12 @@ function strictlyMonotonic(values: number[], direction: Direction): "asc" | "des
 export function checkSequence(prompt: Text, items: List): string | null {
   for (const [index, item] of items.en.entries()) {
     const ar = items.ar[index] ?? "";
-    if (COMPOUND_EN.test(item) || COMPOUND_AR.test(ar) || hasTwoNumbers(item) || hasTwoNumbers(ar)) {
+    // A step joining values ("3 and 7", "dog and cat" in a size order) can't be
+    // ordered. In an order of events ("wake up and wash", morning first) one
+    // step can be one event described with "and".
+    const compared = /\d/.test(westernDigits(item)) || /\d/.test(westernDigits(ar)) || statedDirection(prompt) !== null;
+    const joinsValues = compared && (COMPOUND_EN.test(item) || COMPOUND_AR.test(ar));
+    if (joinsValues || hasTwoNumbers(item) || hasTwoNumbers(ar)) {
       return `Step ${index + 1} ("${item}") holds more than one value; each step must be one thing to compare.`;
     }
   }

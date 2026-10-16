@@ -72,6 +72,7 @@ describe("sequence_order", () => {
 
   it("still accepts events in time (not mechanically checkable)", () => {
     accepts(seq("Put the day in order: morning first!", ["wake up", "eat lunch", "go to bed"]));
+    accepts(seq("Put the day in order: morning first!", ["wake up and wash", "eat lunch", "go to bed"]));
   });
 
   it("generated prompts must be short and state the rule", () => {
