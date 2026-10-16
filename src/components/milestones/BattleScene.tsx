@@ -644,7 +644,7 @@ export default function BattleScene(props: BattleSceneProps) {
         >
           <div
             className="relative flex items-start gap-2 rounded-[26px] bg-[#FFF8EC] py-3 pe-2.5 ps-4 text-[#1a1a1a] shadow-[0_6px_0_rgba(0,0,0,0.22)] motion-safe:animate-pop-in"
-            style={{ maxHeight: taunt ? undefined : Math.max(bubble.height, 80) + 4 }}
+            style={bubble.scroll && !taunt ? { maxHeight: bubble.height + 4 } : undefined}
           >
             {taunt ? (
               <p aria-live="polite" className={`font-bold leading-snug ${desktop ? "text-[28px]" : "text-[19px]"}`}>{taunt}</p>
@@ -690,7 +690,7 @@ export default function BattleScene(props: BattleSceneProps) {
       </div>
 
       {/* The owl's life: its shields (and the Super Star pips) in a row under its feet */}
-      <div className={`absolute z-[7] flex -translate-x-1/2 items-center gap-1.5 ${inEntrance ? "invisible" : ""}`} style={{ left: geometry.shields.x, top: geometry.shields.top }}>
+      <div className={`absolute z-[7] flex -translate-x-1/2 items-center gap-1.5 ${inEntrance ? "invisible" : ""}`} style={{ left: Math.max(geometry.shields.x, (comboLit > 0 ? 96 : 54) * (desktop ? 1.3 : 1) + 6), top: geometry.shields.top }}>
         <span className={`flex gap-1 rounded-full px-2 py-1 ${GLASS}`} role="img" aria-label={`${t.shields}: ${formatNumber(battle.heartsLeft, lang)}`}>
           {Array.from({ length: battle.heartsTotal }, (_, i) => (
             <OwlShieldIcon key={i} className={desktop ? "h-8 w-8" : compact ? "h-5 w-5" : "h-6 w-6"} empty={i >= battle.heartsLeft} />

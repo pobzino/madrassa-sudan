@@ -65,7 +65,7 @@ export interface BubbleFit {
 }
 
 /** Rough glyph width per font size for the battle's rounded fonts (bold). */
-const CHAR_EM = { en: 0.56, ar: 0.5 } as const;
+const CHAR_EM = { en: 0.56, ar: 0.56 } as const;
 const LINE_HEIGHT = 1.2;
 const BUBBLE_PAD_Y = 24;
 const BUBBLE_PAD_X = 30;
@@ -83,7 +83,9 @@ export function estimateLines(text: string, fontSize: number, width: number, lan
   const maxCharsOn = (line: number) => Math.max(1, Math.floor((line <= floatLines && float ? width - float.width : width) / perChar));
   let lines = 1;
   let used = 0;
-  for (const word of text.split(/\s+/).filter(Boolean)) {
+  // Maths never wraps ("7 + 5?" is one unbreakable run), so count it as one word.
+  const words = text.replace(/\s*([+\-−×÷=<>])\s*/g, "\u00a0$1\u00a0").split(/[ \t\r\n]+/).filter(Boolean);
+  for (const word of words) {
     const len = word.length;
     if (used === 0) used = len;
     else if (used + 1 + len <= maxCharsOn(lines)) used += 1 + len;
@@ -244,7 +246,8 @@ function phoneGeometry({ width, height, anchors, prompt = "", lang = "en", safeT
     owl: { left: owlLeft, top: owlTop, right: owlLeft + owlSize, bottom: owlTop + owlSize },
     bossPanel: null,
     // On the front of the owl's platform, just below its top edge (under the feet, not over the owl).
-    shields: { x: anchors.owl.x, top: anchors.owl.y + 6 },
+    // (On very short screens it may only rise to clear the action row's buttons.)
+    shields: { x: anchors.owl.x, top: Math.min(anchors.owl.y + 6, moveBottom - ACTION_ROW_H + 10 - SHIELD_ROW_H) },
     bubble,
     move: { left: columnLeft, right: columnRight, top: bandTop, bottom: moveBottom },
     bandHeight,
