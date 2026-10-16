@@ -60,6 +60,7 @@ import { POST as startBattle } from "@/app/api/milestones/[id]/battle/route";
 import { POST as hint } from "@/app/api/milestones/[id]/battle/hint/route";
 import { POST as answer } from "@/app/api/milestones/battles/[battleId]/answer/route";
 import { GET as bossBook } from "@/app/api/milestones/boss-book/route";
+import { GET as placementGate } from "@/app/api/milestones/placement-gate/route";
 import { GET as teacherList } from "@/app/api/teacher/milestones/route";
 import { GET as teacherDetail, PUT as teacherPut } from "@/app/api/teacher/milestones/[id]/route";
 import { POST as generateRoute } from "@/app/api/teacher/milestones/generate/route";
@@ -493,5 +494,59 @@ describe("schools and classes", () => {
     expect((await learnerClasses(new Request("http://localhost/x"), { params: Promise.resolve({ id: IDS.learner }) })).status).toBe(403);
     expect((await decide(post({ decision: "maybe" }), { params: Promise.resolve({ id: IDS.cohort, requestId: IDS.request }) })).status).toBe(400);
     expect((await schoolOverview(new Request("http://localhost/x?school_id=nope"))).status).toBe(400);
+  });
+});
+
+describe("the starting boss's required switch", () => {
+  it("staff can turn the gate off and on for a placement, not for a Big Challenge", async () => {
+    const tables = seed();
+    mocks.user = { id: "author-teacher" };
+    mocks.teacherRole = "admin";
+    const put = (id: string, body: unknown) =>
+      teacherPut(new Request("http://localhost/x", { method: "PUT", body: JSON.stringify(body) }), { params: Promise.resolve({ id }) });
+    expect((await put(IDS.placement, { required: false })).status).toBe(200);
+    expect(tables.learning_path_milestones[0].required).toBe(false);
+    expect((await put(IDS.placement, { required: "yes" })).status).toBe(400);
+    tables.learning_path_milestones.push({ id: IDS.milestone, path_id: IDS.path, after_week_number: 4, kind: "milestone", assignment_id: "a-4", title_ar: "x", title_en: "x", status: "draft", battle_question_count: 12, pass_percent: 75, boss_key: "number_giant" });
+    expect((await put(IDS.milestone, { required: false })).status).toBe(400);
+  });
+});
+
+describe("placement gate (the starting boss before lesson 1)", () => {
+  const ask = (lessonId: string) => placementGate(new Request(`http://localhost/api/milestones/placement-gate?lesson_id=${lessonId}`));
+
+  it("gates a child who has done no lesson of the path and not met the required boss; names the boss", async () => {
+    seed();
+    expect(await (await ask("lesson-0")).json()).toEqual({ gated: true, placementId: IDS.placement, bossKey: "number_giant" });
+    // a lesson in no published path is never gated
+    expect(await (await ask("lesson-elsewhere")).json()).toEqual({ gated: false, placementId: null, bossKey: null });
+  });
+
+  it("does not gate after any lesson of the path is done, after the boss is met, when staff switched it off, or for staff", async () => {
+    const tables = seed();
+    tables.lesson_progress = [{ student_id: IDS.learner, lesson_id: "lesson-3", completed: true }];
+    expect((await (await ask("lesson-0")).json()).gated).toBe(false);
+
+    tables.lesson_progress = [];
+    tables.milestone_battles = [{ id: "b-done", learner_id: IDS.learner, milestone_id: IDS.placement, status: "completed", is_preview: false, superseded_at: null }];
+    expect((await (await ask("lesson-0")).json()).gated).toBe(false);
+    // a superseded (reset) placement counts as not met again
+    tables.milestone_battles[0].superseded_at = "2026-10-16T00:00:00Z";
+    expect((await (await ask("lesson-0")).json()).gated).toBe(true);
+
+    tables.milestone_battles = [];
+    tables.learning_path_milestones[0].required = false;
+    expect((await (await ask("lesson-0")).json()).gated).toBe(false);
+
+    tables.learning_path_milestones[0].required = true;
+    tables.profiles = [{ id: IDS.learner, role: "teacher" }];
+    expect((await (await ask("lesson-0")).json()).gated).toBe(false);
+  });
+
+  it("needs a learner and a lesson id", async () => {
+    seed();
+    expect((await ask("")).status).toBe(400);
+    mocks.contextResponse = new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    expect((await ask("lesson-0")).status).toBe(401);
   });
 });

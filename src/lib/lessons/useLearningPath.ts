@@ -30,6 +30,7 @@ import { watchedPercent } from "@/lib/lessons/watched-percent";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 import { BOSS_KEYS, type BossKey } from "@/lib/milestones/types";
 import { PLACEMENT_MAX_PRIOR_LESSONS } from "@/lib/measurement/types";
+import { placementGateApplies } from "@/lib/learning-path-gate";
 import { milestoneLevel, requiredCorrect } from "@/lib/milestones/rules";
 
 interface PathRow {
@@ -91,6 +92,10 @@ export interface TreePlacement {
   offered: boolean;
   /** More than PLACEMENT_MAX_PRIOR_LESSONS lessons were done first: still offered, flagged as a late baseline by the server. */
   late: boolean;
+  /** Staff switch: week 1 waits for this boss (children who have not started the path). */
+  required: boolean;
+  /** The gate holds for this learner right now: the tree closes the path while online. */
+  gate: boolean;
 }
 
 export interface TreeStep {
@@ -127,7 +132,7 @@ export interface SubjectLearningPath {
   weeks: TreeWeek[];
   /** Published milestones whose week exists, in week order. */
   milestones: TreeMilestone[];
-  /** The published placement, or null. Never gates anything. */
+  /** The published placement, or null. While `placement.gate` holds (and online) the path is closed behind it. */
   placement?: TreePlacement | null;
   currentStepId: string | null;
 }
@@ -194,7 +199,7 @@ export async function loadSubjectLearningPath(
       .returns<MilestoneRow[]>(),
     db
       .from("learning_path_milestones")
-      .select("id, kind, after_week_number, title_ar, title_en, boss_key, battle_question_count, status")
+      .select("id, kind, after_week_number, title_ar, title_en, boss_key, battle_question_count, status, required")
       .eq("path_id", pathRow.id)
       .eq("status", "published")
       .eq("kind", "placement")
@@ -207,6 +212,11 @@ export async function loadSubjectLearningPath(
   const placementRow = split.placement;
   const milestoneIds = milestoneRows.map((m) => m.id);
   type PlacementBattleRow = { status: string; superseded_at: string | null; is_preview: boolean };
+  // The learner's role: staff are never gated behind the placement (their battles are previews).
+  const rolePromise: Promise<string | null> = placementRow
+    ? Promise.resolve(db.from("profiles").select("role").eq("id", userId).maybeSingle())
+        .then(({ data }: { data: { role?: string | null } | null }) => data?.role ?? null, () => null)
+    : Promise.resolve(null);
   const [{ data: certificateRows }, { data: battleRows }, { data: placementBattleRows }] = await Promise.all([
     milestoneIds.length
       ? db
@@ -398,6 +408,7 @@ export async function loadSubjectLearningPath(
     const state = placementState(
       (placementBattleRows ?? []).map((b) => ({ status: b.status, supersededAt: b.superseded_at, isPreview: b.is_preview }))
     );
+    const required = (placementRow as { required?: boolean | null }).required !== false;
     treePlacement = {
       id: placementRow.id,
       bossKey: (BOSS_KEYS as readonly string[]).includes(placementRow.boss_key) ? (placementRow.boss_key as BossKey) : "puzzle_owlet",
@@ -406,6 +417,8 @@ export async function loadSubjectLearningPath(
       state,
       offered: isPlacementOffered(state),
       late: completedLessonsInPath > PLACEMENT_MAX_PRIOR_LESSONS,
+      required,
+      gate: placementGateApplies({ required, completed: state === "completed", completedLessonsInPath, learnerRole: await rolePromise }),
     };
   }
 

@@ -139,6 +139,8 @@ export const MILESTONE_COPY = {
     placementBackToPath: "Back to my path",
     placementPreviewNote: "Staff preview: nothing is saved for the family.",
     placementNodeSub: "A quick game to show what you know",
+    placementGateSub: "Meet your first boss to open week 1!",
+    placementGateToast: "Meet your first boss first!",
     placementMetBadge: (boss: string) => `You met ${boss} ✓`,
   },
   ar: {
@@ -273,6 +275,8 @@ export const MILESTONE_COPY = {
     placementBackToPath: "العودة إلى مساري",
     placementPreviewNote: "معاينة للمعلم: لا يُحفظ شيء للعائلة.",
     placementNodeSub: "لعبة سريعة لتُريَنا ما تعرفه",
+    placementGateSub: "قابل أوّل زعيم لتفتح الأسبوع الأول!",
+    placementGateToast: "قابل أوّل زعيم أولاً!",
     placementMetBadge: (boss: string) => `تعرّفت على ${boss} ✓`,
   },
 } as const;

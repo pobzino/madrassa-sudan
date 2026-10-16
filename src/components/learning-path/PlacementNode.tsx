@@ -16,7 +16,7 @@ export function placementHref(placement: TreePlacement, isOnline: boolean): stri
   return `/milestones/${placement.id}/battle?boss=${placement.bossKey}`;
 }
 
-export default function PlacementNode({ placement, lang, isOnline }: { placement: TreePlacement; lang: "ar" | "en"; isOnline: boolean }) {
+export default function PlacementNode({ placement, lang, isOnline, gated = false }: { placement: TreePlacement; lang: "ar" | "en"; isOnline: boolean; gated?: boolean }) {
   const t = MILESTONE_COPY[lang];
   const boss = bossName(placement.bossKey, lang, true);
   const { prefetchBattle } = usePrefetchBattle();
@@ -48,7 +48,7 @@ export default function PlacementNode({ placement, lang, isOnline }: { placement
         <FitBoss bossKey={placement.bossKey} pose={isOnline ? "happy" : "sleep"} className="h-[72px] w-[72px] shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="font-fredoka text-[18px] font-bold leading-tight text-[#9A3412]">{t.placementIntroTitle(boss)}</p>
-          <p className="mt-0.5 font-fredoka text-[13px] font-semibold leading-snug text-[#78350F]">{isOnline ? t.placementNodeSub : t.needsInternetTitle}</p>
+          <p className="mt-0.5 font-fredoka text-[13px] font-semibold leading-snug text-[#78350F]">{!isOnline ? t.needsInternetTitle : gated ? t.placementGateSub : t.placementNodeSub}</p>
         </div>
         {href && (
           <Link

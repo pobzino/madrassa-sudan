@@ -127,6 +127,7 @@ export async function teacherMilestoneRow(admin: MilestoneAdminClient, row: Mile
     publishedAt: row.published_at,
     activeBattles: active.count ?? 0,
     certificates: certificates.count ?? 0,
+    required: row.required !== false,
   };
 }
 

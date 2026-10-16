@@ -117,6 +117,11 @@ export async function PUT(request: Request, { params }: RouteContext) {
       }
       milestoneUpdate.battle_question_count = body.battleQuestionCount;
     }
+    if (body.required !== undefined) {
+      if (typeof body.required !== "boolean") return milestoneError("invalid_answer", 400, { message: "required must be true or false." });
+      if (!isPlacement(row)) return milestoneError("invalid_answer", 400, { message: "Only the starting boss can be required." });
+      milestoneUpdate.required = body.required;
+    }
     if (body.bossKey !== undefined) {
       if (!isBossKey(body.bossKey)) return milestoneError("invalid_answer", 400, { message: "Unknown boss." });
       milestoneUpdate.boss_key = body.bossKey;

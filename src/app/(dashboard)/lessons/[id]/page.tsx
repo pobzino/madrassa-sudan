@@ -23,6 +23,7 @@ const SimPlayer = dynamic(() => import("@/components/slides/SimPlayer"), {
   loading: () => <div className="animate-pulse bg-gray-100 rounded-2xl h-96" />,
 });
 import { toast } from "sonner";
+import { MILESTONE_COPY } from "@/components/milestones/copy";
 import { Confetti } from "@/components/illustrations";
 import { getAuthState, getLastVerifiedUser } from "@/lib/supabase/auth-cache";
 import { getCachedSimAudio } from "@/lib/offline/db";
@@ -257,6 +258,11 @@ export default function LessonPlayerPage() {
   const router = useRouter();
   const supabase = createClient();
   const { language } = useLanguage();
+  // Read inside the load effect without re-running it on a language switch.
+  const languageRef = useRef(language);
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
   const { activeLearner, accountId, fetchWithLearner } = useLearnerContext();
   const { canAccessSims } = useSimAccess();
   const t = translations[language];
@@ -518,6 +524,16 @@ export default function LessonPlayerPage() {
       const learnerId = activeLearner?.id || user.id;
       setUserId(learnerId);
 
+      // A required starting boss not yet met (online only) comes before lesson 1. Asked
+      // alongside the lesson, not before it, so an open lesson costs nothing extra.
+      type GateAnswer = { gated?: boolean; placementId?: string | null; bossKey?: string | null };
+      const gatePromise: Promise<GateAnswer | null> =
+        typeof navigator !== "undefined" && !navigator.onLine
+          ? Promise.resolve(null)
+          : fetchWithLearner(`/api/milestones/placement-gate?lesson_id=${encodeURIComponent(lessonId)}`, { signal })
+              .then((res) => (res.ok ? (res.json() as Promise<GateAnswer>) : null))
+              .catch(() => null);
+
       // Fetch lesson
       const { data: lessonData, error: lessonError } = await supabase
         .from("lessons")
@@ -528,6 +544,14 @@ export default function LessonPlayerPage() {
 
       if (signal.aborted) return;
       if (lessonError && lessonError.code !== "PGRST116") throw lessonError;
+      const gate = await gatePromise;
+      if (signal.aborted) return;
+      if (gate?.gated && gate.placementId) {
+        redirecting = true;
+        toast(MILESTONE_COPY[languageRef.current].placementGateToast);
+        router.replace(`/milestones/${gate.placementId}/battle?boss=${gate.bossKey ?? "puzzle_owlet"}`);
+        return;
+      }
 
       if (!lessonData) {
         setLoading(false);

@@ -179,6 +179,21 @@ export default function LearningPathEditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [milestones?.pathId]);
 
+  const setPlacementRequired = async (required: boolean) => {
+    const m = milestones?.placement;
+    if (!m) return;
+    setMilestoneBusy(PLACEMENT_WEEK);
+    try {
+      const res = await fetch(`/api/teacher/milestones/${m.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ required }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) toast.error(data.message ?? MILESTONE_ERRORS[data.error] ?? "Could not save");
+      else toast.success(required ? "Week 1 now waits for the starting boss" : "Week 1 opens without the starting boss");
+    } finally {
+      setMilestoneBusy(null);
+      await loadMilestones(selectedSubject);
+    }
+  };
+
   const setMilestoneLive = async (afterWeekNumber: number, live: boolean) => {
     const m = milestoneAt(afterWeekNumber);
     if (!m) return;
@@ -458,6 +473,7 @@ export default function LearningPathEditorPage() {
             {ordered.length > 0 && (
               <PlacementBlockCard
                 placement={milestones?.placement ?? null}
+                onToggleRequired={setPlacementRequired}
                 hasPath={Boolean(milestones?.pathId)}
                 disabled={dirty}
                 generating={generatingBlock === PLACEMENT_WEEK}

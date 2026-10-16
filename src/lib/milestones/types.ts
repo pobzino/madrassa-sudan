@@ -300,6 +300,8 @@ export interface TeacherMilestoneRow {
   kind?: MilestoneKind;
   /** Gradable items per tagged difficulty; untagged counted under "none". */
   difficultyCounts?: { d1: number; d2: number; d3: number; none: number };
+  /** Placement only: a child with no lesson done must meet this boss before week 1 (default true). */
+  required?: boolean;
 }
 export interface TeacherMilestoneBlock {
   afterWeekNumber: number;
@@ -321,5 +323,7 @@ export interface TeacherMilestoneDetail { milestone: TeacherMilestoneRow; questi
 }
 export interface TeacherMilestoneUpdate {
   titleAr?: string; titleEn?: string | null; battleQuestionCount?: number; bossKey?: BossKey;
+  /** Placement only: whether week 1 waits for the boss. */
+  required?: boolean;
   questions?: TeacherMilestoneQuestion[];   // full replacement; when published: same ids only (text edits)
 }

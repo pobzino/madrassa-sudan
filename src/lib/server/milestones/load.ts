@@ -56,7 +56,8 @@ export interface MilestoneRow {
   created_at: string;
   updated_at: string;
   /** Absent on rows read before the measurement migration: "milestone". */
-  kind?: MilestoneKind;
+  kind?: MilestoneKind;  /** Placement only: must a child with no lesson done meet this boss before week 1? (Default true.) */
+  required?: boolean | null;
 }
 
 export function isPlacement(row: Pick<MilestoneRow, "kind">): boolean {
@@ -78,7 +79,7 @@ export interface SubjectRow {
 }
 
 export const MILESTONE_COLUMNS =
-  "id, path_id, after_week_number, assignment_id, title_ar, title_en, status, battle_question_count, pass_percent, boss_key, generated_at, generated_by, reviewed_at, reviewed_by, published_at, published_by, created_at, updated_at, kind";
+  "id, path_id, after_week_number, assignment_id, title_ar, title_en, status, battle_question_count, pass_percent, boss_key, generated_at, generated_by, reviewed_at, reviewed_by, published_at, published_by, created_at, updated_at, kind, required";
 
 export const BATTLE_COLUMNS =
   "id, milestone_id, assignment_id, learner_id, attempt_number, is_preview, question_ids, question_count, required_correct, hearts_total, correct_count, wrong_count, answered_count, status, started_at, last_answer_at, finished_at, hint_used_question_index, hint_used_at, kind, superseded_at";

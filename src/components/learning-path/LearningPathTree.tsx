@@ -1,5 +1,6 @@
 "use client";
 
+import { closePathBehindPlacement } from "@/lib/learning-path-gate";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { PathOwl } from "./PathOwl";
@@ -239,7 +240,7 @@ function smoothPath(pts: { x: number; y: number }[], reach: number): string {
 }
 
 export default function LearningPathTree({
-  path,
+  path: openPath,
   language,
   currentStepId,
 }: {
@@ -248,8 +249,11 @@ export default function LearningPathTree({
   currentStepId?: string | null;
 }) {
   const t = translations[language];
-  const current = currentStepId ?? path.currentStepId;
   const { isLessonDownloaded, offlineReady, isOnline } = useOffline();
+  // A required starting boss not yet met closes the path, online only (offline, the boss can't be played).
+  const gated = Boolean(openPath.placement?.gate) && isOnline;
+  const path = gated ? closePathBehindPlacement(openPath) : openPath;
+  const current = gated ? null : currentStepId ?? path.currentStepId;
 
   // The owl follows the tapped node; until the student taps, it sits on the
   // current progress node. A tap selects a node (owl glides there) and reveals
@@ -380,7 +384,7 @@ export default function LearningPathTree({
   return (
     <>
     {/* "Meet your first boss": above week 1, never part of the road (it gates nothing). */}
-    {path.placement && <PlacementNode placement={path.placement} lang={language} isOnline={isOnline} />}
+    {path.placement && <PlacementNode placement={path.placement} lang={language} isOnline={isOnline} gated={gated} />}
     <div ref={containerRef} className="relative w-full" style={{ height: totalH }}>
       {width !== null && (
       <div className="relative w-full" style={{ height: totalH }}>

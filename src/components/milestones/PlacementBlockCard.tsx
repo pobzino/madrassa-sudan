@@ -33,6 +33,7 @@ export default function PlacementBlockCard({
   onGenerate,
   onPublish,
   onUnpublish,
+  onToggleRequired,
 }: {
   placement: TeacherMilestoneRow | null;
   hasPath: boolean;
@@ -43,6 +44,8 @@ export default function PlacementBlockCard({
   onGenerate: () => void;
   onPublish: () => void;
   onUnpublish: () => void;
+  /** Flip "children must meet this boss before lesson 1". */
+  onToggleRequired?: (required: boolean) => void;
 }) {
   const m = placement;
   const published = m?.status === "published";
@@ -55,8 +58,23 @@ export default function PlacementBlockCard({
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-gray-900">Starting boss · &ldquo;Meet your first boss&rdquo;</p>
           <p className="text-xs text-gray-600">
-            {PLACEMENT_QUESTION_COUNT} questions from the whole path, easy to hard. Shows each child&apos;s starting point; it never locks anything.
+            {PLACEMENT_QUESTION_COUNT} questions from the whole path, easy to hard. Shows each child&apos;s starting point.
           </p>
+          {m && (
+            <label className="mt-1 flex cursor-pointer items-center gap-2 text-xs text-gray-700">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 accent-[#007229]"
+                checked={m.required !== false}
+                disabled={busy || !onToggleRequired}
+                onChange={(event) => onToggleRequired?.(event.target.checked)}
+              />
+              <span>
+                Children must meet this boss before lesson 1
+                <span className="text-gray-500"> (only children who haven&apos;t started the path; never offline)</span>
+              </span>
+            </label>
+          )}
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <span
               className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${
