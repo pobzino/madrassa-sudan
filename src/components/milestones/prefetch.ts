@@ -1,4 +1,4 @@
-import type { BossKey, Lang, MilestoneIntroResponse, StartBattleResponse } from "@/lib/milestones/types";
+import type { BossKey, GetBattleResponse, Lang, MilestoneIntroResponse, StartBattleResponse } from "@/lib/milestones/types";
 import { BOSS_KEYS } from "@/lib/milestones/types";
 import { milestoneApi, type Fetcher } from "./api";
 
@@ -29,7 +29,30 @@ export function loadIntro(fetcher: Fetcher, milestoneId: string, lang: Lang): Pr
   return promise;
 }
 
-/** Called when the child presses Play: start (or resume) the battle now. */
+/**
+ * Warm the battle for a milestone (its node was selected on the path): the
+ * intro data and the current battle, so tapping Battle! opens it at once.
+ * Never starts an attempt.
+ */
+const WARM_TTL_MS = 20_000;
+const warm = new Map<string, { at: number; promise: Promise<GetBattleResponse> }>();
+export function warmBattle(fetcher: Fetcher, milestoneId: string, lang: Lang) {
+  void loadIntro(fetcher, milestoneId, lang).catch(() => undefined);
+  const cached = warm.get(milestoneId);
+  if (cached && Date.now() - cached.at < WARM_TTL_MS) return;
+  const promise = milestoneApi.getBattle(fetcher, milestoneId, lang);
+  promise.catch(() => warm.delete(milestoneId));
+  warm.set(milestoneId, { at: Date.now(), promise });
+}
+
+/** The battle page takes the warmed battle (once, while fresh), if there is one. */
+export function takeWarmBattle(milestoneId: string): Promise<GetBattleResponse> | null {
+  const cached = warm.get(milestoneId);
+  warm.delete(milestoneId);
+  return cached && Date.now() - cached.at < WARM_TTL_MS ? cached.promise : null;
+}
+
+/** Start (or resume) the battle now, e.g. on the tap that opens it. */
 export function startBattleEarly(fetcher: Fetcher, milestoneId: string, lang: Lang): Promise<StartBattleResponse> {
   const promise = milestoneApi.startBattle(fetcher, milestoneId, lang);
   // Unclaimed failures are re-tried by the battle page's own request.

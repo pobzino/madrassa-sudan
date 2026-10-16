@@ -60,6 +60,8 @@ export interface BubbleFit {
   scroll: boolean;
   /** The bubble's box (height = the estimate, never more than allowed). */
   rect: Rect;
+  /** Desktop: where the tail leaves the bubble's bottom (px from its left) and its tilt toward the boss (deg, + = right). */
+  tail?: { x: number; angle: number };
 }
 
 /** Rough glyph width per font size for the battle's rounded fonts (bold). */
@@ -241,8 +243,8 @@ function phoneGeometry({ width, height, anchors, prompt = "", lang = "en", safeT
     boss: { left: bossLeft, top: bossTop, right: bossLeft + bossSize, bottom: bossTop + bossSize },
     owl: { left: owlLeft, top: owlTop, right: owlLeft + owlSize, bottom: owlTop + owlSize },
     bossPanel: null,
-    // On the front of the owl's platform, just under its feet.
-    shields: { x: anchors.owl.x, top: anchors.owl.y - 22 },
+    // On the front of the owl's platform, just below its top edge (under the feet, not over the owl).
+    shields: { x: anchors.owl.x, top: anchors.owl.y + 6 },
     bubble,
     move: { left: columnLeft, right: columnRight, top: bandTop, bottom: moveBottom },
     bandHeight,
@@ -276,6 +278,10 @@ function desktopGeometry({ width, height, anchors, prompt = "", lang = "en", saf
     scroll: !fit.fits,
     rect: { left: (width - bubbleW) / 2, right: (width + bubbleW) / 2, top: bubbleTop, bottom: bubbleTop + bubbleH },
   };
+  // The tail points at the boss.
+  const tailX = Math.max(40, Math.min(bubbleW - 40, boss.x - bubble.rect.left));
+  const tailAngle = (Math.atan2(boss.x - (bubble.rect.left + tailX), Math.max(40, bossTop + bossSize * 0.2 - bubble.rect.bottom)) * 180) / Math.PI;
+  bubble.tail = { x: tailX, angle: Math.round(Math.max(-65, Math.min(65, tailAngle))) };
 
   // The boss's name and health, over the boss (and clear of the bubble).
   const panelW = Math.min(380, bossSize * 1.25);

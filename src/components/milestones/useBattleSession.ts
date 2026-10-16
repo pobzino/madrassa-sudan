@@ -7,7 +7,7 @@ import { trackAnalyticsEvent } from "@/lib/analytics";
 import { MilestoneApiError, MilestoneNetworkError, milestoneApi, type Fetcher } from "./api";
 import { answerRequestFor } from "./moves/contract";
 import { superReady, turnOf } from "./turns";
-import { loadIntro, takeEarlyStart } from "./prefetch";
+import { loadIntro, takeEarlyStart, takeWarmBattle } from "./prefetch";
 
 /**
  * The battle's data and rules, with no drawing: load or resume, start a new
@@ -154,7 +154,7 @@ export function useBattleSession({
   const load = useCallback(async () => {
     setScreen((current) => (current === "won" || current === "lost" ? current : "loading"));
     try {
-      // Pressing Play on the intro already started (or resumed) the battle.
+      // The tap that opened the battle may already have started (or resumed) it.
       const early = takeEarlyStart(milestoneId);
       if (early) {
         const [introData, started] = await Promise.all([loadIntro(fetcher, milestoneId, lang), early.catch(() => null)]);
@@ -164,9 +164,11 @@ export function useBattleSession({
           return;
         }
       }
+      // Selecting the node on the path warmed the current battle.
+      const warmed = takeWarmBattle(milestoneId);
       const [introData, current] = await Promise.all([
         loadIntro(fetcher, milestoneId, lang),
-        milestoneApi.getBattle(fetcher, milestoneId, lang),
+        (warmed ? warmed.catch(() => milestoneApi.getBattle(fetcher, milestoneId, lang)) : milestoneApi.getBattle(fetcher, milestoneId, lang)),
       ]);
       setIntro(introData);
       if (current.battle) {

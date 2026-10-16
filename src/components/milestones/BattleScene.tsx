@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import Link from "next/link";
-import { RotateCw, X } from "lucide-react";
+import { RotateCw, Volume2, VolumeX, X } from "lucide-react";
 import { OwlHead } from "@/components/illustrations";
 import {
   BossCharacter,
@@ -15,7 +15,7 @@ import {
   type Pose,
 } from "@/components/characters";
 import type { InteractionAnswer } from "@/lib/interactions/types";
-import type { AnswerResult, BattleQuestion, BattleState, BossKey, Lang, OwlHint } from "@/lib/milestones/types";
+import type { AnswerResult, BattleQuestion, BattleState, BossKey, Lang, MilestoneIntroResponse, OwlHint } from "@/lib/milestones/types";
 import { BOSS_NAMES } from "@/lib/milestones/rules";
 import { MathText, OwlShieldBubble, OwlShieldIcon, Projectile, ReadAloudButton, WifiOffIcon } from "./BattleParts";
 import { milestoneApi, type Fetcher } from "./api";
@@ -116,6 +116,9 @@ interface BattleSceneProps {
   fxEvent: FxEvent | null;
   entrance: EntranceKind | null;
   muted: boolean;
+  onToggleMute: () => void;
+  /** The block's lessons: the entrance offers "Practise these lessons". */
+  blockLessons: MilestoneIntroResponse["blockLessons"];
   fetcher: Fetcher;
   /** The layer above the arena, for screen shakes. */
   shellRef: RefObject<HTMLDivElement | null>;
@@ -573,6 +576,8 @@ export default function BattleScene(props: BattleSceneProps) {
     />
   );
   const { bubble } = geometry;
+  // Very short phones: the owl's row of shields shrinks a step.
+  const compact = !desktop && height < 700;
   const flashTop = geometry.move.top + bandHeight * moveScale * 0.4;
 
   const healthBar = (
@@ -600,7 +605,7 @@ export default function BattleScene(props: BattleSceneProps) {
     <div ref={arenaRef} className="absolute inset-0">
       {/* HUD. Phone: close + the boss's panel across the top. Desktop: close top-left, the boss's panel over the boss. */}
       <header ref={headerRef} className={`absolute z-10 flex items-center gap-2 ${desktop ? "left-6" : "inset-x-0 mx-auto max-w-[480px] px-3"}`} style={{ top: `calc(env(safe-area-inset-top) + ${desktop ? 24 : 12}px)` }}>
-        <Link href={`/milestones/${props.milestoneId}`} aria-label={t.exit} title={t.exit} className={`grid h-14 w-14 shrink-0 place-items-center rounded-full text-white ${GLASS}`}>
+        <Link href="/lessons" aria-label={t.exit} title={t.exit} className={`grid h-14 w-14 shrink-0 place-items-center rounded-full text-white ${GLASS}`}>
           <X className="h-7 w-7" strokeWidth={3.2} aria-hidden="true" />
         </Link>
         {!desktop && <div className={`min-w-0 flex-1 rounded-[22px] px-4 pb-2.5 pt-1.5 ${GLASS}`}>{bossPanelInner}</div>}
@@ -664,10 +669,14 @@ export default function BattleScene(props: BattleSceneProps) {
               </>
             )}
             {/* the tail points at the boss */}
-            {bubble.placement === "beside" || taunt ? (
+            {bubble.placement === "beside" || (taunt && !desktop) ? (
               <span className="absolute -right-3 top-[38%] h-0 w-0 border-y-[10px] border-l-[16px] border-y-transparent border-l-[#FFF8EC]" aria-hidden="true" />
             ) : bubble.placement === "top" ? (
-              <span className="absolute -bottom-3 right-[18%] h-0 w-0 border-x-[12px] border-t-[16px] border-x-transparent border-t-[#FFF8EC]" aria-hidden="true" />
+              <span
+                className="absolute h-0 w-0 border-x-[13px] border-t-[22px] border-x-transparent border-t-[#FFF8EC]"
+                style={{ top: "calc(100% - 1px)", left: bubble.tail?.x ?? "80%", transform: `translateX(-50%) rotate(${-(bubble.tail?.angle ?? 0)}deg)`, transformOrigin: "50% 0" }}
+                aria-hidden="true"
+              />
             ) : (
               <span className="absolute -top-3 right-[22%] h-0 w-0 border-x-[10px] border-b-[14px] border-x-transparent border-b-[#FFF8EC]" aria-hidden="true" />
             )}
@@ -681,16 +690,16 @@ export default function BattleScene(props: BattleSceneProps) {
       </div>
 
       {/* The owl's life: its shields (and the Super Star pips) in a row under its feet */}
-      <div className="absolute z-[7] flex -translate-x-1/2 items-center gap-1.5" style={{ left: geometry.shields.x, top: geometry.shields.top }}>
+      <div className={`absolute z-[7] flex -translate-x-1/2 items-center gap-1.5 ${inEntrance ? "invisible" : ""}`} style={{ left: geometry.shields.x, top: geometry.shields.top }}>
         <span className={`flex gap-1 rounded-full px-2 py-1 ${GLASS}`} role="img" aria-label={`${t.shields}: ${formatNumber(battle.heartsLeft, lang)}`}>
           {Array.from({ length: battle.heartsTotal }, (_, i) => (
-            <OwlShieldIcon key={i} className={desktop ? "h-8 w-8" : "h-6 w-6"} empty={i >= battle.heartsLeft} />
+            <OwlShieldIcon key={i} className={desktop ? "h-8 w-8" : compact ? "h-5 w-5" : "h-6 w-6"} empty={i >= battle.heartsLeft} />
           ))}
         </span>
         {comboLit > 0 && (
           <span className={`flex gap-0.5 rounded-full px-2 py-1.5 ${GLASS}`} role="img" aria-label={superReady(battle.combo) ? t.superReady : `${t.superStar} ${formatNumber(comboLit, lang)}`}>
             {[0, 1, 2].map((i) => (
-              <svg key={i} viewBox="0 0 24 24" className={`${desktop ? "h-6 w-6" : "h-5 w-5"} ${superReady(battle.combo) ? "drop-shadow-[0_0_6px_rgba(245,158,11,0.9)]" : ""}`} aria-hidden="true">
+              <svg key={i} viewBox="0 0 24 24" className={`${desktop ? "h-6 w-6" : compact ? "h-4 w-4" : "h-5 w-5"} ${superReady(battle.combo) ? "drop-shadow-[0_0_6px_rgba(245,158,11,0.9)]" : ""}`} aria-hidden="true">
                 <path d={STAR_PATH} fill={i < comboLit ? "#F59E0B" : "none"} stroke={i < comboLit ? "#F59E0B" : "rgba(255,255,255,0.6)"} strokeWidth={1.8} strokeLinejoin="round" />
               </svg>
             ))}
@@ -702,8 +711,9 @@ export default function BattleScene(props: BattleSceneProps) {
       <div
         className="absolute z-[6]"
         style={{
-          left: geometry.move.left,
-          top: geometry.move.top,
+          // CSS zoom scales the element's own offsets and size too.
+          left: geometry.move.left / moveScale,
+          top: geometry.move.top / moveScale,
           width: (geometry.move.right - geometry.move.left) / moveScale,
           height: (geometry.move.bottom - geometry.move.top) / moveScale,
           zoom: moveScale === 1 ? undefined : moveScale,
@@ -814,7 +824,7 @@ export default function BattleScene(props: BattleSceneProps) {
             <span className={`${desktop ? "text-[96px]" : "text-[56px]"} font-bold leading-none text-[#FDE68A] [text-shadow:0_4px_0_#7A2E00]`}>{lang === "ar" ? "دُم!" : "THUD!"}</span>
           </div>
           {(step ?? 0) >= 2 && (
-            <div ref={bannerRef} className="absolute inset-x-[-6%] z-[9] bg-[#D21034] py-4 shadow-[0_8px_0_rgba(0,0,0,0.25)]" style={{ top: geometry.move.top + bandHeight * moveScale * 0.55, transform: "skewY(-6deg)" }}>
+            <div ref={bannerRef} className="absolute inset-x-[-6%] z-[9] bg-[#D21034] py-4 shadow-[0_8px_0_rgba(0,0,0,0.25)]" style={{ top: desktop ? Math.max(bubble.rect.bottom, bubble.rect.top + 110) + 28 : geometry.move.top + bandHeight * moveScale * 0.55, transform: "skewY(-6deg)" }}>
               <div className="mx-auto max-w-[720px] px-[12%] text-white">
                 <p className={`${desktop ? "text-[80px]" : "text-[clamp(40px,7dvh,56px)]"} font-bold uppercase leading-none tracking-wide [text-shadow:0_3px_0_#7F0A20]`}>{boss}</p>
                 {subtitle && <p className={`mt-1 ${desktop ? "text-[34px]" : "text-[clamp(20px,3dvh,26px)]"} font-semibold leading-tight text-[#FDE68A]`}>{subtitle}</p>}
@@ -824,6 +834,32 @@ export default function BattleScene(props: BattleSceneProps) {
         </>
       )}
       {inEntrance && <button type="button" onClick={props.onEntranceEnd} aria-label={t.skip} className="absolute inset-0 z-20 cursor-pointer bg-transparent" />}
+      {/* What the old intro screen said, while the boss makes its entrance: the shields, what it takes to win, the lessons, the sound. */}
+      {inEntrance && (
+        <div className={`absolute inset-x-0 z-30 mx-auto flex w-fit max-w-[calc(100%-24px)] flex-wrap items-center justify-center gap-2 motion-safe:animate-pop-in ${desktop ? "text-xl" : "text-base"}`} style={{ bottom: "calc(env(safe-area-inset-bottom) + 14px)" }}>
+          <span className={`flex items-center gap-1 rounded-full px-3 py-1.5 ${GLASS}`} role="img" aria-label={`${t.shieldsCount(formatNumber(battle.heartsLeft, lang))}, ${t.toWin(formatNumber(battle.requiredCorrect, lang), formatNumber(battle.questionCount, lang))}`}>
+            {Array.from({ length: battle.heartsTotal }, (_, i) => (
+              <OwlShieldIcon key={i} className={desktop ? "h-8 w-8" : "h-6 w-6"} empty={i >= battle.heartsLeft} />
+            ))}
+            <span className="ms-1 font-bold">{t.toWin(formatNumber(battle.requiredCorrect, lang), formatNumber(battle.questionCount, lang))}</span>
+          </span>
+          {props.blockLessons[0] && (
+            <Link href={`/lessons/${props.blockLessons[0].lessonId}`} className={`rounded-full px-4 py-2 font-semibold text-white ${GLASS}`}>
+              {t.practiseLessons}
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={props.onToggleMute}
+            aria-pressed={muted}
+            aria-label={muted ? t.soundOff : t.soundOn}
+            title={muted ? t.soundOff : t.soundOn}
+            className={`grid h-12 w-12 place-items-center rounded-full text-white ${GLASS}`}
+          >
+            {muted ? <VolumeX className="h-6 w-6" aria-hidden="true" /> : <Volume2 className="h-6 w-6" aria-hidden="true" />}
+          </button>
+        </div>
+      )}
 
       {(!isOnline || netError) && !feedback && (
         <div role="status" className="absolute inset-x-4 z-30 mx-auto flex max-w-[460px] items-center gap-3 rounded-[22px] bg-[#1a1a1a]/90 px-4 py-3 text-white shadow-lg" style={{ bottom: "calc(env(safe-area-inset-bottom) + 16px)" }}>

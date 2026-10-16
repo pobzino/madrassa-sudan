@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import type { LearnerAvatar } from "@/lib/learners/types";
-import type { AnswerResult, Lang } from "@/lib/milestones/types";
+import type { AnswerResult, BossKey, Lang } from "@/lib/milestones/types";
 import { ArenaBackdrop, type PlacedAnchor } from "@/components/characters";
 import AmalLoading from "@/components/AmalLoading";
 import BattleScene, { useViewport, type FxEvent } from "./BattleScene";
@@ -26,11 +26,13 @@ export interface MilestoneBattleProps {
   fetcher: Fetcher;
   isOnline: boolean;
   learner: { name: string; avatar: LearnerAvatar | null } | null;
+  /** The boss, from the path link (`?boss=`), so even the loading line names the right one. */
+  bossHint?: BossKey | null;
 }
 
 const noSubscribe = () => () => undefined;
 
-export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, learner }: MilestoneBattleProps) {
+export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, learner, bossHint = null }: MilestoneBattleProps) {
   const t = MILESTONE_COPY[lang];
   const viewport = useViewport();
   const mode = layoutModeFor(viewport.width, viewport.height);
@@ -88,7 +90,8 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
   );
 
   const { screen, intro, battle, question } = session;
-  const bossKey = intro?.milestone.bossKey ?? rememberedBoss ?? "puzzle_owlet";
+  const knownBoss = intro?.milestone.bossKey ?? bossHint ?? rememberedBoss;
+  const bossKey = knownBoss ?? "puzzle_owlet";
   const level = intro?.milestone.level ?? 1;
   const powered = screen === "play" && battle?.phase === 2;
   const fontStyle: CSSProperties = {
@@ -144,7 +147,7 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
       <AmalLoading
         fullScreen
         dir={lang === "ar" ? "rtl" : "ltr"}
-        message={intro || rememberedBoss ? t.gettingReady(bossName(bossKey, lang, true)) : t.loading}
+        message={knownBoss ? t.gettingReady(bossName(knownBoss, lang, true)) : t.loading}
       />
     );
   }
@@ -223,6 +226,8 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
       fxEvent={fxEvent}
       entrance={entrance}
       muted={sounds.muted}
+      onToggleMute={sounds.toggleMuted}
+      blockLessons={intro?.blockLessons ?? []}
       fetcher={fetcher}
       shellRef={shellRef}
       onEntranceEnd={() => setEntrance(null)}
