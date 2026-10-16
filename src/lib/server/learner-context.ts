@@ -37,38 +37,62 @@ export class LearnerContextError extends Error {
  * optional learner selector. The selector is never an authentication token.
  * Routes may pass an existing cookie-backed client to avoid creating another.
  */
+export interface ResolveLearnerOptions {
+  /**
+   * Verify the session token locally (Supabase getClaims, the project signs
+   * with asymmetric ES256 keys) instead of asking the auth server. Saves a
+   * round trip to the database region on hot routes such as answering a
+   * battle; the token stays valid until it expires (about an hour) even
+   * after sign-out elsewhere.
+   */
+  fastAuth?: boolean;
+}
+
+async function authenticatedUserId(supabase: Awaited<ReturnType<typeof createClient>>, fastAuth: boolean): Promise<string | null> {
+  if (fastAuth) {
+    const { data, error } = await supabase.auth.getClaims();
+    const sub = data?.claims?.sub;
+    if (!error && typeof sub === "string" && sub) return sub;
+    return null;
+  }
+  const { data: { user }, error } = await supabase.auth.getUser();
+  return !error && user ? user.id : null;
+}
+
 export async function resolveLearnerContext(
   request: Request,
   existingClient?: Awaited<ReturnType<typeof createClient>>,
+  options: ResolveLearnerOptions = {},
 ): Promise<LearnerContext> {
   const supabase = existingClient ?? await createClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) throw new LearnerContextError(401, "unauthorized");
+  const userId = await authenticatedUserId(supabase, options.fastAuth === true);
+  if (!userId) throw new LearnerContextError(401, "unauthorized");
+  const user = { id: userId };
 
-  const { data: rawAccount, error: accountError } = await supabase
+  const learnerId = request.headers.get(LEARNER_HEADER);
+  const wantsChild = learnerId !== null && learnerId !== user.id;
+  if (wantsChild && !isUuid(learnerId)) throw new LearnerContextError(400, "invalid_learner_id");
+
+  // The account and (for a child) the learner in one round trip; RLS still
+  // decides what this session can read.
+  const { data: rawProfiles, error: profilesError } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (accountError || !rawAccount) throw new LearnerContextError(403, "account_profile_unavailable");
+    .in("id", wantsChild ? [user.id, learnerId] : [user.id]);
+  const profiles = (rawProfiles ?? []) as LearnerProfile[];
+  const rawAccount = profiles.find((profile) => profile.id === user.id);
+  if (profilesError || !rawAccount) throw new LearnerContextError(403, "account_profile_unavailable");
 
-  const accountProfile = rawAccount as LearnerProfile;
-  const learnerId = request.headers.get(LEARNER_HEADER);
-  if (learnerId === null || learnerId === user.id) {
+  const accountProfile = rawAccount;
+  if (!wantsChild) {
     return { accountId: user.id, learnerId: user.id, learnerProfile: accountProfile, accountProfile, isSelf: true };
   }
-  if (!isUuid(learnerId)) throw new LearnerContextError(400, "invalid_learner_id");
   const canManageChildren = accountProfile.role === "parent" ||
     (accountProfile.role === "admin" && accountProfile.is_approved);
   if (!canManageChildren) throw new LearnerContextError(403, "learner_forbidden");
 
-  const { data: rawLearner, error: learnerError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", learnerId)
-    .maybeSingle();
-
-  const learnerProfile = rawLearner as LearnerProfile | null;
+  const learnerError = null;
+  const learnerProfile = profiles.find((profile) => profile.id === learnerId) ?? null;
   if (
     learnerError ||
     !learnerProfile ||
@@ -94,9 +118,10 @@ export function learnerContextResponse(error: unknown): Response | null {
 export async function getLearnerContextResult(
   request: Request,
   existingClient?: Awaited<ReturnType<typeof createClient>>,
+  options: ResolveLearnerOptions = {},
 ): Promise<{ context: LearnerContext; response: null } | { context: null; response: Response }> {
   try {
-    return { context: await resolveLearnerContext(request, existingClient), response: null };
+    return { context: await resolveLearnerContext(request, existingClient, options), response: null };
   } catch (error) {
     return {
       context: null,

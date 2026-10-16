@@ -38,7 +38,11 @@ function query(table: string, { asService = false }: { asService?: boolean } = {
   const filters: [string, unknown][] = [];
   const visible = (row: Row) =>
     asService || table !== "lessons" || !state.hiddenLessons.has(String(row.id));
-  const matches = (row: Row) => filters.every(([key, value]) => row[key] === value) && visible(row);
+  const inFilters: [string, unknown[]][] = [];
+  const matches = (row: Row) =>
+    filters.every(([key, value]) => row[key] === value) &&
+    inFilters.every(([key, list]) => list.includes(row[key])) &&
+    visible(row);
 
   async function run(mode: "many" | "maybe" | "single") {
     const rows = (state.tables[table] ??= []);
@@ -88,6 +92,10 @@ function query(table: string, { asService = false }: { asService?: boolean } = {
     },
     is: (key: string, value: unknown) => {
       filters.push([key, value]);
+      return api;
+    },
+    in: (key: string, list: unknown[]) => {
+      inFilters.push([key, list]);
       return api;
     },
     not: () => api,

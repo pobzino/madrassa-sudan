@@ -9,9 +9,10 @@
 import { after } from "next/server";
 import { z } from "zod";
 import { isUuid } from "@/lib/learners/types";
-import { battlePhase, bossHpPercent, starsFor } from "@/lib/milestones/rules";
+import { battlePhase, bossHpPercent, comboFrom, starsFor } from "@/lib/milestones/rules";
 import type { AnswerResult, BattleQuestion } from "@/lib/milestones/types";
 import { openMilestoneLearnerRequest } from "@/lib/server/milestones/context";
+import { createServiceClient, hasServiceRoleConfig } from "@/lib/supabase/service";
 import { gradeBattleAnswer, InvalidAnswerError, MAX_TEXT_ANSWER_LENGTH } from "@/lib/server/milestones/grade";
 import { storedAnswer } from "@/lib/server/milestones/interactions";
 import type { InteractionAnswer } from "@/lib/interactions/types";
@@ -58,21 +59,52 @@ async function conflict(admin: MilestoneAdminClient, code: "battle_finished" | "
   return milestoneError(code, 409, current ? { battle: await battleStateFor(admin, current, lang) } : {});
 }
 
+/** Prior answers' verdicts in order, for the combo (fetched alongside everything else). */
+async function priorResults(admin: MilestoneAdminClient, battleId: string): Promise<boolean[]> {
+  const { data } = await admin
+    .from("milestone_battle_answers")
+    .select("position, is_correct")
+    .eq("battle_id", battleId)
+    .order("position", { ascending: true })
+    .returns<Array<{ position: number; is_correct: boolean }>>();
+  return (data ?? []).map((row) => row.is_correct === true);
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ battleId: string }> }) {
   const { battleId } = await params;
-  const opened = await openMilestoneLearnerRequest(request);
+  if (!isUuid(battleId)) return milestoneError("battle_not_found", 404);
+  const body = request.json().catch(() => null);
+
+  // The database is far from the functions, so every round trip counts: load
+  // the battle, this question, the next one and the prior answers while the
+  // learner is still being checked. Nothing is returned or written until the
+  // check passes and the battle is the learner's own.
+  const early = hasServiceRoleConfig() ? (createServiceClient() as unknown as MilestoneAdminClient) : null;
+  const battlePromise = early ? loadBattle(early, battleId) : Promise.resolve(null);
+  const prefetch = battlePromise.then((battle) =>
+    battle && early
+      ? Promise.all([
+          loadBattleQuestion(early, battle, battle.answered_count),
+          battle.answered_count + 1 < battle.question_count ? loadBattleQuestion(early, battle, battle.answered_count + 1) : Promise.resolve(null),
+          priorResults(early, battle.id),
+        ])
+      : null,
+  );
+  prefetch.catch(() => undefined);
+
+  const opened = await openMilestoneLearnerRequest(request, { preview: false });
   if (!opened.ok) return opened.response;
   const { context, admin } = opened.value;
-  if (!isUuid(battleId)) return milestoneError("battle_not_found", 404);
 
-  const parsed = AnswerSchema.safeParse(await request.json().catch(() => null));
+  const parsed = AnswerSchema.safeParse(await body);
   if (!parsed.success) return milestoneError("invalid_answer", 400);
   const { position, answer, choiceIndex, text } = parsed.data;
   const lang = parseLang(parsed.data.lang);
 
   try {
-    const battle = await loadBattle(admin, battleId);
+    const battle = await battlePromise;
     if (!battle || battle.learner_id !== context.learnerId) return milestoneError("battle_not_found", 404);
+    const [currentLoaded, nextLoaded, prior] = (await prefetch) ?? [null, null, []];
 
     const isReplay = position < battle.answered_count;
     if (!isReplay) {
@@ -85,7 +117,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
     let responseText: string | null = null;
     let canonicalAnswer: InteractionAnswer | null = null;
     if (!isReplay) {
-      const loaded = await loadBattleQuestion(admin, battle, position);
+      const loaded = position === battle.answered_count ? currentLoaded : await loadBattleQuestion(admin, battle, position);
       if (!loaded) return milestoneError("service_unavailable", 503);
       const item = servedItem(loaded.question, battle.id);
       if (!item) return milestoneError("service_unavailable", 503);
@@ -134,11 +166,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
       finished,
       passed,
       replay: recorded.replay === true,
-      next: finished ? null : await nextQuestion(admin, row, lang),
+      next: finished
+        ? null
+        : !recorded.replay && nextLoaded && row.answered_count === battle.answered_count + 1
+          ? toBattleQuestion(nextLoaded.question, row.id, row.answered_count, lang, nextLoaded.languageMode)
+          : await nextQuestion(admin, row, lang),
       certificateId,
       firstPass,
       stars: passed ? starsFor(row.wrong_count, row.hearts_total) : null,
-      combo: await loadBattleCombo(admin, row.id),
+      combo: recorded.replay ? await loadBattleCombo(admin, row.id) : comboFrom([...prior, recorded.is_correct === true]),
       phase: battlePhase(hp),
     };
     return milestoneJson(result);
