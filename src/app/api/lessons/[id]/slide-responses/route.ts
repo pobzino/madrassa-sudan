@@ -252,6 +252,22 @@ export async function POST(
     return NextResponse.json({ error: 'Forbidden', code: 'no_access' }, { status: 403 });
   }
 
+  // The answer is written for the learner with the service role, so check the
+  // learner (not the signed-in parent) can open this lesson, as the
+  // task-responses route does.
+  if (lesson.created_by !== user.id) {
+    const { data: learnerCanAccess, error: accessError } = await supabase.rpc('can_user_access_published_lesson', {
+      p_user_id: learnerId,
+      p_lesson_id: lessonId,
+    });
+    if (accessError) {
+      return NextResponse.json({ error: 'Lesson could not be loaded' }, { status: 503 });
+    }
+    if (learnerCanAccess !== true) {
+      return NextResponse.json({ error: 'Forbidden', code: 'no_access' }, { status: 403 });
+    }
+  }
+
   const slide = slides.find((candidate) => candidate.id === slide_id);
 
   if (!slide) {

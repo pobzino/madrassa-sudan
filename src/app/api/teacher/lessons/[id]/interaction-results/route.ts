@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { readAnswerFromTaskResponse } from "@/lib/lesson-activities";
-import { canManageLesson, getTeacherRole } from "@/lib/server/teacher-lesson-access";
+import { canManageLesson, getClassStudentIds, getTeacherRole } from "@/lib/server/teacher-lesson-access";
 
 type TeacherReviewStatus = "pending_review" | "accepted" | "needs_retry";
 
@@ -222,6 +222,18 @@ export async function GET(
     );
   }
 
+  // Lesson authors only see answers from students in their own classes.
+  let classStudentIds: Set<string> | null;
+  try {
+    classStudentIds = await getClassStudentIds(service, role, user.id);
+  } catch {
+    return NextResponse.json({ error: "Failed to load results" }, { status: 500 });
+  }
+  const inTeachersClasses = (studentId: string) => !classStudentIds || classStudentIds.has(studentId);
+  const questionResponses = (questionResponsesResult.data || []).filter((response) => inTeachersClasses(response.student_id));
+  const activityResponses = (activityResponsesResult.data || []).filter((response) => inTeachersClasses(response.student_id));
+  const slideResponses = (slideResponsesResult.data || []).filter((response) => inTeachersClasses(response.student_id));
+
   const slideDeck = (Array.isArray(slideDeckResult.data?.slides) ? slideDeckResult.data?.slides : []) as Array<{
     id?: string;
     title_ar?: string;
@@ -239,9 +251,9 @@ export async function GET(
 
   const studentIds = Array.from(
     new Set([
-      ...(questionResponsesResult.data || []).map((response) => response.student_id),
-      ...(activityResponsesResult.data || []).map((response) => response.student_id),
-      ...(slideResponsesResult.data || []).map((response) => response.student_id),
+      ...questionResponses.map((response) => response.student_id),
+      ...activityResponses.map((response) => response.student_id),
+      ...slideResponses.map((response) => response.student_id),
     ])
   );
 
@@ -255,7 +267,7 @@ export async function GET(
   const studentMap = new Map((students || []).map((student) => [student.id, student.full_name]));
 
   const quizzes: QuizAggregate[] = (questionDefsResult.data || []).map((question, index) => {
-    const responses = (questionResponsesResult.data || []).filter((response) => response.question_id === question.id);
+    const responses = questionResponses.filter((response) => response.question_id === question.id);
     const totalCorrect = responses.filter((response) => response.is_correct).length;
 
     return {
@@ -281,7 +293,7 @@ export async function GET(
   });
 
   const activities: ActivityAggregate[] = (activityDefsResult.data || []).map((task, index) => {
-    const responses = (activityResponsesResult.data || []).filter((response) => response.task_id === task.id);
+    const responses = activityResponses.filter((response) => response.task_id === task.id);
     const completedCount = responses.filter((response) => response.status === "completed").length;
     const skippedCount = responses.filter((response) => response.status === "skipped").length;
     const timedOutCount = responses.filter((response) => response.status === "timed_out").length;
@@ -352,7 +364,7 @@ export async function GET(
   });
 
   const legacySlides: SlideAggregate[] = Object.values(
-    (slideResponsesResult.data || []).reduce<Record<string, SlideAggregate>>((acc, response) => {
+    slideResponses.reduce<Record<string, SlideAggregate>>((acc, response) => {
       if (!acc[response.slide_id]) {
         const meta = slideMeta.get(response.slide_id) || { title_ar: "", title_en: "" };
         acc[response.slide_id] = {
