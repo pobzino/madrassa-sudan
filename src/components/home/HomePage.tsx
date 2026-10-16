@@ -213,8 +213,8 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
                 <span className="hidden xs:inline">{txt.goToDashboard}</span>
               </Link>
             ) : (
-              <div className="flex items-center rounded-full border border-gray-200 bg-white p-0.5 shadow-sm sm:p-1">
-                <Link href="/auth/login" className="whitespace-nowrap rounded-full px-2 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 hover:text-[#007229] sm:px-3 sm:py-2.5 sm:text-sm">
+              <>
+                <Link href="/auth/login" className="whitespace-nowrap rounded-full border border-gray-200 px-2 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:border-[#007229]/30 hover:bg-gray-50 hover:text-[#007229] sm:px-3 sm:py-2.5 sm:text-sm">
                   {txt.login}
                 </Link>
                 <Link
@@ -225,7 +225,7 @@ export default function HomePage({ stats }: { stats: HomeStats }) {
                 >
                   {txt.getStarted}
                 </Link>
-              </div>
+              </>
             )}
           </div>
         </div>
