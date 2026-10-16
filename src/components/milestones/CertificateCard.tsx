@@ -7,7 +7,7 @@ import { MadrassaLogo } from "@/components/illustrations";
 import LearnerAvatarIcon from "@/components/learners/LearnerAvatarIcon";
 import type { CertificateView, Lang } from "@/lib/milestones/types";
 import { BOSS_NAMES, milestoneBlockWeeks } from "@/lib/milestones/rules";
-import { BossCharacter, OwlCharacter } from "./Characters";
+import { FitBoss, FitOwl } from "./Characters";
 import { MilestoneApiError, milestoneApi, type Fetcher } from "./api";
 import { formatDate, formatNumber } from "./copy";
 
@@ -76,7 +76,7 @@ export default function CertificateCard({ certificateId, lang, fetcher }: { cert
   if (state !== "ready" || !view) {
     return (
       <div dir={lang === "ar" ? "rtl" : "ltr"} className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center" style={font}>
-        <OwlCharacter pose={state === "loading" ? "idle" : "hit"} className="h-28 w-32" />
+        <FitOwl pose={state === "loading" ? "think" : "wrong"} className="h-32 w-32" />
         <p className="text-xl font-semibold text-gray-700" role={state === "loading" ? "status" : undefined}>
           {state === "loading" ? t.loading : state === "not_found" ? t.notFound : t.error}
         </p>
@@ -137,8 +137,8 @@ export default function CertificateCard({ certificateId, lang, fetcher }: { cert
         </p>
 
         <div className="mt-4 flex items-end justify-center gap-2" aria-hidden="true">
-          <OwlCharacter pose="happy" celebrate className="h-24 w-28" />
-          <BossCharacter bossKey={view.bossKey} pose="ko" level={view.level} className="h-32 w-32" />
+          <FitOwl pose="cheer" className="h-28 w-28" />
+          <FitBoss bossKey={view.bossKey} pose="ko" className="h-32 w-32" />
         </div>
 
         <div className="mt-3 flex justify-center gap-1" role="img" aria-label={t.stars(formatNumber(view.stars, lang))}>

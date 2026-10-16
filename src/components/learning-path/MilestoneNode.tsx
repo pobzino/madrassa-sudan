@@ -1,6 +1,6 @@
 "use client";
 
-import { BossCharacter, type CharacterPose } from "@/components/milestones/Characters";
+import { FitBoss, type CharacterPose } from "@/components/milestones/Characters";
 import { bossName, formatNumber } from "@/components/milestones/copy";
 import type { TreeMilestone } from "@/lib/lessons/useLearningPath";
 
@@ -66,7 +66,7 @@ export function milestoneHref(m: TreeMilestone, isOnline: boolean): string | nul
 const STAR_PATH = "M12 2.5 l2.9 6 6.6 .8 -4.9 4.6 1.3 6.5 -5.9 -3.3 -5.9 3.3 1.3 -6.5 -4.9 -4.6 6.6 -.8 z";
 
 export function MilestoneDisc({ milestone, isCurrent, isOnline }: { milestone: TreeMilestone; isCurrent: boolean; isOnline: boolean }) {
-  const { state, bossKey, level } = milestone;
+  const { state, bossKey } = milestone;
   const passed = state === "passed";
   const locked = state === "locked";
   const greyed = locked || (!isOnline && !passed);
@@ -84,10 +84,9 @@ export function MilestoneDisc({ milestone, isCurrent, isOnline }: { milestone: T
       />
       {/* the boss peeks over the top of its disc */}
       <div className={`absolute -top-[30%] left-1/2 h-[104%] w-[104%] -translate-x-1/2 ${state === "available" && isOnline ? "motion-safe:[animation:float_3s_ease-in-out_infinite]" : ""}`}>
-        <BossCharacter
+        <FitBoss
           bossKey={bossKey}
           pose={pose}
-          level={level}
           className={`h-full w-full ${greyed ? "[filter:grayscale(1)_opacity(0.55)]" : ""}`}
         />
       </div>

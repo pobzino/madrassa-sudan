@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Check, Delete, Undo2, X } from "lucide-react";
 import type { BattleTurn, Lang, OwlHint } from "@/lib/milestones/types";
 import type { InteractionAnswer } from "@/lib/interactions/types";
@@ -42,6 +42,8 @@ export interface BattleMoveProps {
   throwFrom?: () => DOMRect | null;
   /** The Owl hint icon button, first in the action row (when the hint fits). */
   hintButton?: ReactNode;
+  /** Height of the targets band, between the boss's ledge and the owl's head (px). */
+  bandHeight?: number;
 }
 
 /** Moves whose prompt lives inside the move itself (the spell scroll). */
@@ -50,6 +52,14 @@ export function moveOwnsPrompt(interaction: PublicInteraction): boolean {
 }
 
 export default function BattleMove(props: BattleMoveProps) {
+  return (
+    <div className="h-full" style={{ "--band": `${props.bandHeight ?? 210}px` } as CSSProperties}>
+      <MoveBody {...props} />
+    </div>
+  );
+}
+
+function MoveBody(props: BattleMoveProps) {
   switch (props.interaction.type) {
     case "choose_correct":
       return <StarOrbs {...props} interaction={props.interaction} />;
@@ -83,7 +93,7 @@ const RUNE_STONE =
 const RUNE_SHAPES = ["42% 58% 52% 48% / 46% 40% 60% 54%", "56% 44% 46% 54% / 52% 58% 42% 48%", "48% 52% 60% 40% / 40% 52% 48% 60%", "60% 40% 44% 56% / 56% 46% 54% 44%"];
 
 /** The move's targets: the band between the boss and the owl. */
-const BAND = "h-[clamp(180px,24dvh,220px)] shrink-0";
+const BAND = "h-[var(--band,210px)] shrink-0";
 /** The bottom row: small round icons (hint, undo), then the one big button. */
 const ACTION_ROW = "mt-auto flex h-[76px] shrink-0 items-center gap-3";
 
@@ -193,7 +203,7 @@ function useDragPiece(onDrop: (slot: string) => void, disabled: boolean) {
 function orbArc(count: number): Array<{ x: number; y: number }> {
   if (count <= 2) return [{ x: 30, y: 50 }, { x: 70, y: 50 }];
   if (count === 3) return [{ x: 20, y: 30 }, { x: 50, y: 72 }, { x: 80, y: 30 }];
-  return [{ x: 22, y: 27 }, { x: 74, y: 27 }, { x: 37, y: 75 }, { x: 63, y: 75 }];
+  return [{ x: 20, y: 25 }, { x: 80, y: 25 }, { x: 36, y: 76 }, { x: 64, y: 76 }];
 }
 
 function StarOrbs({ interaction, lang, hint, disabled, onSubmit, hintButton }: BattleMoveProps & { interaction: Extract<PublicInteraction, { type: "choose_correct" }> }) {
@@ -262,7 +272,7 @@ function StarOrbs({ interaction, lang, hint, disabled, onSubmit, hintButton }: B
             disabled={disabled || gone}
             aria-hidden={gone || undefined}
             onClick={() => onSubmit({ type: "choose_correct", selected_index: index }, rectOf(refs.current[index]))}
-            className={`absolute grid aspect-square h-[clamp(80px,11.5dvh,100px)] -translate-y-1/2 place-items-center rounded-full text-[clamp(30px,5dvh,40px)] font-bold text-[#1a1a1a] transition-[opacity,scale] duration-300 active:scale-95 ltr:-translate-x-1/2 rtl:translate-x-1/2 ${gone ? "scale-50 opacity-0" : ""}`}
+            className={`absolute grid aspect-square h-[min(100px,calc(var(--band)*0.44))] -translate-y-1/2 place-items-center rounded-full text-[clamp(30px,5dvh,40px)] font-bold text-[#1a1a1a] transition-[opacity,scale] duration-300 active:scale-95 ltr:-translate-x-1/2 rtl:translate-x-1/2 ${gone ? "scale-50 opacity-0" : ""}`}
             style={{ ...ORB_STYLE, insetInlineStart: `${spot.x}%`, top: `${spot.y}%` }}
           >
             <span className="pointer-events-none absolute start-[20%] top-[16%] h-3 w-3 rounded-full bg-white/80" aria-hidden="true" />

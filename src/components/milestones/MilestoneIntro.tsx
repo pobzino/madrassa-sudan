@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation";
 import { Volume2, VolumeX, X } from "lucide-react";
 import type { Lang, MilestoneIntroResponse } from "@/lib/milestones/types";
 import { trackAnalyticsEvent } from "@/lib/analytics";
-import ArenaBackdrop from "./ArenaBackdrop";
+import { ArenaBackdrop } from "@/components/characters";
 import { MessageScreen, GREEN_BUTTON, TEXT_LINK } from "./BattleEndScreens";
 import { NeedsInternetCard, OwlShieldIcon, SpeakerIcon } from "./BattleParts";
-import { BossCharacter, OwlCharacter } from "./Characters";
+import { FitBoss, FitOwl } from "./Characters";
 import { MilestoneApiError, milestoneApi, type Fetcher } from "./api";
 import { bossName, formatNumber, MILESTONE_COPY, speakLine } from "./copy";
 import { useBattleFeedback } from "./motion";
@@ -143,12 +143,12 @@ export default function MilestoneIntro({ milestoneId, lang, fetcher, isOnline }:
           </button>
           <span className="absolute -bottom-3 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[10px] border-t-[14px] border-x-transparent border-t-[#FFF8EC]" aria-hidden="true" />
         </div>
-        <BossCharacter bossKey={bossKey} pose={locked ? "sleep" : passed ? "ko" : "taunt"} level={level} title={bossName(bossKey, lang)} className="h-[clamp(160px,28dvh,240px)] w-[clamp(160px,28dvh,240px)]" />
+        <FitBoss bossKey={bossKey} pose={locked ? "sleep" : passed ? "ko" : "taunt"} enter={!locked} title={bossName(bossKey, lang)} className="h-[clamp(160px,28dvh,240px)] w-[clamp(160px,28dvh,240px)]" />
       </div>
 
       {/* Shields you get, then go */}
       <div className="flex items-end gap-3">
-        <OwlCharacter pose={locked ? "sleep" : "taunt"} className="aspect-[72/64] h-[min(13dvh,24vw,108px)] shrink-0" />
+        <FitOwl pose={locked ? "think" : "idle"} glow={!locked} className="aspect-square h-[min(15dvh,28vw,124px)] shrink-0" />
         <div className="flex min-w-0 flex-1 flex-col gap-2.5">
           {!locked && (
             <span className="flex items-center gap-1 self-start rounded-full bg-[#052814]/70 px-3 py-1.5 ring-1 ring-white/15" role="img" aria-label={t.shieldsCount(formatNumber(m.heartsTotal, lang))}>

@@ -391,7 +391,7 @@ export default function LearningPathTree({
               )}
               {/* Owl rides the selected node — flies in from where it was */}
               {isSelected && (
-                <div key={selId ?? "owl"} className="absolute left-1/2 -top-[64px] z-10 -translate-x-1/2 pointer-events-none">
+                <div key={selId ?? "owl"} className={`absolute -top-[64px] z-10 -translate-x-1/2 pointer-events-none ${node.kind === "milestone" ? "left-[-56px]" : "left-1/2"}`}>
                   <PathOwl dx={owlDx} dy={owlDy} />
                 </div>
               )}

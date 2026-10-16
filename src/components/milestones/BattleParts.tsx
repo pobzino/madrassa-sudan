@@ -130,8 +130,11 @@ export function ReadAloudButton({
   speechText,
   lang,
   size = "md",
+  onSpeak,
 }: {
   size?: "sm" | "md";
+  /** Narration started; `ms` is how long it lasts (so a character can talk along). */
+  onSpeak?: (ms: number) => void;
   /** Changes per question; resets the player. */
   cacheKey: string;
   initialUrl: string | null;
@@ -157,9 +160,11 @@ export function ReadAloudButton({
 
   const speakWithPhone = useCallback(() => {
     if (!speakLine(speechText, lang)) return false;
+    // The phone's voice gives no length up front: about 70ms a character.
+    onSpeak?.(Math.min(8000, Math.max(1200, speechText.length * 70)));
     setStatus("idle");
     return true;
-  }, [lang, speechText]);
+  }, [lang, onSpeak, speechText]);
 
   const toggle = useCallback(async () => {
     if (status === "playing" || status === "loading") {
@@ -179,7 +184,11 @@ export function ReadAloudButton({
       }
       const audio = new Audio(url);
       audioRef.current = audio;
-      audio.onplay = () => setStatus("playing");
+      audio.onplay = () => {
+        setStatus("playing");
+        const seconds = Number.isFinite(audio.duration) ? audio.duration : speechText.length * 0.07;
+        onSpeak?.(Math.min(12000, Math.max(800, seconds * 1000)));
+      };
       audio.onended = () => {
         audioRef.current = null;
         setStatus("idle");
@@ -194,7 +203,7 @@ export function ReadAloudButton({
       if (blocked) setStatus("idle");
       else if (!speakWithPhone()) setStatus("error");
     }
-  }, [cacheKey, initialUrl, requestUrl, speakWithPhone, status, stop]);
+  }, [cacheKey, initialUrl, onSpeak, requestUrl, speakWithPhone, speechText.length, status, stop]);
 
   const busy = status === "playing" || status === "loading";
   return (

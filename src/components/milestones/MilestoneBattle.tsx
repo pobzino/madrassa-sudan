@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { LearnerAvatar } from "@/lib/learners/types";
 import type { AnswerResult, Lang } from "@/lib/milestones/types";
-import ArenaBackdrop from "./ArenaBackdrop";
+import { ArenaBackdrop, type PlacedAnchor } from "@/components/characters";
 import BattleScene, { type FxEvent } from "./BattleScene";
 import { MessageScreen, SoCloseScreen, VictoryScreen } from "./BattleEndScreens";
 import { NeedsInternetCard } from "./BattleParts";
@@ -84,7 +84,9 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
     fontFamily: lang === "ar" ? "var(--font-cairo), var(--font-fredoka), sans-serif" : "var(--font-fredoka), system-ui, sans-serif",
   };
 
-  const shell = (children: ReactNode, dim = false) => (
+  // The arena fills the screen; the battle stands its cast on the arena's
+  // anchors (px), every other screen sits in a centred column on top.
+  const shell = (content: ReactNode | ((anchors: { boss: PlacedAnchor; owl: PlacedAnchor }) => ReactNode), dim = false) => (
     <div
       dir={lang === "ar" ? "rtl" : "ltr"}
       lang={lang}
@@ -92,15 +94,27 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
       className="notranslate fixed inset-0 z-[60] h-[100dvh] overflow-hidden bg-[#08361C] text-white"
       style={fontStyle}
     >
-      <ArenaBackdrop bossKey={bossKey} powered={powered} className="absolute inset-0 h-full w-full" />
-      {dim && <div className="absolute inset-0 bg-[#1a1a1a]/35" aria-hidden="true" />}
-      <div
-        ref={shellRef}
-        className="relative mx-auto h-full w-full max-w-[480px]"
-        style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        {children}
-      </div>
+      <ArenaBackdrop bossKey={bossKey}>
+        {(anchors) => (
+          <>
+            {/* phase 2: the arena warms as the boss powers up */}
+            {powered && <div className="pointer-events-none absolute inset-0 bg-[#D21034]/15" aria-hidden="true" />}
+            {dim && <div className="absolute inset-0 bg-[#1a1a1a]/35" aria-hidden="true" />}
+            <div ref={shellRef} className="absolute inset-0">
+              {typeof content === "function" ? (
+                content(anchors)
+              ) : (
+                <div
+                  className="relative mx-auto h-full w-full max-w-[480px]"
+                  style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
+                >
+                  {content}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </ArenaBackdrop>
     </div>
   );
 
@@ -164,8 +178,9 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
   }
 
   if (!question || !battle) return null;
-  return shell(
+  return shell((anchors) => (
     <BattleScene
+      anchors={anchors}
       milestoneId={milestoneId}
       lang={lang}
       bossKey={bossKey}
@@ -190,5 +205,5 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
       onRetry={session.retry}
       onNext={() => advanceRef.current()}
     />
-  );
+  ));
 }

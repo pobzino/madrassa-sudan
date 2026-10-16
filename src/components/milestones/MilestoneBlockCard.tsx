@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import Boss from "./Boss";
+import { FitBoss } from "./Characters";
 import type { TeacherMilestoneBlock } from "@/lib/milestones/types";
 
 /**
@@ -39,7 +39,7 @@ export default function MilestoneBlockCard({
   return (
     <div className="my-3 rounded-2xl border-2 border-amber-200 bg-amber-50/60 p-3">
       <div className="flex flex-wrap items-center gap-3">
-        <Boss bossKey={m?.bossKey ?? "number_giant"} level={afterWeekNumber / 4} mood={published ? "ko" : "curious"} className="h-12 w-12 shrink-0" />
+        <FitBoss bossKey={m?.bossKey ?? "number_giant"} pose={published ? "ko" : "idle"} className="h-12 w-12 shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-gray-900">
             Big Challenge after week {afterWeekNumber} (weeks {afterWeekNumber - 3}–{afterWeekNumber})

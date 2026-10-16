@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
 import InteractionRenderer from "@/components/interactions/InteractionRenderer";
-import Boss from "@/components/milestones/Boss";
+import { FitBoss } from "@/components/milestones/Characters";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import {
   BOSS_KEYS,
@@ -228,7 +228,7 @@ export default function TeacherMilestoneReviewPage() {
                 title={BOSS_NAMES[key].en}
                 className={`rounded-xl border-2 p-1 ${bossKey === key ? "border-emerald-500 bg-emerald-50" : "border-gray-100"}`}
               >
-                <Boss bossKey={key} level={m.afterWeekNumber / 4} mood="curious" className="h-16 w-16" />
+                <FitBoss bossKey={key} pose={bossKey === key ? "taunt" : "idle"} className="h-16 w-16" />
               </button>
             ))}
           </div>

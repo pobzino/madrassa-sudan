@@ -6,7 +6,7 @@ import ConfettiBurst from "@/components/practice/ConfettiBurst";
 import LearnerAvatarIcon from "@/components/learners/LearnerAvatarIcon";
 import type { LearnerAvatar } from "@/lib/learners/types";
 import type { BossKey, Lang, MilestoneIntroResponse } from "@/lib/milestones/types";
-import { BossCharacter, OwlCharacter } from "./Characters";
+import { FitBoss, FitOwl } from "./Characters";
 import { bossName, formatNumber, MILESTONE_COPY } from "./copy";
 
 const STAR_PATH = "M12 2.5 l2.9 6 6.6 .8 -4.9 4.6 1.3 6.5 -5.9 -3.3 -5.9 3.3 1.3 -6.5 -4.9 -4.6 6.6 -.8 z";
@@ -21,7 +21,6 @@ export const TEXT_LINK = "self-center px-3 py-2 text-[17px] font-semibold text-w
 export function VictoryScreen({
   lang,
   bossKey,
-  level,
   burst,
   stars,
   certificateId,
@@ -47,8 +46,8 @@ export function VictoryScreen({
       <div className="relative flex h-full flex-col items-center gap-3 overflow-y-auto px-6 pb-6 pt-8 text-center">
         <h1 className="text-[clamp(34px,6dvh,44px)] font-bold leading-[1.05] [text-shadow:0_3px_0_rgba(0,0,0,0.35)]">{t.youBeat(boss)}</h1>
         <div className="relative flex w-full items-end justify-center" aria-hidden="true">
-          <BossCharacter bossKey={bossKey} pose="ko" level={level} className="h-[clamp(150px,27dvh,230px)] w-[clamp(150px,27dvh,230px)]" />
-          <OwlCharacter pose="happy" celebrate className="-ms-6 mb-1 h-[clamp(80px,13dvh,112px)] w-[clamp(90px,15dvh,126px)] shrink-0" />
+          <FitBoss bossKey={bossKey} pose="ko" className="h-[clamp(150px,27dvh,230px)] w-[clamp(150px,27dvh,230px)]" />
+          <FitOwl pose="cheer" className="-ms-6 mb-1 h-[clamp(100px,16dvh,140px)] w-[clamp(100px,16dvh,140px)] shrink-0" />
         </div>
         <p className="text-[21px] font-semibold leading-snug">{t.tooClever(boss)}</p>
         {stars && (
@@ -86,7 +85,6 @@ export function VictoryScreen({
 export function SoCloseScreen({
   lang,
   bossKey,
-  level,
   blockLessons,
   isOnline,
   restarting,
@@ -104,8 +102,8 @@ export function SoCloseScreen({
   return (
     <div className="relative flex h-full flex-col items-center gap-3 overflow-y-auto px-6 pb-6 pt-8 text-center">
       <div className="flex w-full items-end justify-center" aria-hidden="true">
-        <BossCharacter bossKey={bossKey} pose="happy" level={level} className="h-[clamp(130px,23dvh,200px)] w-[clamp(130px,23dvh,200px)]" />
-        <OwlCharacter pose="hit" className="-ms-3 h-[clamp(72px,12dvh,100px)] w-[clamp(80px,13dvh,112px)] shrink-0" />
+        <FitBoss bossKey={bossKey} pose="happy" className="h-[clamp(130px,23dvh,200px)] w-[clamp(130px,23dvh,200px)]" />
+        <FitOwl pose="idle" className="-ms-3 h-[clamp(92px,15dvh,124px)] w-[clamp(92px,15dvh,124px)] shrink-0" />
       </div>
       <h1 className="text-[clamp(36px,6dvh,44px)] font-bold leading-none [text-shadow:0_3px_0_rgba(0,0,0,0.35)]">{t.soCloseTitle}</h1>
       <p className="text-[21px] font-semibold leading-snug">{t.practiseThenPlay}</p>
@@ -143,7 +141,6 @@ export function SoCloseScreen({
 export function MessageScreen({
   lang,
   bossKey,
-  level,
   title,
   loading = false,
   action,
@@ -158,7 +155,7 @@ export function MessageScreen({
   const t = MILESTONE_COPY[lang];
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 px-6 text-center" role={loading ? "status" : undefined}>
-      <BossCharacter bossKey={bossKey} pose={loading ? "idle" : "sleep"} level={level} className={`h-44 w-44 ${loading ? "motion-safe:animate-pulse" : ""}`} />
+      <FitBoss bossKey={bossKey} pose={loading ? "idle" : "sleep"} className={`h-44 w-44 ${loading ? "motion-safe:animate-pulse" : ""}`} />
       <h1 className="max-w-sm text-[28px] font-bold leading-tight">{title}</h1>
       {!loading && (
         <div className="flex w-full max-w-sm flex-col gap-3">

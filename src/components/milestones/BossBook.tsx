@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { BOSS_KEYS, type BossBookEntry, type BossBookResponse, type Lang } from "@/lib/milestones/types";
 import { BOSS_NAMES } from "@/lib/milestones/rules";
-import { BossCharacter } from "./Characters";
+import { FitBoss } from "./Characters";
 import { MilestoneApiError, type Fetcher } from "./api";
 import { formatDate, formatNumber } from "./copy";
 import { BOSS_FACTS, BOSS_SUBJECTS } from "./signatures";
@@ -100,14 +100,14 @@ export default function BossBook({ lang, fetcher }: { lang: Lang; fetcher: Fetch
                   }`}
                 >
                   <div className={`relative grid aspect-square w-full max-w-[150px] place-items-center rounded-full ${beaten ? "bg-[radial-gradient(circle,#FDE68A_0%,rgba(253,230,138,0)_70%)]" : ""}`}>
-                    <BossCharacter
+                    <FitBoss
                       bossKey={entry.bossKey}
                       pose={beaten ? "ko" : entry.met ? "taunt" : "sleep"}
-                      className={`h-full w-full ${beaten ? "" : "[filter:brightness(0)_opacity(0.22)]"}`}
+                      className={`h-full w-full ${beaten ? "" : entry.met ? "[filter:grayscale(0.7)_opacity(0.75)]" : "[filter:brightness(0)_opacity(0.22)]"}`}
                       title={beaten || entry.met ? BOSS_NAMES[entry.bossKey][lang] : undefined}
                     />
                   </div>
-                  <p className={`mt-1 text-xl font-bold leading-tight ${beaten ? "" : "tracking-widest"}`}>
+                  <p className={`mt-4 text-xl font-bold leading-tight ${beaten || entry.met ? "" : "tracking-widest"}`}>
                     {beaten || entry.met ? BOSS_NAMES[entry.bossKey][lang] : t.unknown}
                   </p>
                   {beaten ? (
