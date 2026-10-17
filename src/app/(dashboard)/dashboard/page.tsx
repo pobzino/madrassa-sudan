@@ -18,6 +18,7 @@ import {
 } from "@/components/illustrations";
 import { HeroScene, SubjectScene } from "@/components/dashboard/DashboardScenes";
 import { DashboardInstallNudge } from "@/components/pwa/InstallNudges";
+import { AddChildNudge } from "@/components/learners/AddChildNudge";
 import { useLearnerContext, LearnerSwitcher } from "@/contexts/LearnerContext";
 
 const translations = {
@@ -221,6 +222,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Parents from before child profiles: add a child before anything else. */}
+          <AddChildNudge />
           <DashboardInstallNudge allowReminders={profile?.role === "parent" || profile?.role === "admin"} />
 
           {/* Stats Grid */}

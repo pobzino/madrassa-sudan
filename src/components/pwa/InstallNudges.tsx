@@ -134,7 +134,7 @@ type CardProps = {
   onHide?: () => void;
 };
 
-function NudgeCard({ icon, title, body, action, onHide }: CardProps) {
+export function NudgeCard({ icon, title, body, action, onHide }: CardProps) {
   const { language, isRtl } = useLanguage();
   return (
     <div className="mb-8 flex flex-wrap items-center gap-4 rounded-3xl bg-[#ecf7ef] p-4 ring-1 ring-[#cfe9d6] sm:flex-nowrap sm:p-5" dir={isRtl ? "rtl" : "ltr"}>
