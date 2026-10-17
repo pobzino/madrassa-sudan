@@ -1,7 +1,7 @@
 "use client";
 
 import AmalLoading from "@/components/AmalLoading";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { BossAlbum, BossBookResponse, BossSticker, Lang } from "@/lib/milestones/types";
 import { BOSS_NAMES } from "@/lib/milestones/rules";
@@ -28,6 +28,7 @@ const COPY = {
     certificate: "Certificate",
     preview: "Preview",
     previewNote: "Stickers from your preview battles are shown here, but nothing is saved for a child.",
+    subjects: "Subjects",
     loading: "Opening your Boss Book...",
     error: "We couldn't open the Boss Book. Please try again.",
     back: "Back to lessons",
@@ -50,6 +51,7 @@ const COPY = {
     certificate: "الشهادة",
     preview: "معاينة",
     previewNote: "تظهر هنا ملصقات معارك المعاينة الخاصة بك، لكن لا يُحفظ شيء للطفل.",
+    subjects: "المواد",
     loading: "نفتح كتاب الوحوش...",
     error: "لم نتمكن من فتح كتاب الوحوش. حاول مرة أخرى.",
     back: "العودة للدروس",
@@ -66,6 +68,7 @@ export default function BossBook({ lang, fetcher }: { lang: Lang; fetcher: Fetch
   const t = COPY[lang];
   const [book, setBook] = useState<BossBookResponse | null>(null);
   const [failed, setFailed] = useState(false);
+  const [tab, setTab] = useState<string | null>(null);
   const fetcherRef = useRef(fetcher);
   useEffect(() => {
     fetcherRef.current = fetcher;
@@ -80,7 +83,15 @@ export default function BossBook({ lang, fetcher }: { lang: Lang; fetcher: Fetch
         return (await response.json()) as BossBookResponse;
       })
       .then((data) => {
-        if (!cancelled) setBook(data);
+        if (cancelled) return;
+        setBook(data);
+        // Opened from a path node's link: show that sticker's album and scroll to it.
+        const anchor = window.location.hash.slice(1);
+        const target = anchor ? data.albums.find((album) => album.stickers.some((sticker) => sticker.id === anchor)) : null;
+        if (target) {
+          setTab(target.pathId);
+          window.setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ block: "center" }), 50);
+        }
       })
       .catch(() => {
         if (!cancelled) setFailed(true);
@@ -92,6 +103,12 @@ export default function BossBook({ lang, fetcher }: { lang: Lang; fetcher: Fetch
 
   const font = { fontFamily: lang === "ar" ? "var(--font-cairo), var(--font-fredoka), sans-serif" : "var(--font-fredoka), system-ui, sans-serif" };
   const hasPreview = book?.albums.some((album) => album.stickers.some((sticker) => sticker.preview)) ?? false;
+
+  // One tab per subject. The first open goes to the album the page's #anchor points at,
+  // else the first album with progress, else the first album.
+  const albums = useMemo(() => book?.albums ?? [], [book]);
+  const activeId = tab && albums.some((album) => album.pathId === tab) ? tab : defaultAlbum(albums);
+  const active = albums.find((album) => album.pathId === activeId) ?? null;
 
   return (
     <div dir={lang === "ar" ? "rtl" : "ltr"} lang={lang} className="mx-auto w-full max-w-3xl px-4 py-6" style={font}>
@@ -114,14 +131,39 @@ export default function BossBook({ lang, fetcher }: { lang: Lang; fetcher: Fetch
         ) : (
           <AmalLoading message={t.loading} dir={lang === "ar" ? "rtl" : "ltr"} />
         )
-      ) : book.albums.length === 0 ? (
+      ) : book.albums.length === 0 || !active ? (
         <p className="py-16 text-center text-xl font-semibold text-gray-600">{t.empty}</p>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {hasPreview && <p className="rounded-2xl bg-amber-50 px-4 py-2 text-center text-sm font-semibold text-[#92400E]">{t.previewNote}</p>}
-          {book.albums.map((album) => (
-            <AlbumPage key={album.pathId} album={album} lang={lang} />
-          ))}
+          {book.albums.length > 1 && (
+            <div role="tablist" aria-label={t.subjects} className="flex gap-2 overflow-x-auto pb-1">
+              {book.albums.map((album) => {
+                const selected = album.pathId === active.pathId;
+                const earned = album.stickers.filter((sticker) => sticker.state === "earned").length;
+                return (
+                  <button
+                    key={album.pathId}
+                    type="button"
+                    role="tab"
+                    id={`tab-${album.pathId}`}
+                    aria-selected={selected}
+                    aria-controls={`album-${album.pathId}`}
+                    onClick={() => setTab(album.pathId)}
+                    className={`flex min-h-12 shrink-0 items-center gap-2 rounded-full px-5 text-lg font-bold transition-colors ${
+                      selected ? "bg-[#007229] text-white shadow-[0_4px_0_#052814]" : "bg-white text-[#7C2D12] shadow-[0_4px_0_#E9D8B4]"
+                    }`}
+                  >
+                    {albumTitle(album, lang)}
+                    <span className={`rounded-full px-2 py-0.5 text-sm ${selected ? "bg-white/20" : "bg-[#FFF8EC] text-[#B45309]"}`}>
+                      {formatNumber(earned, lang)}/{formatNumber(album.stickers.length, lang)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <AlbumPage key={active.pathId} album={active} lang={lang} />
         </div>
       )}
 
@@ -134,12 +176,23 @@ export default function BossBook({ lang, fetcher }: { lang: Lang; fetcher: Fetch
   );
 }
 
+/** The tab and page title: the subject's name, else the path's title. */
+function albumTitle(album: BossAlbum, lang: Lang): string {
+  const subject = lang === "ar" ? album.subject?.nameAr : album.subject?.nameEn ?? album.subject?.nameAr;
+  return subject || (lang === "ar" ? album.titleAr : album.titleEn ?? album.titleAr) || "";
+}
+
+/** The album to open first: the first with any progress, else the first. */
+function defaultAlbum(albums: BossAlbum[]): string | null {
+  return (albums.find((album) => album.stickers.some((sticker) => sticker.state !== "locked")) ?? albums[0])?.pathId ?? null;
+}
+
 function AlbumPage({ album, lang }: { album: BossAlbum; lang: Lang }) {
   const t = COPY[lang];
-  const title = (lang === "ar" ? album.titleAr : album.titleEn ?? album.titleAr) || (lang === "ar" ? album.subject?.nameAr : album.subject?.nameEn) || "";
+  const title = albumTitle(album, lang);
   const earned = album.stickers.filter((sticker) => sticker.state === "earned").length;
   return (
-    <section aria-label={title} className="rounded-[28px] bg-[#FFF8EC] p-4 shadow-[0_6px_0_#E9D8B4]">
+    <section id={`album-${album.pathId}`} role="tabpanel" aria-labelledby={`tab-${album.pathId}`} className="rounded-[28px] bg-[#FFF8EC] p-4 shadow-[0_6px_0_#E9D8B4]">
       <header className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-2xl font-bold leading-tight text-[#7C2D12]">{title}</h2>
         <span className="shrink-0 rounded-full bg-white px-3 py-1 text-sm font-bold text-[#B45309]">{t.albumProgress(formatNumber(earned, lang), formatNumber(album.stickers.length, lang))}</span>
