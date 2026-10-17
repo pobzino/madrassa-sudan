@@ -1,7 +1,7 @@
 import "server-only";
 
 import { learnerDisplayName } from "@/lib/learners/types";
-import { BOSS_NAMES, milestoneBlockWeeks } from "@/lib/milestones/rules";
+import { BOSS_NAMES, milestoneWeeksCovered } from "@/lib/milestones/rules";
 import type { EmailLanguage } from "@/lib/email/render";
 import { sendEmails } from "@/lib/email/send";
 import { milestonePassedEmail } from "@/lib/email/templates";
@@ -35,10 +35,10 @@ export type MilestoneNotifyReport = {
   testMode: boolean;
 };
 
-function weeksLabel(language: EmailLanguage, afterWeekNumber: number) {
-  const weeks = milestoneBlockWeeks(afterWeekNumber);
+function weeksLabel(language: EmailLanguage, afterWeekNumber: number, final = false) {
+  const weeks = milestoneWeeksCovered(afterWeekNumber, final);
   const format = (value: number) => new Intl.NumberFormat(language === "ar" ? "ar-EG" : "en-GB").format(value);
-  const range = `${format(weeks[0])}–${format(weeks[weeks.length - 1])}`;
+  const range = `${format(weeks.first)}–${format(weeks.last)}`;
   return language === "ar" ? `الأسابيع ${range}` : `weeks ${range}`;
 }
 
@@ -84,12 +84,17 @@ export async function notifyMilestonePassed(admin: MilestoneAdminClient, certifi
   const recipientIds = [...new Set([owner, ...(guardians ?? []).map((row) => row.guardian_id)].filter((id): id is string => Boolean(id)))];
   if (!recipientIds.length) return { ...report, reason: "no_recipients" };
 
-  const [{ data: recipients }, { data: subject }] = await Promise.all([
+  const [{ data: recipients }, { data: subject }, { data: milestone }] = await Promise.all([
     admin.from("profiles").select("id, full_name, preferred_language").in("id", recipientIds).returns<RecipientRow[]>(),
     certificate.subject_id
       ? admin.from("subjects").select("name_ar, name_en").eq("id", certificate.subject_id).maybeSingle<{ name_ar: string | null; name_en: string | null }>()
       : Promise.resolve({ data: null }),
+    // A final boss's certificate covers the whole path.
+    certificate.milestone_id
+      ? admin.from("learning_path_milestones").select("is_final").eq("id", certificate.milestone_id).maybeSingle<{ is_final: boolean | null }>()
+      : Promise.resolve({ data: null }),
   ]);
+  const final = milestone?.is_final === true;
   const recipientById = new Map((recipients ?? []).map((row) => [row.id, row]));
   report.recipients = recipientIds.length;
 
@@ -101,7 +106,7 @@ export async function notifyMilestonePassed(admin: MilestoneAdminClient, certifi
     subjectName:
       (language === "ar" ? subject?.name_ar || subject?.name_en : subject?.name_en || subject?.name_ar) ||
       (language === "ar" ? "المادة" : "their subject"),
-    weeksLabel: weeksLabel(language, certificate.after_week_number),
+    weeksLabel: weeksLabel(language, certificate.after_week_number, final),
     bossName: BOSS_NAMES[bossKey][language],
   });
   const languageFor = (userId: string) => languageOf(recipientById.get(userId)?.preferred_language);

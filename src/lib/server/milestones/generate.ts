@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { extractSlideContent } from "@/lib/ai/homework-slides";
-import { bossForSubject, isMilestoneWeek, milestoneBlockWeeks } from "@/lib/milestones/rules";
+import { FINAL_BOSS_TITLES, bossForSubject, isMilestoneWeek, milestoneBlockWeeks } from "@/lib/milestones/rules";
 import {
   MILESTONE_DEFAULT_BATTLE_QUESTIONS,
   MILESTONE_MAX_BATTLE_QUESTIONS,
@@ -50,6 +50,8 @@ export interface GenerateMilestonePoolArgs {
   actorId: string;
   /** Default "milestone" (a Big Challenge). "placement" = the path's "Meet your first boss". */
   kind?: MilestoneKind;
+  /** The path's final boss ("The Grand Challenge"): kind "milestone", after the last week, whole-path pool. */
+  final?: boolean;
   /** Injected in tests; defaults to the interaction-mix item generator. */
   generate?: LessonItemGenerator;
   /** Injected in tests; defaults to the fast-model blind verifier. */
@@ -192,7 +194,7 @@ function trimPlacementPool(pool: PoolItem[], size: number): PoolItem[] {
   return result;
 }
 
-type PlanArgs = Pick<GenerateMilestonePoolArgs, "admin" | "pathId" | "afterWeekNumber" | "poolSize" | "kind">;
+type PlanArgs = Pick<GenerateMilestonePoolArgs, "admin" | "pathId" | "afterWeekNumber" | "poolSize" | "kind" | "final">;
 
 /** Which lessons' deck content a plan loads: all (one-shot generation), one (a lesson step) or none (plan / finish). */
 type DeckScope = { decks: "all" } | { decks: "one"; lessonId: string } | { decks: "none" };
@@ -205,6 +207,10 @@ interface PoolPlan {
   pathId: string;
   kind: MilestoneKind;
   placement: boolean;
+  /** The path's final boss. */
+  final: boolean;
+  /** Placement or final: the pool spans the whole path with the 4/4/4 difficulty plan. */
+  spansPath: boolean;
   afterWeekNumber: number;
   poolSize: number;
   path: { id: string; subject_id: string };
@@ -231,13 +237,14 @@ export interface LessonPoolResult {
 
 /** 1. The source weeks, their steps in path order, lessons, decks. */
 async function loadPoolPlan(
-  { admin, pathId, afterWeekNumber: requestedWeek, poolSize: requestedPoolSize, kind = "milestone" }: PlanArgs,
+  { admin, pathId, afterWeekNumber: requestedWeek, poolSize: requestedPoolSize, kind = "milestone", final: requestedFinal = false }: PlanArgs,
   scope: DeckScope = { decks: "all" },
 ): Promise<PoolPlan> {
   const placement = kind === "placement";
-  const afterWeekNumber = placement ? 0 : requestedWeek;
-  const poolSize = placement ? PLACEMENT_DEFAULT_POOL_SIZE : requestedPoolSize;
-  if (!placement && !isMilestoneWeek(afterWeekNumber)) throw new MilestoneRouteError("block_incomplete", 400);
+  const final = !placement && requestedFinal;
+  const spansPath = placement || final;
+  const poolSize = spansPath ? PLACEMENT_DEFAULT_POOL_SIZE : requestedPoolSize;
+  if (!spansPath && !isMilestoneWeek(requestedWeek)) throw new MilestoneRouteError("block_incomplete", 400);
 
   const { data: path } = await admin
     .from("learning_paths")
@@ -246,18 +253,8 @@ async function loadPoolPlan(
     .maybeSingle<{ id: string; subject_id: string }>();
   if (!path) throw new MilestoneRouteError("milestone_not_found", 404);
 
-  const findExisting = async () => {
-    const { data } = await admin
-      .from("learning_path_milestones")
-      .select("id, assignment_id, status")
-      .eq("path_id", pathId)
-      .eq("after_week_number", afterWeekNumber)
-      .maybeSingle<{ id: string; assignment_id: string; status: string }>();
-    return data ?? null;
-  };
-  if ((await findExisting())?.status === "published") throw new MilestoneRouteError("unpublish_first", 409);
-
-  const { data: weeks } = placement
+  // The weeks the pool draws from: a block's 4 weeks; a placement's 1..12; a final boss's whole path.
+  const { data: weeks } = spansPath
     ? await admin
         .from("learning_path_weeks")
         .select("id, week_number")
@@ -267,14 +264,25 @@ async function loadPoolPlan(
         .from("learning_path_weeks")
         .select("id, week_number")
         .eq("path_id", pathId)
-        .in("week_number", milestoneBlockWeeks(afterWeekNumber))
+        .in("week_number", milestoneBlockWeeks(requestedWeek))
         .returns<Array<{ id: string; week_number: number }>>();
   const sourceWeeks = placement
     ? (weeks ?? []).filter((week) => week.week_number >= 1 && week.week_number <= PLACEMENT_SOURCE_WEEKS)
-    : weeks ?? [];
-  if (placement ? !sourceWeeks.length : sourceWeeks.length !== milestoneBlockWeeks(afterWeekNumber).length) {
+    : (weeks ?? []).filter((week) => week.week_number >= 1);
+  if (spansPath ? !sourceWeeks.length : sourceWeeks.length !== milestoneBlockWeeks(requestedWeek).length) {
     throw new MilestoneRouteError("block_incomplete", 400);
   }
+  // A placement is week 0; a final boss sits after the path's last week; a block boss where asked.
+  const afterWeekNumber = placement ? 0 : final ? Math.max(...sourceWeeks.map((week) => week.week_number)) : requestedWeek;
+
+  const findExisting = async () => {
+    type Existing = { id: string; assignment_id: string; status: string; is_final?: boolean | null };
+    const query = admin.from("learning_path_milestones").select("id, assignment_id, status, is_final").eq("path_id", pathId);
+    // The final boss is found by its flag; a block boss or placement by its week (a 12-week path has both after week 12).
+    const { data } = await (final ? query.eq("is_final", true) : query.eq("after_week_number", afterWeekNumber)).returns<Existing[]>();
+    return (data ?? []).find((row) => (final ? row.is_final === true : row.is_final !== true)) ?? null;
+  };
+  if ((await findExisting())?.status === "published") throw new MilestoneRouteError("unpublish_first", 409);
   const weekNumberById = new Map(sourceWeeks.map((week) => [week.id, week.week_number]));
 
   const { data: steps } = await admin
@@ -309,7 +317,7 @@ async function loadPoolPlan(
   const skillKeys = tagSkills.map((skill) => skill.skillKey);
   const defaultSkillOf = (lessonId: string) => defaultSkillForLesson(lessonById.get(lessonId)?.curriculum_topic, skills, subjectKey);
 
-  const lessonIds = placement
+  const lessonIds = spansPath
     ? samplePlacementLessons(orderedLessonIds.map((lessonId) => ({ lessonId, skillKey: defaultSkillOf(lessonId) }))).map((lesson) => lesson.lessonId)
     : orderedLessonIds;
 
@@ -353,15 +361,17 @@ async function loadPoolPlan(
     else skippedLessons.push(lessonId);
   }
   if (!sources.length) {
-    throw new MilestoneRouteError("generation_failed", 502, placement ? "No lesson in these weeks has a recorded deck yet." : "No lesson in this block has a recorded deck yet.");
+    throw new MilestoneRouteError("generation_failed", 502, spansPath ? "No lesson in these weeks has a recorded deck yet." : "No lesson in this block has a recorded deck yet.");
   }
 
-  const perLesson = placement ? PLACEMENT_PER_LESSON : Math.min(MAX_PER_LESSON, Math.max(MIN_PER_LESSON, Math.ceil(poolSize / sources.length)));
+  const perLesson = spansPath ? PLACEMENT_PER_LESSON : Math.min(MAX_PER_LESSON, Math.max(MIN_PER_LESSON, Math.ceil(poolSize / sources.length)));
   return {
     admin,
     pathId,
     kind,
     placement,
+    final,
+    spansPath,
     afterWeekNumber,
     poolSize,
     path,
@@ -401,7 +411,7 @@ async function runLesson(plan: PoolPlan, lessonIndex: number, generate: LessonIt
     letters,
     skills: promptSkills,
     defaultSkillKey,
-    ...(plan.placement ? { difficultyPlan: placementDifficultyPlan(lessonIndex, requested) } : {}),
+    ...(plan.spansPath ? { difficultyPlan: placementDifficultyPlan(lessonIndex, requested) } : {}),
   });
 
   // 3a. Deterministic checks: structure, keys that must add up, one order, quality rules. Tags never drop an item.
@@ -424,17 +434,17 @@ async function runLesson(plan: PoolPlan, lessonIndex: number, generate: LessonIt
   const kept = checked
     .map((item, index) => ({ item, verdict: verdictByIndex.get(index) }))
     .filter(({ item }) => keptSet.has(item.interaction))
-    .map(({ item, verdict }) => ({ interaction: item.interaction, ...mergeTags(item, verdict, { preferGenerated: plan.placement }) }));
+    .map(({ item, verdict }) => ({ interaction: item.interaction, ...mergeTags(item, verdict, { preferGenerated: plan.spansPath }) }));
   return { lessonId: source.lessonId, kept, dropped: [...dropped, ...verified.dropped] };
 }
 
 /** 3c-5. Assemble the pool from the lessons' results and write it (a draft). */
 async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoolResult>[], actorId: string): Promise<GenerateMilestonePoolResult> {
-  const { admin, placement, perLesson, poolSize, path, subject, pathId, kind, afterWeekNumber } = plan;
+  const { admin, placement, final, spansPath, perLesson, poolSize, path, subject, pathId, kind, afterWeekNumber } = plan;
   const skippedLessons = [...plan.skippedLessons];
   const droppedItems: DroppedItem[] = [];
 
-  // 3c. Keep at most perLesson good items per lesson (a placement prefers one of each difficulty), no repeated prompts.
+  // 3c. Keep at most perLesson good items per lesson (a placement or final boss prefers one of each difficulty), no repeated prompts.
   let pool: PoolItem[] = [];
   const spare: PoolItem[] = [];
   const seenPrompts = new Set<string>();
@@ -449,7 +459,7 @@ async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoo
       console.warn("Milestone item dropped:", lessonId, JSON.stringify(item));
       droppedItems.push(item);
     }
-    const candidates = placement
+    const candidates = spansPath
       ? (() => {
           const seen = new Set<Difficulty | null>();
           const first: typeof result.value.kept = [];
@@ -478,10 +488,10 @@ async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoo
     if (!kept) skippedLessons.push(lessonId);
   });
 
-  // 4. Enough for the smallest battle? A placement also wants >= 3 of each difficulty, but that is
+  // 4. Enough for the smallest battle? A placement or final boss also wants >= 3 of each difficulty, but that is
   //    publish_milestone's rule (pool_unbalanced): the draft is saved so staff can retag, and warned.
   const warnings: string[] = [];
-  if (placement) {
+  if (spansPath) {
     // A difficulty the per-lesson cap left short is topped up from the lessons' spare good items.
     for (const d of [1, 2, 3] as Difficulty[]) {
       for (const item of spare) {
@@ -534,13 +544,13 @@ async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoo
     await admin.from("homework_assignments").update({ total_points: pool.length, updated_at: now }).eq("id", existing.assignment_id);
     const { error: milestoneError } = await admin
       .from("learning_path_milestones")
-      .update({ generated_at: now, generated_by: actorId, reviewed_at: null, reviewed_by: null })
+      .update({ generated_at: now, generated_by: actorId, reviewed_at: null, reviewed_by: null, ...(final ? { after_week_number: afterWeekNumber } : {}) })
       .eq("id", existing.id);
     if (milestoneError) throw new Error(milestoneError.message);
     return { milestoneId: existing.id, assignmentId: existing.assignment_id, questionCount: pool.length, skippedLessons, droppedItems, warnings };
   }
 
-  const { titleAr, titleEn } = placement ? PLACEMENT_TITLES : milestoneTitles(afterWeekNumber);
+  const { titleAr, titleEn } = placement ? PLACEMENT_TITLES : final ? FINAL_BOSS_TITLES : milestoneTitles(afterWeekNumber);
   const { data: assignment, error: assignmentError } = await admin
     .from("homework_assignments")
     .insert({
@@ -567,11 +577,12 @@ async function writePool(plan: PoolPlan, settled: PromiseSettledResult<LessonPoo
         path_id: pathId,
         after_week_number: afterWeekNumber,
         kind,
+        is_final: final,
         assignment_id: assignment.id,
         title_ar: titleAr,
         title_en: titleEn,
         status: "draft",
-        battle_question_count: placement
+        battle_question_count: spansPath
           ? PLACEMENT_QUESTION_COUNT
           : Math.min(
               MILESTONE_MAX_BATTLE_QUESTIONS,
@@ -632,9 +643,9 @@ function signingKey(): string {
   return createHmac("sha256", secret).update("milestone-generate-lesson-v1").digest("hex");
 }
 
-function lessonSignature(scope: { pathId: string; kind: MilestoneKind; afterWeekNumber: number }, result: LessonPoolResult): string {
+function lessonSignature(scope: { pathId: string; kind: MilestoneKind; afterWeekNumber: number; final?: boolean }, result: LessonPoolResult): string {
   return createHmac("sha256", signingKey())
-    .update(JSON.stringify([scope.pathId, scope.kind, scope.afterWeekNumber, result.lessonId, result.kept, result.dropped]))
+    .update(JSON.stringify([scope.pathId, scope.kind, scope.final === true ? "final" : scope.afterWeekNumber, result.lessonId, result.kept, result.dropped]))
     .digest("hex");
 }
 

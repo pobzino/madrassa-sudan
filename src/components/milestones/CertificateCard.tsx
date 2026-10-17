@@ -7,7 +7,7 @@ import { BookOpen, Printer } from "lucide-react";
 import { MadrassaLogo } from "@/components/illustrations";
 import LearnerAvatarIcon from "@/components/learners/LearnerAvatarIcon";
 import type { CertificateView, Lang } from "@/lib/milestones/types";
-import { BOSS_NAMES, milestoneBlockWeeks } from "@/lib/milestones/rules";
+import { BOSS_NAMES, milestoneWeeksCovered } from "@/lib/milestones/rules";
 import { FitBoss, FitOwl } from "./Characters";
 import { MilestoneApiError, milestoneApi, type Fetcher } from "./api";
 import { formatDate, formatNumber } from "./copy";
@@ -88,7 +88,7 @@ export default function CertificateCard({ certificateId, lang, fetcher }: { cert
   }
 
   const subject = (lang === "ar" ? view.subjectNameAr : view.subjectNameEn) ?? "";
-  const weeks = milestoneBlockWeeks(view.afterWeekNumber);
+  const weeks = milestoneWeeksCovered(view.afterWeekNumber, view.final === true);
   const bossFull = BOSS_NAMES[view.bossKey][lang];
 
   return (
@@ -131,7 +131,7 @@ export default function CertificateCard({ certificateId, lang, fetcher }: { cert
           {t.beat(bossFull)} <span className="text-gray-600">{t.bigChallenge}</span>
         </p>
         <p className="mt-1 text-base font-semibold text-[#B45309]">
-          {t.weeks(subject, formatNumber(weeks[0], lang), formatNumber(weeks[weeks.length - 1], lang))}
+          {t.weeks(subject, formatNumber(weeks.first, lang), formatNumber(weeks.last, lang))}
         </p>
 
         <div className="mt-4 flex items-end justify-center gap-2" aria-hidden="true">

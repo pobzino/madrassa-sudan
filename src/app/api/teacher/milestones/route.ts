@@ -57,15 +57,16 @@ export async function GET(request: Request) {
 
     const weekByNumber = new Map(weekList.map((week) => [week.week_number, week]));
     const maxWeek = Math.max(0, ...weekList.map((week) => week.week_number));
-    // Blocks are Big Challenges only; the placement ("Meet your first boss") is returned on its own.
-    const blockMilestones = (milestones ?? []).filter((row) => row.kind !== "placement");
+    // Blocks are Big Challenges only; the placement ("Meet your first boss") and the final boss are returned on their own.
+    const blockMilestones = (milestones ?? []).filter((row) => row.kind !== "placement" && row.is_final !== true);
     const placementRow = (milestones ?? []).find((row) => row.kind === "placement") ?? null;
+    const finalRow = (milestones ?? []).find((row) => row.kind !== "placement" && row.is_final === true) ?? null;
     const milestoneByWeek = new Map(blockMilestones.map((row) => [row.after_week_number, row]));
 
     const blockWeeksAt: number[] = [];
     for (let k = MILESTONE_WEEKS_PER_BLOCK; k <= maxWeek; k += MILESTONE_WEEKS_PER_BLOCK) blockWeeksAt.push(k);
     // Every boss's details at once (each is its own small query).
-    const [blocks, placement] = await Promise.all([
+    const [blocks, placement, final] = await Promise.all([
       Promise.all(blockWeeksAt.map(async (k): Promise<TeacherMilestoneBlock> => {
         const blockWeeks = milestoneBlockWeeks(k).filter((number) => weekByNumber.has(number));
         const blockWeekIds = new Set(blockWeeks.map((number) => weekByNumber.get(number)!.id));
@@ -80,8 +81,9 @@ export async function GET(request: Request) {
         };
       })),
       placementRow ? teacherMilestoneRow(admin, placementRow) : Promise.resolve(null),
+      finalRow ? teacherMilestoneRow(admin, finalRow) : Promise.resolve(null),
     ]);
-    return milestoneJson({ pathId: path.id, blocks, placement } satisfies TeacherMilestoneListResponse);
+    return milestoneJson({ pathId: path.id, blocks, placement, final, lastWeekNumber: maxWeek || null } satisfies TeacherMilestoneListResponse);
   } catch (error) {
     console.error("Teacher milestone list failed:", error);
     return milestoneError("service_unavailable", 500);

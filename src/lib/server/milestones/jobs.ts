@@ -32,6 +32,7 @@ export interface GenerationJobRow {
   path_id: string;
   kind: MilestoneKind;
   after_week_number: number;
+  is_final?: boolean;
   pool_size: number;
   requested_by: string | null;
   status: JobStatus;
@@ -49,6 +50,8 @@ export interface GenerationJobScope {
   pathId: string;
   kind: MilestoneKind;
   afterWeekNumber: number;
+  /** The path's final boss (kind "milestone"; the plan sets the week). */
+  final?: boolean;
   poolSize: number;
 }
 
@@ -101,6 +104,7 @@ export async function createGenerationJob(
     .eq("path_id", scope.pathId)
     .eq("kind", scope.kind)
     .eq("after_week_number", scope.afterWeekNumber)
+    .eq("is_final", scope.final === true)
     .in("status", ["queued", "running"])
     .limit(1);
   if (Array.isArray(active) && active.length) {
@@ -113,6 +117,7 @@ export async function createGenerationJob(
       path_id: scope.pathId,
       kind: scope.kind,
       after_week_number: scope.afterWeekNumber,
+      is_final: scope.final === true,
       pool_size: scope.poolSize,
       requested_by: requestedBy,
       status: "queued",
@@ -190,7 +195,7 @@ export type GenerationStepBody =
  * to record; "finish" marks the job done here so the outcome and the draft land together.
  */
 export async function runGenerationStep(admin: MilestoneAdminClient, job: GenerationJobRow, body: GenerationStepBody): Promise<unknown> {
-  const scope = { admin, pathId: job.path_id, afterWeekNumber: job.after_week_number, kind: job.kind, poolSize: job.pool_size };
+  const scope = { admin, pathId: job.path_id, afterWeekNumber: job.after_week_number, kind: job.kind, final: job.is_final === true, poolSize: job.pool_size };
   if (body.step === "plan") {
     const plan = await planMilestonePool(scope);
     await updateGenerationJob(admin, job.id, { status: "running", progress_done: 0, progress_total: plan.lessons.length });

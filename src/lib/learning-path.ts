@@ -45,6 +45,8 @@ export interface PathWeekInput {
 export interface PathMilestoneInput {
   id: string;
   afterWeekNumber: number;
+  /** The path's final boss: after the last week, opens once every week (and its boss) is done. */
+  final?: boolean;
 }
 
 export interface PathInput {
@@ -194,10 +196,14 @@ export function evaluatePath(
   let currentStepId: string | null = null;
   let currentWeekId: string | null = null;
 
-  // One milestone per week number (the DB keys them uniquely); the first wins.
+  // One block milestone per week number (the DB keys them uniquely); the first wins.
+  // The final boss is kept apart: it comes after the last week, whatever its number.
   const milestoneByWeek = new Map<number, PathMilestoneInput>();
+  let finalMilestone: PathMilestoneInput | null = null;
   for (const milestone of path.milestones ?? []) {
-    if (!milestoneByWeek.has(milestone.afterWeekNumber)) {
+    if (milestone.final) {
+      finalMilestone ??= milestone;
+    } else if (!milestoneByWeek.has(milestone.afterWeekNumber)) {
       milestoneByWeek.set(milestone.afterWeekNumber, milestone);
     }
   }
@@ -320,6 +326,21 @@ export function evaluatePath(
       steps,
     };
   });
+
+  // The final boss ("The Grand Challenge"): open once the last week is done
+  // and its block boss (if any) beaten; it gates nothing after it.
+  if (finalMilestone && weeks.length) {
+    const lastWeek = weeks[weeks.length - 1];
+    let state: MilestoneState;
+    if (passedMilestones.has(finalMilestone.id)) state = "passed";
+    else if (unlockAll || previousWeekCompleted) state = activeBattles.has(finalMilestone.id) ? "in_battle" : "available";
+    else state = "locked";
+    milestoneResults.push({ id: finalMilestone.id, afterWeekNumber: lastWeek.weekNumber, state });
+    if (currentStepId === null && (state === "available" || state === "in_battle")) {
+      currentStepId = milestoneNodeId(finalMilestone.id);
+      currentWeekId = lastWeek.id;
+    }
+  }
 
   return { weeks: results, milestones: milestoneResults, currentStepId, currentWeekId };
 }

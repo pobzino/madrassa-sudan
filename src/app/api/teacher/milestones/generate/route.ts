@@ -31,14 +31,16 @@ const BodySchema = z
     path_id: z.string().uuid(),
     after_week_number: z.number().int().min(0).optional(),
     kind: z.enum(["milestone", "placement"]).optional(),
+    // The path's final boss ("The Grand Challenge"): kind "milestone", week chosen by the plan (the last week).
+    final: z.boolean().optional(),
     pool_size: z.number().int().min(12).max(32).optional(),
     step: z.enum(["plan", "lesson", "finish"]).optional(),
     lesson_id: z.string().uuid().optional(),
     // Signed lesson results from the "lesson" step (checked again by the server).
     results: z.array(z.unknown()).max(64).optional(),
   })
-  // A Big Challenge needs its week (> 0); a placement is always week 0.
-  .refine((body) => body.kind === "placement" || (body.after_week_number ?? 0) > 0);
+  // A Big Challenge needs its week (> 0); a placement is always week 0; a final boss finds its own week.
+  .refine((body) => body.kind === "placement" || body.final === true || (body.after_week_number ?? 0) > 0);
 
 export async function POST(request: Request) {
   const staff = await openStaffRequest({ fastAuth: true });
@@ -47,12 +49,14 @@ export async function POST(request: Request) {
   if (!parsed.success) return milestoneError("block_incomplete", 400, { message: "Invalid request" });
   if (!(await canManagePathMilestones(staff.admin, staff, parsed.data.path_id))) return publishForbiddenResponse();
   const kind = parsed.data.kind ?? "milestone";
+  const final = kind === "milestone" && parsed.data.final === true;
 
   const scope = {
     admin: staff.admin,
     pathId: parsed.data.path_id,
-    afterWeekNumber: kind === "placement" ? 0 : parsed.data.after_week_number ?? 0,
+    afterWeekNumber: kind === "placement" || final ? 0 : parsed.data.after_week_number ?? 0,
     kind,
+    final,
     poolSize: parsed.data.pool_size ?? MILESTONE_DEFAULT_POOL_SIZE,
   };
 
@@ -67,7 +71,7 @@ export async function POST(request: Request) {
     }
     if (!parsed.data.step && backgroundGenerationEnabled(request.url)) {
       // The deployed site: the work runs in the background function; the page polls the job.
-      const job = await createGenerationJob(staff.admin, { pathId: scope.pathId, kind, afterWeekNumber: scope.afterWeekNumber, poolSize: scope.poolSize }, staff.userId);
+      const job = await createGenerationJob(staff.admin, { pathId: scope.pathId, kind, afterWeekNumber: scope.afterWeekNumber, final, poolSize: scope.poolSize }, staff.userId);
       try {
         await enqueueGenerationJob(request.url, job.id);
       } catch (error) {

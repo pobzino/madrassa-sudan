@@ -291,9 +291,9 @@ export default function LearningPathTree({
   for (const week of path.weeks) {
     for (const step of week.steps) nodes.push({ kind: "lesson", id: step.id, step });
     if (week.testAssignmentId) nodes.push({ kind: "test", id: `test-${week.id}`, week });
-    // The Big Challenge after this week (weeks 4, 8, 12...).
-    const milestone = (path.milestones ?? []).find((m) => m.afterWeekNumber === week.weekNumber);
-    if (milestone) nodes.push({ kind: "milestone", id: milestoneNodeId(milestone.id), milestone });
+    // The Big Challenge after this week (weeks 4, 8, 12...), then the path's final boss after the last week.
+    const after = (path.milestones ?? []).filter((m) => m.afterWeekNumber === week.weekNumber).sort((a, b) => Number(a.final) - Number(b.final));
+    for (const milestone of after) nodes.push({ kind: "milestone", id: milestoneNodeId(milestone.id), milestone });
   }
 
   // Two nodes a row, serpentine. A Big Challenge is the hero: it takes a row

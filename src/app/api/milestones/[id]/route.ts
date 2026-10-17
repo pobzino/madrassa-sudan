@@ -7,6 +7,7 @@ import type { MilestoneIntroResponse } from "@/lib/milestones/types";
 import { bossHpPercent } from "@/lib/milestones/rules";
 import { openMilestoneLearnerRequest } from "@/lib/server/milestones/context";
 import {
+  isFinalBoss,
   isPlacement,
   loadActiveBattle,
   loadBlockLessons,
@@ -89,7 +90,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         .select("id", { count: "exact", head: true })
         .eq("learner_id", learnerId)
         .eq("milestone_id", row.id),
-      loadBlockLessons(admin, path.id, row.after_week_number, lang),
+      loadBlockLessons(admin, path.id, row.after_week_number, lang, isFinalBoss(row) ? Array.from({ length: row.after_week_number }, (_, i) => i + 1) : undefined),
     ]);
 
     // Preview opens drafts and locked blocks without changing the learner's tree.

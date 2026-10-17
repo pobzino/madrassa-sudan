@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import MilestoneBlockCard from "@/components/milestones/MilestoneBlockCard";
 import PlacementBlockCard from "@/components/milestones/PlacementBlockCard";
+import FinalBlockCard from "@/components/milestones/FinalBlockCard";
 import { MILESTONE_WEEKS_PER_BLOCK, type TeacherMilestoneListResponse } from "@/lib/milestones/types";
 
 const LESSONS_PER_WEEK = 2;
@@ -22,7 +23,8 @@ const MILESTONE_ERRORS: Record<string, string> = {
   pool_unbalanced: "A starting boss needs at least 3 easy, 3 medium and 3 hard questions.",
 };
 
-/** The starting boss (placement) uses week 0 in these handlers. */
+/** The starting boss (placement) uses week 0 in these handlers; the final boss ("The Grand Challenge") uses -1. */
+const FINAL_WEEK = -1;
 const PLACEMENT_WEEK = 0;
 
 interface SubjectRow {
@@ -89,11 +91,14 @@ export default function LearningPathEditorPage() {
   const milestoneAt = (afterWeekNumber: number) =>
     afterWeekNumber === PLACEMENT_WEEK
       ? milestones?.placement ?? null
-      : milestones?.blocks.find((b) => b.afterWeekNumber === afterWeekNumber)?.milestone ?? null;
+      : afterWeekNumber === FINAL_WEEK
+        ? milestones?.final ?? null
+        : milestones?.blocks.find((b) => b.afterWeekNumber === afterWeekNumber)?.milestone ?? null;
+  const bossLabel = (afterWeekNumber: number) =>
+    afterWeekNumber === PLACEMENT_WEEK ? "starting boss" : afterWeekNumber === FINAL_WEEK ? "Grand Challenge" : "Big Challenge";
 
   const pollJob = useCallback(async (pathId: string, afterWeekNumber: number, jobId: string, progress: string | number) => {
-    const placement = afterWeekNumber === PLACEMENT_WEEK;
-    const what = placement ? "starting boss" : "Big Challenge";
+    const what = bossLabel(afterWeekNumber);
     setGeneratingBlock(afterWeekNumber);
     try {
       for (;;) {
@@ -103,7 +108,7 @@ export default function LearningPathEditorPage() {
         if (!res.ok) throw new Error(job.message ?? "Could not read the generation's progress.");
         if (job.status === "done") {
           writeJobId(pathId, afterWeekNumber, null);
-          toast.success(placement ? "Starting boss draft ready: review the tags before publishing" : "Big Challenge draft ready: review it before publishing", { id: progress });
+          toast.success(afterWeekNumber === PLACEMENT_WEEK ? "Starting boss draft ready: review the tags before publishing" : `${what === "Grand Challenge" ? "Grand Challenge" : "Big Challenge"} draft ready: review it before publishing`, { id: progress });
           for (const warning of job.warnings ?? []) toast.warning(warning, { duration: 12000 });
           return;
         }
@@ -130,10 +135,11 @@ export default function LearningPathEditorPage() {
   const generateMilestone = async (afterWeekNumber: number) => {
     if (!milestones?.pathId) return;
     const placement = afterWeekNumber === PLACEMENT_WEEK;
+    const final = afterWeekNumber === FINAL_WEEK;
     const existing = milestoneAt(afterWeekNumber);
     if (existing && !window.confirm("Replace this draft's questions with a newly generated set?")) return;
     setGeneratingBlock(afterWeekNumber);
-    const what = placement ? "starting boss" : "Big Challenge";
+    const what = bossLabel(afterWeekNumber);
     const progress = toast.loading(`Starting the ${what}...`);
     try {
       const res = await fetch("/api/teacher/milestones/generate", {
@@ -142,7 +148,9 @@ export default function LearningPathEditorPage() {
         body: JSON.stringify(
           placement
             ? { path_id: milestones.pathId, kind: "placement" }
-            : { path_id: milestones.pathId, after_week_number: afterWeekNumber }
+            : final
+              ? { path_id: milestones.pathId, final: true }
+              : { path_id: milestones.pathId, after_week_number: afterWeekNumber }
         ),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string; jobId?: string; warnings?: string[] };
@@ -154,7 +162,7 @@ export default function LearningPathEditorPage() {
         await pollJob(milestones.pathId, afterWeekNumber, data.jobId, progress);
         return;
       }
-      toast.success(placement ? "Starting boss draft ready: review the tags before publishing" : "Big Challenge draft ready: review it before publishing", { id: progress });
+      toast.success(placement ? "Starting boss draft ready: review the tags before publishing" : `${final ? "Grand Challenge" : "Big Challenge"} draft ready: review it before publishing`, { id: progress });
       for (const warning of data.warnings ?? []) toast.warning(warning, { duration: 12000 });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Generation failed", { id: progress });
@@ -168,7 +176,7 @@ export default function LearningPathEditorPage() {
   useEffect(() => {
     const pathId = milestones?.pathId;
     if (!pathId || generatingBlock !== null) return;
-    const weeks = [PLACEMENT_WEEK, ...(milestones?.blocks.map((b) => b.afterWeekNumber) ?? [])];
+    const weeks = [PLACEMENT_WEEK, FINAL_WEEK, ...(milestones?.blocks.map((b) => b.afterWeekNumber) ?? [])];
     for (const week of weeks) {
       const jobId = readJobId(pathId, week);
       if (jobId) {
@@ -197,14 +205,14 @@ export default function LearningPathEditorPage() {
   const setMilestoneLive = async (afterWeekNumber: number, live: boolean) => {
     const m = milestoneAt(afterWeekNumber);
     if (!m) return;
-    const what = afterWeekNumber === PLACEMENT_WEEK ? "starting boss" : "Big Challenge";
+    const what = bossLabel(afterWeekNumber);
     if (!live && !window.confirm(`Unpublish this ${what}? Any games children are playing now will be reset.`)) return;
     setMilestoneBusy(afterWeekNumber);
     try {
       const res = await fetch(`/api/teacher/milestones/${m.id}/${live ? "publish" : "unpublish"}`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) toast.error(MILESTONE_ERRORS[data.error] ?? `Failed: ${data.message ?? data.error ?? "unknown error"}`);
-      else toast.success(`${afterWeekNumber === PLACEMENT_WEEK ? "Starting boss" : "Big Challenge"} ${live ? "published" : "unpublished"}`);
+      else toast.success(`${afterWeekNumber === PLACEMENT_WEEK ? "Starting boss" : afterWeekNumber === FINAL_WEEK ? "Grand Challenge" : "Big Challenge"} ${live ? "published" : "unpublished"}`);
     } finally {
       setMilestoneBusy(null);
       await loadMilestones(selectedSubject);
@@ -592,6 +600,18 @@ export default function LearningPathEditorPage() {
                   );
                 })}
               </ul>
+            )}
+            {ordered.length > 0 && (
+              <FinalBlockCard
+                final={milestones?.final ?? null}
+                lastWeekNumber={milestones?.lastWeekNumber ?? null}
+                disabled={dirty}
+                generating={generatingBlock === FINAL_WEEK}
+                busy={generatingBlock !== null || milestoneBusy !== null}
+                onGenerate={() => void generateMilestone(FINAL_WEEK)}
+                onPublish={() => void setMilestoneLive(FINAL_WEEK, true)}
+                onUnpublish={() => void setMilestoneLive(FINAL_WEEK, false)}
+              />
             )}
           </div>
 

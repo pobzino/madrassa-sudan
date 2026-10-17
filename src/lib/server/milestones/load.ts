@@ -8,6 +8,7 @@ import {
   comboFrom,
   heartsFor,
   milestoneBlockWeeks,
+  finalBossLevel,
   milestoneLevel,
   requiredCorrect,
 } from "@/lib/milestones/rules";
@@ -56,12 +57,20 @@ export interface MilestoneRow {
   created_at: string;
   updated_at: string;
   /** Absent on rows read before the measurement migration: "milestone". */
-  kind?: MilestoneKind;  /** Placement only: must a child with no lesson done meet this boss before week 1? (Default true.) */
+  kind?: MilestoneKind;
+  /** The path's final boss ("The Grand Challenge"): kind "milestone", after the last week, whole-path pool. */
+  is_final?: boolean;
+  /** Placement only: must a child with no lesson done meet this boss before week 1? (Default true.) */
   required?: boolean | null;
 }
 
 export function isPlacement(row: Pick<MilestoneRow, "kind">): boolean {
   return row.kind === "placement";
+}
+
+/** The path's final boss: a Big Challenge after the last week whose pool spans the whole path. */
+export function isFinalBoss(row: Pick<MilestoneRow, "kind" | "is_final">): boolean {
+  return row.kind !== "placement" && row.is_final === true;
 }
 
 export interface PathRow {
@@ -79,7 +88,7 @@ export interface SubjectRow {
 }
 
 export const MILESTONE_COLUMNS =
-  "id, path_id, after_week_number, assignment_id, title_ar, title_en, status, battle_question_count, pass_percent, boss_key, generated_at, generated_by, reviewed_at, reviewed_by, published_at, published_by, created_at, updated_at, kind, required";
+  "id, path_id, after_week_number, assignment_id, title_ar, title_en, status, battle_question_count, pass_percent, boss_key, generated_at, generated_by, reviewed_at, reviewed_by, published_at, published_by, created_at, updated_at, kind, required, is_final";
 
 export const BATTLE_COLUMNS =
   "id, milestone_id, assignment_id, learner_id, attempt_number, is_preview, question_ids, question_count, required_correct, hearts_total, correct_count, wrong_count, answered_count, status, started_at, last_answer_at, finished_at, hint_used_question_index, hint_used_at, kind, superseded_at";
@@ -133,7 +142,12 @@ function digits(lang: Lang, value: number) {
  * The kind, child-facing line for a locked Big Challenge (shown on the
  * battle screen). Names the weeks when the caller knows them.
  */
-export function milestoneLockedMessage(lang: Lang, afterWeekNumber?: number): string {
+export function milestoneLockedMessage(lang: Lang, afterWeekNumber?: number, final = false): string {
+  if (final) {
+    return lang === "ar"
+      ? "أكمل كل دروس مسارك أولاً، ثم عُد إلى التحدي الأكبر!"
+      : "Finish every lesson on your path first, then come back for the Grand Challenge!";
+  }
   if (afterWeekNumber) {
     const [first, last] = [afterWeekNumber - 3, afterWeekNumber].map((week) => digits(lang, week));
     return lang === "ar"
@@ -159,13 +173,13 @@ export const POOL_UNBALANCED_MESSAGE = "A starting boss needs at least 3 easy, 3
 
 export function mapMilestoneRpcError(
   error: { message?: string; code?: string } | null,
-  options: { lang?: Lang; afterWeekNumber?: number; bossKey?: BossKey | null } = {},
+  options: { lang?: Lang; afterWeekNumber?: number; final?: boolean; bossKey?: BossKey | null } = {},
 ): MilestoneRouteError {
   const message = error?.message ?? "";
   if (message.includes("milestone_not_found")) return new MilestoneRouteError("milestone_not_found", 404);
   if (message.includes("milestone_unpublished")) return new MilestoneRouteError("milestone_unpublished", 404);
   if (message.includes("milestone_locked")) {
-    return new MilestoneRouteError("milestone_locked", 409, milestoneLockedMessage(options.lang ?? "ar", options.afterWeekNumber));
+    return new MilestoneRouteError("milestone_locked", 409, milestoneLockedMessage(options.lang ?? "ar", options.afterWeekNumber, options.final === true));
   }
   if (message.includes("placement_done")) {
     return new MilestoneRouteError("placement_done", 409, placementDoneMessage(options.lang ?? "ar", options.bossKey));
@@ -248,13 +262,15 @@ export function toMilestoneSummary(row: MilestoneRow, path: PathRow): MilestoneS
     };
   }
   const required = requiredCorrect(row.battle_question_count, row.pass_percent);
+  const final = isFinalBoss(row);
   return {
     id: row.id,
     pathId: row.path_id,
     subjectId: path.subject_id,
     afterWeekNumber: row.after_week_number,
-    firstWeekNumber: row.after_week_number - 3,
-    level: milestoneLevel(row.after_week_number),
+    // A final boss covers the whole path and looks a level tougher than the last block boss.
+    firstWeekNumber: final ? 1 : row.after_week_number - 3,
+    level: final ? finalBossLevel(row.after_week_number) : milestoneLevel(row.after_week_number),
     titleAr: row.title_ar,
     titleEn: row.title_en,
     bossKey,
@@ -262,6 +278,7 @@ export function toMilestoneSummary(row: MilestoneRow, path: PathRow): MilestoneS
     requiredCorrect: required,
     heartsTotal: heartsFor(row.battle_question_count, row.pass_percent),
     kind: "milestone",
+    ...(final ? { final: true } : {}),
   };
 }
 

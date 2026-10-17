@@ -4,7 +4,7 @@
 // learner's own certificates and battles, after the ownership check.
 
 import { BOSS_KEYS, type BossBookEntry, type BossBookResponse, type BossKey } from "@/lib/milestones/types";
-import { milestoneBlockWeeks } from "@/lib/milestones/rules";
+import { milestoneWeeksCovered } from "@/lib/milestones/rules";
 import { openMilestoneLearnerRequest } from "@/lib/server/milestones/context";
 import { isBossKey, milestoneError, milestoneJson } from "@/lib/server/milestones/load";
 
@@ -12,12 +12,11 @@ export const dynamic = "force-dynamic";
 
 type CertRow = { id: string; boss_key: string; subject_id: string | null; after_week_number: number; stars: number; awarded_at: string };
 type BattleRow = { milestone_id: string; started_at: string; kind?: string | null };
-type MilestoneRow = { id: string; boss_key: string; path_id: string; after_week_number: number };
+type MilestoneRow = { id: string; boss_key: string; path_id: string; after_week_number: number; is_final?: boolean | null };
 type SubjectRow = { id: string; name_ar: string | null; name_en: string | null };
 
-function weeksOf(afterWeekNumber: number) {
-  const weeks = milestoneBlockWeeks(afterWeekNumber);
-  return { first: weeks[0], last: weeks[weeks.length - 1] };
+function weeksOf(afterWeekNumber: number, final = false) {
+  return milestoneWeeksCovered(afterWeekNumber, final);
 }
 
 export async function GET(request: Request) {
@@ -49,7 +48,7 @@ export async function GET(request: Request) {
     const { data: milestones } = milestoneIds.length
       ? await admin
           .from("learning_path_milestones")
-          .select("id, boss_key, path_id, after_week_number")
+          .select("id, boss_key, path_id, after_week_number, is_final")
           .in("id", milestoneIds)
           .returns<MilestoneRow[]>()
       : { data: [] as MilestoneRow[] };

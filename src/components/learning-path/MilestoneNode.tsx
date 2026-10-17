@@ -20,8 +20,11 @@ import type { TreeMilestone } from "@/lib/lessons/useLearningPath";
 const COPY = {
   en: {
     ribbon: "BOSS BATTLE",
+    ribbonFinal: "GRAND CHALLENGE",
     beatToOpen: (boss: string, week: string) => `Beat ${boss} to open Week ${week}!`,
+    beatToFinish: (boss: string) => `Beat ${boss} to finish your path!`,
     locked: (a: string, b: string) => `Finish weeks ${a}–${b} first`,
+    lockedFinal: "Finish every lesson first",
     inBattle: (boss: string) => `${boss} is waiting for you!`,
     passed: (boss: string) => `You beat ${boss}!`,
     offline: "Needs internet",
@@ -38,8 +41,11 @@ const COPY = {
   },
   ar: {
     ribbon: "معركة الوحش",
+    ribbonFinal: "التحدي الأكبر",
     beatToOpen: (boss: string, week: string) => `اهزم ${boss} لتفتح الأسبوع ${week}!`,
+    beatToFinish: (boss: string) => `اهزم ${boss} لتُكمل مسارك!`,
     locked: (a: string, b: string) => `أكمل الأسابيع ${a}–${b} أولاً`,
+    lockedFinal: "أكمل كل الدروس أولاً",
     inBattle: (boss: string) => `${boss} ينتظرك!`,
     passed: (boss: string) => `لقد هزمت ${boss}!`,
     offline: "يحتاج إلى إنترنت",
@@ -65,11 +71,15 @@ export function milestoneLabel(m: TreeMilestone, lang: "ar" | "en", isOnline: bo
       : !isOnline
         ? t.offline
         : m.state === "locked"
-          ? t.locked(formatNumber(m.firstWeekNumber, lang), formatNumber(m.afterWeekNumber, lang))
+          ? m.final
+            ? t.lockedFinal
+            : t.locked(formatNumber(m.firstWeekNumber, lang), formatNumber(m.afterWeekNumber, lang))
           : m.state === "in_battle"
             ? t.inBattle(boss)
-            : t.beatToOpen(boss, formatNumber(m.afterWeekNumber + 1, lang));
-  return { title: `${t.ribbon} · ${boss}`, sub, muted: m.state === "locked" || (!isOnline && m.state !== "passed") };
+            : m.final
+              ? t.beatToFinish(boss)
+              : t.beatToOpen(boss, formatNumber(m.afterWeekNumber + 1, lang));
+  return { title: `${m.final ? t.ribbonFinal : t.ribbon} · ${boss}`, sub, muted: m.state === "locked" || (!isOnline && m.state !== "passed") };
 }
 
 export function milestoneCta(m: TreeMilestone, lang: "ar" | "en"): string {

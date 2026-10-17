@@ -31,7 +31,7 @@ import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 import { BOSS_KEYS, type BossKey } from "@/lib/milestones/types";
 import { PLACEMENT_MAX_PRIOR_LESSONS } from "@/lib/measurement/types";
 import { placementGateApplies } from "@/lib/learning-path-gate";
-import { milestoneLevel, requiredCorrect } from "@/lib/milestones/rules";
+import { finalBossLevel, milestoneLevel, requiredCorrect } from "@/lib/milestones/rules";
 
 interface PathRow {
   id: string;
@@ -57,6 +57,7 @@ interface StepRow {
 interface MilestoneRow {
   id: string;
   kind?: string | null;
+  is_final?: boolean | null;
   after_week_number: number;
   title_ar: string;
   title_en: string | null;
@@ -79,6 +80,8 @@ export interface TreeMilestone {
   /** Battle size N and the correct answers needed to win (display only). */
   questionCount: number;
   requiredCorrect: number;
+  /** The path's final boss ("The Grand Challenge"): after the last week, covering the whole path. */
+  final: boolean;
 }
 
 /** "Meet your first boss": the path's placement, shown above week 1 while it is offered. */
@@ -191,7 +194,7 @@ export async function loadSubjectLearningPath(
   const [{ data: milestoneData }, { data: placementData }] = await Promise.all([
     db
       .from("learning_path_milestones")
-      .select("id, kind, after_week_number, title_ar, title_en, boss_key, battle_question_count, status")
+      .select("id, kind, is_final, after_week_number, title_ar, title_en, boss_key, battle_question_count, status")
       .eq("path_id", pathRow.id)
       .eq("status", "published")
       .eq("kind", "milestone")
@@ -345,7 +348,7 @@ export async function loadSubjectLearningPath(
         practiceAssignmentId: s.practice_assignment_id,
       })),
     })),
-    milestones: milestoneRows.map((m) => ({ id: m.id, afterWeekNumber: m.after_week_number })),
+    milestones: milestoneRows.map((m) => ({ id: m.id, afterWeekNumber: m.after_week_number, final: m.is_final === true })),
   };
 
   const lessonCompletion: StudentProgressInput["lessonCompletion"] = {};
@@ -387,11 +390,13 @@ export async function loadSubjectLearningPath(
     const certificate = certificateByMilestone.get(result.id);
     const stars = certificate && [1, 2, 3].includes(certificate.stars) ? (certificate.stars as 1 | 2 | 3) : null;
     const questionCount = row.battle_question_count;
+    const final = row.is_final === true;
     return {
       id: result.id,
       afterWeekNumber: result.afterWeekNumber,
-      firstWeekNumber: result.afterWeekNumber - 3,
-      level: milestoneLevel(result.afterWeekNumber),
+      firstWeekNumber: final ? 1 : result.afterWeekNumber - 3,
+      level: final ? finalBossLevel(result.afterWeekNumber) : milestoneLevel(result.afterWeekNumber),
+      final,
       title: (language === "ar" ? row.title_ar : row.title_en) || row.title_ar,
       bossKey: (BOSS_KEYS as readonly string[]).includes(row.boss_key) ? (row.boss_key as BossKey) : "puzzle_owlet",
       state: result.state,

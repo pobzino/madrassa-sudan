@@ -238,3 +238,20 @@ export const BOSS_BLOCK_LINES: Record<BossKey, { en: readonly string[]; ar: read
     ar: ["حَرف ينفخ نحوك دوّامة من الحروف!", "حَرف يرمي نحوك حرفاً ملتفّاً!", "حَرف يخلط الحروف برفرفة جناحه!"],
   },
 };
+
+/* ------------------------------------------------------------------ final boss */
+
+/** The path's final boss ("The Grand Challenge"): a Big Challenge after the last week, drawn from the whole path. */
+export const FINAL_BOSS_TITLES = { titleAr: "التحدي الأكبر", titleEn: "The Grand Challenge" } as const;
+
+/** A final boss looks one level tougher than the last block boss would. */
+export function finalBossLevel(afterWeekNumber: number): number {
+  return Math.ceil(afterWeekNumber / MILESTONE_WEEKS_PER_BLOCK) + 1;
+}
+
+/** The weeks a boss covers: a block boss its 4 weeks, a final boss the whole path (1..last). */
+export function milestoneWeeksCovered(afterWeekNumber: number, final = false): { first: number; last: number } {
+  if (final) return { first: 1, last: Math.max(1, afterWeekNumber) };
+  const weeks = milestoneBlockWeeks(afterWeekNumber);
+  return { first: weeks[0], last: weeks[weeks.length - 1] };
+}

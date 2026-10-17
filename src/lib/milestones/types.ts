@@ -109,6 +109,8 @@ export interface MilestoneSummary {
   heartsTotal: number;              // N - requiredCorrect ("tries")
   /** Always set by the server; absent means "milestone". Placement: afterWeekNumber 0, firstWeekNumber 1, level 0. */
   kind?: MilestoneKind;
+  /** The path's final boss ("The Grand Challenge"): after the last week, drawn from the whole path (firstWeekNumber 1). */
+  final?: boolean;
 }
 
 export interface BattleQuestion {
@@ -224,6 +226,8 @@ export interface CertificateView {
   stars: 1 | 2 | 3;
   scorePercent: number;
   awardedAt: string;
+  /** Earned at the path's final boss: the certificate covers weeks 1..afterWeekNumber. */
+  final?: boolean;
 }
 export interface CertificateListResponse { certificates: CertificateView[] }
 
@@ -298,6 +302,8 @@ export interface TeacherMilestoneRow {
   activeBattles: number;
   certificates: number;
   kind?: MilestoneKind;
+  /** The path's final boss (kind "milestone", after the last week, whole-path pool). */
+  final?: boolean;
   /** Gradable items per tagged difficulty; untagged counted under "none". */
   difficultyCounts?: { d1: number; d2: number; d3: number; none: number };
   /** Placement only: a child with no lesson done must meet this boss before week 1 (default true). */
@@ -315,6 +321,10 @@ export interface TeacherMilestoneListResponse {
   blocks: TeacherMilestoneBlock[];
   /** The path's placement ("Meet your first boss"), or null when not created. */
   placement?: TeacherMilestoneRow | null;
+  /** The path's final boss ("The Grand Challenge"), or null when not created. */
+  final?: TeacherMilestoneRow | null;
+  /** The path's last week number (where the final boss sits), or null for an empty path. */
+  lastWeekNumber?: number | null;
 }
 export interface TeacherMilestoneDetail { milestone: TeacherMilestoneRow; questions: TeacherMilestoneQuestion[];
   lessons: { id: string; title: string; weekNumber: number }[];
