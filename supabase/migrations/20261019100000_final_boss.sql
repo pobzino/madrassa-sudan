@@ -124,6 +124,123 @@ END;
 $$;
 
 -- -----------------------------------------------------------------------------
+-- 3b. start_milestone_battle: the database's lock floor for a final boss is the
+--     whole path, not the last 4 weeks (20261018121000's body, one line changed)
+-- -----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.start_milestone_battle(
+  p_milestone_id uuid, p_learner_id uuid, p_question_ids uuid[], p_preview boolean)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_m        public.learning_path_milestones%ROWTYPE;
+  v_b        public.milestone_battles%ROWTYPE;
+  v_preview  boolean := coalesce(p_preview, false);
+  v_n        integer;
+  v_required integer;
+  v_attempt  integer;
+BEGIN
+  -- FOR SHARE: waits for a concurrent publish/unpublish of this milestone.
+  SELECT * INTO v_m FROM public.learning_path_milestones WHERE id = p_milestone_id FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'milestone_not_found' USING ERRCODE = 'P0002';
+  END IF;
+  IF v_m.status <> 'published' AND NOT v_preview THEN
+    RAISE EXCEPTION 'milestone_unpublished' USING ERRCODE = '55000';
+  END IF;
+  IF p_learner_id IS NULL THEN
+    RAISE EXCEPTION 'invalid_answer: learner id is required' USING ERRCODE = '22023';
+  END IF;
+
+  -- One start at a time per (learner, milestone).
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_learner_id::text || ':' || p_milestone_id::text, 0));
+
+  SELECT * INTO v_b FROM public.milestone_battles
+  WHERE learner_id = p_learner_id AND milestone_id = p_milestone_id AND status = 'active';
+  IF FOUND THEN
+    RETURN jsonb_build_object('battle', to_jsonb(v_b), 'resumed', true);
+  END IF;
+
+  IF v_m.kind = 'placement' THEN
+    -- No week gate: a placement never locks and is never locked.
+    IF NOT v_preview AND EXISTS (SELECT 1 FROM public.milestone_battles b
+         WHERE b.learner_id = p_learner_id AND b.milestone_id = v_m.id AND NOT b.is_preview
+           AND b.status = 'completed' AND b.superseded_at IS NULL) THEN
+      RAISE EXCEPTION 'placement_done' USING ERRCODE = '55000';
+    END IF;
+  ELSIF NOT v_preview THEN
+    IF NOT EXISTS (SELECT 1 FROM public.learning_path_weeks w
+                   WHERE w.path_id = v_m.path_id AND w.week_number = v_m.after_week_number)
+       OR EXISTS (
+         SELECT 1
+         FROM public.learning_path_weeks w
+         JOIN public.learning_path_steps s ON s.week_id = w.id
+         WHERE w.path_id = v_m.path_id
+           -- A block boss needs its 4 weeks; the final boss needs the whole path.
+           AND w.week_number BETWEEN CASE WHEN v_m.is_final THEN 1 ELSE v_m.after_week_number - 3 END AND v_m.after_week_number
+           AND NOT (
+             CASE WHEN s.practice_assignment_id IS NOT NULL THEN
+               EXISTS (SELECT 1 FROM public.homework_submissions hs
+                       JOIN public.homework_assignments ha ON ha.id = hs.assignment_id
+                       WHERE hs.assignment_id = s.practice_assignment_id
+                         AND hs.student_id = p_learner_id
+                         AND hs.status::text IN ('graded', 'returned')
+                         AND hs.score IS NOT NULL
+                         AND coalesce(ha.total_points, 0) > 0
+                         AND hs.score >= (coalesce(ha.passing_score, 75) / 100.0) * ha.total_points)
+             ELSE
+               EXISTS (SELECT 1 FROM public.lesson_progress lp
+                       WHERE lp.student_id = p_learner_id AND lp.lesson_id = s.lesson_id
+                         AND lp.completed = true)
+             END)
+       ) THEN
+      RAISE EXCEPTION 'milestone_locked' USING ERRCODE = '55000';
+    END IF;
+  END IF;
+
+  v_n := coalesce(array_length(p_question_ids, 1), 0);
+  IF v_n < 1 OR v_n > 16 OR array_ndims(p_question_ids) <> 1
+     OR array_position(p_question_ids, NULL) IS NOT NULL THEN
+    RAISE EXCEPTION 'pool_mismatch: % question ids', v_n USING ERRCODE = '22023';
+  END IF;
+  IF (SELECT count(DISTINCT q) FROM unnest(p_question_ids) AS q) <> v_n THEN
+    RAISE EXCEPTION 'pool_mismatch: question ids repeat' USING ERRCODE = '22023';
+  END IF;
+  IF (SELECT count(*) FROM public.homework_questions hq
+      WHERE hq.assignment_id = v_m.assignment_id
+        AND hq.id = ANY (p_question_ids)
+        AND public.milestone_question_gradable(hq.question_type::text, hq.correct_answer, hq.interaction)) <> v_n THEN
+    RAISE EXCEPTION 'pool_mismatch: a question is not an auto-gradable question of this milestone'
+      USING ERRCODE = '22023';
+  END IF;
+
+  v_required := CASE WHEN v_m.kind = 'placement' THEN 0 ELSE ceil(v_m.pass_percent * v_n / 100.0)::int END;
+  SELECT coalesce(max(attempt_number), 0) + 1 INTO v_attempt
+  FROM public.milestone_battles WHERE learner_id = p_learner_id AND milestone_id = p_milestone_id;
+
+  BEGIN
+    INSERT INTO public.milestone_battles (milestone_id, assignment_id, learner_id, attempt_number, is_preview,
+                                          question_ids, question_count, required_correct, hearts_total, kind)
+    VALUES (v_m.id, v_m.assignment_id, p_learner_id, v_attempt, v_preview,
+            p_question_ids, v_n, v_required, v_n - v_required, v_m.kind)
+    RETURNING * INTO v_b;
+  EXCEPTION WHEN unique_violation THEN
+    -- A concurrent start won the race: resume its battle.
+    SELECT * INTO v_b FROM public.milestone_battles
+    WHERE learner_id = p_learner_id AND milestone_id = p_milestone_id AND status = 'active';
+    IF FOUND THEN
+      RETURN jsonb_build_object('battle', to_jsonb(v_b), 'resumed', true);
+    END IF;
+    RAISE;
+  END;
+
+  RETURN jsonb_build_object('battle', to_jsonb(v_b), 'resumed', false);
+END;
+$$;
+
+-- -----------------------------------------------------------------------------
 -- 4. Post-checks (fail closed)
 -- -----------------------------------------------------------------------------
 DO $$
@@ -154,5 +271,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
                  WHERE n.nspname = 'public' AND p.proname = 'publish_milestone' AND p.prosrc ~ 'is_final') THEN
     RAISE EXCEPTION 'final boss migration aborted: publish_milestone does not check is_final';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                 WHERE n.nspname = 'public' AND p.proname = 'start_milestone_battle' AND p.prosrc ~ 'v_m\.is_final THEN 1') THEN
+    RAISE EXCEPTION 'final boss migration aborted: start_milestone_battle does not gate the final boss on the whole path';
   END IF;
 END $$;
