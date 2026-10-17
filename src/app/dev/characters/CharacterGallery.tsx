@@ -112,7 +112,7 @@ function OwlCard() {
   };
   return (
     <section style={card}>
-      <h2 style={h2}>Amal owl</h2>
+      <h2 style={h2}>Amowl</h2>
       <div style={{ display: "grid", placeItems: "end center", height: 250, background: "linear-gradient(#F3E3BF,#E9D3A5)", borderRadius: 16 }}>
         <OwlCharacter pose={pose} size={200} ref={ref} />
       </div>
