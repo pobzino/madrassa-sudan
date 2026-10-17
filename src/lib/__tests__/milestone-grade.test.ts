@@ -70,6 +70,12 @@ describe("validateBattleInteraction", () => {
     expect(validateBattleInteraction({ type: "draw_answer", prompt: { ar: "ارسم", en: "Draw" }, expected_answer: { ar: "x", en: "x" } })).toHaveProperty("error");
   });
 
+  it("refuses emoji and arrows in item text but allows the countable key", () => {
+    expect(validateBattleInteraction({ ...INTERACTIONS.choose_correct, prompt: { ar: "عُدّ 🍎🍎", en: "Count 🍎🍎 → ___" } })).toHaveProperty("error");
+    expect(validateBattleInteraction({ ...INTERACTIONS.match_pairs, items: { ar: ["⭐⭐", "⭐"], en: ["⭐⭐", "⭐"] } })).toHaveProperty("error");
+    expect(validateBattleInteraction({ ...INTERACTIONS.tap_to_count, emoji: "🍎" })).toHaveProperty("interaction");
+  });
+
   it("refuses broken keys", () => {
     expect(validateBattleInteraction({ ...INTERACTIONS.choose_correct, correct_index: 9 })).toHaveProperty("error");
     expect(validateBattleInteraction({ ...INTERACTIONS.sort_groups, solution_map: [0, 1] })).toHaveProperty("error");

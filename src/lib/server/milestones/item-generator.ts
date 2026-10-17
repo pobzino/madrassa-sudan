@@ -232,6 +232,7 @@ const CHILD_RULES = [
   "- Distractors are plausible but clearly wrong; all choices distinct; no \"all of the above\".",
   "- If a requested type cannot be made meaningfully from this lesson, use choose_correct for that item instead.",
   "- Every item must teach or test something real. Never match a word to itself, never count letters or abstract things, never ask what the child can see on screen.",
+  "- NO emoji, pictograms or arrow symbols anywhere in any text field (prompt, options, pairs, groups, sentences). The app draws its own pictures: to show things to count, use tap_to_count with interaction_visual_emoji; otherwise write the words (\"6 apples\", \"then\").",
   "- Set every field that does not apply to the item's type to null.",
 ];
 

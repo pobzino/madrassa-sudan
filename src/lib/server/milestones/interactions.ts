@@ -116,10 +116,19 @@ export function countableGlyph(value: string): string {
   return countableFor(value);
 }
 
+const EMOJI = /\p{Extended_Pictographic}|[←-⇿⬀-⯿]/u;
+
+/** True when any text of the item (prompt, options, pairs, groups...) contains an emoji or arrow symbol. The `emoji` key itself is data and is excluded. */
+export function hasEmojiText(raw: Record<string, unknown>): boolean {
+  const { emoji: _emoji, interaction_visual_emoji: _visual, ...rest } = raw;
+  return EMOJI.test(JSON.stringify(rest));
+}
+
 export function validateBattleInteraction(value: unknown): { interaction: BattleInteraction } | { error: string } {
   if (!value || typeof value !== "object") return { error: "The item is missing." };
   const raw = value as Record<string, unknown>;
   if (!isBattleInteractionType(raw.type)) return { error: "This item type cannot be used in a Big Challenge." };
+  if (hasEmojiText(raw)) return { error: "The item uses emoji or symbols in its text. Write the words out, or use tap_to_count to show things to count." };
   const prompt = cleanBilingual(raw.prompt);
   if (!prompt.ar) return { error: "The item needs a question." };
 
