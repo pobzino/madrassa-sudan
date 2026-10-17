@@ -494,3 +494,7 @@ html {
   0%, 100% { opacity: 0.35; transform: scale(0.8); }
   50% { opacity: 1; transform: scale(1.25); }
 }
+@keyframes cape-sway {
+  0%, 100% { transform: translateX(-50%) rotate(-2deg) skewX(0deg); }
+  50% { transform: translateX(-50%) rotate(2deg) skewX(-3deg); }
+}

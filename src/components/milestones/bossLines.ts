@@ -11,6 +11,9 @@ import type { BossKey } from "@/lib/milestones/types";
  * and the battle falls back to the phone's own voice if the file is missing.
  */
 export type BossLineKind =
+  | "entrance"
+  | "rematch"
+  | "resume"
   | "calm"
   | "powered"
   | "enraged"
@@ -30,6 +33,9 @@ const l = (en: string, ar: string): BossLine => ({ en, ar });
 
 export const BOSS_LINES: Record<BossKey, BossLineSet> = {
   number_giant: {
+    entrance: [l("I'm Numbo! Bet you can't beat my numbers!", "أنا نُمبو! أراهن أنك لن تغلب أرقامي!")],
+    rematch: [l("You again? I've been practising!", "أنت مرة أخرى؟ لقد كنت أتدرّب!")],
+    resume: [l("Back for more? Let's go!", "عدت لتلعب؟ هيا بنا!")],
     calm: [
       l("Numbers are MY thing. Watch out!", "الأرقام لعبتي أنا! انتبه!"),
       l("One, two, three... I count faster than you!", "واحد، اثنان، ثلاثة... أنا أعدّ أسرع منك!"),
@@ -70,6 +76,9 @@ export const BOSS_LINES: Record<BossKey, BossLineSet> = {
     victory: [l("Phew! Close one. Practise and come back, friend!", "أوف! كانت قريبة. تدرّب وعُد يا صديقي!")],
   },
   word_dragon: {
+    entrance: [l("I'm Wordy! My words are super tricky!", "أنا وردي! كلماتي صعبة جداً!")],
+    rematch: [l("You again? I've been practising!", "أنت مرة أخرى؟ لقد كنت أتدرّب!")],
+    resume: [l("Back for more? Let's go!", "عدت لتلعب؟ هيا بنا!")],
     calm: [
       l("My words are twisty and tricky!", "كلماتي ملتوية وصعبة!"),
       l("Achoo! Oops, I sneezed a spelling word.", "هاتشو! أوبس، عطست كلمة إملائية."),
@@ -110,6 +119,9 @@ export const BOSS_LINES: Record<BossKey, BossLineSet> = {
     victory: [l("Phew! Nearly. Practise and come back, friend!", "أوف! كدت تفوز. تدرّب وعُد يا صديقي!")],
   },
   letter_dragon: {
+    entrance: [l("I'm Harf! I'll jumble all your letters!", "أنا حَرف! سأخلط كل حروفك!")],
+    rematch: [l("You again? I've been practising!", "أنت مرة أخرى؟ لقد كنت أتدرّب!")],
+    resume: [l("Back for more? Let's go!", "عدت لتلعب؟ هيا بنا!")],
     calm: [
       l("I'll jumble all your letters!", "سأخلط كل حروفك!"),
       l("Alif, baa, taa... can you keep up?", "ألف، باء، تاء... هل تستطيع مجاراتي؟"),
@@ -150,6 +162,9 @@ export const BOSS_LINES: Record<BossKey, BossLineSet> = {
     victory: [l("Phew! So close. Practise and come back, friend!", "أوف! كانت قريبة. تدرّب وعُد يا صديقي!")],
   },
   letter_camel: {
+    entrance: [l("I'm Harfi! My letters will fool you!", "أنا حَرفي! حروفي ستخدعك!")],
+    rematch: [l("You again? I've been practising!", "أنت مرة أخرى؟ لقد كنت أتدرّب!")],
+    resume: [l("Back for more? Let's go!", "عدت لتلعب؟ هيا بنا!")],
     calm: [
       l("Desert letters are hot and tricky!", "حروف الصحراء حارّة وصعبة!"),
       l("I keep spare letters in my hump. Lots!", "أخبّئ حروفاً إضافية في سنامي. كثيرة!"),
@@ -190,6 +205,9 @@ export const BOSS_LINES: Record<BossKey, BossLineSet> = {
     victory: [l("Phew! Nearly. Practise and come back, friend!", "أوف! كدت تفوز. تدرّب وعُد يا صديقي!")],
   },
   sprout_buddy: {
+    entrance: [l("I'm Sprouty! Watch my seeds fly!", "أنا بُرعم! انظر إلى بذوري تطير!")],
+    rematch: [l("You again? I've been practising!", "أنت مرة أخرى؟ لقد كنت أتدرّب!")],
+    resume: [l("Back for more? Let's go!", "عدت لتلعب؟ هيا بنا!")],
     calm: [
       l("My puzzles grow like weeds!", "ألغازي تنمو كالأعشاب!"),
       l("Sprouty is sprouting a new question!", "بُرعم ينبت سؤالاً جديداً!"),
@@ -230,6 +248,9 @@ export const BOSS_LINES: Record<BossKey, BossLineSet> = {
     victory: [l("Phew! So close. Practise and come back, friend!", "أوف! كانت قريبة. تدرّب وعُد يا صديقي!")],
   },
   puzzle_owlet: {
+    entrance: [l("Hoo hoo! My puzzles are the hardest!", "هو هو! ألغازي هي الأصعب!")],
+    rematch: [l("You again? I've been practising!", "أنت مرة أخرى؟ لقد كنت أتدرّب!")],
+    resume: [l("Back for more? Let's go!", "عدت لتلعب؟ هيا بنا!")],
     calm: [
       l("Hoo hoo! My puzzles are the hardest!", "هو هو! ألغازي هي الأصعب!"),
       l("A puzzle inside a puzzle. Hoo!", "لغز داخل لغز. هو!"),

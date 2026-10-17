@@ -282,9 +282,15 @@ export default function BattleScene(props: BattleSceneProps) {
       });
     }
     if (activeStep === 3 && taunt) {
-      const ms = Math.min(4000, Math.max(1200, taunt.length * 60));
-      void bossRef.current?.play("talk", { durationMs: ms });
-      if (!muted) speakLine(taunt, lang);
+      if (placement && entrance !== "resume") {
+        // The placement's hello is the narrator's line, not a boss recording.
+        const ms = Math.min(4000, Math.max(1200, taunt.length * 60));
+        void bossRef.current?.play("talk", { durationMs: ms });
+        if (!muted) speakLine(taunt, lang);
+      } else {
+        const line = lines.next(entrance === "rematch" ? "rematch" : entrance === "resume" ? "resume" : "entrance", lang);
+        void speakBossLine(line, lang, muted).then((ms) => void bossRef.current?.play("talk", { durationMs: Math.min(4000, ms) }));
+      }
     }
     return () => {
       cancelled = true;
@@ -601,7 +607,11 @@ export default function BattleScene(props: BattleSceneProps) {
       <div ref={bossBoxRef} className="absolute" style={{ left: bossLeft, top: bossTop, width: bossSize, height: bossSize }}>
         <div data-layout="boss" className="pointer-events-none absolute" style={artBox(geometry.bossArt, geometry.boss)} aria-hidden="true" />
         <div ref={bossRigRef} className={`absolute inset-0 ${enraged && !knockedOut ? "motion-safe:animate-[boss-rage_0.9s_ease-in-out_infinite] [filter:drop-shadow(0_0_16px_rgba(210,16,52,0.85))]" : ""}`}>
-          {bossMounted && <BossCharacter ref={bossRef} bossKey={bossKey} pose={bossPose} size={bossSize} enter={inEntrance} onCue={bossCues.onCue} title={BOSS_NAMES[bossKey][lang]} />}
+          {final && bossMounted && <Cape size={bossSize} fallen={knockedOut} />}
+          {/* Positioned, so the boss paints above the cape behind it. */}
+          <div className="relative h-full w-full">
+            {bossMounted && <BossCharacter ref={bossRef} bossKey={bossKey} pose={bossPose} size={bossSize} enter={inEntrance} onCue={bossCues.onCue} title={BOSS_NAMES[bossKey][lang]} />}
+          </div>
           {final && bossMounted && <Crown size={bossSize} fallen={knockedOut} />}
         </div>
         {secondsLeft !== null && !feedback && (
@@ -919,5 +929,25 @@ export function Dusk() {
         />
       ))}
     </div>
+  );
+}
+
+/** The Grand Challenge's cape: behind the boss, swaying; it drops with the boss at the KO. */
+export function Cape({ size, fallen }: { size: number; fallen: boolean }) {
+  const w = Math.round(size * 1.08);
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      aria-hidden="true"
+      className={`pointer-events-none absolute left-1/2 ${fallen ? "opacity-60" : "motion-safe:animate-[cape-sway_3.4s_ease-in-out_infinite]"}`}
+      style={{ width: w, height: Math.round(w * 0.8), top: Math.round(size * 0.3), transform: "translateX(-50%)", transformOrigin: "50% 8%", transition: "opacity 600ms" }}
+    >
+      <path d="M22 8 C12 30 6 60 10 94 Q30 86 50 92 Q70 86 90 94 C94 60 88 30 78 8 Q50 18 22 8 Z" fill="#B3102C" stroke="#7F0A20" strokeWidth="2.5" strokeLinejoin="round" />
+      <path d="M22 8 Q50 18 78 8" fill="none" stroke="#F59E0B" strokeWidth="4" strokeLinecap="round" />
+      <path d="M10 94 Q30 86 50 92 Q70 86 90 94" fill="none" stroke="#F59E0B" strokeWidth="3.5" strokeLinecap="round" />
+      <path d="M30 20 C26 45 24 70 26 90" fill="none" stroke="#7F0A20" strokeWidth="2" opacity="0.6" />
+      <path d="M70 20 C74 45 76 70 74 90" fill="none" stroke="#7F0A20" strokeWidth="2" opacity="0.6" />
+      <circle cx="50" cy="12" r="4" fill="#FDE68A" stroke="#B45309" strokeWidth="1.5" />
+    </svg>
   );
 }
