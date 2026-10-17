@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
-import { ClipboardList } from "lucide-react";
+import { Check, ClipboardList } from "lucide-react";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 
 interface Question {
@@ -380,7 +380,7 @@ export default function GradeHomeworkPage({ params }: { params: Promise<{ id: st
                                     }`}
                                   >
                                     {opt}
-                                    {opt === question.correct_answer && " ✓"}
+                                    {opt === question.correct_answer && <Check className="ml-1 inline h-3.5 w-3.5" aria-label="correct answer" />}
                                     {opt === response?.response_text && opt !== question.correct_answer && " (selected)"}
                                   </div>
                                 ))}

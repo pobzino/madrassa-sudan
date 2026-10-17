@@ -1,5 +1,6 @@
 'use client'
 
+import { X } from 'lucide-react'
 import type { MatchingPairsData } from '@/lib/tasks.types'
 
 interface Props {
@@ -74,9 +75,10 @@ export default function MatchingPairsEditor({ data, onChange }: Props) {
           </div>
           <button
             onClick={() => removePair(idx)}
-            className="text-red-500 hover:text-red-700 text-xs self-center"
+            className="text-red-500 hover:text-red-700 self-center"
+            title="Remove"
           >
-            ✕
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
       ))}

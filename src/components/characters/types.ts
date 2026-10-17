@@ -1,6 +1,6 @@
 /**
  * Public types for the Big Challenge characters (rigged SVG bosses and the
- * Amal owl). The battle screen codes against these, so keep them stable.
+ * Amowl). The battle screen codes against these, so keep them stable.
  */
 
 /** Same union as `BossKey` in the milestone types; kept here so the characters have no app imports. */

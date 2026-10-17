@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
-import { Users, BookOpen, ClipboardList, Plus, ChevronDown } from "lucide-react";
+import { Users, BookOpen, ClipboardList, Plus, ChevronDown, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import { watchedPercent } from "@/lib/lessons/watched-percent";
@@ -538,9 +538,16 @@ export default function CohortDetailsPage({ params }: { params: Promise<{ id: st
                 <code className="text-xl font-mono font-bold text-emerald-600">{cohort.join_code}</code>
                 <button
                   onClick={copyJoinCode}
-                  className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-white border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition-colors"
                 >
-                  {copiedCode ? "✓ Copied" : "Copy"}
+                  {copiedCode ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                      Copied
+                    </>
+                  ) : (
+                    "Copy"
+                  )}
                 </button>
               </div>
             </div>

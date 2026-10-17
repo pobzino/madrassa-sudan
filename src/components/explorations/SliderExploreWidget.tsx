@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ExplorationWidgetProps, SliderExploreConfig, SliderExploreStage } from '@/lib/explorations/types';
+import { SearchIcon } from '@/components/icons/AmalIcons';
 
 function getActiveStage(
   value: number,
@@ -166,9 +167,10 @@ export default function SliderExploreWidget({
         <p
           className={`text-sm text-slate-500 text-center ${language === 'ar' ? 'font-cairo' : ''}`}
         >
+          <SearchIcon className="me-1.5 inline-block h-4 w-4 align-[-0.15em]" />
           {language === 'ar'
-            ? '🔍 حرّك الشريط لاكتشاف ما يحدث عند القيم المختلفة'
-            : '🔍 Move the slider to discover what happens at different values'}
+            ? 'حرّك الشريط لاكتشاف ما يحدث عند القيم المختلفة'
+            : 'Move the slider to discover what happens at different values'}
         </p>
       )}
 

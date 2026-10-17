@@ -11,6 +11,7 @@ import { MathText } from "../BattleParts";
 import { pickList, pickText, type PublicInteraction } from "./contract";
 import { layoutCatch, type CatchLayout } from "./catchLayout";
 import * as fx from "./fx";
+import { Countable, COUNTABLE_NAMES, countableFor, countableSvgMarkup } from "@/components/icons/Countables";
 import TraceRune from "./TraceRune";
 
 /** How many things the boss throws in a catch move (more than any count asked for). */
@@ -483,13 +484,15 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
   };
   const fire = (origin: DOMRect | null) => {
     // Everything caught fires as a volley (or rings the owl as its shield).
-    aimOf({ turn, throwFrom, catchTarget }, "catch", interaction.emoji || "⭐");
+    aimOf({ turn, throwFrom, catchTarget }, "catch", countableSvgMarkup(kind, 26));
     // They ride along with the owl's throw.
-    if (turn === "attack") fx.volley(interaction.emoji || "⭐", caught.length, catchTarget?.() ?? null, throwFrom?.() ?? null);
+    if (turn === "attack") fx.volley(countableSvgMarkup(kind, 34), caught.length, catchTarget?.() ?? null, throwFrom?.() ?? null);
     onSubmit({ type: "tap_to_count", count: caught.length }, origin);
   };
 
-  const glyph = interaction.emoji || "⭐";
+  // The generator's emoji (or a key) becomes one of our own drawings; anything unknown is a star.
+  const kind = countableFor(interaction.emoji);
+  const thing = lang === "ar" ? COUNTABLE_NAMES[kind].ar : COUNTABLE_NAMES[kind].en[0];
   const size = layout?.size ?? 64;
   return (
     <div className="relative flex h-full flex-col">
@@ -503,7 +506,7 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
               data-thrown="" data-layout="moves"
               disabled={disabled}
               onClick={(event) => catchOne(index, event.currentTarget)}
-              aria-label={glyph}
+              aria-label={thing}
               className={`pointer-events-auto absolute grid place-items-center leading-none active:scale-90 ${
                 skin?.thrown === "die"
                   ? "rounded-full border-2 border-[#FDE68A]/70 bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.55),rgba(253,224,71,0.22)_50%,rgba(245,158,11,0.3))] shadow-[0_0_20px_rgba(252,211,77,0.6),inset_0_0_12px_rgba(255,255,255,0.25)]"
@@ -513,7 +516,7 @@ function CatchCount({ interaction, lang, turn, disabled, onSubmit, seed, skin, c
               }`}
               style={{ left: point.x, top: point.y, width: size, height: size, fontSize: Math.round(size * 0.46) }}
             >
-              <span aria-hidden="true">{glyph}</span>
+              <Countable kind={kind} style={{ width: Math.round(size * 0.62), height: Math.round(size * 0.62) }} />
             </button>
           )
         )}

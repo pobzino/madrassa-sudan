@@ -2,8 +2,8 @@ import { Brows, HandGlow, Dust, Eyes, Hand, lidPivots, Mouths, Rim, ShadeDefs, S
 import type { BossDef } from "./types";
 
 /**
- * Puzzle Owlet: the Amal owl's cheeky little rival. Deliberately unlike the
- * Amal owl: blue, no cap, puzzle-knob ear tufts, a heart-shaped face, amber
+ * Puzzle Owlet: Amowl's cheeky little rival. Deliberately unlike the
+ * Amowl: blue, no cap, puzzle-knob ear tufts, a heart-shaped face, amber
  * eyes in dark rings and a smug half-lidded look. Holds a puzzle piece.
  */
 

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CheckIcon } from "@/components/icons/AmalIcons";
 import { FitBoss } from "@/components/milestones/Characters";
 import { bossName, MILESTONE_COPY } from "@/components/milestones/copy";
 import { usePrefetchBattle } from "@/components/milestones/usePrefetchBattle";
@@ -28,6 +29,7 @@ export default function PlacementNode({ placement, lang, isOnline, gated = false
         <span className="inline-flex items-center gap-2 rounded-full bg-white/90 py-1 pe-3.5 ps-1 font-fredoka text-[13px] font-bold text-[#005C22] shadow-sm ring-1 ring-emerald-100">
           <FitBoss bossKey={placement.bossKey} pose="happy" className="h-7 w-7" />
           {t.placementMetBadge(boss)}
+          <CheckIcon className="h-4 w-4 shrink-0" />
         </span>
       </div>
     );

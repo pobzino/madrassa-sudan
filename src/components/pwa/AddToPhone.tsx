@@ -22,7 +22,7 @@ const COPY = {
   en: {
     oneTapButton: "Add Amal to my phone",
     oneTapHint: "Then tap Install. It's free and only takes a moment.",
-    done: "Done! You'll find the Amal owl on your home screen.",
+    done: "Done! You'll find Amowl on your home screen.",
     dismissed: "No problem. You can add it any time from your account.",
     installed: "Amal is already on this phone. Open it from your home screen.",
     iosSafari: ["Tap the Share button at the bottom of Safari.", "Scroll down and tap Add to Home Screen.", "Tap Add."],

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Check } from "lucide-react";
 import { OwlWaving } from "@/components/illustrations";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { AddToPhone, useInstallPlatform } from "./AddToPhone";
@@ -63,7 +64,7 @@ export function AppInstallLanding() {
             <ul className="mt-6 space-y-2">
               {t.perks.map((perk) => (
                 <li key={perk} className="flex items-center gap-3 rounded-2xl bg-white/70 px-4 py-3 text-[15px] font-semibold text-gray-700">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#007229] text-sm text-white">✓</span>
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#007229] text-white"><Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden="true" /></span>
                   {perk}
                 </li>
               ))}

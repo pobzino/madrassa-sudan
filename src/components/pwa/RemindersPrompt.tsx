@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { CheckIcon, FlameIcon } from "@/components/icons/AmalIcons";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { enableReminders, hideRemindersCard } from "@/lib/push-client";
 
@@ -18,12 +19,12 @@ const COPY = {
       settings: "Turn on lesson reminders",
     },
     body: "We'll send a short reminder when it's time to learn, and your weekly summary. You can turn them off any time in Settings.",
-    previewTitle: "🔥 4-day learning streak",
+    previewTitle: "4-day learning streak",
     previewBody: "Do today's lesson to keep it going.",
     now: "now",
     button: "Turn on reminders",
     busy: "Turning on…",
-    on: "Reminders are on ✓",
+    on: "Reminders are on",
     onBody: "A test notification is on its way.",
     error: "Couldn't turn reminders on just now. Please try again later.",
     pending: "Almost done: we'll finish turning reminders on in a moment.",
@@ -40,12 +41,12 @@ const COPY = {
       settings: "فعّل تذكيرات الدروس",
     },
     body: "سنرسل تذكيراً قصيراً عندما يحين وقت التعلّم، مع ملخصك الأسبوعي. يمكنك إيقافها في أي وقت من الإعدادات.",
-    previewTitle: "🔥 سلسلة التعلّم: ٤",
+    previewTitle: "سلسلة التعلّم: ٤",
     previewBody: "أكملوا درس اليوم لتستمر السلسلة.",
     now: "الآن",
     button: "فعّل التذكيرات",
     busy: "جارٍ التفعيل…",
-    on: "تم تفعيل التذكيرات ✓",
+    on: "تم تفعيل التذكيرات",
     onBody: "إشعار تجريبي في الطريق إليك.",
     error: "تعذّر تفعيل التذكيرات الآن. حاول مرة أخرى لاحقاً.",
     pending: "اقتربنا: سنُكمل تفعيل التذكيرات بعد لحظات.",
@@ -118,7 +119,7 @@ export function RemindersPrompt({ source, onClose }: { source: RemindersSource; 
           <img src="/icons/icon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline justify-between gap-2">
-              <p className="truncate text-sm font-bold text-gray-900">{t.previewTitle}</p>
+              <p className="flex min-w-0 items-center gap-1 truncate text-sm font-bold text-gray-900"><FlameIcon className="h-4 w-4 shrink-0" /><span className="truncate">{t.previewTitle}</span></p>
               <span className="shrink-0 text-xs text-gray-400">{t.now}</span>
             </div>
             <p className="text-sm text-gray-600">{t.previewBody}</p>
@@ -127,6 +128,7 @@ export function RemindersPrompt({ source, onClose }: { source: RemindersSource; 
 
         <h2 id="reminders-title" className="font-fredoka text-xl font-bold leading-tight text-gray-900">
           {state === "on" ? t.on : t.title[source]}
+          {state === "on" && <CheckIcon className="inline-block h-[1.1em] w-[1.1em] align-[-0.15em] ms-1.5" />}
         </h2>
         <p className="mt-2 text-[15px] leading-relaxed text-gray-600">{state === "on" ? t.onBody : t.body}</p>
 

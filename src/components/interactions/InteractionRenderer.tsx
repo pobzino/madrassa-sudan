@@ -19,6 +19,8 @@
  */
 
 import { useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Countable, countableFor } from '@/components/icons/Countables';
 import MatchPairsDnD from '@/components/lessons/interactions/MatchPairsDnD';
 import SortGroupsDnD from '@/components/lessons/interactions/SortGroupsDnD';
 import SequenceOrderDnD from '@/components/lessons/interactions/SequenceOrderDnD';
@@ -544,7 +546,11 @@ function TapToCountAnswer({
         >
           −
         </button>
-        <span className="text-4xl tabular-nums">{emoji.repeat(Math.max(0, count))}</span>
+        <span className="flex flex-wrap items-center justify-center gap-1 text-4xl" aria-label={String(count)}>
+          {Array.from({ length: Math.max(0, count) }, (_, i) => (
+            <Countable key={i} kind={countableFor(emoji)} className="h-[1em] w-[1em]" />
+          ))}
+        </span>
         <button
           type="button"
           disabled={disabled}
@@ -1180,7 +1186,7 @@ function OptionsEditor({
               className="flex-shrink-0 w-6 h-6 text-xs text-red-400 hover:text-red-600 disabled:opacity-30 rounded hover:bg-red-50"
               title="Remove choice"
             >
-              ✕
+              <X className="mx-auto h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
         ))}
@@ -1264,7 +1270,7 @@ function TapToCountAuthor({
             onChange({ ...interaction, emoji: e.target.value })
           }
           className={authorInputClass}
-          placeholder="🍎"
+          placeholder="apple"
         />
       </div>
     </div>
@@ -1374,7 +1380,7 @@ function MatchPairsAuthor({
                 disabled={count <= 2}
                 className="flex-shrink-0 w-6 h-6 text-xs text-red-400 hover:text-red-600 disabled:opacity-30 rounded hover:bg-red-50"
               >
-                ✕
+                <X className="mx-auto h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </div>
           );
@@ -1466,17 +1472,17 @@ function SequenceAuthor({
                 type="button"
                 onClick={() => move(index, index - 1)}
                 disabled={index === 0}
-                className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-[10px] leading-none"
+                className="text-gray-400 hover:text-gray-600 disabled:opacity-30 leading-none"
               >
-                ▲
+                <ChevronUp className="h-3 w-3" aria-hidden="true" />
               </button>
               <button
                 type="button"
                 onClick={() => move(index, index + 1)}
                 disabled={index === count - 1}
-                className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-[10px] leading-none"
+                className="text-gray-400 hover:text-gray-600 disabled:opacity-30 leading-none"
               >
-                ▼
+                <ChevronDown className="h-3 w-3" aria-hidden="true" />
               </button>
             </div>
             <input
@@ -1492,7 +1498,7 @@ function SequenceAuthor({
               disabled={count <= 2}
               className="flex-shrink-0 w-6 h-6 text-xs text-red-400 hover:text-red-600 disabled:opacity-30 rounded hover:bg-red-50"
             >
-              ✕
+              <X className="mx-auto h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
         ))}
@@ -1634,7 +1640,7 @@ function SortGroupsAuthor({
               disabled={targetCount <= 2}
               className="flex-shrink-0 w-6 h-6 text-xs text-red-400 hover:text-red-600 disabled:opacity-30 rounded hover:bg-red-50"
             >
-              ✕
+              <X className="mx-auto h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
         ))}
@@ -1680,7 +1686,7 @@ function SortGroupsAuthor({
               disabled={itemCount <= 2}
               className="flex-shrink-0 w-6 h-6 text-xs text-red-400 hover:text-red-600 disabled:opacity-30 rounded hover:bg-red-50"
             >
-              ✕
+              <X className="mx-auto h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
         ))}
@@ -1886,7 +1892,7 @@ function DragDropLabelAuthor({
                   disabled={count <= 2}
                   className="flex-shrink-0 w-6 h-6 text-xs text-red-400 hover:text-red-600 disabled:opacity-30 rounded hover:bg-red-50"
                 >
-                  ✕
+                  <X className="mx-auto h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </div>
             );

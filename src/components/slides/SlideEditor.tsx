@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { toast } from 'sonner';
+import { Search } from 'lucide-react';
 import type { Slide, SlideType } from '@/lib/slides.types';
 import SlideCard from './SlideCard';
 import SlideThumbnail from './SlideThumbnail';
@@ -290,19 +291,19 @@ const TAP_COUNT_VARIANTS: Omit<InteractivePlaceholders, 'expected_answer_ar' | '
     title_ar: 'عدّ التفاح!', title_en: 'Count the apples!',
     body_ar: 'اضغط على كل تفاحة تراها', body_en: 'Tap each apple you see',
     prompt_ar: 'كم تفاحة ترى؟', prompt_en: 'How many apples do you see?',
-    count_target: 5, visual_emoji: '🍎',
+    count_target: 5, visual_emoji: 'apple',
   },
   {
     title_ar: 'عدّ النجوم!', title_en: 'Count the stars!',
     body_ar: 'اضغط على كل نجمة تراها', body_en: 'Tap each star you see',
     prompt_ar: 'كم نجمة ترى؟', prompt_en: 'How many stars do you see?',
-    count_target: 7, visual_emoji: '⭐',
+    count_target: 7, visual_emoji: 'star',
   },
   {
     title_ar: 'عدّ الأشجار!', title_en: 'Count the trees!',
     body_ar: 'اضغط على كل شجرة تراها', body_en: 'Tap each tree you see',
     prompt_ar: 'كم شجرة ترى؟', prompt_en: 'How many trees do you see?',
-    count_target: 4, visual_emoji: '🌳',
+    count_target: 4, visual_emoji: 'tree',
   },
 ];
 
@@ -1731,7 +1732,7 @@ export default function SlideEditor({
                           : 'bg-white/15 text-white hover:bg-white/25'
                     }`}
                   >
-                    <span className="text-sm">🔍</span>
+                    <Search className="h-3.5 w-3.5" aria-hidden="true" />
                     {explorationFlash ? 'Added' : 'Explore'}
                   </button>
 

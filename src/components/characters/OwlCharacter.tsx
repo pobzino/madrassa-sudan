@@ -7,7 +7,7 @@ import type { CharacterCue, OwlHandle, OwlPose } from "./types";
 import { useRig } from "./useRig";
 
 /**
- * The Amal owl, rigged. Every shape is the brand owl's (OwlDuoStyle in
+ * Amowl, rigged. Every shape is the brand owl's (OwlDuoStyle in
  * illustrations.tsx, viewBox 0 0 80 64): red body, pink facial disc, green
  * graduation cap with an amber tassel. Only soft shading is added.
  */
@@ -308,7 +308,7 @@ export interface OwlCharacterProps {
 }
 
 /**
- * The rigged Amal owl for battles.
+ * The rigged Amowl for battles.
  *
  *   const owl = useRef<OwlHandle>(null);
  *   <OwlCharacter pose="idle" size={118} ref={owl} />

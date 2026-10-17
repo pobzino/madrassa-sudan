@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ExplorationWidgetProps, LetterTraceConfig } from '@/lib/explorations/types';
+import { Check } from 'lucide-react';
+import { PencilIcon } from '@/components/icons/AmalIcons';
 
 const VIEWBOX = 200;
 const CANVAS_SIZE = 300;
@@ -365,7 +367,7 @@ export default function LetterTraceWidget({
             >
               {checking
                 ? (language === 'ar' ? 'جاري التحقق...' : 'Checking...')
-                : (language === 'ar' ? 'تحقق ✓' : 'Check ✓')}
+                : (<>{language === 'ar' ? 'تحقق' : 'Check'} <Check className="inline-block h-4 w-4 align-[-0.15em]" strokeWidth={3} aria-hidden="true" /></>)}
             </button>
           </div>
         )}
@@ -374,9 +376,10 @@ export default function LetterTraceWidget({
       {/* Instruction */}
       {!completed && !feedback && !checking && (
         <p className={`text-sm text-slate-500 text-center ${language === 'ar' ? 'font-cairo' : ''}`}>
+          <PencilIcon className="me-1.5 inline-block h-4 w-4 align-[-0.15em]" />
           {language === 'ar'
-            ? '✏️ تتبع النص بإصبعك فوق الخطوط الرمادية'
-            : '✏️ Trace over the gray guide with your finger'}
+            ? 'تتبع النص بإصبعك فوق الخطوط الرمادية'
+            : 'Trace over the gray guide with your finger'}
         </p>
       )}
 

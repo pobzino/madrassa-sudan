@@ -1,5 +1,6 @@
 "use client";
 
+import { sparkSvg } from "./glyphs";
 import { prefersReducedMotion } from "../motion";
 
 /**
@@ -68,8 +69,8 @@ function sparkles(x: number, y: number, colour: string, radius: number) {
   for (let i = 0; i < 7; i += 1) {
     const angle = (i / 7) * Math.PI * 2 + 0.3;
     const el = document.createElement("div");
-    Object.assign(el.style, { position: "absolute", left: `${x - 9}px`, top: `${y - 9}px`, width: "18px", height: "18px", color: colour, fontSize: "18px", lineHeight: "1", textAlign: "center", textShadow: `0 0 8px ${colour}`, opacity: "0" });
-    el.textContent = "✦";
+    Object.assign(el.style, { position: "absolute", left: `${x - 9}px`, top: `${y - 9}px`, width: "18px", height: "18px", display: "grid", placeItems: "center", opacity: "0" });
+    el.innerHTML = sparkSvg(18, colour);
     root.appendChild(el);
     run(el, [
       { transform: "translate(0, 0) scale(0.4)", opacity: 1 },

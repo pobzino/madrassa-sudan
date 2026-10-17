@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useLanguage } from '@/contexts/LanguageContext'
 import type { LessonTask, MatchingPairsData, SortingOrderData } from '@/lib/tasks.types'
 import { Link2, ArrowUpDown, PenLine, Tag, Brush, Mic, type LucideIcon } from 'lucide-react'
+import { SparkleIcon, StrongIcon, ThumbsUpIcon } from '@/components/icons/AmalIcons'
 import MatchingPairsTask from './MatchingPairsTask'
 import SortingOrderTask from './SortingOrderTask'
 
@@ -37,10 +38,10 @@ export default function TaskOverlay({ task, lessonId, onComplete, onSkip }: Task
       submit: 'إرسال',
       score: 'النتيجة',
       continue: 'متابعة',
-      perfect: 'ممتاز! 🎉',
-      great: 'أحسنت! 👏',
+      perfect: 'ممتاز!',
+      great: 'أحسنت!',
       good: 'جيد!',
-      tryBetter: 'واصل المحاولة، ستتحسن! 💪',
+      tryBetter: 'واصل المحاولة، ستتحسن!',
       timeUp: 'انتهى الوقت!',
       seconds: 'ث',
     },
@@ -49,10 +50,10 @@ export default function TaskOverlay({ task, lessonId, onComplete, onSkip }: Task
       submit: 'Submit',
       score: 'Score',
       continue: 'Continue',
-      perfect: 'Perfect! 🎉',
-      great: 'Great job! 👏',
+      perfect: 'Perfect!',
+      great: 'Great job!',
       good: 'Good!',
-      tryBetter: 'Keep going, you\u2019ll get there! 💪',
+      tryBetter: 'Keep going, you\u2019ll get there!',
       timeUp: "Time's up!",
       seconds: 's',
     },
@@ -201,8 +202,8 @@ export default function TaskOverlay({ task, lessonId, onComplete, onSkip }: Task
                   : 'bg-amber-50 border-2 border-amber-400'
               }`}>
                 <div className="text-center mb-4">
-                  <div className="text-4xl mb-2">
-                    {result.score >= 0.7 ? '🌟' : result.score >= 0.4 ? '👍' : '💪'}
+                  <div className="mb-2 flex justify-center">
+                    {result.score >= 0.7 ? <SparkleIcon className="h-10 w-10" /> : result.score >= 0.4 ? <ThumbsUpIcon className="h-10 w-10" /> : <StrongIcon className="h-10 w-10" />}
                   </div>
                   <p className="text-lg font-bold text-gray-900">
                     {getScoreMessage(result.score)}

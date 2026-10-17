@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { toast } from "sonner";
+import { Check } from "lucide-react";
+import { BoltIcon, RefreshIcon } from "@/components/icons/AmalIcons";
 import { createClient } from "@/lib/supabase/client";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
 import MilestoneBlockCard from "@/components/milestones/MilestoneBlockCard";
@@ -77,6 +79,8 @@ export default function LearningPathEditorPage() {
   const [milestones, setMilestones] = useState<TeacherMilestoneListResponse | null>(null);
   const [milestoneBusy, setMilestoneBusy] = useState<number | null>(null);
   const [generatingBlock, setGeneratingBlock] = useState<number | null>(null);
+  /** "Generate all bosses" is running: every slot's job was started and is being followed. */
+  const [generatingAll, setGeneratingAll] = useState(false);
 
   const loadMilestones = useCallback(async (subjectId: string) => {
     if (!subjectId) return;
@@ -168,6 +172,58 @@ export default function LearningPathEditorPage() {
       toast.error(error instanceof Error ? error.message : "Generation failed", { id: progress });
     } finally {
       setGeneratingBlock(null);
+      await loadMilestones(selectedSubject);
+    }
+  };
+
+  /** Every boss of the path: the starting boss, each 4-week block, the Grand Challenge. */
+  const allBossSlots = () => [PLACEMENT_WEEK, ...(milestones?.blocks.map((b) => b.afterWeekNumber) ?? []), ...(milestones?.lastWeekNumber ? [FINAL_WEEK] : [])];
+
+  /**
+   * One click for the whole path: starts a background job per boss (unpublishing
+   * first when regenerating), then follows them all. Published bosses are left
+   * alone unless `regenerate`.
+   */
+  const generateAll = async (regenerate: boolean) => {
+    if (!milestones?.pathId || generatingAll || generatingBlock !== null) return;
+    const pathId = milestones.pathId;
+    const slots = allBossSlots();
+    if (regenerate && !window.confirm(`Unpublish and regenerate every boss on this path (${slots.length})? Children in a battle right now will be reset; nothing is published until you review each draft.`)) return;
+    setGeneratingAll(true);
+    const started: Array<{ week: number; jobId: string }> = [];
+    try {
+      for (const week of slots) {
+        const existing = milestoneAt(week);
+        const what = bossLabel(week);
+        if (existing?.status === "published") {
+          if (!regenerate) continue;
+          const res = await fetch(`/api/teacher/milestones/${existing.id}/unpublish`, { method: "POST" });
+          if (!res.ok) {
+            toast.error(`Could not unpublish the ${what}`);
+            continue;
+          }
+        }
+        const body =
+          week === PLACEMENT_WEEK ? { path_id: pathId, kind: "placement" } : week === FINAL_WEEK ? { path_id: pathId, final: true } : { path_id: pathId, after_week_number: week };
+        const res = await fetch("/api/teacher/milestones/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string; jobId?: string };
+        if (!res.ok) {
+          toast.error(`${what}: ${data.message ?? MILESTONE_ERRORS[data.error ?? ""] ?? `error ${res.status}`}`);
+          continue;
+        }
+        if (res.status === 202 && data.jobId) {
+          writeJobId(pathId, week, data.jobId);
+          started.push({ week, jobId: data.jobId });
+        } else toast.success(`${what} draft ready`);
+      }
+      if (!started.length) {
+        toast.message(regenerate ? "Nothing to regenerate." : "Every boss is already published. Use Regenerate all to replace them.");
+        return;
+      }
+      toast.message(`Generating ${started.length} bosses in the background: you can leave this page and come back.`, { duration: 8000 });
+      await Promise.all(started.map(({ week, jobId }) => pollJob(pathId, week, jobId, toast.loading(`Starting the ${bossLabel(week)}...`))));
+    } finally {
+      setGeneratingAll(false);
       await loadMilestones(selectedSubject);
     }
   };
@@ -477,7 +533,31 @@ export default function LearningPathEditorPage() {
         <>
           {/* Ordered path */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">Path order</h2>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-gray-900">Path order</h2>
+              {ordered.length > 0 && milestones?.pathId && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void generateAll(false)}
+                    disabled={dirty || generatingAll || generatingBlock !== null || milestoneBusy !== null}
+                    className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
+                    title={dirty ? "Save the path first" : "Draft every boss that is not published yet (starting boss, each block, the Grand Challenge)"}
+                  >
+                    {generatingAll ? "Generating all bosses…" : "Generate all bosses"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void generateAll(true)}
+                    disabled={dirty || generatingAll || generatingBlock !== null || milestoneBusy !== null}
+                    className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-40"
+                    title="Unpublish every boss and draft them all again"
+                  >
+                    Regenerate all
+                  </button>
+                </div>
+              )}
+            </div>
             {ordered.length > 0 && (
               <PlacementBlockCard
                 placement={milestones?.placement ?? null}
@@ -525,28 +605,31 @@ export default function LearningPathEditorPage() {
                             <span className="flex items-center gap-1">
                               <a
                                 href={`/teacher/homework/create?assignment=${stepByLesson[lesson.id].practiceAssignmentId}`}
-                                className="px-2.5 py-1 text-xs font-medium text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50"
                                 title="Review and edit the practice questions"
                               >
-                                ✓ Practice · Vet
+                                <Check className="h-3 w-3" aria-hidden="true" />
+                                Practice · Vet
                               </a>
                               <button
                                 onClick={() => generatePractice(lesson.id)}
                                 disabled={generatingFor !== null}
                                 className="px-2 py-1 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-40"
                                 title="Regenerate questions from the lesson"
+                                aria-label="Regenerate questions from the lesson"
                               >
-                                ↻
+                                <RefreshIcon className="h-3.5 w-3.5" />
                               </button>
                             </span>
                           ) : (
                             <button
                               onClick={() => generatePractice(lesson.id)}
                               disabled={generatingFor !== null}
-                              className="px-2.5 py-1 text-xs font-medium text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-50 disabled:opacity-40"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-50 disabled:opacity-40"
                               title="Generate ~10 auto-marked questions from this lesson"
                             >
-                              ⚡ Generate practice
+                              <BoltIcon className="h-3 w-3" />
+                              Generate practice
                             </button>
                           )
                         ) : (

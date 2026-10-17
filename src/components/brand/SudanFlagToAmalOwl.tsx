@@ -27,7 +27,7 @@ type SudanFlagToAmalOwlProps = {
 
 /**
  * Brand-motion mark: the four shapes of the Sudanese flag become the four
- * structural shapes of the Amal owl. Extra facial details resolve only after
+ * structural shapes of Amowl. Extra facial details resolve only after
  * the flag geometry is visibly on its way to becoming the mascot.
  */
 export function SudanFlagToAmalOwl({
@@ -193,7 +193,7 @@ export function SudanFlagToAmalOwl({
         role="img"
         aria-labelledby="amal-morph-title amal-morph-description"
       >
-        <title id="amal-morph-title">Sudanese flag morphing into the Amal owl</title>
+        <title id="amal-morph-title">Sudanese flag morphing into Amowl</title>
         <desc id="amal-morph-description">
           The red, white, black, and green shapes of Sudan&apos;s flag transform
           into the Amal School owl mascot.

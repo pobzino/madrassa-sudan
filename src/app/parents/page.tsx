@@ -23,6 +23,17 @@ import { SectionScene } from "@/components/dashboard/DashboardScenes";
 import { SudanFlagToAmalOwl } from "@/components/brand/SudanFlagToAmalOwl";
 import { LEGAL_ENTITY } from "@/lib/legal-entity";
 
+/** The three circles in the hero's "which one is different?" puzzle: half-filled, bottom-filled, full. */
+function PuzzleShape({ variant }: { variant: "half" | "bottom" | "full" }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-9 w-9" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+      <circle cx="12" cy="12" r="9" fill={variant === "full" ? "currentColor" : "none"} />
+      {variant === "half" && <path d="M12 3a9 9 0 0 0 0 18Z" fill="currentColor" stroke="none" />}
+      {variant === "bottom" && <path d="M3 12a9 9 0 0 0 18 0Z" fill="currentColor" stroke="none" />}
+    </svg>
+  );
+}
+
 const copy = {
   en: {
     nav: {
@@ -426,12 +437,12 @@ export default function ParentsPage() {
                   <div className="rounded-3xl bg-[#0d1830] p-5 text-white">
                     <p className="text-sm font-semibold text-white/70">{t.hero.question}</p>
                     <div className="mt-4 grid grid-cols-3 gap-2" dir="ltr">
-                      {["◐", "◒", "●"].map((shape, index) => (
+                      {(["half", "bottom", "full"] as const).map((shape, index) => (
                         <div
                           key={shape}
-                          className={`flex aspect-square items-center justify-center rounded-2xl text-3xl ${index === 1 ? "bg-white text-[#007229] ring-4 ring-emerald-300" : "bg-white/10 text-white/75"}`}
+                          className={`flex aspect-square items-center justify-center rounded-2xl ${index === 1 ? "bg-white text-[#007229] ring-4 ring-emerald-300" : "bg-white/10 text-white/75"}`}
                         >
-                          {shape}
+                          <PuzzleShape variant={shape} />
                         </div>
                       ))}
                     </div>
@@ -593,8 +604,8 @@ export default function ParentsPage() {
             <div className="relative mx-auto h-52 w-full max-w-xs">
               <div className="absolute inset-6 rounded-full bg-white/65" />
               <OwlWaving className="absolute bottom-2 left-1/2 w-48 -translate-x-1/2 drop-shadow-xl" />
-              <span className="absolute left-5 top-2 text-3xl text-amber-400">✦</span>
-              <span className="absolute right-8 top-12 text-xl text-[#007229]">♥</span>
+              <Sparkles className="absolute left-5 top-2 h-8 w-8 text-amber-400" aria-hidden="true" />
+              <Heart className="absolute right-8 top-12 h-5 w-5 text-[#007229]" fill="currentColor" aria-hidden="true" />
             </div>
             <div>
               <h2 className="font-fredoka text-3xl font-semibold leading-tight text-[#0d1830] sm:text-4xl">{t.reassurance.title}</h2>

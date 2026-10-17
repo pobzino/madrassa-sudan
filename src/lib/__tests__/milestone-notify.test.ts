@@ -68,7 +68,7 @@ describe("notifyMilestonePassed", () => {
     expect(messages.get("parent-ar")!.title).toContain("Amira");
     expect(messages.get("parent-ar")!.lang).toBe("ar");
     expect(messages.get("parent-ar")!.body).toContain("الرياضيات");
-    expect(messages.get("guardian-en")!.title).toBe("🏆 Amira beat Numbo the Number Giant and earned a certificate!");
+    expect(messages.get("guardian-en")!.title).toBe("Amira beat Numbo the Number Giant and earned a certificate!");
     expect(messages.get("guardian-en")!.url).toBe("/certificates/cert-1");
 
     const sent = mocks.sendEmails.mock.calls.map((call) => (call[0] as Array<{ to: string; subject: string; tag: string }>)[0]);
@@ -124,7 +124,7 @@ describe("milestone copy", () => {
     expect(ar.body).toContain("الأسابيع ١–٤");
     const emailEn = milestonePassedEmail({ language: "en", name: "Sam Lee", siteUrl: "https://amal.test", ...args, stars: 2, certificateUrl: "https://amal.test/certificates/c1" });
     const emailAr = milestonePassedEmail({ language: "ar", name: "فاطمة", siteUrl: "https://amal.test", ...args, stars: 2, certificateUrl: "https://amal.test/certificates/c1" });
-    expect(emailEn.subject).toBe("🏆 Amira beat Numbo the Number Giant and earned a certificate!");
+    expect(emailEn.subject).toBe("Amira beat Numbo the Number Giant and earned a certificate!");
     expect(emailEn.html).toContain("https://amal.test/certificates/c1");
     expect(emailAr.html).toContain('dir="rtl"');
     const violent = /\b(kill|destroy|dead|die|blood|weapon)\b|يقتل|دمّر|دم /i;

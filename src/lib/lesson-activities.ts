@@ -199,7 +199,7 @@ export function buildTaskDataFromSlide(slide: Slide): Record<string, unknown> | 
       return withSlidePromptData(
         {
           count_target: slide.interaction_count_target ?? 1,
-          visual_emoji: slide.interaction_visual_emoji ?? '🍎',
+          visual_emoji: slide.interaction_visual_emoji ?? 'apple',
         } satisfies TapToCountData as unknown as Record<string, unknown>,
         slide
       );
@@ -305,7 +305,7 @@ function getDraftActivityContent(interactionType: SlideInteractionType) {
         prompt_ar: 'كم عنصراً ترى في الصورة؟',
         prompt_en: 'How many items can you count?',
         count_target: 5,
-        visual_emoji: '🍎',
+        visual_emoji: 'apple',
       };
     case 'match_pairs':
       return {
@@ -589,7 +589,7 @@ export function buildSlideUpdatesFromTask(task: Pick<
       break;
     case 'tap_to_count':
       updates.interaction_count_target = Number(task.task_data.count_target ?? 1);
-      updates.interaction_visual_emoji = String(task.task_data.visual_emoji || '🍎');
+      updates.interaction_visual_emoji = String(task.task_data.visual_emoji || 'apple');
       break;
     case 'match_pairs': {
       const pairs = (task.task_data.pairs as MatchPairsData['pairs'] | undefined) || [];

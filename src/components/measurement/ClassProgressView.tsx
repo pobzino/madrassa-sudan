@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import LearnerAvatarIcon from "@/components/learners/LearnerAvatarIcon";
 import type { LevelBand } from "@/lib/measurement/types";
 import { Cell, StatTile, TableWrap, TD, TH, THN, Tip } from "./ImpactParts";
-import { BAND_LABELS, BAND_ORDER, bandLabel, formatDay, formatInt, suppressedHint, SUPPRESSED_MARK, type UiLang } from "./format";
+import { BAND_ORDER, bandLabel, formatDay, formatInt, suppressedHint, SUPPRESSED_MARK, type UiLang } from "./format";
 import { CLASS_COPY } from "./classCopy";
 import { scopeApi, type ClassProgressResponse, type ClassSubjectBands } from "./scopeApi";
 
@@ -175,7 +175,7 @@ function BandBar({ subject, lang }: { subject: ClassSubjectBands; lang: UiLang }
     <span className="flex h-4 w-full gap-[2px]" role="img" aria-label={BAND_ORDER.map((b) => `${bandLabel(b, lang)} ${formatInt(bands[b], lang)}`).join(", ")}>
       {present.map((b, i) => (
         <span key={b} className="flex h-full min-w-[6px]" style={{ flexGrow: bands[b], flexBasis: 0 }}>
-          <Tip label={`${BAND_LABELS[b].icon} ${bandLabel(b, lang)}: ${formatInt(bands[b], lang)}`} className="h-full w-full">
+          <Tip label={`${bandLabel(b, lang)}: ${formatInt(bands[b], lang)}`} className="h-full w-full">
             <span
               className="block h-full w-full"
               style={{

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Users } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { RemindersSetting } from "@/components/pwa/RemindersSetting";
 import { AccountActions } from "@/components/settings/AccountActions";
@@ -559,7 +560,7 @@ export default function SettingsPage() {
 
           {(profile?.role === "parent" || profile?.role === "admin") && (
             <Link href="/settings/children" className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:border-[#007229]/30 hover:bg-[#007229]/[0.02]">
-              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-2xl" aria-hidden="true">👨‍👩‍👧</span>
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700" aria-hidden="true"><Users className="h-6 w-6" /></span>
               <span className="min-w-0 flex-1">
                 <span className="block font-bold text-gray-900">{t.myChildren}</span>
                 <span className="block text-sm text-gray-500">{t.manageChildren}</span>

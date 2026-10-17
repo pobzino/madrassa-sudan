@@ -5,6 +5,7 @@ import ConfettiBurst from "@/components/practice/ConfettiBurst";
 import type { SkillChip } from "@/lib/measurement/types";
 import type { BossKey, Lang } from "@/lib/milestones/types";
 import { GREEN_BUTTON, TEXT_LINK } from "./BattleEndScreens";
+import { LetterIcon, PartyIcon, SproutIcon, StarIcon } from "@/components/icons/AmalIcons";
 import { FitBoss, FitOwl } from "./Characters";
 import { bossName, formatNumber, MILESTONE_COPY } from "./copy";
 
@@ -71,7 +72,7 @@ function Chips({ skills, lang, tone }: { skills: SkillChip[]; lang: Lang; tone: 
             tone === "known" ? "bg-[#FDE68A] text-[#3B1D00]" : "bg-white text-[#005C22]"
           }`}
         >
-          <span aria-hidden="true">{tone === "known" ? "⭐" : "🌱"}</span>
+          {tone === "known" ? <StarIcon className="h-[1.1em] w-[1.1em] shrink-0" /> : <SproutIcon className="h-[1.1em] w-[1.1em] shrink-0" />}
           {lang === "ar" ? skill.familyLabelAr : skill.familyLabelEn}
         </li>
       ))}
@@ -103,7 +104,9 @@ export function PlacementEndScreen({
     <>
       <ConfettiBurst burst={burst} big originY={0.3} />
       <div className="relative flex h-full flex-col items-center gap-3 overflow-y-auto px-5 pb-6 pt-8 text-center">
-        <h1 className="text-[clamp(32px,5.6dvh,44px)] font-bold leading-[1.05] [text-shadow:0_3px_0_rgba(0,0,0,0.35)]">{t.placementDoneTitle(boss)}</h1>
+        <h1 className="text-[clamp(32px,5.6dvh,44px)] font-bold leading-[1.05] [text-shadow:0_3px_0_rgba(0,0,0,0.35)]">
+          {t.placementDoneTitle(boss)} <PartyIcon className="inline-block h-[1.1em] w-[1.1em] align-[-0.15em] [filter:drop-shadow(0_3px_0_rgba(0,0,0,0.35))]" />
+        </h1>
         <div className="relative flex w-full items-end justify-center" aria-hidden="true">
           <FitBoss bossKey={bossKey} pose="happy" className="h-[clamp(120px,21dvh,200px)] w-[clamp(120px,21dvh,200px)]" />
           <FitOwl pose="cheer" className="-ms-5 mb-1 h-[clamp(84px,13dvh,124px)] w-[clamp(84px,13dvh,124px)] shrink-0" />
@@ -123,7 +126,11 @@ export function PlacementEndScreen({
         )}
         <div className="mt-auto flex w-full max-w-sm flex-col gap-2 pt-3">
           {preview && <p className="rounded-[20px] bg-white/90 px-4 py-3 text-base font-semibold text-[#1a1a1a]">{t.placementPreviewNote}</p>}
-          {toldGrownUp && <p className="text-lg font-semibold">{t.placementToldGrownUp}</p>}
+          {toldGrownUp && (
+            <p className="inline-flex items-center justify-center gap-1.5 text-lg font-semibold">
+              {t.placementToldGrownUp} <LetterIcon className="inline-block h-[1.1em] w-[1.1em] align-[-0.15em]" />
+            </p>
+          )}
           <Link href="/lessons" className={GREEN_BUTTON}>
             {t.placementStartPath}
           </Link>
@@ -143,7 +150,9 @@ export function PlacementDoneScreen({ lang, bossKey }: { lang: Lang; bossKey: Bo
         <FitBoss bossKey={bossKey} pose="happy" className="h-44 w-44" />
         <FitOwl pose="cheer" className="-ms-4 h-28 w-28 shrink-0" />
       </div>
-      <h1 className="max-w-sm text-[30px] font-bold leading-tight">{t.placementAlreadyMet(boss)}</h1>
+      <h1 className="max-w-sm text-[30px] font-bold leading-tight">
+        {t.placementAlreadyMet(boss)} <PartyIcon className="inline-block h-[1.1em] w-[1.1em] align-[-0.15em]" />
+      </h1>
       <p className="text-[20px] font-semibold">{t.placementAlreadyMetSub}</p>
       <div className="flex w-full max-w-sm flex-col gap-3">
         <Link href="/lessons" className={GREEN_BUTTON}>

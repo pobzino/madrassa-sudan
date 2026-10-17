@@ -11,6 +11,8 @@ import {
 } from "react";
 import { useRef } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronDown, UserRound } from "lucide-react";
+import LearnerAvatarIcon from "@/components/learners/LearnerAvatarIcon";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   LEARNER_HEADER,
@@ -312,10 +314,10 @@ export function LearnerSwitcher({ className = "" }: { className?: string }) {
   if (!canManageChildren || !activeLearner) return null;
   return (
     <button type="button" onClick={openPicker} className={`inline-flex items-center gap-2 rounded-full border border-[#007229]/20 bg-white/90 px-4 py-2 text-sm font-bold text-[#005C22] shadow-sm hover:bg-[#007229]/5 ${className}`} aria-label={language === "ar" ? "تبديل المتعلّم" : "Switch learner"}>
-      <span aria-hidden="true">{activeLearner.avatar ? ({ cat: "🐱", dog: "🐶", lion: "🦁", elephant: "🐘", camel: "🐪", rabbit: "🐰", turtle: "🐢", fish: "🐟", bird: "🐦", monkey: "🐵", bear: "🐻", frog: "🐸" } as const)[activeLearner.avatar] : "👤"}</span>
+      {activeLearner.avatar ? <LearnerAvatarIcon avatar={activeLearner.avatar} className="h-5 w-5 shrink-0" /> : <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" />}
       <span>{language === "ar" ? "تبديل المتعلّم" : "Switch learner"}</span>
       <span className="hidden sm:inline text-gray-500">{activeLearner.name || (language === "ar" ? "المتعلّم" : "Learner")}</span>
-      <span aria-hidden="true">⌄</span>
+      <ChevronDown className="h-4 w-4 shrink-0" aria-hidden="true" />
     </button>
   );
 }

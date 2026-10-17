@@ -63,7 +63,7 @@ export function FitBoss({
   );
 }
 
-/** The rigged Amal owl, filling its box (square). */
+/** The rigged Amowl, filling its box (square). */
 export function FitOwl({ pose = "idle", glow = false, className = "" }: { pose?: OwlPose; glow?: boolean; className?: string }) {
   const { ref, size } = useBoxSize();
   return (

@@ -57,8 +57,8 @@ describe("notifyPlacementDone", () => {
     const report = await notifyPlacementDone(client as never, "battle-1");
     expect(report).toMatchObject({ status: "sent", recipients: 2, pushUsers: 2, emailsSent: 1 });
     const messages = mocks.sendPushToUsers.mock.calls[0][1] as Map<string, PushMessage>;
-    expect(messages.get("parent-ar")).toMatchObject({ title: "تعرّف Amira على نُمبو عملاق الأرقام! 🎉", body: "صار آمال يعرف من أين يبدأ في الرياضيات.", url: "/progress" });
-    expect(messages.get("guardian-en")).toMatchObject({ title: "Amira met Numbo the Number Giant! 🎉", body: "Amal now knows where to start in Maths." });
+    expect(messages.get("parent-ar")).toMatchObject({ title: "تعرّف Amira على نُمبو عملاق الأرقام!", body: "صار آمال يعرف من أين يبدأ في الرياضيات.", url: "/progress" });
+    expect(messages.get("guardian-en")).toMatchObject({ title: "Amira met Numbo the Number Giant!", body: "Amal now knows where to start in Maths." });
     expect(mocks.sendEmails).toHaveBeenCalledTimes(1);
     const [[emails, idempotency]] = mocks.sendEmails.mock.calls as unknown as Array<[Array<{ to: string; tag: string }>, string]>;
     expect(emails[0]).toMatchObject({ to: "fatima@example.com", tag: "placement_done" });

@@ -39,7 +39,7 @@ const SHOULDER_L = "182 318";
 const SHOULDER_R = "458 318";
 
 /**
- * The Amal owl, rigged from the same shapes as the brand mark so it can
+ * Amowl, rigged from the same shapes as the brand mark so it can
  * breathe, blink, follow the pointer, react to what is on screen and dance.
  */
 export function LivingOwl({ mood = "idle", restGaze = { x: 0.6, y: 0 }, onActEnd, shadow = true, badge, className = "" }: LivingOwlProps) {

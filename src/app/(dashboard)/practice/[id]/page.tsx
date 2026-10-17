@@ -15,6 +15,7 @@ import PracticePlayer, {
   type PracticeQuestionInput,
 } from "@/components/practice/PracticePlayer";
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
+import { PartyIcon } from "@/components/icons/AmalIcons";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { requestInstallNudge } from "@/lib/pwa-install";
 import { loadLessonNavigation } from "@/lib/lessons/path-navigation";
@@ -500,7 +501,7 @@ export default function PracticePage() {
     };
     return (
       <div dir={isRtl ? "rtl" : "ltr"} className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
-        <div className="text-2xl">🎉</div>
+        <PartyIcon className="h-8 w-8" />
         <div className="text-lg font-bold text-gray-800">
           {language === "ar" ? "أكملت هذا التدريب من قبل!" : "You already completed this practice!"}
         </div>

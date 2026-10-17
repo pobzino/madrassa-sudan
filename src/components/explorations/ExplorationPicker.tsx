@@ -88,9 +88,9 @@ export default function ExplorationPicker({
 
   // Counting Objects config
   const [coObjects, setCoObjects] = useState([
-    { icon: '🍎', x_pct: 20, y_pct: 30, size: 48 },
-    { icon: '🍎', x_pct: 50, y_pct: 50, size: 48 },
-    { icon: '🍎', x_pct: 75, y_pct: 35, size: 48 },
+    { icon: 'apple', x_pct: 20, y_pct: 30, size: 48 },
+    { icon: 'apple', x_pct: 50, y_pct: 50, size: 48 },
+    { icon: 'apple', x_pct: 75, y_pct: 35, size: 48 },
   ]);
 
   // Sorting config
@@ -413,7 +413,7 @@ export default function ExplorationPicker({
                 </div>
               ))}
             </div>
-            <button type="button" onClick={() => setCoObjects([...coObjects, { icon: '🍎', x_pct: Math.round(Math.random() * 70 + 15), y_pct: Math.round(Math.random() * 60 + 20), size: 48 }])} className={addBtnCls}>+ Add object</button>
+            <button type="button" onClick={() => setCoObjects([...coObjects, { icon: 'apple', x_pct: Math.round(Math.random() * 70 + 15), y_pct: Math.round(Math.random() * 60 + 20), size: 48 }])} className={addBtnCls}>+ Add object</button>
           </div>
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={() => setStep('pick_type')} className={btnBackCls}>Back</button>

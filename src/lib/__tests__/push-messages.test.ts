@@ -13,9 +13,9 @@ const week = (overrides: Partial<Parameters<typeof weeklySummaryMessage>[1]> = {
 
 describe("push messages", () => {
   it("celebrates a streak, or encourages the second day", () => {
-    expect(streakReminderMessage("en", 4)).toMatchObject({ title: "🔥 4-day learning streak", url: "/dashboard", tag: "streak" });
-    expect(streakReminderMessage("en", 1).title).toBe("🌱 Great start yesterday!");
-    expect(streakReminderMessage("ar", 4).title).toBe("🔥 سلسلة التعلّم: ٤");
+    expect(streakReminderMessage("en", 4)).toMatchObject({ title: "4-day learning streak", url: "/dashboard", tag: "streak" });
+    expect(streakReminderMessage("en", 1).title).toBe("Great start yesterday!");
+    expect(streakReminderMessage("ar", 4).title).toBe("سلسلة التعلّم: ٤");
     expect(streakReminderMessage("ar", 4).lang).toBe("ar");
   });
 
@@ -31,11 +31,11 @@ describe("push messages", () => {
 
   it("sends a gentle nudge after a quiet week", () => {
     const quiet = week({ lessonsStarted: 0, lessonsCompleted: 0, practiceTried: 0, practicePassed: 0, activeDays: Array(7).fill(false) });
-    expect(weeklySummaryMessage("en", quiet)).toMatchObject({ title: "📚 Your next lesson is ready", url: "/dashboard" });
+    expect(weeklySummaryMessage("en", quiet)).toMatchObject({ title: "Your next lesson is ready", url: "/dashboard" });
   });
 
   it("confirms reminders in the family's language", () => {
-    expect(remindersOnMessage("ar").title).toBe("تم تفعيل التذكيرات ✓");
-    expect(remindersOnMessage("en").title).toBe("Reminders are on ✓");
+    expect(remindersOnMessage("ar").title).toBe("تم تفعيل التذكيرات");
+    expect(remindersOnMessage("en").title).toBe("Reminders are on");
   });
 });

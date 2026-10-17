@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { OwlCelebrating, OwlMedal, OwlEncouraging, Confetti } from '@/components/illustrations';
+import { FlameIcon, PartyIcon, SparkleIcon } from '@/components/icons/AmalIcons';
 
 interface HomeworkCompletionCardProps {
   language: 'ar' | 'en';
@@ -31,9 +32,9 @@ interface HomeworkCompletionCardProps {
 
 const translations = {
   ar: {
-    submitted: 'أحسنت! تم الإرسال 🎉',
+    submitted: 'أحسنت! تم الإرسال',
     submittedSub: 'عمل رائع! سيراجعه معلمك قريباً.',
-    perfect: 'ممتاز! 🌟',
+    perfect: 'ممتاز!',
     perfectSub: 'لقد أجبت على كل الأسئلة بشكل صحيح!',
     result: 'نتيجتك',
     keepGoing: 'محاولة جيدة! حاول مرة أخرى للحصول عليها كلها.',
@@ -47,9 +48,9 @@ const translations = {
     close: 'إغلاق',
   },
   en: {
-    submitted: 'All done! 🎉',
+    submitted: 'All done!',
     submittedSub: 'Nicely done — your teacher will check it soon.',
-    perfect: 'Perfect! 🌟',
+    perfect: 'Perfect!',
     perfectSub: 'You got every question right!',
     result: 'Your Result',
     keepGoing: 'Good try! Have another go to get them all.',
@@ -139,7 +140,9 @@ export default function HomeworkCompletionCard({
           <div className={`bg-gradient-to-b ${headerGradient} px-5 sm:px-6 pt-6 sm:pt-8 pb-10 sm:pb-12 text-center relative`}>
             <div className="relative z-10">
               <OwlComponent className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-2 sm:mb-3" />
-              <h2 className="text-xl sm:text-2xl font-bold font-fredoka text-white">{headline}</h2>
+              <h2 className="text-xl sm:text-2xl font-bold font-fredoka text-white">
+                {headline}{!isGraded ? <PartyIcon className="inline-block h-[1.1em] w-[1.1em] align-[-0.15em] ms-1.5" /> : isMastered ? <SparkleIcon className="inline-block h-[1.1em] w-[1.1em] align-[-0.15em] ms-1.5" /> : null}
+              </h2>
               <p className="text-white/90 text-xs sm:text-sm mt-1">{subline}</p>
             </div>
             {/* Decorative circles */}
@@ -210,7 +213,7 @@ export default function HomeworkCompletionCard({
               {/* Streak */}
               {streakDays != null && streakDays > 0 && (
                 <div className="flex items-center justify-center gap-2 px-3 py-2 bg-amber-50 rounded-xl">
-                  <span className="text-lg">🔥</span>
+                  <FlameIcon className="h-5 w-5 shrink-0" />
                   <span className="text-sm font-bold font-fredoka text-amber-700">
                     {streakDays} {t.streak}
                   </span>

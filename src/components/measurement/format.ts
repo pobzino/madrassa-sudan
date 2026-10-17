@@ -78,10 +78,12 @@ export function formatCell(value: number | null | undefined, kind: CellKind, lan
 
 export const BAND_ORDER: readonly LevelBand[] = ["getting_started", "on_the_way", "confident"];
 
-export const BAND_LABELS: Record<LevelBand, { en: string; ar: string; icon: string }> = {
-  getting_started: { en: "Getting started", ar: "في البداية", icon: "🌱" },
-  on_the_way: { en: "On the way", ar: "في الطريق", icon: "🌿" },
-  confident: { en: "Confident", ar: "واثق", icon: "🌳" },
+// `icon` is intentionally empty: the brand uses no emoji. Components that want a
+// visual marker should render an AmalIcons glyph keyed on the band instead.
+export const BAND_LABELS: Record<LevelBand, { en: string; ar: string }> = {
+  getting_started: { en: "Getting started", ar: "في البداية" },
+  on_the_way: { en: "On the way", ar: "في الطريق" },
+  confident: { en: "Confident", ar: "واثق" },
 };
 
 export function bandLabel(band: LevelBand, lang: UiLang): string {

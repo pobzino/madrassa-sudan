@@ -20,30 +20,30 @@ const incorrectMessages = {
 
 const correctMessages = {
   ar: [
-    'إجابة صحيحة! 🎉',
-    'أحسنت! 🌟',
-    'ممتاز! 👏',
-    'رائع! 🎉',
+    'إجابة صحيحة!',
+    'أحسنت!',
+    'ممتاز!',
+    'رائع!',
   ],
   en: [
-    'Correct! 🎉',
-    'Well done! 🌟',
-    'Excellent! 👏',
-    'Great job! 🎉',
+    'Correct!',
+    'Well done!',
+    'Excellent!',
+    'Great job!',
   ],
 };
 
 const lowScoreMessages = {
   ar: [
-    'واصل المحاولة، ستتحسن! 💪',
+    'واصل المحاولة، ستتحسن!',
     'لا بأس، التعلم يحتاج وقت!',
-    'حاول مرة أخرى، أنت تتعلم! 💪',
+    'حاول مرة أخرى، أنت تتعلم!',
     'استمر، أنت في الطريق الصحيح!',
   ],
   en: [
-    'Keep going, you\u2019ll get there! 💪',
+    'Keep going, you\u2019ll get there!',
     'No worries, learning takes time!',
-    'Try again, you\u2019re learning! 💪',
+    'Try again, you\u2019re learning!',
     'Keep at it, you\u2019re on the right track!',
   ],
 };

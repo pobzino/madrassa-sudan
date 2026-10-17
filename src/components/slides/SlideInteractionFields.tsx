@@ -159,7 +159,7 @@ export default function SlideInteractionFields({
     if (nextType === 'tap_to_count') {
       baseUpdates.interaction_count_target = slide.interaction_count_target ?? 5;
       baseUpdates.interaction_visual_emoji =
-        slide.interaction_visual_emoji ?? '🍎';
+        slide.interaction_visual_emoji ?? 'apple';
     }
 
     if (nextType === 'match_pairs') {

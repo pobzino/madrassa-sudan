@@ -2,6 +2,17 @@
 
 import { useCallback, useState } from 'react';
 import type { ExplorationWidgetProps, ImageHotspotConfig } from '@/lib/explorations/types';
+import { Countable, countableFor, isCountableKey } from '@/components/icons/Countables';
+import { CheckIcon, TapIcon } from '@/components/icons/AmalIcons';
+
+/** Platform emoji never reach the screen: known ones become brand countables, anything else a star. */
+const PICTOGRAPH = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B55}]/u;
+function HotspotMark({ emoji }: { emoji?: string }) {
+  const v = (emoji ?? '').trim();
+  if (!v) return <CheckIcon className="h-6 w-6" />;
+  if (!isCountableKey(v) && !PICTOGRAPH.test(v)) return <>{v}</>;
+  return <Countable kind={countableFor(v)} className="h-6 w-6" />;
+}
 
 export default function ImageHotspotWidget({
   config,
@@ -107,7 +118,7 @@ export default function ImageHotspotWidget({
                   }
                   className="w-12 h-12 rounded-full bg-emerald-500 border-2 border-white shadow-lg flex items-center justify-center text-lg transition-transform hover:scale-110 animate-[revealPop_0.4s_ease-out]"
                 >
-                  {hotspot.emoji || '✓'}
+                  <HotspotMark emoji={hotspot.emoji} />
                 </button>
               )}
 
@@ -149,9 +160,10 @@ export default function ImageHotspotWidget({
       {/* Instruction */}
       {!completed && (
         <p className={`text-sm text-slate-500 text-center ${language === 'ar' ? 'font-cairo' : ''}`}>
+          <TapIcon className="me-1.5 inline-block h-4 w-4 align-[-0.15em]" />
           {language === 'ar'
-            ? '👆 اضغط على النقاط المضيئة لاكتشاف ما تمثله'
-            : '👆 Tap the glowing dots to discover what they represent'}
+            ? 'اضغط على النقاط المضيئة لاكتشاف ما تمثله'
+            : 'Tap the glowing dots to discover what they represent'}
         </p>
       )}
 

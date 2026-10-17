@@ -1,5 +1,5 @@
 /**
- * Big Challenge characters: rigged SVG bosses, the rigged Amal owl, and the
+ * Big Challenge characters: rigged SVG bosses, the rigged Amowl, and the
  * layered arena backdrops. See the dev gallery at /dev/characters.
  */
 export { BossCharacter, type BossCharacterProps } from "./BossCharacter";

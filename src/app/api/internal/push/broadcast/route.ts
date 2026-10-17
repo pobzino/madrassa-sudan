@@ -15,7 +15,7 @@ type UntypedClient = SupabaseClient<any>;
 type Localised = { en: string; ar: string };
 
 const HELLO = {
-  title: { en: "👋 Hello from Amal School", ar: "👋 تحية من مدرسة آمال" },
+  title: { en: "Hello from Amal School", ar: "تحية من مدرسة آمال" },
   body: { en: "Your lesson reminders are working. Tap to keep learning.", ar: "تذكيرات الدروس تعمل. اضغطوا لمتابعة التعلّم." },
   url: "/dashboard",
 };

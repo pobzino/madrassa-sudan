@@ -39,6 +39,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Circle, Flashlight, Pause, Pencil, Play } from 'lucide-react';
 
 // ── Types ──
 
@@ -731,7 +732,7 @@ export default function SimLabPage() {
           >
             {showStorageInfo ? 'Hide' : 'Show'} storage info
           </button>
-          <Link href="/" className="text-gray-500 hover:text-gray-800 underline">← Back</Link>
+          <Link href="/" className="inline-flex items-center gap-1 text-gray-500 hover:text-gray-800 underline"><ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />Back</Link>
         </div>
       </header>
 
@@ -765,7 +766,7 @@ export default function SimLabPage() {
                 <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-mono">
                   <span>#{i + 1}</span>
                   <span className="uppercase">{slide.kind}</span>
-                  {s.strokes.length > 0 && <span title="has drawings">✏️</span>}
+                  {s.strokes.length > 0 && <Pencil className="h-3 w-3" aria-label="has drawings" />}
                 </div>
                 <div className="text-xs font-medium text-gray-800 mt-0.5 leading-tight line-clamp-2">
                   {slide.title}
@@ -836,13 +837,15 @@ export default function SimLabPage() {
                 </div>
               )}
               {mode === 'playing' && (
-                <div className="bg-blue-600 text-white text-xs font-bold rounded-full px-3 py-1.5">
-                  ▶ PLAYING
+                <div className="bg-blue-600 text-white text-xs font-bold rounded-full px-3 py-1.5 flex items-center gap-1.5">
+                  <Play className="h-3 w-3" fill="currentColor" aria-hidden="true" />
+                  PLAYING
                 </div>
               )}
               {mode === 'paused_interactive' && (
-                <div className="bg-amber-500 text-white text-xs font-bold rounded-full px-3 py-1.5">
-                  ⏸ YOU&apos;RE DRIVING — draw freely, hit Resume to continue
+                <div className="bg-amber-500 text-white text-xs font-bold rounded-full px-3 py-1.5 flex items-center gap-1.5">
+                  <Pause className="h-3 w-3" fill="currentColor" aria-hidden="true" />
+                  YOU&apos;RE DRIVING — draw freely, hit Resume to continue
                 </div>
               )}
             </div>
@@ -864,23 +867,25 @@ export default function SimLabPage() {
               <div className="mt-1.5 grid grid-cols-2 gap-2">
                 <button
                   onClick={() => setTool('pen')}
-                  className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
+                  className={`px-3 py-2 text-sm rounded-lg border transition-colors inline-flex items-center gap-1.5 ${
                     tool === 'pen'
                       ? 'bg-[#007229] text-white border-[#007229]'
                       : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
                   }`}
                 >
-                  ✏️ Pen
+                  <Pencil className="h-4 w-4" aria-hidden="true" />
+                  Pen
                 </button>
                 <button
                   onClick={() => setTool('spotlight')}
-                  className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
+                  className={`px-3 py-2 text-sm rounded-lg border transition-colors inline-flex items-center gap-1.5 ${
                     tool === 'spotlight'
                       ? 'bg-[#007229] text-white border-[#007229]'
                       : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
                   }`}
                 >
-                  🔦 Spotlight
+                  <Flashlight className="h-4 w-4" aria-hidden="true" />
+                  Spotlight
                 </button>
               </div>
             </div>
@@ -934,9 +939,10 @@ export default function SimLabPage() {
               <button
                 onClick={startRecording}
                 disabled={mode === 'playing'}
-                className="w-full px-3 py-2.5 text-sm font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-40"
+                className="w-full px-3 py-2.5 text-sm font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 inline-flex items-center justify-center gap-2"
               >
-                ● Start Recording
+                <Circle className="h-3 w-3" fill="currentColor" aria-hidden="true" />
+                Start Recording
               </button>
             ) : (
               <button
@@ -958,16 +964,18 @@ export default function SimLabPage() {
                 {mode === 'playing' ? (
                   <button
                     onClick={pausePlayback}
-                    className="flex-1 px-3 py-2 text-sm font-semibold rounded-lg bg-amber-500 text-white hover:bg-amber-600"
+                    className="flex-1 px-3 py-2 text-sm font-semibold rounded-lg bg-amber-500 text-white hover:bg-amber-600 inline-flex items-center justify-center gap-1.5"
                   >
-                    ⏸ Pause & interact
+                    <Pause className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
+                    Pause & interact
                   </button>
                 ) : (
                   <button
                     onClick={mode === 'paused_interactive' ? resumePlayback : startPlayback}
-                    className="flex-1 px-3 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                    className="flex-1 px-3 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 inline-flex items-center justify-center gap-1.5"
                   >
-                    ▶ {mode === 'paused_interactive' ? 'Resume teacher' : 'Play'}
+                    <Play className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
+                    {mode === 'paused_interactive' ? 'Resume teacher' : 'Play'}
                   </button>
                 )}
                 <button

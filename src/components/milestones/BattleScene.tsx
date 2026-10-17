@@ -28,6 +28,7 @@ import { superReady, turnOf } from "./turns";
 import { BossLinePicker, type BossLineKind } from "./bossLines";
 import { speakBossLine, stopBossVoice } from "./bossVoice";
 import { BIG_MOVE_SECONDS } from "@/lib/milestones/rules";
+import { TimerIcon } from "@/components/icons/AmalIcons";
 import type { EntranceKind, Feedback, PendingAnswer } from "./useBattleSession";
 import { battleGeometry, layoutModeFor, type BattleLayoutMode } from "./geometry";
 import { clearFx } from "./moves/fx";
@@ -611,7 +612,7 @@ export default function BattleScene(props: BattleSceneProps) {
             aria-live={secondsLeft <= 5 ? "assertive" : "off"}
             aria-label={t.bigMoveHurry}
           >
-            <span aria-hidden="true">⏱</span>
+            <TimerIcon className="h-[1.1em] w-[1.1em]" />
             <span className="tabular-nums">{formatNumber(secondsLeft, lang)}</span>
             <span className="h-1.5 w-16 overflow-hidden rounded-full bg-black/35" aria-hidden="true">
               <span className="block h-full rounded-full bg-[#FDE68A] transition-[width] duration-200" style={{ width: `${(secondsLeft / BIG_MOVE_SECONDS) * 100}%` }} />

@@ -1,5 +1,6 @@
 'use client'
 
+import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import type { SortingOrderData } from '@/lib/tasks.types'
 
 interface Props {
@@ -81,23 +82,26 @@ export default function SortingOrderEditor({ data, onChange }: Props) {
             <button
               onClick={() => moveItem(idx, 'up')}
               disabled={idx === 0}
-              className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 text-xs"
+              className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+              title="Move up"
             >
-              ▲
+              <ChevronUp className="h-3 w-3" aria-hidden="true" />
             </button>
             <button
               onClick={() => moveItem(idx, 'down')}
               disabled={idx === items.length - 1}
-              className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 text-xs"
+              className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+              title="Move down"
             >
-              ▼
+              <ChevronDown className="h-3 w-3" aria-hidden="true" />
             </button>
           </div>
           <button
             onClick={() => removeItem(idx)}
-            className="text-red-500 hover:text-red-700 text-xs"
+            className="text-red-500 hover:text-red-700"
+            title="Remove"
           >
-            ✕
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
       ))}

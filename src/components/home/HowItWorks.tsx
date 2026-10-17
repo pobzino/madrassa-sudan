@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, BookOpen, Calculator, Check, Lock, Music2, Play } from "lucide-react";
 import type { Language } from "@/contexts/LanguageContext";
 import { LivingOwl, type OwlMood } from "@/components/brand/LivingOwl";
+import { WaveIcon } from "@/components/icons/AmalIcons";
 import { SudanFlagToAmalOwl } from "@/components/brand/SudanFlagToAmalOwl";
 import { useOwlShow, type OwlAct } from "@/components/brand/useOwlShow";
 import { DayMeadow, DaySky } from "./DayMeadow";
@@ -42,7 +43,7 @@ const copy = {
     dance: "Make the owl dance",
     bubble: "Let's dance!",
     welcome: {
-      hello: "Hey, Sara! 👋",
+      hello: "Hey, Sara!",
       ready: "Ready for a new learning adventure?",
       continue: "Continue learning",
       pick: "Pick a Subject",
@@ -93,7 +94,7 @@ const copy = {
     dance: "اجعل البومة ترقص",
     bubble: "يلا نرقص!",
     welcome: {
-      hello: "أهلاً يا سارة! 👋",
+      hello: "أهلاً يا سارة!",
       ready: "مستعد لمغامرة تعليمية جديدة؟",
       continue: "واصل التعلم",
       pick: "اختر مادة",
@@ -381,7 +382,9 @@ function WelcomeScreen({ txt }: { txt: Copy }) {
     <div className="flex h-full flex-col">
       <ScreenHeader />
       <div className="flex flex-1 flex-col px-4 pt-3 sm:pt-4">
-        <p className="font-fredoka text-lg font-semibold leading-tight sm:text-xl">{txt.welcome.hello}</p>
+        <p className="font-fredoka text-lg font-semibold leading-tight sm:text-xl">
+          {txt.welcome.hello} <WaveIcon className="inline-block h-[1.1em] w-[1.1em] align-[-0.15em]" />
+        </p>
         <p className="mt-0.5 text-xs text-gray-500">{txt.welcome.ready}</p>
         <div className="mt-3 flex items-center justify-between rounded-2xl bg-[#007229] px-3.5 py-3 text-white shadow-[0_3px_0_#005C22]">
           <span className="text-sm font-bold">{txt.welcome.continue}</span>

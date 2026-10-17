@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BoltIcon, RefreshIcon, WarningIcon } from "@/components/icons/AmalIcons";
 import { FitBoss } from "./Characters";
 import { PLACEMENT_MIN_PER_DIFFICULTY, PLACEMENT_QUESTION_COUNT } from "@/lib/measurement/types";
 import type { TeacherMilestoneRow } from "@/lib/milestones/types";
@@ -101,10 +102,20 @@ export default function PlacementBlockCard({
               <button
                 onClick={onGenerate}
                 disabled={disabled || busy || !hasPath}
-                className="rounded-lg border border-sky-300 px-2.5 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100 disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded-lg border border-sky-300 px-2.5 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100 disabled:opacity-40"
                 title={disabled ? "Save the path first" : "Draft 30 questions across the path's first 12 weeks"}
               >
-                {m ? "↻ Regenerate" : "⚡ Generate"}
+                {m ? (
+                  <>
+                    <RefreshIcon className="h-3 w-3" />
+                    Regenerate
+                  </>
+                ) : (
+                  <>
+                    <BoltIcon className="h-3 w-3" />
+                    Generate
+                  </>
+                )}
               </button>
             )
           )}
@@ -131,8 +142,9 @@ export default function PlacementBlockCard({
         </div>
       </div>
       {m && short && (
-        <p className="mt-2 text-xs font-medium text-red-700">
-          ⚠ A starting boss needs at least {PLACEMENT_MIN_PER_DIFFICULTY} easy, {PLACEMENT_MIN_PER_DIFFICULTY} medium and {PLACEMENT_MIN_PER_DIFFICULTY} hard questions. Tag or add questions in Review &amp; edit.
+        <p className="mt-2 flex items-start gap-1 text-xs font-medium text-red-700">
+          <WarningIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          A starting boss needs at least {PLACEMENT_MIN_PER_DIFFICULTY} easy, {PLACEMENT_MIN_PER_DIFFICULTY} medium and {PLACEMENT_MIN_PER_DIFFICULTY} hard questions. Tag or add questions in Review &amp; edit.
         </p>
       )}
     </div>

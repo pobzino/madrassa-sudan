@@ -92,11 +92,11 @@ const letterTraceArabicConfig: LetterTraceConfig = {
 const countingConfig: CountingObjectsConfig = {
   type: 'counting_objects',
   objects: [
-    { icon: '🍎', x_pct: 20, y_pct: 25, size: 48 },
-    { icon: '🍎', x_pct: 55, y_pct: 40, size: 48 },
-    { icon: '🍎', x_pct: 75, y_pct: 30, size: 48 },
-    { icon: '🍎', x_pct: 35, y_pct: 65, size: 48 },
-    { icon: '🍎', x_pct: 65, y_pct: 70, size: 48 },
+    { icon: 'apple', x_pct: 20, y_pct: 25, size: 48 },
+    { icon: 'apple', x_pct: 55, y_pct: 40, size: 48 },
+    { icon: 'apple', x_pct: 75, y_pct: 30, size: 48 },
+    { icon: 'apple', x_pct: 35, y_pct: 65, size: 48 },
+    { icon: 'apple', x_pct: 65, y_pct: 70, size: 48 },
   ],
   target_count: 5,
 };

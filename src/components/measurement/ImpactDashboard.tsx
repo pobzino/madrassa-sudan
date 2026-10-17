@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { FileText } from "lucide-react";
+import { ArrowDown, ArrowLeftRight, ArrowUp, Dot, EqualApproximately, FileText, type LucideIcon } from "lucide-react";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import {
   MIN_CELL_SIZE,
@@ -708,13 +708,18 @@ function Coverage({ report, lang, labels, g, showGroups, subjectName }: GroupedP
   );
 }
 
-const FLAG_STYLE: Record<ItemFlag, { icon: string; className: string }> = {
-  too_hard: { icon: "▲", className: "bg-red-50 text-red-800 ring-red-200" },
-  too_easy: { icon: "▼", className: "bg-amber-50 text-amber-800 ring-amber-200" },
-  not_discriminating: { icon: "≈", className: "bg-orange-50 text-orange-800 ring-orange-200" },
-  difficulty_mismatch: { icon: "⇄", className: "bg-violet-50 text-violet-800 ring-violet-200" },
-  low_n: { icon: "·", className: "bg-gray-50 text-gray-600 ring-gray-200" },
+const FLAG_STYLE: Record<ItemFlag, { icon: LucideIcon; className: string }> = {
+  too_hard: { icon: ArrowUp, className: "bg-red-50 text-red-800 ring-red-200" },
+  too_easy: { icon: ArrowDown, className: "bg-amber-50 text-amber-800 ring-amber-200" },
+  not_discriminating: { icon: EqualApproximately, className: "bg-orange-50 text-orange-800 ring-orange-200" },
+  difficulty_mismatch: { icon: ArrowLeftRight, className: "bg-violet-50 text-violet-800 ring-violet-200" },
+  low_n: { icon: Dot, className: "bg-gray-50 text-gray-600 ring-gray-200" },
 };
+
+function FlagIcon({ flag, className }: { flag: ItemFlag; className: string }) {
+  const Icon = FLAG_STYLE[flag].icon;
+  return <Icon className={className} aria-hidden="true" />;
+}
 
 function QuestionQuality({ report, lang, labels, flag, setFlag, caveats }: SectionProps & { flag: ItemFlag | null; setFlag: (f: ItemFlag | null) => void; caveats: readonly string[] }) {
   const t = IMPACT_COPY[lang];
@@ -741,7 +746,7 @@ function QuestionQuality({ report, lang, labels, flag, setFlag, caveats }: Secti
             onClick={() => setFlag(flag === f ? null : f)}
             className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${flag === f ? "bg-gray-900 text-white ring-gray-900" : FLAG_STYLE[f].className}`}
           >
-            <span aria-hidden="true">{FLAG_STYLE[f].icon}</span>
+            <FlagIcon flag={f} className="h-3 w-3" />
             {t.flagLabels[f]} · {formatInt(counts.get(f) ?? 0, lang)}
           </button>
         ))}
@@ -778,7 +783,7 @@ function QuestionQuality({ report, lang, labels, flag, setFlag, caveats }: Secti
                   <span className="flex flex-wrap gap-1">
                     {item.flags.map((f) => (
                       <span key={f} className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${FLAG_STYLE[f].className}`}>
-                        <span aria-hidden="true">{FLAG_STYLE[f].icon}</span>
+                        <FlagIcon flag={f} className="h-2.5 w-2.5" />
                         {t.flagLabels[f]}
                       </span>
                     ))}

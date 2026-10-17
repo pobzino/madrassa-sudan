@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { Check, X } from "lucide-react";
 import type { RubricCriterion } from "@/lib/homework.types";
 
 interface GradingQuestion {
@@ -282,13 +283,15 @@ export function GradingInterface({
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm font-medium text-gray-500">Student Answer</span>
               {isCorrect && (
-                <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-sm font-medium rounded-full">
-                  ✓ Correct
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 text-sm font-medium rounded-full">
+                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                  Correct
                 </span>
               )}
               {!isCorrect && currentQuestion.correct_answer && currentQuestion.response_text && (
-                <span className="px-2 py-1 bg-red-100 text-red-700 text-sm font-medium rounded-full">
-                  ✗ Incorrect
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 text-sm font-medium rounded-full">
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  Incorrect
                 </span>
               )}
             </div>

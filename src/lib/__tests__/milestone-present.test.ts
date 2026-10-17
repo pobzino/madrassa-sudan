@@ -186,8 +186,8 @@ describe("catch moves say what to tap", () => {
     const bare = { type: "tap_to_count" as const, prompt: { en: "Count the apples.", ar: "عدّ التفاحات." }, target: 5, emoji: "🍎" };
     const shown = toPublicInteraction(bare, interactionPerms(BATTLE_A, "q", bare));
     expect(shown).toMatchObject({ catch_count: 5 });
-    expect(countInstruction("Count the apples.", shown as { emoji: string; catch_count: number | null }, "en")).toBe("Count 5 🍎!");
-    expect(countInstruction("عدّ التفاحات.", shown as { emoji: string; catch_count: number | null }, "ar")).toBe("عُدّ 5 🍎!");
+    expect(countInstruction("Count the apples.", shown as { emoji: string; catch_count: number | null }, "en")).toBe("Count 5 apples!");
+    expect(countInstruction("عدّ التفاحات.", shown as { emoji: string; catch_count: number | null }, "ar")).toBe("عُدّ 5 تفاحات!");
   });
 
   it("keeps the count hidden when working it out is the question", async () => {
@@ -196,7 +196,7 @@ describe("catch moves say what to tap", () => {
     const sum = { type: "tap_to_count" as const, prompt: { en: "7 stars, take away 3.", ar: "٧ نجمات، شلنا ٣." }, target: 4, emoji: "⭐" };
     const shown = toPublicInteraction(sum, interactionPerms(BATTLE_A, "q", sum)) as { emoji: string; catch_count: number | null };
     expect(shown.catch_count).toBeNull();
-    expect(countInstruction("7 stars, take away 3.", shown, "en")).toBe("7 stars, take away 3. Tap that many ⭐!");
+    expect(countInstruction("7 stars, take away 3.", shown, "en")).toBe("7 stars, take away 3. Tap that many stars!");
     const week = INTERACTIONS.tap_to_count;
     const shownWeek = toPublicInteraction(week, interactionPerms(BATTLE_A, "q", week)) as { emoji: string; catch_count: number | null };
     expect(shownWeek.catch_count).toBeNull();

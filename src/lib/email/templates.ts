@@ -47,7 +47,7 @@ export function welcomeParentEmail(args: Base & { whatsappGroupUrl: string }): R
     {
       language,
       preheader: "Your account is ready, and your first lesson is waiting.",
-      hero: { art: "welcome", alt: "The Amal owl waving hello" },
+      hero: { art: "welcome", alt: "Amowl waving hello" },
       heading: first ? `Welcome to the family, ${first}!` : "Welcome to the family!",
       paragraphs: ["Your account is ready. Every lesson on Amal is free, recorded by volunteer teachers, and made for learning at home."],
       steps: [
@@ -92,7 +92,7 @@ export function welcomeTeacherEmail(args: Base): RenderedEmail {
     {
       language,
       preheader: "You're approved. Here's how to record your first lesson.",
-      hero: { art: "teacher", alt: "The Amal owl beside a chalkboard" },
+      hero: { art: "teacher", alt: "Amowl beside a chalkboard" },
       heading: first ? `You're in, ${first}!` : "You're in!",
       paragraphs: [
         "Thank you for volunteering. Your part is simple: record lessons in your own voice, and children learn from them at their own pace, wherever they are. No classes to run, no marking.",
@@ -257,7 +257,7 @@ export function weeklyProgressEmail(
       {
         language,
         preheader: "Even ten minutes today makes a difference.",
-        hero: { art: "missed", alt: "The Amal owl reading a book" },
+        hero: { art: "missed", alt: "Amowl reading a book" },
         heading: first ? `We missed you this week, ${first}` : "We missed you this week",
         paragraphs: ["Your next lesson is ready whenever you are. Even ten minutes today keeps the learning going.", ...addChildTip],
         cta: { label: "Open my next lesson", url: `${siteUrl}/dashboard` },
@@ -272,7 +272,7 @@ export function weeklyProgressEmail(
     {
       language,
       preheader: `Your family's report card for ${weekLabel}.`,
-      hero: { art: "celebrate", alt: "The Amal owl dancing" },
+      hero: { art: "celebrate", alt: "Amowl dancing" },
       heading: first ? `What a week, ${first}!` : "What a week!",
       paragraphs: [`Here's your family's report card for ${weekLabel}.`, ...childLines],
       board: {
@@ -343,7 +343,7 @@ export function volunteerImpactEmail(
     {
       language,
       preheader: "Thank you for keeping children learning.",
-      hero: { art: "thanks", alt: "The happy Amal owl surrounded by hearts" },
+      hero: { art: "thanks", alt: "Happy Amowl surrounded by hearts" },
       heading: first ? `Thank you, ${first}!` : "Thank you!",
       paragraphs: [`Here's what your lessons did in ${monthLabel}.`],
       board: {
@@ -383,11 +383,13 @@ export function milestonePassedEmail(
   const { language, name, siteUrl, childName, subjectName, weeksLabel, stars, certificateUrl, bossName } = args;
   const first = firstName(name);
   const child = childName.trim();
-  const starRow = "⭐".repeat(stars);
+  // Spelled out rather than drawn: the brand uses no emoji, and star glyphs don't survive every mail client.
+  const starsEn = stars === 1 ? "1 star" : `${stars} stars`;
+  const starsAr = stars === 1 ? "بنجمة واحدة" : stars === 2 ? "بنجمتين" : "بثلاث نجوم";
   if (language === "ar") {
     const who = child || "طفلكم";
     return render(
-      bossName ? `🏆 فوز رائع لـ${who} على ${bossName}!` : `🏆 فوز رائع لـ${who} في التحدي الكبير!`,
+      bossName ? `فوز رائع لـ${who} على ${bossName}!` : `فوز رائع لـ${who} في التحدي الكبير!`,
       {
         language,
         preheader: `شهادة جديدة في ${subjectName} (${weeksLabel}).`,
@@ -395,7 +397,7 @@ export function milestonePassedEmail(
         heading: first ? `خبر سعيد يا ${first}!` : "خبر سعيد!",
         paragraphs: [
           `فوز جديد لـ${who} في التحدي الكبير: ${subjectName} (${weeksLabel}).`,
-          bossName ? `هُزم ${bossName} في هذه الجولة، والشهادة جاهزة: ${starRow}` : `الشهادة جاهزة: ${starRow}`,
+          bossName ? `هُزم ${bossName} في هذه الجولة، والشهادة جاهزة ${starsAr}.` : `الشهادة جاهزة ${starsAr}.`,
         ],
         closingParagraphs: ["هذا إنجاز يستحق الاحتفال. شاهدوا الشهادة معاً وشجّعوا الدروس القادمة."],
         cta: { label: "شاهد الشهادة", url: certificateUrl },
@@ -406,15 +408,15 @@ export function milestonePassedEmail(
   }
   const who = child || "Your child";
   return render(
-    bossName ? `🏆 ${who} beat ${bossName} and earned a certificate!` : `🏆 ${who} beat the Big Challenge!`,
+    bossName ? `${who} beat ${bossName} and earned a certificate!` : `${who} beat the Big Challenge!`,
     {
       language,
       preheader: `A new certificate in ${subjectName}, ${weeksLabel}.`,
-      hero: { art: "celebrate", alt: "The Amal owl dancing" },
+      hero: { art: "celebrate", alt: "Amowl dancing" },
       heading: first ? `Great news, ${first}!` : "Great news!",
       paragraphs: [
         `${who} beat the Big Challenge in ${subjectName}, ${weeksLabel}.`,
-        bossName ? `${bossName} is defeated, and the certificate is ready: ${starRow}` : `The certificate is ready: ${starRow}`,
+        bossName ? `${bossName} is defeated, and the certificate is ready with ${starsEn}.` : `The certificate is ready with ${starsEn}.`,
       ],
       closingParagraphs: ["That's worth celebrating. Look at the certificate together and cheer on the next lessons."],
       cta: { label: "See the certificate", url: certificateUrl },
@@ -436,12 +438,12 @@ export function placementDoneEmail(args: Base & { childName: string; bossName: s
   if (language === "ar") {
     const who = child || "طفلكم";
     return render(
-      `تعرّف ${who} على ${bossName}! 🎉`,
+      `تعرّف ${who} على ${bossName}!`,
       {
         language,
         preheader: `صار آمال يعرف من أين يبدأ في ${subjectName}.`,
         hero: { art: "welcome", alt: "بومة آمال تلوّح بجناحها" },
-        heading: first ? `خبر جميل يا ${first}: تعرّف ${who} على ${bossName}! 🎉` : `تعرّف ${who} على ${bossName}! 🎉`,
+        heading: first ? `خبر جميل يا ${first}: تعرّف ${who} على ${bossName}!` : `تعرّف ${who} على ${bossName}!`,
         paragraphs: [`صار آمال يعرف من أين يبدأ ${who} في ${subjectName}. سنشجّع كل مهارة جديدة يتعلّمها ${who}، وستجدونها في ملخص يوم الأحد.`],
         cta: { label: `شاهد مهارات ${who}`, url: `${siteUrl}/progress` },
       },
@@ -450,12 +452,12 @@ export function placementDoneEmail(args: Base & { childName: string; bossName: s
   }
   const who = child || "Your child";
   return render(
-    `${who} met ${bossName}! 🎉`,
+    `${who} met ${bossName}!`,
     {
       language,
       preheader: `Amal now knows where to start in ${subjectName}.`,
-      hero: { art: "welcome", alt: "The Amal owl waving hello" },
-      heading: first ? `Good news, ${first}: ${who} met ${bossName}! 🎉` : `${who} met ${bossName}! 🎉`,
+      hero: { art: "welcome", alt: "Amowl waving hello" },
+      heading: first ? `Good news, ${first}: ${who} met ${bossName}!` : `${who} met ${bossName}!`,
       paragraphs: [`Amal now knows where to start in ${subjectName}. We'll cheer on every new skill ${who} learns. You'll see them in your Sunday summary.`],
       cta: { label: `See ${who}'s skills`, url: `${siteUrl}/progress` },
     },

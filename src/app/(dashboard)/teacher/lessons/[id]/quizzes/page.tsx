@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { Clock } from 'lucide-react'
 import QuestionBuilder from '@/components/teacher/QuestionBuilder'
 import QuizSettingsPanel from '@/components/teacher/QuizSettingsPanel'
 import type { Database, QuizSettings } from '@/lib/database.types'
@@ -330,8 +331,9 @@ export default function TeacherQuizzesPage() {
                         <span className="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
                           {getQuestionTypeLabel(question.question_type)}
                         </span>
-                        <span className="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded ml-2">
-                          ⏱ {formatTimestamp(question.timestamp_seconds)}
+                        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded ml-2">
+                          <Clock className="h-3 w-3" aria-hidden="true" />
+                          {formatTimestamp(question.timestamp_seconds)}
                         </span>
                         {question.is_required && (
                           <span className="inline-block px-2 py-1 text-xs bg-red-100 text-red-800 rounded ml-2">

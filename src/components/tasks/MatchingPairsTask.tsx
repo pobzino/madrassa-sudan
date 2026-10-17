@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import type { MatchingPairsData } from '@/lib/tasks.types'
+import { Check } from 'lucide-react'
 
 interface Props {
   data: MatchingPairsData
@@ -132,7 +133,7 @@ export default function MatchingPairsTask({ data, language, onSubmit, disabled }
               >
                 {isAr ? pair.left_ar : (pair.left_en || pair.left_ar)}
                 {isMatched && (
-                  <span className="ml-1 text-xs opacity-60">✓</span>
+                  <Check className="ml-1 inline-block h-3 w-3 opacity-60" aria-hidden="true" />
                 )}
               </button>
             )
@@ -161,7 +162,7 @@ export default function MatchingPairsTask({ data, language, onSubmit, disabled }
               >
                 {isAr ? pair.right_ar : (pair.right_en || pair.right_ar)}
                 {isMatched && (
-                  <span className="ml-1 text-xs opacity-60">✓</span>
+                  <Check className="ml-1 inline-block h-3 w-3 opacity-60" aria-hidden="true" />
                 )}
               </button>
             )

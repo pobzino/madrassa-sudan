@@ -10,6 +10,7 @@ import type {
   SlideEntranceAnimation,
   SlideImageFit,
 } from '@/lib/slides.types';
+import { ChevronDown, ChevronUp, Image as ImageIcon, LayoutTemplate, PanelLeft, PanelRight, PanelTop, X, type LucideIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import SlideInteractionFields from './SlideInteractionFields';
 import SlideImageGenerator from './SlideImageGenerator';
@@ -40,12 +41,12 @@ const SLIDE_TYPES: { value: SlideType; label: string }[] = [
   { value: 'whiteboard', label: 'Whiteboard' },
 ];
 
-const LAYOUTS: { value: SlideLayout; label: string; icon: string }[] = [
-  { value: 'default', label: 'Default', icon: '▣' },
-  { value: 'image_left', label: 'Image Left', icon: '◧' },
-  { value: 'image_right', label: 'Image Right', icon: '◨' },
-  { value: 'image_top', label: 'Image Top', icon: '⬒' },
-  { value: 'full_image', label: 'Full Image', icon: '▩' },
+const LAYOUTS: { value: SlideLayout; label: string; icon: LucideIcon }[] = [
+  { value: 'default', label: 'Default', icon: LayoutTemplate },
+  { value: 'image_left', label: 'Image Left', icon: PanelLeft },
+  { value: 'image_right', label: 'Image Right', icon: PanelRight },
+  { value: 'image_top', label: 'Image Top', icon: PanelTop },
+  { value: 'full_image', label: 'Full Image', icon: ImageIcon },
 ];
 
 const TEXT_SIZES: { value: SlideTextSize; label: string }[] = [
@@ -349,7 +350,7 @@ export default function SlideEditPanel({
                     : 'border-gray-200 text-gray-500 hover:border-gray-300'
                 }`}
               >
-                <span className="text-base leading-none">{l.icon}</span>
+                <l.icon className="h-4 w-4" aria-hidden="true" />
                 <span className="text-[9px] leading-tight truncate w-full text-center">{l.label.split(' ').pop()}</span>
               </button>
             ))}
@@ -786,18 +787,18 @@ export default function SlideEditPanel({
                   <button
                     onClick={() => moveBullet(i, i - 1)}
                     disabled={i === 0}
-                    className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-[10px] leading-none"
+                    className="text-gray-400 hover:text-gray-600 disabled:opacity-30 leading-none"
                     title="Move up"
                   >
-                    ▲
+                    <ChevronUp className="h-3 w-3" aria-hidden="true" />
                   </button>
                   <button
                     onClick={() => moveBullet(i, i + 1)}
                     disabled={i === bullets.length - 1}
-                    className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-[10px] leading-none"
+                    className="text-gray-400 hover:text-gray-600 disabled:opacity-30 leading-none"
                     title="Move down"
                   >
-                    ▼
+                    <ChevronDown className="h-3 w-3" aria-hidden="true" />
                   </button>
                 </div>
                 <input
@@ -812,10 +813,10 @@ export default function SlideEditPanel({
                 <button
                   onClick={() => removeBullet(i)}
                   disabled={bullets.length <= 1}
-                  className="flex-shrink-0 w-6 h-6 text-xs text-red-400 hover:text-red-600 disabled:opacity-30 rounded hover:bg-red-50"
+                  className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-red-400 hover:text-red-600 disabled:opacity-30 rounded hover:bg-red-50"
                   title="Remove"
                 >
-                  ✕
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </div>
             ))}
@@ -860,18 +861,18 @@ export default function SlideEditPanel({
                   <button
                     onClick={() => moveRevealItem(i, i - 1)}
                     disabled={i === 0}
-                    className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-[10px] leading-none"
+                    className="text-gray-400 hover:text-gray-600 disabled:opacity-30 leading-none"
                     title="Move up"
                   >
-                    ▲
+                    <ChevronUp className="h-3 w-3" aria-hidden="true" />
                   </button>
                   <button
                     onClick={() => moveRevealItem(i, i + 1)}
                     disabled={i === revealItems.length - 1}
-                    className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-[10px] leading-none"
+                    className="text-gray-400 hover:text-gray-600 disabled:opacity-30 leading-none"
                     title="Move down"
                   >
-                    ▼
+                    <ChevronDown className="h-3 w-3" aria-hidden="true" />
                   </button>
                 </div>
                 <input
@@ -886,10 +887,10 @@ export default function SlideEditPanel({
                 <button
                   onClick={() => removeRevealItem(i)}
                   disabled={revealItems.length <= 1}
-                  className="flex-shrink-0 w-6 h-6 text-xs text-red-400 hover:text-red-600 disabled:opacity-30 rounded hover:bg-red-50"
+                  className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-red-400 hover:text-red-600 disabled:opacity-30 rounded hover:bg-red-50"
                   title="Remove"
                 >
-                  ✕
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </div>
             ))}

@@ -19,7 +19,7 @@ function Eyes({ y = 31, left = 23, right = 41 }: { y?: number; left?: number; ri
   );
 }
 
-/** Small, original animal heads drawn in the same bold, flat style as the Amal owl. */
+/** Small, original animal heads drawn in the same bold, flat style as Amowl. */
 export default function LearnerAvatarIcon({ avatar, className = "" }: LearnerAvatarIconProps) {
   return (
     <svg viewBox="0 0 64 64" className={className} aria-hidden="true" focusable="false">

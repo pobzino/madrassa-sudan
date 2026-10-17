@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { ExplorationWidgetProps, SortingConfig } from '@/lib/explorations/types';
+import { TapIcon } from '@/components/icons/AmalIcons';
 
 interface PlacedItem {
   itemIndex: number;
@@ -146,14 +147,15 @@ export default function SortingWidget({
           </div>
         ) : (
           <>
-            <p className="text-sm text-slate-500">
+            <p className="flex items-center gap-1.5 text-sm text-slate-500">
+              <TapIcon className={`h-4 w-4 shrink-0 ${selectedItem !== null ? '' : 'rotate-180'}`} />
               {selectedItem !== null
                 ? language === 'ar'
-                  ? '👆 اختر الفئة المناسبة'
-                  : '👆 Now tap the correct category'
+                  ? 'اختر الفئة المناسبة'
+                  : 'Now tap the correct category'
                 : language === 'ar'
-                  ? '👇 اختر عنصراً ثم ضعه في الفئة'
-                  : '👇 Tap an item, then tap its category'}
+                  ? 'اختر عنصراً ثم ضعه في الفئة'
+                  : 'Tap an item, then tap its category'}
             </p>
             {placed.length > 0 && (
               <button

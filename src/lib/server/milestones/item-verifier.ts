@@ -1,7 +1,8 @@
 import "server-only";
 
 import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
-import { AI_MODEL_FAST, AI_MODEL_MILESTONE_VERIFY, getOpenAIClient } from "@/lib/ai/openai-client";
+import { AI_MODEL_FAST, AI_MODEL_MILESTONE_VERIFY, AI_MODEL_MILESTONE_VERIFY_BACKGROUND, getOpenAIClient } from "@/lib/ai/openai-client";
+import { startBackgroundCall } from "@/lib/server/milestones/background-model";
 import { isModelUnavailableError, MILESTONE_CALL_OPTIONS, timedMilestoneCall } from "@/lib/ai/model-errors";
 import type { Difficulty, TagSource } from "@/lib/measurement/types";
 import {
@@ -16,7 +17,7 @@ import {
 // raise flags. Any flag, a mismatch with the key, or a missing verdict drops
 // the item.
 
-export const VERIFY_FLAGS = ["ambiguous", "wrong_key", "needs_picture", "incomplete_prompt", "too_hard"] as const;
+export const VERIFY_FLAGS = ["ambiguous", "wrong_key", "needs_picture", "incomplete_prompt", "too_hard", "pointless"] as const;
 export type VerifyFlag = (typeof VERIFY_FLAGS)[number];
 
 export interface ItemVerdict {
@@ -98,6 +99,7 @@ export function verdictSchema(skillKeys: readonly string[] = []) {
     needs_picture: { type: "boolean" },
     incomplete_prompt: { type: "boolean" },
     too_hard: { type: "boolean" },
+    pointless: { type: "boolean" },
     reason: { type: "string" },
     difficulty: { type: "integer", enum: [1, 2, 3] },
     skill_key: keys.length ? { type: "string", enum: keys } : { type: "string" },
@@ -115,11 +117,10 @@ export function verdictSchema(skillKeys: readonly string[] = []) {
   } as const;
 }
 
-/** The default verifier: one structured call on the fast model per lesson's items. */
-export const verifyItemsWithModel: ItemVerifier = async (request) => {
-  if (!request.items.length) return [];
-  const openai = getOpenAIClient();
-  if (!openai) throw new Error("OpenAI is not configured for Big Challenge verification.");
+const VERIFIER_SYSTEM = "You are a strict, careful reviewer of children's quiz items. When in doubt, flag.";
+
+/** The verifier's call for one lesson's items (shared by the sync and background paths). */
+export function verifyCall(request: VerifyRequest): { system: string; prompt: string; schemaName: string; schema: Record<string, unknown> } {
   const shown = request.items.map((item, index) => `ITEM ${index}: ${describeForChild(item, index)}`).join("\n");
   const keys = request.items.map((item, index) => `ITEM ${index}: ${describeKey(item)}`).join("\n");
   const prompt = `You check quick game items for children (subject: ${request.subjectName}, grade ${request.gradeLevel}, lesson "${request.lessonTitleEn}").
@@ -137,32 +138,17 @@ For each item set:
 - needs_picture: the item can't be answered without a picture, sound or something not shown.
 - incomplete_prompt: the prompt is missing words, the rule to follow, or doesn't make sense on its own.
 - too_hard: well beyond a 7-year-old at this grade.
+- pointless: the item tests nothing worth testing: a word matched to itself or to the same word in the other list, an answer given away in the prompt, counting letters or abstract things, a "which is the cat?" with one option, or anything a child could answer without the lesson.
 - reason: one short sentence when any flag is true or matches_key is false, else "".
 - difficulty: how hard the item is for this grade (1 = recall: one step, a taught fact; 2 = apply: one step on a fresh example or a familiar two-step; 3 = stretch: two or more steps or a new context).
 - skill_key: the skill the item checks${request.skills?.length ? `, one of: ${request.skills.map((skill) => `${skill.key} (${skill.label})`).join("; ")}` : ""}.
 Trace-a-letter items (type "trace_letter") have nothing to choose: the child traces the letter shown. Set child_answer to "trace" and matches_key to true; only judge the prompt: it must make sense on its own and ask the child to trace (write) exactly that letter (incomplete_prompt otherwise).
 Return one verdict per item, using its index.`;
+  return { system: VERIFIER_SYSTEM, prompt, schemaName: "milestone_item_verdicts", schema: verdictSchema((request.skills ?? []).map((skill) => skill.key)) };
+}
 
-  const params: Omit<ChatCompletionCreateParamsNonStreaming, "model"> = {
-    reasoning_effort: "low",
-    messages: [
-      { role: "system", content: "You are a strict, careful reviewer of children's quiz items. When in doubt, flag." },
-      { role: "user", content: prompt },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: { name: "milestone_item_verdicts", strict: true, schema: verdictSchema((request.skills ?? []).map((skill) => skill.key)) },
-    },
-  };
-  // The newest model first; an older one if this key cannot use it.
-  const completion = await timedMilestoneCall("verify", AI_MODEL_MILESTONE_VERIFY, (model) => openai.chat.completions.create({ model, ...params }, MILESTONE_CALL_OPTIONS.verify))
-    .catch((error: unknown) => {
-      if (!isModelUnavailableError(error) || AI_MODEL_MILESTONE_VERIFY === AI_MODEL_FAST) throw error;
-      console.warn(`OpenAI model ${AI_MODEL_MILESTONE_VERIFY} unavailable; using ${AI_MODEL_FAST}`);
-      return timedMilestoneCall("verify", AI_MODEL_FAST, (model) => openai.chat.completions.create({ model, ...params }, MILESTONE_CALL_OPTIONS.verify));
-    });
-  const text = completion.choices[0]?.message?.content;
-  if (!text) throw new Error("Big Challenge verification returned no content.");
+/** The verifier's answer as verdicts. */
+export function parseVerdicts(text: string): ItemVerdict[] {
   const parsed = JSON.parse(text) as { verdicts?: Array<Record<string, unknown>> };
   return (parsed.verdicts ?? []).map((verdict) => ({
     index: Number(verdict.index),
@@ -174,6 +160,42 @@ Return one verdict per item, using its index.`;
     ...(verdict.difficulty === 1 || verdict.difficulty === 2 || verdict.difficulty === 3 ? { difficulty: verdict.difficulty } : {}),
     ...(typeof verdict.skill_key === "string" && verdict.skill_key ? { skillKey: verdict.skill_key } : {}),
   }));
+}
+
+/** Background path: start the verifier on OpenAI's side and return the response id. */
+export async function startVerify(request: VerifyRequest): Promise<string> {
+  const call = verifyCall(request);
+  const { id } = await startBackgroundCall({ ...call, model: AI_MODEL_MILESTONE_VERIFY_BACKGROUND, effort: "medium", tag: "verify" });
+  return id;
+}
+
+/** The default verifier: one structured call on the fast model per lesson's items (the sync path). */
+export const verifyItemsWithModel: ItemVerifier = async (request) => {
+  if (!request.items.length) return [];
+  const openai = getOpenAIClient();
+  if (!openai) throw new Error("OpenAI is not configured for Big Challenge verification.");
+  const call = verifyCall(request);
+  const params: Omit<ChatCompletionCreateParamsNonStreaming, "model"> = {
+    reasoning_effort: "low",
+    messages: [
+      { role: "system", content: call.system },
+      { role: "user", content: call.prompt },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: { name: call.schemaName, strict: true, schema: call.schema },
+    },
+  };
+  // The newest model first; an older one if this key cannot use it.
+  const completion = await timedMilestoneCall("verify", AI_MODEL_MILESTONE_VERIFY, (model) => openai.chat.completions.create({ model, ...params }, MILESTONE_CALL_OPTIONS.verify))
+    .catch((error: unknown) => {
+      if (!isModelUnavailableError(error) || AI_MODEL_MILESTONE_VERIFY === AI_MODEL_FAST) throw error;
+      console.warn(`OpenAI model ${AI_MODEL_MILESTONE_VERIFY} unavailable; using ${AI_MODEL_FAST}`);
+      return timedMilestoneCall("verify", AI_MODEL_FAST, (model) => openai.chat.completions.create({ model, ...params }, MILESTONE_CALL_OPTIONS.verify));
+    });
+  const text = completion.choices[0]?.message?.content;
+  if (!text) throw new Error("Big Challenge verification returned no content.");
+  return parseVerdicts(text);
 };
 
 /**

@@ -24,12 +24,12 @@ export function streakReminderMessage(language: EmailLanguage, streakDays: numbe
   const base = { url: "/dashboard", tag: "streak", lang: language };
   if (language === "ar") {
     return streakDays > 1
-      ? { ...base, title: `🔥 سلسلة التعلّم: ${number(language, streakDays)}`, body: "أكملوا درس اليوم لتستمر السلسلة." }
-      : { ...base, title: "🌱 بداية رائعة أمس!", body: "تعلّموا اليوم أيضاً لتبدأ سلسلتكم." };
+      ? { ...base, title: `سلسلة التعلّم: ${number(language, streakDays)}`, body: "أكملوا درس اليوم لتستمر السلسلة." }
+      : { ...base, title: "بداية رائعة أمس!", body: "تعلّموا اليوم أيضاً لتبدأ سلسلتكم." };
   }
   return streakDays > 1
-    ? { ...base, title: `🔥 ${streakDays}-day learning streak`, body: "Do today's lesson to keep it going." }
-    : { ...base, title: "🌱 Great start yesterday!", body: "Learn again today to start a streak." };
+    ? { ...base, title: `${streakDays}-day learning streak`, body: "Do today's lesson to keep it going." }
+    : { ...base, title: "Great start yesterday!", body: "Learn again today to start a streak." };
 }
 
 /** Sunday's summary, or a gentle nudge after a quiet week. */
@@ -49,13 +49,13 @@ export function placementDoneMessage(language: EmailLanguage, args: { childName:
   if (language === "ar") {
     return {
       ...base,
-      title: name ? `تعرّف ${name} على ${args.bossName}! 🎉` : `تعرّف طفلكم على ${args.bossName}! 🎉`,
+      title: name ? `تعرّف ${name} على ${args.bossName}!` : `تعرّف طفلكم على ${args.bossName}!`,
       body: `صار آمال يعرف من أين يبدأ في ${args.subjectName}.`,
     };
   }
   return {
     ...base,
-    title: `${name || "Your child"} met ${args.bossName}! 🎉`,
+    title: `${name || "Your child"} met ${args.bossName}!`,
     body: `Amal now knows where to start in ${args.subjectName}.`,
   };
 }
@@ -65,27 +65,27 @@ function weeklySummaryBase(language: EmailLanguage, summary: WeeklySummary): Pus
   const daysLearned = summary.activeDays.filter(Boolean).length;
   if (!hadActivity(summary)) {
     return language === "ar"
-      ? { title: "📚 درسكم التالي جاهز", body: "حتى عشر دقائق اليوم تحافظ على استمرار التعلّم.", url: "/dashboard", tag: "weekly", lang: language }
-      : { title: "📚 Your next lesson is ready", body: "Even ten minutes today keeps the learning going.", url: "/dashboard", tag: "weekly", lang: language };
+      ? { title: "درسكم التالي جاهز", body: "حتى عشر دقائق اليوم تحافظ على استمرار التعلّم.", url: "/dashboard", tag: "weekly", lang: language }
+      : { title: "Your next lesson is ready", body: "Even ten minutes today keeps the learning going.", url: "/dashboard", tag: "weekly", lang: language };
   }
   if (language === "ar") {
     const parts = [`دروس مكتملة: ${n(summary.lessonsCompleted)}`];
     if (summary.practiceTried) parts.push(`تدريبات ناجحة: ${n(summary.practicePassed)}`);
     if (!summary.lessonsCompleted) parts.splice(0, 1, `أيام التعلّم: ${n(daysLearned)}`);
-    return { title: "🎉 أسبوعكم في آمال", body: `${parts.join("، ")}. اضغطوا لرؤية التقرير كاملاً.`, url: "/progress", tag: "weekly", lang: language };
+    return { title: "أسبوعكم في آمال", body: `${parts.join("، ")}. اضغطوا لرؤية التقرير كاملاً.`, url: "/progress", tag: "weekly", lang: language };
   }
   const lessons = `${summary.lessonsCompleted} ${summary.lessonsCompleted === 1 ? "lesson" : "lessons"} completed`;
   const practice = summary.practiceTried ? `, ${summary.practicePassed} Practice ${summary.practicePassed === 1 ? "set" : "sets"} passed` : "";
   const days = `You learned on ${daysLearned} ${daysLearned === 1 ? "day" : "days"} this week`;
   const lead = summary.lessonsCompleted ? `${lessons}${practice}` : `${days}${practice}`;
-  return { title: "🎉 Your week on Amal", body: `${lead}. Tap to see the full report.`, url: "/progress", tag: "weekly", lang: language };
+  return { title: "Your week on Amal", body: `${lead}. Tap to see the full report.`, url: "/progress", tag: "weekly", lang: language };
 }
 
 /** Sent straight away when a family turns reminders on, so they know it works. */
 export function remindersOnMessage(language: EmailLanguage): PushMessage {
   return language === "ar"
-    ? { title: "تم تفعيل التذكيرات ✓", body: "سنخبركم عندما يحين وقت التعلّم.", url: "/dashboard", tag: "welcome", lang: language }
-    : { title: "Reminders are on ✓", body: "We'll let you know when it's time to learn.", url: "/dashboard", tag: "welcome", lang: language };
+    ? { title: "تم تفعيل التذكيرات", body: "سنخبركم عندما يحين وقت التعلّم.", url: "/dashboard", tag: "welcome", lang: language }
+    : { title: "Reminders are on", body: "We'll let you know when it's time to learn.", url: "/dashboard", tag: "welcome", lang: language };
 }
 
 /**
@@ -104,14 +104,14 @@ export function milestonePassedMessage(
     const over = bossName ? ` على ${bossName}` : " في التحدي الكبير";
     return {
       ...base,
-      title: name ? `🏆 فوز رائع لـ${name}${over}!` : `🏆 فوز رائع${over}!`,
+      title: name ? `فوز رائع لـ${name}${over}!` : `فوز رائع${over}!`,
       body: `التحدي الكبير في ${subjectName} (${weeksLabel}) والشهادة جاهزة. اضغطوا لرؤيتها.`,
     };
   }
   const who = name || "Your child";
   return {
     ...base,
-    title: bossName ? `🏆 ${who} beat ${bossName} and earned a certificate!` : `🏆 ${who} beat the Big Challenge!`,
+    title: bossName ? `${who} beat ${bossName} and earned a certificate!` : `${who} beat the Big Challenge!`,
     body: `Big Challenge in ${subjectName}, ${weeksLabel}. Tap to see the certificate.`,
   };
 }

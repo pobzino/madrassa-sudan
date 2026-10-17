@@ -96,7 +96,7 @@ export function slideToInteraction(slide: Slide): Interaction | null {
         type: 'tap_to_count',
         prompt,
         target: slide.interaction_count_target ?? 0,
-        emoji: slide.interaction_visual_emoji?.trim() || '⭐',
+        emoji: slide.interaction_visual_emoji?.trim() || 'star',
       };
 
     case 'match_pairs':

@@ -10,13 +10,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: "feedback",
 };
 
-const CATEGORY_EMOJI: Record<string, string> = {
-  bug: "🐛",
-  feature: "✨",
-  change: "🔄",
-  other: "💬",
-};
-
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -78,11 +71,10 @@ export async function POST(request: NextRequest) {
     const githubToken = process.env.GITHUB_TOKEN;
     if (githubToken) {
       try {
-        const emoji = CATEGORY_EMOJI[category] || "💬";
         const label = CATEGORY_LABELS[category] || "feedback";
 
         const issueBody = [
-          `${emoji} **${category.charAt(0).toUpperCase() + category.slice(1)}** reported by **${profile.full_name}** (${profile.role})`,
+          `**${category.charAt(0).toUpperCase() + category.slice(1)}** reported by **${profile.full_name}** (${profile.role})`,
           "",
           "## Description",
           description,

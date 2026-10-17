@@ -2,6 +2,16 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { ExplorationWidgetProps, CountingObjectsConfig } from '@/lib/explorations/types';
+import { Countable, countableFor, isCountableKey } from '@/components/icons/Countables';
+import { TapIcon } from '@/components/icons/AmalIcons';
+
+/** Platform emoji never reach the screen: known ones become brand countables, anything else a star. */
+const PICTOGRAPH = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B55}]/u;
+function ObjectIcon({ icon }: { icon: string }) {
+  const v = icon.trim();
+  if (v && !isCountableKey(v) && !PICTOGRAPH.test(v)) return <span className="text-2xl select-none">{v}</span>;
+  return <Countable kind={countableFor(v)} className="h-8 w-8 select-none" />;
+}
 
 export default function CountingObjectsWidget({
   config,
@@ -89,7 +99,7 @@ export default function CountingObjectsWidget({
                 animation: !isTapped && !completed ? `bobIdle 3s ease-in-out ${delay}s infinite, bounceIn 0.4s ease-out ${delay}s both` : undefined,
               }}
             >
-              <span className="text-2xl select-none">{obj.icon}</span>
+              <ObjectIcon icon={obj.icon} />
               {num !== null && (
                 <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 text-white text-xs font-bold flex items-center justify-center shadow animate-[tapPulse_0.3s_ease-out]">
                   {num}
@@ -117,8 +127,9 @@ export default function CountingObjectsWidget({
       <div className="flex items-center gap-3">
         {!completed && (
           <>
-            <p className="text-sm text-slate-500">
-              {language === 'ar' ? '👆 اضغط على كل شيء لعدّه' : '👆 Tap each object to count it'}
+            <p className="flex items-center gap-1.5 text-sm text-slate-500">
+              <TapIcon className="h-4 w-4 shrink-0" />
+              {language === 'ar' ? 'اضغط على كل شيء لعدّه' : 'Tap each object to count it'}
             </p>
             {tapOrder.length > 0 && (
               <button

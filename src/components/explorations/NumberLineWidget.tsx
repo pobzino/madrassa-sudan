@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { ExplorationWidgetProps, NumberLineConfig } from '@/lib/explorations/types';
+import { TapIcon } from '@/components/icons/AmalIcons';
 
 const SVG_WIDTH = 600;
 const SVG_HEIGHT = 160;
@@ -274,9 +275,10 @@ export default function NumberLineWidget({
       {/* Instruction */}
       {!completed && (
         <p className={`text-sm text-slate-500 text-center ${language === 'ar' ? 'font-cairo' : ''}`}>
+          <TapIcon className="me-1.5 inline-block h-4 w-4 align-[-0.15em]" />
           {language === 'ar'
-            ? '👆 اسحب الدائرة لتضع العدد في المكان الصحيح'
-            : '👆 Drag the handle to place the number'}
+            ? 'اسحب الدائرة لتضع العدد في المكان الصحيح'
+            : 'Drag the handle to place the number'}
         </p>
       )}
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { ExplorationWidgetProps, ColorPickerConfig } from '@/lib/explorations/types';
+import { Palette } from 'lucide-react';
 
 function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace('#', '');
@@ -145,10 +146,11 @@ export default function ColorPickerWidget({
 
       {/* Hint */}
       {!completed && (
-        <p className="text-sm text-slate-400 text-center">
+        <p className="flex items-center justify-center gap-1.5 text-sm text-slate-400 text-center">
+          <Palette className="h-4 w-4 shrink-0" aria-hidden="true" />
           {language === 'ar'
-            ? '🎨 حرك الأشرطة لمطابقة اللون المطلوب'
-            : '🎨 Adjust the sliders to match the target color'}
+            ? 'حرك الأشرطة لمطابقة اللون المطلوب'
+            : 'Adjust the sliders to match the target color'}
         </p>
       )}
 

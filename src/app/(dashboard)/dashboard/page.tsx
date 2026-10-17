@@ -20,6 +20,7 @@ import { HeroScene, SubjectScene } from "@/components/dashboard/DashboardScenes"
 import { DashboardInstallNudge } from "@/components/pwa/InstallNudges";
 import { AddChildNudge } from "@/components/learners/AddChildNudge";
 import { useLearnerContext, LearnerSwitcher } from "@/contexts/LearnerContext";
+import { TrophyIcon as BossTrophyIcon, WaveIcon } from "@/components/icons/AmalIcons";
 
 const translations = {
   ar: {
@@ -185,7 +186,7 @@ export default function DashboardPage() {
               }`}
             >
               <h1 className="text-2xl min-[380px]:text-3xl sm:text-4xl font-bold font-fredoka text-gray-800">
-                {t.welcomeBack}, <span className="text-[#007229]">{firstName}</span>! 👋
+                {t.welcomeBack}, <span className="text-[#007229]">{firstName}</span>! <WaveIcon className="inline-block h-[1.1em] w-[1.1em] align-[-0.15em]" />
               </h1>
               <p className="text-gray-600 text-sm min-[380px]:text-base sm:text-lg font-fredoka mt-1">{t.welcomeSubtitle}</p>
 
@@ -216,7 +217,7 @@ export default function DashboardPage() {
                 href="/boss-book"
                 className="inline-flex items-center gap-2 mt-5 ms-2 px-5 py-3 bg-white/85 hover:bg-white text-[#B45309] font-bold font-fredoka rounded-2xl shadow-sm transition-all hover:-translate-y-0.5"
               >
-                <span aria-hidden="true">🏆</span>
+                <BossTrophyIcon className="h-5 w-5 shrink-0" />
                 {isRtl ? "كتاب الوحوش" : "Boss Book"}
               </Link>
             </div>

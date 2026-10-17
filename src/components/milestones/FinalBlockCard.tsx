@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BoltIcon, RefreshIcon, WarningIcon } from "@/components/icons/AmalIcons";
 import { FitBoss } from "./Characters";
 import type { TeacherMilestoneRow } from "@/lib/milestones/types";
 
@@ -68,10 +69,20 @@ export default function FinalBlockCard({
               <button
                 onClick={onGenerate}
                 disabled={disabled || busy || !lastWeekNumber}
-                className="rounded-lg border border-violet-300 px-2.5 py-1 text-xs font-medium text-violet-800 hover:bg-violet-100 disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded-lg border border-violet-300 px-2.5 py-1 text-xs font-medium text-violet-800 hover:bg-violet-100 disabled:opacity-40"
                 title={disabled ? "Save the path first" : "Draft a question pool from the whole path"}
               >
-                {m ? "↻ Regenerate" : "⚡ Generate draft"}
+                {m ? (
+                  <>
+                    <RefreshIcon className="h-3 w-3" />
+                    Regenerate
+                  </>
+                ) : (
+                  <>
+                    <BoltIcon className="h-3 w-3" />
+                    Generate draft
+                  </>
+                )}
               </button>
             )
           )}
@@ -93,8 +104,9 @@ export default function FinalBlockCard({
         </div>
       </div>
       {stale && (
-        <p className="mt-2 text-xs font-medium text-violet-800">
-          ⚠ Drafted when the path ended at week {m.afterWeekNumber}; it now ends at week {lastWeekNumber}. Unpublish and regenerate to cover the new weeks.
+        <p className="mt-2 flex items-start gap-1 text-xs font-medium text-violet-800">
+          <WarningIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Drafted when the path ended at week {m.afterWeekNumber}; it now ends at week {lastWeekNumber}. Unpublish and regenerate to cover the new weeks.
         </p>
       )}
     </div>

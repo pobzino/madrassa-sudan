@@ -10,6 +10,7 @@ import {
 import { getIncorrectFeedback, getCorrectFeedback } from '@/lib/feedback-messages';
 import { useActivitySounds } from '@/hooks/useActivitySounds';
 import { ConfettiBurst } from '@/components/illustrations';
+import { Countable, countableFor } from '@/components/icons/Countables';
 import InteractionRenderer from '@/components/interactions/InteractionRenderer';
 import { slideToInteraction, answerToLegacy } from '@/lib/interactions/adapters';
 import { gradeInteraction } from '@/lib/interactions/grader';
@@ -117,7 +118,7 @@ export default function SlideInteractionOverlay({
       submit: 'إرسال',
       retry: 'حاول مرة أخرى',
       continue: 'متابعة',
-      correct: 'إجابة صحيحة! 🎉',
+      correct: 'إجابة صحيحة!',
       incorrect: 'ليست صحيحة بعد',
       tapHint: 'اضغط على كل عنصر حتى تنتهي من العد',
       counting: 'العد التفاعلي',
@@ -146,7 +147,7 @@ export default function SlideInteractionOverlay({
       submit: 'Submit',
       retry: 'Retry',
       continue: 'Continue',
-      correct: 'Correct! 🎉',
+      correct: 'Correct!',
       incorrect: 'Not quite yet',
       tapHint: 'Tap every item to complete the count',
       counting: 'Tap to Count',
@@ -174,7 +175,7 @@ export default function SlideInteractionOverlay({
 
   const prompt = getSlideInteractionPrompt(slide, language);
   const countTarget = Math.max(1, slide.interaction_count_target ?? 5);
-  const countToken = slide.interaction_visual_emoji?.trim() || '🍎';
+  const countKind = countableFor(slide.interaction_visual_emoji);
   const freeResponseLocked = reviewStatus === 'accepted' || reviewStatus === 'pending_review';
   const reviewBanner =
     slide.interaction_type === 'free_response' && (reviewStatus || reviewFeedback)
@@ -509,7 +510,7 @@ export default function SlideInteractionOverlay({
                       : 'border-amber-200 bg-white hover:border-amber-400 hover:bg-amber-50'
                   }`}
                 >
-                  <span className={tapped ? 'opacity-50' : ''}>{countToken}</span>
+                  <Countable kind={countKind} className={`h-[1em] w-[1em] ${tapped ? 'opacity-50' : ''}`} />
                 </button>
               );
             })}

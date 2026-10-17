@@ -1,5 +1,7 @@
 import "server-only";
 
+import { countableFor } from "@/lib/countables";
+
 import { createHash } from "node:crypto";
 import { gradeInteraction } from "@/lib/interactions/grader";
 import { compactTraceStrokes, isTraceStrokeList, MAX_TRACE_POINTS, MAX_TRACE_STROKES, traceLetterOf } from "@/lib/interactions/trace-letter";
@@ -103,6 +105,17 @@ export function isBattleInteractionType(value: unknown): value is BattleInteract
  * Validate and normalize an Interaction for battle use. Returns the clean
  * Interaction, or an error message for staff.
  */
+/** The same word on both sides of a pair (ignoring case, spacing and Arabic diacritics). */
+function sameText(a: string, b: string): boolean {
+  const norm = (text: string) => text.normalize("NFKC").replace(/[\u064B-\u0652\u0640]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  return norm(a) === norm(b);
+}
+
+/** Something a child can count, as one of our icon keys: a known emoji maps across; letters like "abc" become a star. */
+export function countableGlyph(value: string): string {
+  return countableFor(value);
+}
+
 export function validateBattleInteraction(value: unknown): { interaction: BattleInteraction } | { error: string } {
   if (!value || typeof value !== "object") return { error: "The item is missing." };
   const raw = value as Record<string, unknown>;
@@ -147,7 +160,7 @@ export function validateBattleInteraction(value: unknown): { interaction: Battle
       if (typeof target !== "number" || !Number.isInteger(target) || target < 1 || target > 12) return { error: "Tap-to-count needs a number from 1 to 12." };
       const keyError = checkTapTarget(prompt, target);
       if (keyError) return { error: keyError };
-      return { interaction: { type: "tap_to_count", prompt, target, emoji: cleanText(raw.emoji) || "⭐" } };
+      return { interaction: { type: "tap_to_count", prompt, target, emoji: countableGlyph(cleanText(raw.emoji)) } };
     }
     case "match_pairs": {
       const items = cleanList(raw.items);
@@ -156,8 +169,19 @@ export function validateBattleInteraction(value: unknown): { interaction: Battle
         return { error: "Match-the-pairs needs 2 to 5 pairs." };
       }
       if (!distinct(items.ar) || !distinct(targets.ar) || !distinct(items.en) || !distinct(targets.en)) return { error: "Each pair must be different." };
+      // "cat → cat" matches nothing: every partner must differ from its item in both languages.
+      if (items.ar.some((item, i) => sameText(item, targets.ar[i])) || items.en.some((item, i) => sameText(item, targets.en[i]))) {
+        return { error: "A pair must match a word to something else (its meaning, picture or partner), not to itself." };
+      }
       const pairError = checkPairs(items, targets);
       if (pairError) return { error: pairError };
+      // "Match each colour to its Arabic name" with English partners teaches nothing: the asked-for script must appear.
+      const asksArabic = /\barabic\b/i.test(prompt.en) || /العربي|بالعربية/.test(prompt.ar);
+      const asksEnglish = /\benglish\b/i.test(prompt.en) || /الإنجليزي|بالإنجليزية|الانجليزي/.test(prompt.ar);
+      const hasArabic = (list: string[]) => list.every((text) => /[\u0600-\u06FF]/.test(text));
+      const hasLatin = (list: string[]) => list.every((text) => /[A-Za-z]/.test(text));
+      if (asksArabic && !hasArabic(targets.en) && !hasArabic(items.en)) return { error: "The prompt asks for Arabic names, but no side of the pairs is in Arabic." };
+      if (asksEnglish && !hasLatin(targets.ar) && !hasLatin(items.ar)) return { error: "The prompt asks for English words, but no side of the pairs is in English." };
       return { interaction: { type: "match_pairs", prompt, items, targets } };
     }
     case "sequence_order": {

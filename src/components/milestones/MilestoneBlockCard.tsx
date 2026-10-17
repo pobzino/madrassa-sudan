@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BoltIcon, RefreshIcon, WarningIcon } from "@/components/icons/AmalIcons";
 import { FitBoss } from "./Characters";
 import type { TeacherMilestoneBlock } from "@/lib/milestones/types";
 
@@ -63,10 +64,20 @@ export default function MilestoneBlockCard({
               <button
                 onClick={onGenerate}
                 disabled={disabled || busy || !block}
-                className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-40"
                 title={disabled ? "Save the path first" : "Draft a question pool from these 4 weeks' lessons"}
               >
-                {m ? "↻ Regenerate" : "⚡ Generate draft"}
+                {m ? (
+                  <>
+                    <RefreshIcon className="h-3 w-3" />
+                    Regenerate
+                  </>
+                ) : (
+                  <>
+                    <BoltIcon className="h-3 w-3" />
+                    Generate draft
+                  </>
+                )}
               </button>
             )
           )}
@@ -88,8 +99,9 @@ export default function MilestoneBlockCard({
         </div>
       </div>
       {thin && (
-        <p className="mt-2 text-xs font-medium text-amber-800">
-          ⚠ {block.lessonCount - block.lessonsWithContent} of {block.lessonCount} lessons have no recorded slides yet, so the AI has less to draw questions from.
+        <p className="mt-2 flex items-start gap-1 text-xs font-medium text-amber-800">
+          <WarningIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {block.lessonCount - block.lessonsWithContent} of {block.lessonCount} lessons have no recorded slides yet, so the AI has less to draw questions from.
         </p>
       )}
     </div>

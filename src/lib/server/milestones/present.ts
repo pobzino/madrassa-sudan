@@ -1,3 +1,4 @@
+import { COUNTABLE_NAMES, countableFor } from "@/lib/countables";
 import "server-only";
 
 import {
@@ -96,20 +97,22 @@ export function servedItem(question: MilestonePoolQuestion, battleId: string): S
   return { interaction, perms: interactionPerms(battleId, question.id, interaction) };
 }
 
-/** A catch move always says what to tap: "Count 5 🍎!", or the question then "Tap that many ⭐!". */
+/** A catch move always says what to tap: "Count 5 apples!", or the question then "Tap that many stars!". */
 export function countInstruction(
   prompt: string,
   shown: { emoji: string; catch_count: number | null },
   lang: Lang,
 ): string {
   const { emoji, catch_count: count } = shown;
+  const kind = countableFor(emoji);
+  const name = (n: number) => (lang === "ar" ? COUNTABLE_NAMES[kind].ar : COUNTABLE_NAMES[kind].en[n === 1 ? 0 : 1]);
   if (count !== null) {
     // Keep a prompt that already gives the direction with its number ("Count 5 apples!").
     const digits = prompt.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
     if (new RegExp(`(^|\\D)${count}(\\D|$)`).test(digits)) return prompt;
-    return lang === "ar" ? `عُدّ ${count} ${emoji}!` : `Count ${count} ${emoji}!`;
+    return lang === "ar" ? `عُدّ ${count} ${name(count)}!` : `Count ${count} ${name(count)}!`;
   }
-  const tail = lang === "ar" ? `اضغط بعددها ${emoji}!` : `Tap that many ${emoji}!`;
+  const tail = lang === "ar" ? `اضغط بعدد ${name(2)}!` : `Tap that many ${name(2)}!`;
   return /that many|بعدد/i.test(prompt) ? prompt : `${prompt.trim()} ${tail}`;
 }
 

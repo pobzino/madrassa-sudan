@@ -12,6 +12,8 @@ import {
   generateMilestonePoolLesson,
   planMilestonePool,
   type GenerateMilestonePoolResult,
+  pollMilestoneLesson,
+  startMilestoneLesson,
 } from "@/lib/server/milestones/generate";
 import { MilestoneRouteError, type MilestoneAdminClient } from "@/lib/server/milestones/load";
 
@@ -187,6 +189,8 @@ export async function enqueueGenerationJob(requestUrl: string, jobId: string, fe
 export type GenerationStepBody =
   | { step: "plan" }
   | { step: "lesson"; lesson_id: string }
+  | { step: "lesson-start"; lesson_id: string }
+  | { step: "lesson-poll"; lesson_id: string; generation: string; verification?: string | null }
   | { step: "finish"; results: unknown[] };
 
 /**
@@ -203,6 +207,13 @@ export async function runGenerationStep(admin: MilestoneAdminClient, job: Genera
   }
   if (body.step === "lesson") {
     return generateMilestonePoolLesson({ ...scope, lessonId: body.lesson_id });
+  }
+  // The background path: the model works on OpenAI's side between these two short steps.
+  if (body.step === "lesson-start") {
+    return startMilestoneLesson({ ...scope, lessonId: body.lesson_id });
+  }
+  if (body.step === "lesson-poll") {
+    return pollMilestoneLesson({ ...scope, lessonId: body.lesson_id, generation: body.generation, verification: body.verification ?? null });
   }
   const result: GenerateMilestonePoolResult = await finishMilestonePool({
     ...scope,

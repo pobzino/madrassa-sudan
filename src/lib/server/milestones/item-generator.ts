@@ -3,10 +3,12 @@ import "server-only";
 import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
 import { slideToInteraction } from "@/lib/interactions/adapters";
 import { TRACE_LETTERS } from "@/lib/interactions/trace-letter";
-import { AI_MODEL, AI_MODEL_MILESTONE, getOpenAIClient } from "@/lib/ai/openai-client";
+import { AI_MODEL, AI_MODEL_MILESTONE, AI_MODEL_MILESTONE_BACKGROUND, getOpenAIClient } from "@/lib/ai/openai-client";
+import { startBackgroundCall } from "@/lib/server/milestones/background-model";
 import { isModelUnavailableError, MILESTONE_CALL_OPTIONS, timedMilestoneCall } from "@/lib/ai/model-errors";
 import type { BattleInteractionType } from "@/lib/milestones/types";
 import type { Difficulty } from "@/lib/measurement/types";
+import { COUNTABLE_KEYS } from "@/lib/countables";
 import type { Slide } from "@/lib/slides.types";
 import { INTERACTION_FIELD_RULES } from "@/lib/slide-generator-policy";
 import { MISSING_CONTEXT_PATTERN } from "@/lib/server/practice-generator";
@@ -31,13 +33,36 @@ export const ITEM_TYPE_MIX: readonly GeneratedItemType[] = [
   "tap_to_count",
 ];
 
+/** The rotation for a language subject: nothing to count or to put in number order; more words. */
+export const LANGUAGE_ITEM_TYPE_MIX: readonly GeneratedItemType[] = [
+  "choose_correct",
+  "match_pairs",
+  "fill_missing_word",
+  "true_false",
+  "sort_groups",
+  "fill_missing_word",
+  "choose_correct",
+  "match_pairs",
+];
+
+export type SubjectKind = "math" | "language" | "other";
+
+/** Maths counts; English and Arabic are language subjects; the rest get the general mix. */
+export function subjectKindOf(subjectName: string): SubjectKind {
+  const name = subjectName.toLowerCase();
+  if (/math|arith|رياضيات|حساب/.test(name)) return "math";
+  if (/english|arabic|إنجليزي|انجليزي|عربي|لغتي|لغة/.test(name)) return "language";
+  return "other";
+}
+
 /**
  * The types to ask for, spread across lessons. A lesson that teaches letters
  * also gets a trace_letter item (two when there is room), in place of the
- * mix's slot 1 (and slot 4).
+ * mix's slot 1 (and slot 4). A language subject never gets a counting item.
  */
-export function itemTypesForLesson(lessonIndex: number, count: number, teachesLetters = false): GeneratedItemType[] {
-  const types: GeneratedItemType[] = Array.from({ length: count }, (_, k) => ITEM_TYPE_MIX[(lessonIndex * count + k) % ITEM_TYPE_MIX.length]);
+export function itemTypesForLesson(lessonIndex: number, count: number, teachesLetters = false, subjectKind: SubjectKind = "other"): GeneratedItemType[] {
+  const mix = subjectKind === "language" ? LANGUAGE_ITEM_TYPE_MIX : ITEM_TYPE_MIX;
+  const types: GeneratedItemType[] = Array.from({ length: count }, (_, k) => mix[(lessonIndex * count + k) % mix.length]);
   if (teachesLetters) {
     if (count >= 2) types[1] = "trace_letter";
     if (count >= 7) types[4] = "trace_letter";
@@ -134,7 +159,7 @@ const ITEM_FIELDS = {
   interaction_correct_index: nullable({ type: "integer" }),
   interaction_true_false_answer: nullable({ type: "boolean" }),
   interaction_count_target: nullable({ type: "integer" }),
-  interaction_visual_emoji: nullable({ type: "string" }),
+  interaction_visual_emoji: nullable({ type: "string", enum: [...COUNTABLE_KEYS] }),
   interaction_items_ar: nullable(stringList),
   interaction_items_en: nullable(stringList),
   interaction_targets_ar: nullable(stringList),
@@ -202,10 +227,11 @@ const CHILD_RULES = [
   "- Every item must be self-contained: never refer to a picture, audio, slide, gesture, text above/below, or \"the lesson\".",
   "- Exactly ONE defensible answer per item; no trick wording, opinions or teacher-led activities. If you can argue for a second answer, rewrite the item.",
   "- Every prompt is a complete sentence a 7-year-old understands on its own, at most 12 words, and says exactly what to do.",
-  "- Arabic and English fields are separate, natural and meaning-aligned; never mix languages in one field.",
+  "- Arabic and English fields are separate, natural and meaning-aligned; never mix languages in one field. EXCEPTION: when the task itself is about the other language (\"Match each colour to its Arabic name\", \"Which word is 'cat' in English?\"), the words being asked for stay in that language in BOTH fields: the Arabic names are Arabic in interaction_targets_en as well as interaction_targets_ar.",
   "- English vocabulary, phonics and spelling items keep the English target words in Latin script in BOTH option/item lists.",
   "- Distractors are plausible but clearly wrong; all choices distinct; no \"all of the above\".",
   "- If a requested type cannot be made meaningfully from this lesson, use choose_correct for that item instead.",
+  "- Every item must teach or test something real. Never match a word to itself, never count letters or abstract things, never ask what the child can see on screen.",
   "- Set every field that does not apply to the item's type to null.",
 ];
 
@@ -218,9 +244,9 @@ export const TYPE_RULES: Record<GeneratedItemType, string> = {
   fill_missing_word:
     "fill_missing_word: the sentence shows a blank (___) and exactly one choice fits it.",
   tap_to_count:
-    "tap_to_count: the child taps that many things. Either a direction with the number (\"Count 5 apples!\", target 5, emoji 🍎) or a counting question with ONE whole-number answer from 1 to 12 (\"7 stars, take away 3. How many are left?\", target 4). The target is that number.",
+    `tap_to_count: the child taps that many things. Either a direction with the number (\"Count 5 apples!\", target 5, apple) or a counting question with ONE whole-number answer from 1 to 12 (\"7 stars, take away 3. How many are left?\", target 4). The target is that number. interaction_visual_emoji names the thing to count, one of: ${COUNTABLE_KEYS.join(", ")} (a real object, never letters).`,
   match_pairs:
-    "match_pairs: 2-4 pairs; every item has exactly one correct partner and no partner fits two items (no two sums with the same answer, no near-synonyms). List partners aligned by index.",
+    "match_pairs: 2-4 pairs; every item has exactly one correct partner and no partner fits two items (no two sums with the same answer, no near-synonyms). List partners aligned by index. A partner is never the item itself: in a language lesson pair a word with its meaning in the other language (cat → قطة), a definition (\"you write with it\" → pen), its opposite, its plural, or the sound it starts with; in maths pair a sum with its answer or a shape with its name.",
   sequence_order:
     "sequence_order: 3-5 SINGLE, directly comparable values: plain numbers (7), words compared by length or alphabet, or events in time. NEVER pairs, sums or compound values (\"3 and 7\", \"2 + 5\"). No ties and no repeated values: exactly one order under the stated rule. The prompt is complete, at most 10 words, and states the rule, e.g. \"Smallest to biggest!\" or \"Put the day in order: morning first!\". List the items in the correct order.",
   sort_groups:
@@ -229,10 +255,10 @@ export const TYPE_RULES: Record<GeneratedItemType, string> = {
     "trace_letter: the child traces ONE letter this lesson teaches (from LETTERS TAUGHT), shown to them as a guide. Set interaction_trace_script (\"ar\" for an Arabic letter, \"en\" for an English one), interaction_trace_letter to that single letter (Arabic: the plain letter, e.g. \"ب\"; English: in the case to trace, e.g. \"b\" or \"B\"), and interaction_trace_case (\"upper\" / \"lower\" for English, null for Arabic). The prompt asks the child to trace that letter and names it, e.g. \"Trace the letter b!\" / \"تتبّع حرف الباء ب!\". All option, item and answer fields are null.",
 };
 
-/** The default generator: one structured OpenAI call per lesson. */
-export const generateLessonItems: LessonItemGenerator = async (request) => {
-  const openai = getOpenAIClient();
-  if (!openai) throw new Error("OpenAI is not configured for Big Challenge generation.");
+const GENERATOR_SYSTEM = "You are a rigorous bilingual primary-education game designer. Accuracy and child clarity come first.";
+
+/** The writer's call for one lesson: system line, prompt and output schema (shared by the sync and background paths). */
+export function lessonItemsCall(request: LessonItemRequest): { system: string; prompt: string; schemaName: string; schema: Record<string, unknown> } {
   const plan = request.types.map((type, index) => `  ${index + 1}. ${type}`).join("\n");
   const prompt = `Write ${request.types.length} quick game items for a "Big Challenge" that reviews one lesson.
 
@@ -259,17 +285,42 @@ RULES FOR EACH TYPE
 ${[...new Set(request.types)].map((type) => `- ${TYPE_RULES[type]}`).join("\n")}
 
 Before answering, silently check every answer, translation and distractor.`;
+  return {
+    system: GENERATOR_SYSTEM,
+    prompt,
+    schemaName: "milestone_items",
+    schema: itemsSchema((request.skills ?? []).map((skill) => skill.key).concat(request.defaultSkillKey ?? [])),
+  };
+}
 
+/** The writer's answer, as raw items (validated by the caller). */
+export function parseLessonItems(text: string): unknown[] {
+  const parsed = JSON.parse(text) as { items?: unknown[] };
+  return Array.isArray(parsed.items) ? parsed.items : [];
+}
+
+/** Background path: start the writer on OpenAI's side and return the response id (see background-model.ts). */
+export async function startLessonItems(request: LessonItemRequest): Promise<string> {
+  const call = lessonItemsCall(request);
+  const { id } = await startBackgroundCall({ ...call, model: AI_MODEL_MILESTONE_BACKGROUND, effort: "medium", tag: "generate" });
+  return id;
+}
+
+/** The default generator: one structured OpenAI call per lesson, inside the request (the sync path). */
+export const generateLessonItems: LessonItemGenerator = async (request) => {
+  const openai = getOpenAIClient();
+  if (!openai) throw new Error("OpenAI is not configured for Big Challenge generation.");
+  const call = lessonItemsCall(request);
   const params: Omit<ChatCompletionCreateParamsNonStreaming, "model"> = {
     // Low effort: the blind verifier checks every item afterwards; gpt-5.4 at its default (medium) took 15-25 s per lesson.
     reasoning_effort: "low",
     messages: [
-      { role: "system", content: "You are a rigorous bilingual primary-education game designer. Accuracy and child clarity come first." },
-      { role: "user", content: prompt },
+      { role: "system", content: call.system },
+      { role: "user", content: call.prompt },
     ],
     response_format: {
       type: "json_schema",
-      json_schema: { name: "milestone_items", strict: true, schema: itemsSchema((request.skills ?? []).map((skill) => skill.key).concat(request.defaultSkillKey ?? [])) },
+      json_schema: { name: call.schemaName, strict: true, schema: call.schema },
     },
   };
   // The newest model first; an older one if this key cannot use it.
@@ -281,8 +332,7 @@ Before answering, silently check every answer, translation and distractor.`;
     });
   const text = completion.choices[0]?.message?.content;
   if (!text) throw new Error("Big Challenge generation returned no content.");
-  const parsed = JSON.parse(text) as { items?: unknown[] };
-  return Array.isArray(parsed.items) ? parsed.items : [];
+  return parseLessonItems(text);
 };
 
 /** Turn one flat generated item into a validated battle Interaction, or null. */

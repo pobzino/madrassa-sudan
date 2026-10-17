@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, School, Users } from "lucide-react";
+import { Check, Plus, School, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getCachedUser } from "@/lib/supabase/auth-cache";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
@@ -239,9 +239,16 @@ export default function TeacherCohortsPage() {
                     </div>
                     <button
                       onClick={() => copyJoinCode(cohort.join_code)}
-                      className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition-colors"
                     >
-                      {copiedCode === cohort.join_code ? "✓ Copied" : "Copy"}
+                      {copiedCode === cohort.join_code ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                          Copied
+                        </>
+                      ) : (
+                        "Copy"
+                      )}
                     </button>
                   </div>
                 </div>

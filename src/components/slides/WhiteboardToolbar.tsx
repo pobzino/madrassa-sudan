@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Pencil,
   Highlighter,
@@ -22,9 +22,11 @@ import {
   Undo2,
   Redo2,
   Trash2,
+  CircleHelp,
   type LucideIcon,
 } from 'lucide-react';
-import type { WhiteboardAPI, WhiteboardTool } from '@/hooks/useWhiteboard';
+import { CheckIcon, CrossIcon, HeartIcon, StarIcon, TapIcon, ThumbsUpIcon } from '@/components/icons/AmalIcons';
+import { STICKER_KEYS, type StickerKey, type WhiteboardAPI, type WhiteboardTool } from '@/hooks/useWhiteboard';
 
 interface WhiteboardToolbarProps {
   whiteboard: WhiteboardAPI;
@@ -41,7 +43,19 @@ const COLORS = [
   '#FFFFFF', // white
 ];
 
-const STICKERS = ['⭐', '❤️', '✅', '❌', '❓', '👆', '👍', '🔴', '🔵', '🟢'];
+// Picker previews for each sticker key; the canvas draws the same shapes.
+const STICKER_PREVIEWS: Record<StickerKey, { label: string; icon: ReactNode }> = {
+  star: { label: 'Star', icon: <StarIcon className="h-5 w-5" /> },
+  heart: { label: 'Heart', icon: <HeartIcon className="h-5 w-5" /> },
+  check: { label: 'Check', icon: <CheckIcon className="h-5 w-5" /> },
+  cross: { label: 'Cross', icon: <CrossIcon className="h-5 w-5" /> },
+  question: { label: 'Question', icon: <CircleHelp className="h-5 w-5 text-white" fill="#2563EB" /> },
+  tap: { label: 'Pointing hand', icon: <TapIcon className="h-5 w-5" /> },
+  thumbs_up: { label: 'Thumbs up', icon: <ThumbsUpIcon className="h-5 w-5" /> },
+  dot_red: { label: 'Red dot', icon: <Circle className="h-4 w-4 text-red-600" fill="currentColor" /> },
+  dot_blue: { label: 'Blue dot', icon: <Circle className="h-4 w-4 text-blue-600" fill="currentColor" /> },
+  dot_green: { label: 'Green dot', icon: <Circle className="h-4 w-4 text-green-600" fill="currentColor" /> },
+};
 
 const WIDTHS = [2, 4, 8];
 
@@ -87,17 +101,19 @@ export default function WhiteboardToolbar({ whiteboard }: WhiteboardToolbarProps
       {/* Sticker picker */}
       {settings.tool === 'sticker' && (
         <div className="flex gap-1 bg-black/80 backdrop-blur-md rounded-2xl px-3 py-2">
-          {STICKERS.map((emoji) => (
+          {STICKER_KEYS.map((key) => (
             <button
-              key={emoji}
-              onClick={() => whiteboard.setSelectedSticker(emoji)}
-              className={`w-9 h-9 rounded-xl text-lg flex items-center justify-center transition-all ${
-                settings.selectedSticker === emoji
+              key={key}
+              onClick={() => whiteboard.setSelectedSticker(key)}
+              title={STICKER_PREVIEWS[key].label}
+              aria-label={STICKER_PREVIEWS[key].label}
+              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                settings.selectedSticker === key
                   ? 'bg-white/30 scale-110'
                   : 'hover:bg-white/15'
               }`}
             >
-              {emoji}
+              {STICKER_PREVIEWS[key].icon}
             </button>
           ))}
         </div>

@@ -24,6 +24,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pause, Play, X } from 'lucide-react';
 import SimPlayer, { type SimPlayerHandle } from './SimPlayer';
 import VideoTimeline, { type TimelineCheckpointMarker } from './VideoTimeline';
 import { packClipSegments, useSimClipEditor } from '@/lib/sim-clip-editor';
@@ -979,7 +980,7 @@ export default function SimReviewModal(props: SimReviewModalProps) {
                 className="w-8 h-8 rounded-full hover:bg-gray-100 grid place-items-center text-gray-500 hover:text-gray-700"
                 aria-label="Close"
               >
-                ✕
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
           </div>
@@ -1008,7 +1009,11 @@ export default function SimReviewModal(props: SimReviewModalProps) {
               className="w-9 h-9 rounded-full bg-slate-900 text-white grid place-items-center hover:bg-slate-700 transition-colors"
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >
-              {isPlaying ? '⏸' : '▶'}
+              {isPlaying ? (
+                <Pause className="h-4 w-4" fill="currentColor" aria-hidden="true" />
+              ) : (
+                <Play className="h-4 w-4 rtl:-scale-x-100" fill="currentColor" aria-hidden="true" />
+              )}
             </button>
 
             <button

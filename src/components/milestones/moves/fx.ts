@@ -1,5 +1,6 @@
 "use client";
 
+import { setGlyph, sparkSvg, starSvg, tickSvg } from "./glyphs";
 import { prefersReducedMotion } from "../motion";
 
 /**
@@ -73,7 +74,7 @@ function spawn(at: Point, size: number, style: Partial<CSSStyleDeclaration> = {}
     opacity: "0",
     ...style,
   });
-  if (text) el.textContent = text;
+  setGlyph(el, text);
   root.appendChild(el);
   return el;
 }
@@ -156,7 +157,7 @@ function burst(at: Point, options: { count?: number; radius?: number; color?: st
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * Math.PI * 2 + 0.4;
     const size = options.size ?? (options.star ? 22 : 10);
-    const el = spawn(at, size, options.star ? { color: options.color ?? "#FDE68A", fontSize: `${size}px`, lineHeight: "1", textShadow: "0 0 8px rgba(245,158,11,0.95)" } : { borderRadius: "50%", background: options.color ?? "#FDE68A", boxShadow: "0 0 8px rgba(253,230,138,0.9)" }, options.star ? "★" : "");
+    const el = spawn(at, size, options.star ? {} : { borderRadius: "50%", background: options.color ?? "#FDE68A", boxShadow: "0 0 8px rgba(253,230,138,0.9)" }, options.star ? starSvg(size, options.color ?? "#FDE68A") : "");
     if (!el) continue;
     run(el, [
       { transform: "translate(0, 0) scale(0.4)", opacity: 1 },
@@ -292,7 +293,7 @@ export function volley(glyph: string, count: number, from: DOMRect | null, to: D
   const stagger = Math.min(30, 160 / count);
   for (let i = 0; i < count; i++) {
     const glyphSize = Math.round(Math.max(30, from.width * 0.2));
-    const el = spawn(a, glyphSize * 1.3, { fontSize: `${glyphSize}px`, lineHeight: "1", filter: "drop-shadow(0 0 8px rgba(253,230,138,0.9))" }, glyph);
+    const el = spawn(a, glyphSize * 1.3, { filter: "drop-shadow(0 0 8px rgba(253,230,138,0.9))" }, glyph);
     if (!el) continue;
     const wobble = ((i % 3) - 1) * 24;
     run(el, [
@@ -446,7 +447,7 @@ export function labelsFire(spots: Array<HTMLElement | null>, target: DOMRect | n
 /* --------------------------------------------------------- block shields */
 
 /** Block turns: the shield forms in front of the owl in the move's own motif. */
-export function formShield(motif: ShieldMotif, owl: DOMRect | null, glyph = "⭐") {
+export function formShield(motif: ShieldMotif, owl: DOMRect | null, glyph = starSvg(22)) {
   if (!owl) return;
   // A frame later: the dome and the boss's wind-up start first.
   requestAnimationFrame(() => buildShield(motif, owl, glyph));
@@ -461,7 +462,7 @@ function buildShield(motif: ShieldMotif, owl: DOMRect, glyph: string) {
   const part = (style: Partial<CSSStyleDeclaration>, text = "") => {
     const el = document.createElement("div");
     Object.assign(el.style, { position: "absolute", display: "grid", placeItems: "center", ...style });
-    if (text) el.textContent = text;
+    setGlyph(el, text);
     root.appendChild(el);
     return el;
   };
@@ -477,7 +478,7 @@ function buildShield(motif: ShieldMotif, owl: DOMRect, glyph: string) {
       ring({ border: "3px solid rgba(110,231,183,0.8)", boxShadow: "0 0 18px rgba(110,231,183,0.7)" });
       for (let i = 0; i < 8; i++) {
         const angle = (i / 8) * Math.PI * 2;
-        part({ left: `${50 + Math.cos(angle) * 46}%`, top: `${50 + Math.sin(angle) * 46}%`, width: "28px", height: "28px", margin: "-14px", fontSize: "22px", lineHeight: "1" }, glyph);
+        part({ left: `${50 + Math.cos(angle) * 46}%`, top: `${50 + Math.sin(angle) * 46}%`, width: "28px", height: "28px", margin: "-14px" }, glyph);
       }
       break;
     case "runes":
@@ -501,11 +502,11 @@ function buildShield(motif: ShieldMotif, owl: DOMRect, glyph: string) {
       break;
     case "scroll":
       ring({ border: `5px dashed ${AMBER}`, background: "radial-gradient(circle, rgba(254,243,199,0.65), rgba(254,243,199,0.15) 70%)", boxShadow: "0 0 22px rgba(253,230,138,0.9)" });
-      part({ inset: "0", color: "#B45309", fontSize: `${Math.round(size * 0.4)}px`, lineHeight: "1" }, "✦");
+      part({ inset: "0" }, sparkSvg(Math.round(size * 0.4), "#B45309"));
       break;
     case "stamp":
       part({ inset: "6%", background: AMBER, clipPath: "polygon(50% 0,61% 12%,77% 7%,79% 23%,95% 28%,88% 43%,100% 55%,86% 64%,90% 80%,73% 81%,65% 96%,50% 87%,35% 96%,27% 81%,10% 80%,14% 64%,0 55%,12% 43%,5% 28%,21% 23%,23% 7%,39% 12%)", boxShadow: "0 0 18px rgba(245,158,11,0.9)" });
-      part({ inset: "0", color: "#3B1D00", fontSize: `${Math.round(size * 0.32)}px`, fontWeight: "700", lineHeight: "1" }, "✓");
+      part({ inset: "0" }, tickSvg(Math.round(size * 0.32)));
       break;
     case "rune": // trace_letter: the traced letter glows in a ring of light
       ring({ border: "5px solid #A7F3D0", background: "radial-gradient(circle, rgba(236,253,245,0.05) 42%, rgba(110,231,183,0.32) 68%, rgba(16,185,129,0.5))", boxShadow: "0 0 26px rgba(52,211,153,0.9), inset 0 0 18px rgba(167,243,208,0.7)" });

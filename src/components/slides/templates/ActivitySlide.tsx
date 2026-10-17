@@ -19,8 +19,10 @@ import {
   ArrowUpDown,
   FolderInput,
   Target,
+  Check,
   type LucideIcon,
 } from 'lucide-react';
+import { Countable, countableFor } from '@/components/icons/Countables';
 
 interface Props {
   slide: Slide;
@@ -286,7 +288,7 @@ function InteractionPreview({ slide, language, showAnswer = false }: Props) {
               )}
               {option}
               {showAnswer && i === slide.interaction_correct_index && (
-                <span className="ml-1 font-bold">✓</span>
+                <Check className="ml-1 inline h-4 w-4" strokeWidth={3} aria-hidden="true" />
               )}
             </span>
           ))}
@@ -437,9 +439,7 @@ function InteractionPreview({ slide, language, showAnswer = false }: Props) {
         <div className="flex flex-col items-center gap-2">
           <div className="flex flex-wrap justify-center gap-1.5">
             {Array.from({ length: Math.min(slide.interaction_count_target ?? 5, 8) }).map((_, i) => (
-              <span key={i} className="text-2xl sm:text-3xl drop-shadow-sm">
-                {slide.interaction_visual_emoji?.trim() || '🍎'}
-              </span>
+              <Countable key={i} kind={countableFor(slide.interaction_visual_emoji)} className="h-8 w-8 drop-shadow-sm sm:h-9 sm:w-9" />
             ))}
           </div>
           <span className={`text-xs font-bold px-3 py-1 rounded-full ${

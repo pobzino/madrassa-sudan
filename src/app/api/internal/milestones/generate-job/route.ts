@@ -17,6 +17,8 @@ export const maxDuration = 300;
 const BodySchema = z.discriminatedUnion("step", [
   z.object({ jobId: z.string().uuid(), step: z.literal("plan") }),
   z.object({ jobId: z.string().uuid(), step: z.literal("lesson"), lesson_id: z.string().uuid() }),
+  z.object({ jobId: z.string().uuid(), step: z.literal("lesson-start"), lesson_id: z.string().uuid() }),
+  z.object({ jobId: z.string().uuid(), step: z.literal("lesson-poll"), lesson_id: z.string().uuid(), generation: z.string().min(1).max(200), verification: z.string().min(1).max(200).nullable().optional() }),
   z.object({ jobId: z.string().uuid(), step: z.literal("finish"), results: z.array(z.unknown()).max(64) }),
 ]);
 

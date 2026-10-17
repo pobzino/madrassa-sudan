@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Check, X } from 'lucide-react'
 import { Database } from '@/lib/database.types'
 
 type QuestionType = Database['public']['Enums']['question_type']
@@ -222,15 +223,16 @@ export default function QuestionBuilder({
                     }`}
                     title="Mark as correct"
                   >
-                    ✓
+                    <Check className="h-4 w-4" aria-hidden="true" />
                   </button>
                   {options.length > 2 && (
                     <button
                       type="button"
                       onClick={() => removeOption(index)}
                       className="px-3 py-2 bg-red-100 text-red-600 rounded-md hover:bg-red-200"
+                      title="Remove option"
                     >
-                      ✕
+                      <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                   )}
                 </div>
@@ -246,9 +248,9 @@ export default function QuestionBuilder({
               </button>
             )}
             <p className="text-xs text-gray-500 mt-2">
-              انقر على ✓ لتحديد الإجابة الصحيحة
+              انقر على <Check className="inline h-3.5 w-3.5 align-text-bottom" aria-label="علامة الصح" /> لتحديد الإجابة الصحيحة
               <br />
-              Click ✓ to mark the correct answer
+              Click <Check className="inline h-3.5 w-3.5 align-text-bottom" aria-label="the check mark" /> to mark the correct answer
             </p>
           </div>
         )}

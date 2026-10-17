@@ -98,8 +98,8 @@ describe("placement note copy", () => {
       }
       expect(push.url).toBe("/progress");
     }
-    expect(placementDoneMessage("en", { childName: "Sara", bossName: "Numbo", subjectName: "Maths" })).toMatchObject({ title: "Sara met Numbo! 🎉", body: "Amal now knows where to start in Maths." });
-    expect(placementDoneMessage("ar", { childName: "سارة", bossName: "نُمبو", subjectName: "الرياضيات" })).toMatchObject({ title: "تعرّف سارة على نُمبو! 🎉", body: "صار آمال يعرف من أين يبدأ في الرياضيات." });
+    expect(placementDoneMessage("en", { childName: "Sara", bossName: "Numbo", subjectName: "Maths" })).toMatchObject({ title: "Sara met Numbo!", body: "Amal now knows where to start in Maths." });
+    expect(placementDoneMessage("ar", { childName: "سارة", bossName: "نُمبو", subjectName: "الرياضيات" })).toMatchObject({ title: "تعرّف سارة على نُمبو!", body: "صار آمال يعرف من أين يبدأ في الرياضيات." });
     const email = placementDoneEmail({ language: "en", name: null, siteUrl: "https://amal.test", childName: "Sara", bossName: "Numbo", subjectName: "Maths" });
     expect(email.text).toContain("See Sara's skills");
     expect(email.html).toContain("https://amal.test/progress");

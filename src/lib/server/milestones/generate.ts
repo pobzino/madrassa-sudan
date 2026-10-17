@@ -26,10 +26,16 @@ import {
   generateLessonItems,
   itemTypesForLesson,
   lessonLetters,
+  parseLessonItems,
   promptKey,
+  startLessonItems,
+  subjectKindOf,
   type LessonItemGenerator,
+  type LessonItemRequest,
+  type LessonLetters,
 } from "@/lib/server/milestones/item-generator";
-import { applyVerdicts, mergeTags, verifyItemsWithModel, type DroppedItem, type ItemVerdict, type ItemVerifier } from "@/lib/server/milestones/item-verifier";
+import { applyVerdicts, mergeTags, parseVerdicts, startVerify, verifyItemsWithModel, type DroppedItem, type ItemVerdict, type ItemVerifier, type VerifyRequest } from "@/lib/server/milestones/item-verifier";
+import { pollBackgroundCall } from "@/lib/server/milestones/background-model";
 import { MilestoneRouteError, type MilestoneAdminClient } from "@/lib/server/milestones/load";
 import { assessableSkills, defaultSkillForLesson, loadSubjectSkills } from "@/lib/server/measurement/skills";
 
@@ -391,43 +397,51 @@ async function loadPoolPlan(
   };
 }
 
-/** 2-3b. One lesson: generate (a mix of interaction types), deterministic checks, then the blind verifier. */
-async function runLesson(plan: PoolPlan, lessonIndex: number, generate: LessonItemGenerator, verify: ItemVerifier): Promise<LessonPoolResult> {
+/** 2. The writer's request for one lesson (its deck text, the types to ask for, the tags). */
+function lessonRequest(plan: PoolPlan, lessonIndex: number): { request: LessonItemRequest; letters: LessonLetters | null; defaultSkillKey: string; lessonTitleEn: string } {
   const source = plan.sources[lessonIndex];
   const lesson = plan.lessonById.get(source.lessonId);
   const lessonTitleEn = lesson?.title_en || lesson?.title_ar || "Lesson";
   const lessonTitleAr = lesson?.title_ar || lesson?.title_en || "درس";
   const defaultSkillKey = plan.defaultSkillOf(source.lessonId);
-  const { subjectName, gradeLevel, promptSkills, skillKeys, requested } = plan;
+  const { subjectName, gradeLevel, promptSkills, requested } = plan;
   // A lesson that teaches letters also gets a letter to trace.
   const letters = lessonLetters({ subjectName, lessonTitleAr, lessonTitleEn, content: source.content });
-  const raw = await generate({
+  const request: LessonItemRequest = {
     content: source.content,
     lessonTitleAr,
     lessonTitleEn,
     subjectName,
     gradeLevel,
-    types: itemTypesForLesson(lessonIndex, requested, Boolean(letters)),
+    types: itemTypesForLesson(lessonIndex, requested, Boolean(letters), subjectKindOf(subjectName)),
     letters,
     skills: promptSkills,
     defaultSkillKey,
     ...(plan.spansPath ? { difficultyPlan: placementDifficultyPlan(lessonIndex, requested) } : {}),
-  });
+  };
+  return { request, letters, defaultSkillKey, lessonTitleEn };
+}
 
-  // 3a. Deterministic checks: structure, keys that must add up, one order, quality rules. Tags never drop an item.
-  const checked: Array<{ interaction: BattleInteraction; skillKey: string | null; difficulty: Difficulty | null }> = [];
+type CheckedItem = { interaction: BattleInteraction; skillKey: string | null; difficulty: Difficulty | null };
+
+/** 3a. Deterministic checks: structure, keys that must add up, one order, quality rules. Tags never drop an item. */
+function checkLessonItems(plan: PoolPlan, lessonIndex: number, raw: unknown[]): { checked: CheckedItem[]; dropped: DroppedItem[]; verifyRequest: VerifyRequest } {
+  const { letters, defaultSkillKey, lessonTitleEn } = lessonRequest(plan, lessonIndex);
+  const { skillKeys, subjectName, gradeLevel, promptSkills } = plan;
+  const checked: CheckedItem[] = [];
   const dropped: DroppedItem[] = [];
   for (const item of raw) {
     const result = checkGeneratedItem(item, { letters, skillKeys: skillKeys.length ? skillKeys : undefined, defaultSkillKey });
     if ("interaction" in result) checked.push({ interaction: result.interaction, skillKey: result.skillKey ?? defaultSkillKey, difficulty: result.difficulty ?? null });
     else dropped.push({ prompt: result.prompt, reasons: [`check: ${result.reason}`] });
   }
+  const verifyRequest: VerifyRequest = { items: checked.map((item) => item.interaction), lessonTitleEn, subjectName, gradeLevel, skills: promptSkills };
+  return { checked, dropped, verifyRequest };
+}
 
-  // 3b. The verifier answers each surviving item blind and flags the doubtful ones (and estimates difficulty).
+/** 3b. The verifier's verdicts settle the lesson: flagged items go, the rest keep their merged tags. */
+function settleLesson(plan: PoolPlan, lessonIndex: number, checked: CheckedItem[], dropped: DroppedItem[], verdicts: ItemVerdict[]): LessonPoolResult {
   const interactions = checked.map((item) => item.interaction);
-  const request = { items: interactions, lessonTitleEn, subjectName, gradeLevel, skills: promptSkills };
-  // One try: a slow verifier must not push the lesson step past the function time limit (the page retries the lesson).
-  const verdicts: ItemVerdict[] = await verify(request);
   const verified = applyVerdicts(interactions, verdicts);
   const verdictByIndex = new Map(verdicts.map((verdict) => [verdict.index, verdict]));
   const keptSet = new Set(verified.kept);
@@ -435,7 +449,16 @@ async function runLesson(plan: PoolPlan, lessonIndex: number, generate: LessonIt
     .map((item, index) => ({ item, verdict: verdictByIndex.get(index) }))
     .filter(({ item }) => keptSet.has(item.interaction))
     .map(({ item, verdict }) => ({ interaction: item.interaction, ...mergeTags(item, verdict, { preferGenerated: plan.spansPath }) }));
-  return { lessonId: source.lessonId, kept, dropped: [...dropped, ...verified.dropped] };
+  return { lessonId: plan.sources[lessonIndex].lessonId, kept, dropped: [...dropped, ...verified.dropped] };
+}
+
+/** 2-3b in one go (the sync path: local dev, tests, the page without a background worker). */
+async function runLesson(plan: PoolPlan, lessonIndex: number, generate: LessonItemGenerator, verify: ItemVerifier): Promise<LessonPoolResult> {
+  const raw = await generate(lessonRequest(plan, lessonIndex).request);
+  const { checked, dropped, verifyRequest } = checkLessonItems(plan, lessonIndex, raw);
+  // One try: a slow verifier must not push the lesson step past the function time limit (the page retries the lesson).
+  const verdicts: ItemVerdict[] = await verify(verifyRequest);
+  return settleLesson(plan, lessonIndex, checked, dropped, verdicts);
 }
 
 /** 3c-5. Assemble the pool from the lessons' results and write it (a draft). */
@@ -674,10 +697,56 @@ export async function generateMilestonePoolLesson(
   args: PlanArgs & { lessonId: string; generate?: LessonItemGenerator; verify?: ItemVerifier },
 ): Promise<SignedLessonPoolResult> {
   const plan = await loadPoolPlan(args, { decks: "one", lessonId: args.lessonId });
-  const lessonIndex = plan.sources.findIndex((source) => source.lessonId === args.lessonId);
-  if (lessonIndex < 0) throw new MilestoneRouteError("block_incomplete", 400, "That lesson is not part of this Big Challenge.");
+  const lessonIndex = lessonIndexOf(plan, args.lessonId);
   const result = await runLesson(plan, lessonIndex, args.generate ?? generateLessonItems, args.verify ?? verifyItemsWithModel);
   return { ...result, signature: lessonSignature(plan, result) };
+}
+
+/** The lesson's place in the plan, or a clear error. */
+function lessonIndexOf(plan: PoolPlan, lessonId: string): number {
+  const lessonIndex = plan.sources.findIndex((source) => source.lessonId === lessonId);
+  if (lessonIndex < 0) throw new MilestoneRouteError("block_incomplete", 400, "That lesson is not part of this Big Challenge.");
+  return lessonIndex;
+}
+
+/** Step 2 (background): hand the lesson to the writer on OpenAI's side; returns at once with the response id. */
+export async function startMilestoneLesson(args: PlanArgs & { lessonId: string }): Promise<{ lessonId: string; generation: string }> {
+  const plan = await loadPoolPlan(args, { decks: "one", lessonId: args.lessonId });
+  const lessonIndex = lessonIndexOf(plan, args.lessonId);
+  const generation = await startLessonItems(lessonRequest(plan, lessonIndex).request);
+  return { lessonId: args.lessonId, generation };
+}
+
+export type LessonPollResult =
+  | { status: "pending"; verification: string | null }
+  | { status: "done"; result: SignedLessonPoolResult };
+
+/**
+ * Step 2 (background), polled: once the writer is done its items are checked
+ * and handed to the verifier (its id comes back for the next poll); once the
+ * verifier is done the lesson settles. Nothing is carried between polls but
+ * response ids: the items are re-read from OpenAI each time, so the result
+ * can be signed like the sync path's.
+ */
+export async function pollMilestoneLesson(
+  args: PlanArgs & { lessonId: string; generation: string; verification?: string | null },
+): Promise<LessonPollResult> {
+  const plan = await loadPoolPlan(args, { decks: "one", lessonId: args.lessonId });
+  const lessonIndex = lessonIndexOf(plan, args.lessonId);
+  const generated = await pollBackgroundCall(args.generation, "generate");
+  if (generated.status === "pending") return { status: "pending", verification: args.verification ?? null };
+  if (generated.status === "failed") throw new MilestoneRouteError("generation_failed", 502, generated.error);
+  const { checked, dropped, verifyRequest } = checkLessonItems(plan, lessonIndex, parseLessonItems(generated.text));
+  if (!checked.length) {
+    const result = settleLesson(plan, lessonIndex, checked, dropped, []);
+    return { status: "done", result: { ...result, signature: lessonSignature(plan, result) } };
+  }
+  if (!args.verification) return { status: "pending", verification: await startVerify(verifyRequest) };
+  const verified = await pollBackgroundCall(args.verification, "verify");
+  if (verified.status === "pending") return { status: "pending", verification: args.verification };
+  if (verified.status === "failed") throw new MilestoneRouteError("generation_failed", 502, verified.error);
+  const result = settleLesson(plan, lessonIndex, checked, dropped, parseVerdicts(verified.text));
+  return { status: "done", result: { ...result, signature: lessonSignature(plan, result) } };
 }
 
 /** Step 3: assemble and write the pool from the signed lesson results. A missing or unsigned lesson counts as failed. */

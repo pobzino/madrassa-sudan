@@ -24,6 +24,7 @@ import HomeworkCompletionCard from "@/components/homework/HomeworkCompletionCard
 import { PRACTICE_PASSING_SCORE } from "@/lib/practice";
 import TraceLetterInput from "@/components/interactions/TraceLetterInput";
 import type { TraceLetterConfig } from "@/lib/interactions/types";
+import { BulbIcon, SparkleIcon } from "@/components/icons/AmalIcons";
 
 const translations = {
   ar: {
@@ -53,11 +54,11 @@ const translations = {
     feedback: "ملاحظات المعلم",
     correct: "صحيح",
     incorrect: "خطأ",
-    correctBig: "أحسنت! 🎉",
+    correctBig: "أحسنت!",
     correctSub: "إجابة صحيحة! واصل التقدم!",
     tryAgainBig: "ليست صحيحة تماماً",
     tryAgainSub: "حاول مرة أخرى — أنت تستطيع!",
-    allCorrect: "ممتاز! كل الإجابات صحيحة! 🌟",
+    allCorrect: "ممتاز! كل الإجابات صحيحة!",
     keepTrying: "محاولة جيدة — لنحصل عليها كلها!",
     correctOf: "صحيحة",
     tryAgain: "حاول مرة أخرى",
@@ -115,11 +116,11 @@ const translations = {
     feedback: "Teacher Feedback",
     correct: "Correct",
     incorrect: "Incorrect",
-    correctBig: "Correct! 🎉",
+    correctBig: "Correct!",
     correctSub: "You got it! Keep going!",
     tryAgainBig: "Not quite!",
     tryAgainSub: "Have another go — you can do it!",
-    allCorrect: "Perfect! All correct! 🌟",
+    allCorrect: "Perfect! All correct!",
     keepTrying: "Good try — let's get them all!",
     correctOf: "correct",
     tryAgain: "Try Again",
@@ -854,6 +855,7 @@ export default function HomeworkAssignmentPage() {
                 }`}
               >
                 {homeworkMastered ? t.allCorrect : t.keepTrying}
+                {homeworkMastered && <SparkleIcon className="inline-block h-[1.1em] w-[1.1em] align-[-0.15em] ms-1" />}
               </p>
               <p className={`text-sm ${homeworkMastered ? "text-emerald-700" : "text-amber-700"}`}>
                 {correctCount}/{questions.length} {t.correctOf}
@@ -939,7 +941,7 @@ export default function HomeworkAssignmentPage() {
                       }}
                       className="flex items-center gap-2 text-sm text-amber-600 hover:text-amber-700 font-semibold font-fredoka transition-colors"
                     >
-                      <span>💡</span>
+                      <BulbIcon className="h-4 w-4 shrink-0" />
                       {(revealedHints[currentQ.id] || 0) === 0 ? t.askOwlHint : t.hintCost}
                     </button>
                   ) : (revealedHints[currentQ.id] || 0) > 0 ? (

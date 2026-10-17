@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { LeafIcon, PencilIcon, SproutIcon, StarIcon, TreeIcon } from "@/components/icons/AmalIcons";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import type { LevelBand } from "@/lib/measurement/types";
 import { FitBoss } from "@/components/milestones/Characters";
 import { bossName } from "@/components/milestones/copy";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import type { LearnerProgressResponse, LearnerProgressSummary, SkillChip, SubjectGrowth } from "@/lib/measurement/types";
 import { bossForSubject } from "@/lib/milestones/rules";
-import { BAND_LABELS, BAND_ORDER, bandLabel, bandStep, chipLabel, chipOverflow, formatInt, moreLabel, type UiLang } from "./format";
+import { BAND_ORDER, bandLabel, bandStep, chipLabel, chipOverflow, formatInt, moreLabel, type UiLang } from "./format";
 import { PROGRESS_COPY } from "./impactCopy";
 
 type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
@@ -77,7 +80,7 @@ export default function SkillsProgressCard({
   return (
     <section className="mb-8 overflow-hidden rounded-2xl border border-amber-100 bg-gradient-to-b from-amber-50 to-white shadow-sm" aria-busy={state === "loading"}>
       <div className="flex items-center gap-3 border-b border-amber-100 px-6 py-4">
-        <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-100 text-xl" aria-hidden="true">⭐</span>
+        <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-100" aria-hidden="true"><StarIcon className="h-6 w-6" /></span>
         <h2 className="text-xl font-semibold font-fredoka text-gray-900">{useYou ? t.you : t.title(name)}</h2>
       </div>
       <div className="space-y-5 p-6">
@@ -164,7 +167,7 @@ function Chips({ chips, lang, tone }: { chips: SkillChip[]; lang: UiLang; tone: 
             tone === "learned" ? "bg-amber-100 text-amber-900" : "bg-white text-gray-700 ring-1 ring-gray-200"
           }`}
         >
-          <span aria-hidden="true">{tone === "learned" ? "⭐" : "✏️"}</span>
+          {tone === "learned" ? <StarIcon className="h-4 w-4" /> : <PencilIcon className="h-4 w-4" />}
           {chipLabel(chip, lang)}
         </li>
       ))}
@@ -186,27 +189,27 @@ function SubjectJourney({ subject, lang }: { subject: SubjectGrowth; lang: UiLan
   const from = subject.baseline?.band ?? null;
   const to = subject.current?.band ?? null;
   const reached = to ?? from;
-  const arrow = lang === "ar" ? "←" : "→";
+  const Arrow = lang === "ar" ? ArrowLeft : ArrowRight;
   return (
     <li className="rounded-2xl bg-white p-4 ring-1 ring-amber-100">
       <p className="text-sm font-semibold text-gray-900">{name}</p>
       <p className="mt-1 flex flex-wrap items-center gap-1.5 font-fredoka text-base font-semibold text-gray-800">
         {from && (
           <span className="inline-flex items-center gap-1">
-            <span aria-hidden="true">{BAND_LABELS[from].icon}</span>
+            <BandIcon band={from} />
             {bandLabel(from, lang)}
           </span>
         )}
-        {from && to && <span className="text-gray-400" aria-hidden="true">{arrow}</span>}
+        {from && to && <Arrow className="h-4 w-4 text-gray-400" aria-hidden="true" />}
         {to && (
           <span className="inline-flex items-center gap-1 text-emerald-800">
-            <span aria-hidden="true">{BAND_LABELS[to].icon}</span>
+            <BandIcon band={to} />
             {bandLabel(to, lang)}
           </span>
         )}
       </p>
       {reached && (
-        <div className="mt-2 flex gap-1" role="img" aria-label={from && to ? `${bandLabel(from, lang)} ${arrow} ${bandLabel(to, lang)}` : bandLabel(reached, lang)}>
+        <div className="mt-2 flex gap-1" role="img" aria-label={from && to ? `${bandLabel(from, lang)} → ${bandLabel(to, lang)}` : bandLabel(reached, lang)}>
           {BAND_ORDER.map((band) => (
             <span key={band} className={`h-2 flex-1 rounded-full ${bandStep(band) <= bandStep(reached) ? "bg-emerald-500" : "bg-gray-100"}`} />
           ))}
@@ -218,4 +221,12 @@ function SubjectJourney({ subject, lang }: { subject: SubjectGrowth; lang: UiLan
       </p>
     </li>
   );
+}
+
+/** The growth meter's three steps: a sprout, a leaf, a tree. */
+function BandIcon({ band }: { band: LevelBand }) {
+  const className = "h-[1.1em] w-[1.1em] shrink-0";
+  if (band === "confident") return <TreeIcon className={className} />;
+  if (band === "on_the_way") return <LeafIcon className={className} />;
+  return <SproutIcon className={className} />;
 }

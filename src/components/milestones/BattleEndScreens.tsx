@@ -6,6 +6,7 @@ import ConfettiBurst from "@/components/practice/ConfettiBurst";
 import LearnerAvatarIcon from "@/components/learners/LearnerAvatarIcon";
 import type { LearnerAvatar } from "@/lib/learners/types";
 import type { BossKey, Lang, MilestoneIntroResponse } from "@/lib/milestones/types";
+import { PartyIcon } from "@/components/icons/AmalIcons";
 import { FitBoss, FitOwl } from "./Characters";
 import { bossName, formatNumber, MILESTONE_COPY } from "./copy";
 
@@ -73,7 +74,11 @@ export function VictoryScreen({
               {t.seeCertificate}
             </Link>
           ) : null}
-          {firstPass && <p className="text-lg font-semibold">{t.toldGrownUp}</p>}
+          {firstPass && (
+            <p className="inline-flex items-center justify-center gap-1.5 text-lg font-semibold">
+              {t.toldGrownUp} <PartyIcon className="inline-block h-[1.1em] w-[1.1em] align-[-0.15em]" />
+            </p>
+          )}
           <Link href="/lessons" className={TEXT_LINK}>{t.backToLessons}</Link>
         </div>
       </div>

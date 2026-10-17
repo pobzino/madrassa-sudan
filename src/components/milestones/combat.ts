@@ -1,5 +1,6 @@
 "use client";
 
+import { starSvg } from "./moves/glyphs";
 import { gsap } from "gsap";
 import type { BossHandle, OwlHandle } from "@/components/characters";
 import { prefersReducedMotion } from "./motion";
@@ -374,8 +375,8 @@ export class Combat {
       const star = i % 3 === 0;
       const size = star ? radius * 0.32 : radius * (0.1 + Math.random() * 0.08);
       const el = this.el(at, size, star
-        ? { color: colors[0], fontSize: `${size}px`, lineHeight: "1", textShadow: "0 0 8px rgba(245,158,11,0.95)" }
-        : { borderRadius: "50%", background: colors[i % colors.length], boxShadow: `0 0 ${size}px ${colors[0]}` }, star ? "★" : "");
+        ? {}
+        : { borderRadius: "50%", background: colors[i % colors.length], boxShadow: `0 0 ${size}px ${colors[0]}` }, star ? starSvg(size, colors[0]) : "");
       this.once(el, [
         { transform: "translate(0, 0) scale(1.2)", opacity: 1 },
         { transform: `translate(${Math.cos(angle) * dist}px, ${Math.sin(angle) * dist}px) scale(0.9)`, opacity: 1, offset: 0.55 },

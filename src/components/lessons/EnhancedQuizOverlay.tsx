@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useLanguage } from '@/contexts/LanguageContext'
 import type { QuizSettings } from '@/lib/database.types'
 import { getIncorrectFeedback, getCorrectFeedback } from '@/lib/feedback-messages'
+import { Check } from 'lucide-react'
+import { CheckIcon, CrossIcon, StrongIcon } from '@/components/icons/AmalIcons'
 
 interface QuizQuestion {
   id: string
@@ -44,7 +46,7 @@ export default function EnhancedQuizOverlay({
     ar: {
       question: 'سؤال',
       submit: 'إرسال',
-      correct: 'إجابة صحيحة! 🎉',
+      correct: 'إجابة صحيحة!',
       incorrect: 'إجابة خاطئة',
       tryAgain: 'حاول مرة أخرى',
       continue: 'متابعة',
@@ -57,7 +59,7 @@ export default function EnhancedQuizOverlay({
     en: {
       question: 'Question',
       submit: 'Submit',
-      correct: 'Correct! 🎉',
+      correct: 'Correct!',
       incorrect: 'Incorrect',
       tryAgain: 'Try Again',
       continue: 'Continue',
@@ -162,7 +164,7 @@ export default function EnhancedQuizOverlay({
                 : 'border-gray-300 hover:border-green-300 bg-white'
             }`}
           >
-            ✓ {text.true}
+            <CheckIcon className="inline-block h-[1.1em] w-[1.1em] align-[-0.15em] me-1" />{text.true}
           </button>
           <button
             onClick={() => setSelectedAnswer('false')}
@@ -172,7 +174,7 @@ export default function EnhancedQuizOverlay({
                 : 'border-gray-300 hover:border-red-300 bg-white'
             }`}
           >
-            ✗ {text.false}
+            <CrossIcon className="inline-block h-[1.1em] w-[1.1em] align-[-0.15em] me-1" />{text.false}
           </button>
         </div>
       )
@@ -202,12 +204,12 @@ export default function EnhancedQuizOverlay({
       <div className={`p-6 rounded-xl ${isCorrect ? 'bg-green-50 border-2 border-green-500' : 'bg-amber-50 border-2 border-amber-400'}`}>
         <div className="flex items-center gap-3 mb-4">
           {isCorrect ? (
-            <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center text-white text-2xl">
-              ✓
+            <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center text-white">
+              <Check className="h-7 w-7" strokeWidth={3} aria-hidden="true" />
             </div>
           ) : (
-            <div className="w-12 h-12 rounded-full bg-amber-400 flex items-center justify-center text-white text-2xl">
-              💪
+            <div className="w-12 h-12 rounded-full bg-amber-400 flex items-center justify-center text-white">
+              <StrongIcon className="h-7 w-7" />
             </div>
           )}
           <div>

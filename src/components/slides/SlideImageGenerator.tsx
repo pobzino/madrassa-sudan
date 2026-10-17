@@ -1,7 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { Slide } from '@/lib/slides.types';
+import { SparkleIcon } from '@/components/icons/AmalIcons';
 
 interface Props {
   slide: Slide;
@@ -124,8 +126,15 @@ export default function SlideImageGenerator({ slide, lessonId, onUpdate }: Props
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-emerald-800"
       >
-        <span>Generate with AI ✨</span>
-        <span className="text-emerald-600">{open ? '▴' : '▾'}</span>
+        <span className="inline-flex items-center gap-1.5">
+          Generate with AI
+          <SparkleIcon className="h-3.5 w-3.5" />
+        </span>
+        {open ? (
+          <ChevronUp className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+        )}
       </button>
 
       {open && (

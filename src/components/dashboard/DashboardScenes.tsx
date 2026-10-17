@@ -2,6 +2,15 @@
 
 import { OwlWaving, OwlMath, OwlEnglish } from '@/components/illustrations';
 
+// A four-point spark drawn as a path, so the scenes never lean on a text glyph.
+function Spark({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M12 2l1.9 7.1L21 12l-7.1 2.9L12 22l-1.9-7.1L3 12l7.1-2.9L12 2Z" />
+    </svg>
+  );
+}
+
 function sunRayCoordinate(angle: number, radius: number, axis: 'x' | 'y') {
   const trig = axis === 'x' ? Math.cos(angle) : Math.sin(angle);
   return Number((32 + trig * radius).toFixed(4));
@@ -133,8 +142,8 @@ export function MeadowBackdrop() {
 export function TeacherScene({ className = '' }: { className?: string }) {
   return (
     <div className={`relative ${className}`} aria-hidden>
-      <span className="absolute top-1 left-[8%] text-white/70 text-xl">✦</span>
-      <span className="absolute bottom-8 right-[6%] text-white/60 text-sm">✦</span>
+      <Spark className="absolute top-1 left-[8%] h-5 w-5 text-white/70" />
+      <Spark className="absolute bottom-8 right-[6%] h-3.5 w-3.5 text-white/60" />
 
       {/* whiteboard on an easel */}
       <svg className="absolute left-0 bottom-0 w-[64%]" viewBox="0 0 200 200" fill="none">
@@ -191,8 +200,8 @@ export function StudyOwl({ className = '' }: { className?: string }) {
         <rect x="9" y="36" width="18" height="6" rx="2" fill="#e89a62" />
       </svg>
       {/* sparkles */}
-      <span className="absolute top-0 left-[14%] text-amber-300 text-sm">✦</span>
-      <span className="absolute top-2 right-[26%] text-amber-200 text-xs">✦</span>
+      <Spark className="absolute top-0 left-[14%] h-3.5 w-3.5 text-amber-300" />
+      <Spark className="absolute top-2 right-[26%] h-3 w-3 text-amber-200" />
     </div>
   );
 }
@@ -204,8 +213,8 @@ export function StepGraphic({ variant, className = '' }: { variant: 'account' | 
   return (
     <div className={`relative flex items-center justify-center ${className}`} aria-hidden>
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[82%] h-[82%] rounded-full" style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.6), rgba(255,255,255,0) 70%)' }} />
-      <span className="absolute top-1 left-[22%] text-amber-300 text-sm">✦</span>
-      <span className="absolute top-4 right-[22%] text-amber-200 text-xs">✦</span>
+      <Spark className="absolute top-1 left-[22%] h-3.5 w-3.5 text-amber-300" />
+      <Spark className="absolute top-4 right-[22%] h-3 w-3 text-amber-200" />
 
       {variant === 'account' && (
         <svg className="relative w-[62%]" viewBox="0 0 104 74" fill="none">

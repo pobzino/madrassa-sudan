@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useTeacherGuard } from "@/lib/teacher/useTeacherGuard";
-import { ClipboardList } from "lucide-react";
+import { Check, ClipboardList, Minus, X } from "lucide-react";
 import { SubmissionQueue } from "@/components/homework/HomeworkList";
 import { GradingInterface } from "@/components/homework/GradingInterface";
 import type { SubmissionQueueItem, RubricCriterion } from "@/lib/homework.types";
@@ -407,7 +407,12 @@ export default function HomeworkSubmissionsPage() {
                             <div className="min-w-0">
                               <p className="text-sm font-medium text-gray-900">
                                 Attempt {a.attempt_number}
-                                {mastered && <span className="ml-2 text-emerald-600">✓ 100%</span>}
+                                {mastered && (
+                                  <span className="ml-2 inline-flex items-center gap-0.5 text-emerald-600">
+                                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                                    100%
+                                  </span>
+                                )}
                               </p>
                               <p className="text-xs text-gray-500">
                                 {new Date(a.submitted_at).toLocaleString()}
@@ -446,11 +451,11 @@ export default function HomeworkSubmissionsPage() {
                               return (
                                 <div key={ans.question_id} className="flex items-start gap-2 text-sm">
                                   {ans.is_correct === true ? (
-                                    <span className="text-emerald-600 mt-0.5">✓</span>
+                                    <Check className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" aria-label="Correct" />
                                   ) : ans.is_correct === false ? (
-                                    <span className="text-red-500 mt-0.5">✗</span>
+                                    <X className="h-4 w-4 shrink-0 text-red-500 mt-0.5" aria-label="Incorrect" />
                                   ) : (
-                                    <span className="text-gray-300 mt-0.5">•</span>
+                                    <Minus className="h-4 w-4 shrink-0 text-gray-300 mt-0.5" aria-label="Not graded" />
                                   )}
                                   <div className="min-w-0">
                                     <p className="text-gray-700 truncate">{qText}</p>

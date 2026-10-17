@@ -44,9 +44,74 @@ export interface Stroke {
   text?: string;
   position?: Point;
   fontSize?: number;
-  // Sticker
+  // Sticker: a `StickerKey` drawn from `STICKER_SHAPES`. Older recordings
+  // carry a platform emoji here instead; those still render as text.
   emoji?: string;
 }
+
+// ── Stickers ──
+//
+// The stamps a teacher can drop on the board, drawn from the app's own icon
+// paths (24-unit squares, same drawings as `AmalIcons`) so nothing on the
+// canvas depends on the viewer's emoji font.
+export const STICKER_KEYS = [
+  'star',
+  'heart',
+  'check',
+  'cross',
+  'question',
+  'tap',
+  'thumbs_up',
+  'dot_red',
+  'dot_blue',
+  'dot_green',
+] as const;
+export type StickerKey = (typeof STICKER_KEYS)[number];
+
+export function isStickerKey(value: string): value is StickerKey {
+  return (STICKER_KEYS as readonly string[]).includes(value);
+}
+
+interface StickerPath {
+  d: string;
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+}
+
+const INK = '#1a1a1a';
+const CIRCLE_D = 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18Z';
+
+export const STICKER_SHAPES: Record<StickerKey, StickerPath[]> = {
+  star: [{ d: 'M12 3l2.7 5.6 6.1.8-4.5 4.2 1.2 6.1L12 16.8 6.5 19.7l1.2-6.1L3.2 9.4l6.1-.8L12 3Z', fill: '#F59E0B', stroke: INK }],
+  heart: [
+    { d: 'M12 20.5 4.5 13A4.3 4.3 0 0 1 10.6 6.9L12 8.3l1.4-1.4A4.3 4.3 0 0 1 19.5 13L12 20.5Z', fill: '#D21034', stroke: '#D21034' },
+    { d: 'M7.2 9.3c.4-1 1.1-1.6 2-1.9', stroke: '#fff', strokeWidth: 1.5 },
+  ],
+  check: [
+    { d: CIRCLE_D, fill: '#007229' },
+    { d: 'M7.5 12.5l3 3 6-6.5', stroke: '#fff', strokeWidth: 2.6 },
+  ],
+  cross: [
+    { d: CIRCLE_D, fill: '#D21034' },
+    { d: 'M8.5 8.5l7 7M15.5 8.5l-7 7', stroke: '#fff', strokeWidth: 2.6 },
+  ],
+  question: [
+    { d: CIRCLE_D, fill: '#2563EB' },
+    { d: 'M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01', stroke: '#fff', strokeWidth: 2.4 },
+  ],
+  tap: [
+    { d: 'M10 13V5.5a1.5 1.5 0 0 1 3 0V11l3.6.7a2.5 2.5 0 0 1 2 2.8l-.7 4.1A3 3 0 0 1 15 21h-3.4a4 4 0 0 1-3.2-1.6L5.6 15.6A1.4 1.4 0 0 1 7.8 14L10 16v-3Z', fill: '#FBD5A6', stroke: INK },
+    { d: 'M8 4.5A4.5 4.5 0 0 1 14.5 3M7 7.5a3 3 0 0 1 1-2', stroke: '#F59E0B' },
+  ],
+  thumbs_up: [
+    { d: 'M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3Z', fill: '#007229', stroke: INK },
+    { d: 'M7 11l4.2-7.6a1.8 1.8 0 0 1 3.3 1.3L13.8 9H19a2 2 0 0 1 2 2.4l-1.4 6.8A2 2 0 0 1 17.6 20H7v-9Z', fill: '#FBD5A6', stroke: INK },
+  ],
+  dot_red: [{ d: 'M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16Z', fill: '#DC2626' }],
+  dot_blue: [{ d: 'M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16Z', fill: '#2563EB' }],
+  dot_green: [{ d: 'M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16Z', fill: '#16A34A' }],
+};
 
 export interface WhiteboardSettings {
   tool: WhiteboardTool;
@@ -133,7 +198,7 @@ const DEFAULT_SETTINGS: WhiteboardSettings = {
   color: '#000000',
   strokeWidth: 4,
   fontSize: 32,
-  selectedSticker: '⭐',
+  selectedSticker: 'star',
 };
 
 // ── Helpers ──
@@ -415,9 +480,34 @@ export function renderStrokeToCtx(ctx: CanvasRenderingContext2D, stroke: Stroke,
 
   if (stroke.tool === 'sticker' && stroke.position && stroke.emoji) {
     const size = (stroke.fontSize || 48) * Math.min(scaleX, scaleY);
-    ctx.font = `${size}px sans-serif`;
-    ctx.textBaseline = 'top';
-    ctx.fillText(stroke.emoji, stroke.position.x * scaleX, stroke.position.y * scaleY);
+    const x = stroke.position.x * scaleX;
+    const y = stroke.position.y * scaleY;
+    if (isStickerKey(stroke.emoji) && typeof Path2D !== 'undefined') {
+      // Our own sticker drawing, scaled from its 24-unit box to the font size.
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(size / 24, size / 24);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      for (const part of STICKER_SHAPES[stroke.emoji]) {
+        const path = new Path2D(part.d);
+        if (part.fill) {
+          ctx.fillStyle = part.fill;
+          ctx.fill(path);
+        }
+        if (part.stroke) {
+          ctx.strokeStyle = part.stroke;
+          ctx.lineWidth = part.strokeWidth ?? 2;
+          ctx.stroke(path);
+        }
+      }
+      ctx.restore();
+    } else {
+      // Legacy recordings stored a platform emoji; keep replaying them as text.
+      ctx.font = `${size}px sans-serif`;
+      ctx.textBaseline = 'top';
+      ctx.fillText(stroke.emoji, x, y);
+    }
   }
 
   ctx.restore();

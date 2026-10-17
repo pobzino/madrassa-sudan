@@ -8,6 +8,7 @@ import { useLearnerContext } from "@/contexts/LearnerContext";
 import { OwlThinking, OwlStreak } from "@/components/illustrations";
 import { MeadowBackdrop, StudyOwl } from "@/components/dashboard/DashboardScenes";
 import { StudentHomeworkList } from "@/components/homework/HomeworkList";
+import { FlameIcon, TrophyIcon } from "@/components/icons/AmalIcons";
 import type { HomeworkAssignment, HomeworkSubmission, Subject } from "@/lib/database.types";
 import { getCachedUser, getLastAuthStatus } from "@/lib/supabase/auth-cache";
 
@@ -208,8 +209,8 @@ export default function HomeworkPage() {
           <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
             <OwlStreak className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0" />
             <div>
-              <p className="text-base sm:text-lg font-bold font-fredoka text-amber-700">
-                🔥 {streakDays} {t.streak}
+              <p className="inline-flex items-center gap-1.5 text-base sm:text-lg font-bold font-fredoka text-amber-700">
+                <FlameIcon className="h-[1.1em] w-[1.1em] shrink-0" /> {streakDays} {t.streak}
               </p>
               <p className="text-xs sm:text-sm text-amber-600">{t.streakKeepGoing}</p>
             </div>
@@ -234,7 +235,7 @@ export default function HomeworkPage() {
                 </div>
               );
             })}
-            <span className="ml-2 text-2xl sm:text-3xl" title="Streak goal">{streakReached >= streakGoal ? "🏆" : "🏆"}</span>
+            <TrophyIcon title="Streak goal" className={`ml-2 h-7 w-7 sm:h-8 sm:w-8 shrink-0 ${streakReached >= streakGoal ? "" : "opacity-60"}`} />
           </div>
         </div>
       )}
