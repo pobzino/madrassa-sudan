@@ -118,10 +118,14 @@ export function countableGlyph(value: string): string {
 
 const EMOJI = /\p{Extended_Pictographic}|[←-⇿⬀-⯿]/u;
 
+/** How many blanks (runs of two or more underscores) a fill-the-word sentence shows. */
+function blankCount(text: string): number {
+  return (text.match(/_{2,}/g) ?? []).length;
+}
+
 /** True when any text of the item (prompt, options, pairs, groups...) contains an emoji or arrow symbol. The `emoji` key itself is data and is excluded. */
 export function hasEmojiText(raw: Record<string, unknown>): boolean {
-  const { emoji: _emoji, interaction_visual_emoji: _visual, ...rest } = raw;
-  return EMOJI.test(JSON.stringify(rest));
+  return EMOJI.test(JSON.stringify(raw, (key, value: unknown) => (key === "emoji" || key === "interaction_visual_emoji" ? undefined : value)));
 }
 
 export function validateBattleInteraction(value: unknown): { interaction: BattleInteraction } | { error: string } {
@@ -150,6 +154,7 @@ export function validateBattleInteraction(value: unknown): { interaction: Battle
       }
       return { interaction: { type: "true_false", prompt, answer: raw.answer } };
     case "fill_missing_word": {
+      if (blankCount(prompt.ar) > 1 || blankCount(prompt.en) > 1) return { error: "Fill-the-word shows one blank (___), not several." };
       if (raw.free_entry === true) {
         const expected = cleanBilingual(raw.expected_answer);
         if (!expected.ar) return { error: "Fill-the-word needs the missing word." };

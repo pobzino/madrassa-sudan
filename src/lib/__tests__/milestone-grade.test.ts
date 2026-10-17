@@ -76,6 +76,10 @@ describe("validateBattleInteraction", () => {
     expect(validateBattleInteraction({ ...INTERACTIONS.tap_to_count, emoji: "🍎" })).toHaveProperty("interaction");
   });
 
+  it("refuses fill-the-word sentences with several blanks", () => {
+    expect(validateBattleInteraction({ ...INTERACTIONS.fill_missing_word, prompt: { ar: "أكمل: ___ ثم ___", en: "Complete: ___; then ___!" } })).toHaveProperty("error");
+  });
+
   it("refuses broken keys", () => {
     expect(validateBattleInteraction({ ...INTERACTIONS.choose_correct, correct_index: 9 })).toHaveProperty("error");
     expect(validateBattleInteraction({ ...INTERACTIONS.sort_groups, solution_map: [0, 1] })).toHaveProperty("error");
