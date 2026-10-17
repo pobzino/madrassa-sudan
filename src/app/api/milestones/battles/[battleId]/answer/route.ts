@@ -30,7 +30,7 @@ import {
 import { notifyMilestonePassed } from "@/lib/server/milestones/notify";
 import { notifyPlacementDone } from "@/lib/server/measurement/notify";
 import { placementOutcome } from "@/lib/measurement/rules";
-import { battleHpPercent, heartsLeftFor, servedItem, toBattleQuestion, type MilestoneBattleRow } from "@/lib/server/milestones/present";
+import { bigMoveFor, battleHpPercent, heartsLeftFor, servedItem, toBattleQuestion, type MilestoneBattleRow } from "@/lib/server/milestones/present";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +39,8 @@ const AnswerSchema = z.object({
   answer: z.object({ type: z.string() }).passthrough().optional(),
   choiceIndex: z.number().int().min(0).max(15).optional(),
   text: z.string().max(MAX_TEXT_ANSWER_LENGTH).optional(),
+  // The Big Move's clock ran out: no answer, recorded as wrong.
+  timedOut: z.boolean().optional(),
   lang: z.enum(["ar", "en"]).optional(),
 });
 
@@ -69,7 +71,7 @@ async function placementSubjectId(admin: MilestoneAdminClient, milestoneId: stri
 async function nextQuestion(admin: MilestoneAdminClient, battle: MilestoneBattleRow, lang: "ar" | "en"): Promise<BattleQuestion | null> {
   if (battle.status !== "active") return null;
   const loaded = await loadBattleQuestion(admin, battle, battle.answered_count);
-  return loaded ? toBattleQuestion(loaded.question, battle.id, battle.answered_count, lang, loaded.languageMode) : null;
+  return loaded ? toBattleQuestion(loaded.question, battle.id, battle.answered_count, lang, loaded.languageMode, { bigMove: bigMoveFor(battle, battle.answered_count) }) : null;
 }
 
 async function conflict(admin: MilestoneAdminClient, code: "battle_finished" | "position_mismatch", battleId: string, lang: "ar" | "en") {
@@ -119,6 +121,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
   const parsed = AnswerSchema.safeParse(await body);
   if (!parsed.success) return milestoneError("invalid_answer", 400);
   const { position, answer, choiceIndex, text } = parsed.data;
+  const timedOut = parsed.data.timedOut === true;
   const lang = parseLang(parsed.data.lang);
 
   try {
@@ -141,10 +144,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
       if (!loaded) return milestoneError("service_unavailable", 503);
       const item = servedItem(loaded.question, battle.id);
       if (!item) return milestoneError("service_unavailable", 503);
-      const graded = gradeBattleAnswer(item.interaction, item.perms, { answer, choiceIndex, text });
-      isCorrect = graded.isCorrect;
-      ({ choiceIndex: canonicalIndex, responseText } = storedAnswer(graded.canonical));
-      canonicalAnswer = graded.canonical;
+      if (timedOut) {
+        // The Big Move landed: a wrong answer with nothing chosen.
+        isCorrect = false;
+        responseText = "timed_out";
+      } else {
+        const graded = gradeBattleAnswer(item.interaction, item.perms, { answer, choiceIndex, text });
+        isCorrect = graded.isCorrect;
+        ({ choiceIndex: canonicalIndex, responseText } = storedAnswer(graded.canonical));
+        canonicalAnswer = graded.canonical;
+      }
     }
 
     const { data, error } = await admin.rpc("record_milestone_answer", {
@@ -189,13 +198,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
         next: finished
           ? null
           : !recorded.replay && nextLoaded && row.answered_count === battle.answered_count + 1
-            ? toBattleQuestion(nextLoaded.question, row.id, row.answered_count, lang, nextLoaded.languageMode)
+            ? toBattleQuestion(nextLoaded.question, row.id, row.answered_count, lang, nextLoaded.languageMode, { bigMove: bigMoveFor(row, row.answered_count) })
             : await nextQuestion(admin, row, lang),
         certificateId: null,
         firstPass: placementFirst,
         stars: null,
         combo: 0,
         phase: battlePhase(hp),
+      ...(timedOut && !isReplay ? { timedOut: true } : {}),
+        ...(timedOut && !isReplay ? { timedOut: true } : {}),
         neutral: true,
         placement: row.status === "completed" ? placementOutcome(recorded.placement_skills ?? [], subjectId ?? "") : null,
       };
@@ -224,13 +235,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
       next: finished
         ? null
         : !recorded.replay && nextLoaded && row.answered_count === battle.answered_count + 1
-          ? toBattleQuestion(nextLoaded.question, row.id, row.answered_count, lang, nextLoaded.languageMode)
+          ? toBattleQuestion(nextLoaded.question, row.id, row.answered_count, lang, nextLoaded.languageMode, { bigMove: bigMoveFor(row, row.answered_count) })
           : await nextQuestion(admin, row, lang),
       certificateId,
       firstPass,
       stars: passed ? starsFor(row.wrong_count, row.hearts_total) : null,
       combo: recorded.replay ? await loadBattleCombo(admin, row.id) : comboFrom([...prior, recorded.is_correct === true]),
       phase: battlePhase(hp),
+      ...(timedOut && !isReplay ? { timedOut: true } : {}),
     };
     return milestoneJson(result);
   } catch (error) {

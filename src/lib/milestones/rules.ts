@@ -173,9 +173,17 @@ export function battleTurn(position: number): BattleTurn {
   return position % 2 === 0 ? "attack" : "block";
 }
 
-/** Phase 1 while the boss has more than half its health, else phase 2. */
+/** Phase 1 above two thirds of the boss's health, 2 above one third, 3 (enraged) below. */
 export function battlePhase(hpPercent: number): BattlePhase {
-  return hpPercent > 50 ? 1 : 2;
+  return hpPercent > 66 ? 1 : hpPercent > 33 ? 2 : 3;
+}
+
+/** The boss's Big Move: every 4th question of a Big Challenge (positions 3, 7, 11 ...), never a placement's. */
+export const BIG_MOVE_EVERY = 4;
+/** How long a child has to answer a Big Move once it is on screen (generous: they are children). */
+export const BIG_MOVE_SECONDS = 30;
+export function isBigMovePosition(position: number, questionCount: number): boolean {
+  return position >= 0 && position < questionCount && (position + 1) % BIG_MOVE_EVERY === 0;
 }
 
 /** The current consecutive-correct streak from answers in position order. */

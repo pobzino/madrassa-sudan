@@ -25,6 +25,7 @@ import {
 } from "@/lib/milestones/types";
 import { battleInteractionFor, owlHintFor, type InteractionSourceRow } from "@/lib/server/milestones/interactions";
 import {
+  bigMoveFor,
   battleStateFromRow,
   servedItem,
   toBattleQuestion,
@@ -375,7 +376,7 @@ export async function battleStateFor(admin: MilestoneAdminClient, battle: Milest
   if (battle.status === "active") {
     const loaded = await loadBattleQuestion(admin, battle, battle.answered_count);
     if (loaded) {
-      question = toBattleQuestion(loaded.question, battle.id, battle.answered_count, lang, loaded.languageMode);
+      question = toBattleQuestion(loaded.question, battle.id, battle.answered_count, lang, loaded.languageMode, { bigMove: bigMoveFor(battle, battle.answered_count) });
       const item = servedItem(loaded.question, battle.id);
       if (item && battle.hint_used_question_index === battle.answered_count) {
         hint = owlHintFor(battle.id, loaded.question.id, item.interaction, item.perms);

@@ -34,9 +34,13 @@ export interface Feedback {
   final: boolean;
   /** Placement: every answer gets the same happy reaction (correct is always true here). */
   neutral?: boolean;
+  /** The Big Move's clock ran out (always a miss). */
+  timedOut?: boolean;
 }
 
 export interface PendingAnswer {
+  /** The Big Move's clock ran out: sent with no answer. */
+  timedOut?: boolean;
   position: number;
   answer: InteractionAnswer;
   /** Where the move launched from (an orb, a button), for the effects. */
@@ -228,7 +232,12 @@ export function useBattleSession({
       setInFlight(true);
       setNetError(false);
       try {
-        const result = await milestoneApi.answer(fetcher, battle.battleId, answerRequestFor(question, answer.answer), lang);
+        const result = await milestoneApi.answer(
+          fetcher,
+          battle.battleId,
+          answer.timedOut ? { position: answer.position, timedOut: true } : answerRequestFor(question, answer.answer),
+          lang,
+        );
         setInFlight(false);
         const nextFeedback: Feedback = answerFeedback(battle, question, result);
         setBattle(applyResult(battle, result));
@@ -269,6 +278,12 @@ export function useBattleSession({
     },
     [feedback, inFlight, pending, question, send]
   );
+
+  /** The Big Move's clock ran out: the question is answered as a miss. */
+  const timeout = useCallback(() => {
+    if (!question || !question.bigMove || inFlight || feedback || pending) return;
+    void send({ position: question.position, answer: { type: question.interaction.type } as InteractionAnswer, origin: null, timedOut: true });
+  }, [feedback, inFlight, pending, question, send]);
 
   const retry = useCallback(() => {
     if (pending && !inFlight) void send(pending);
@@ -320,6 +335,7 @@ export function useBattleSession({
     restarting,
     lockedMessage,
     submit,
+    timeout,
     retry,
     askOwl,
     advance,

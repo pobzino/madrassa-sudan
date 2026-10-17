@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { RotateCw, Volume2, VolumeX, X } from "lucide-react";
 import { OwlHead } from "@/components/illustrations";
@@ -25,6 +25,9 @@ import BattleMove, { moveOwnsPrompt } from "./moves/BattleMove";
 import { hintFits, promptOf } from "./moves/contract";
 import { BOSS_TAUNTS, REMATCH_TAUNT, RESUME_TAUNT, SKIN_PARTS, signatureFor } from "./signatures";
 import { superReady, turnOf } from "./turns";
+import { BossLinePicker, type BossLineKind } from "./bossLines";
+import { speakBossLine, stopBossVoice } from "./bossVoice";
+import { BIG_MOVE_SECONDS } from "@/lib/milestones/rules";
 import type { EntranceKind, Feedback, PendingAnswer } from "./useBattleSession";
 import { battleGeometry, layoutModeFor, type BattleLayoutMode } from "./geometry";
 import { clearFx } from "./moves/fx";
@@ -101,6 +104,8 @@ interface BattleSceneProps {
   lang: Lang;
   bossKey: BossKey;
   level: number;
+  /** The path's final boss ("The Grand Challenge"): crowned, dusk arena, a bigger finish. */
+  final?: boolean;
   battle: BattleState;
   question: BattleQuestion;
   feedback: Feedback | null;
@@ -119,6 +124,8 @@ interface BattleSceneProps {
   fetcher: Fetcher;
   onEntranceEnd: () => void;
   onSubmit: (answer: InteractionAnswer, origin: DOMRect | null) => void;
+  /** The Big Move's clock ran out. */
+  onTimeout: () => void;
   onAskOwl: () => void;
   onRetry: () => void;
   onNext: () => void;
@@ -133,7 +140,10 @@ export default function BattleScene(props: BattleSceneProps) {
   const prompt = promptOf(question, lang);
   // Placement ("Meet your first boss"): no tries, no hint, no combo; every answer gets the same happy reaction.
   const placement = battle.kind === "placement";
-  const powered = !placement && battle.phase === 2;
+  const powered = !placement && battle.phase >= 2;
+  const enraged = !placement && battle.phase === 3;
+  const final = props.final === true && !placement;
+  const bigMove = !placement && question.bigMove === true;
   const signature = signatureFor(bossKey, interaction.type, turn);
 
   // The layout for this screen (phone or desktop) and the question's length.
@@ -173,6 +183,29 @@ export default function BattleScene(props: BattleSceneProps) {
   // Signature effects fly in a layer of their own: clear it when the battle closes.
   useEffect(() => () => clearFx(), []);
   const previousPhase = useRef(battle.phase);
+  // What the boss says: one line set per battle, no repeats until a kind is used up; a resume says the same things.
+  const lines = useMemo(() => new BossLinePicker(bossKey, battle.battleId), [bossKey, battle.battleId]);
+  const [said, setSaid] = useState<{ key: number; text: string } | null>(null);
+  const speak = useCallback(
+    (kind: BossLineKind, delay = 0) => {
+      const id = window.setTimeout(() => {
+        const line = lines.next(kind, lang);
+        setSaid({ key: Date.now(), text: line.text });
+        void speakBossLine(line, lang, muted).then((ms) => void bossRef.current?.play("talk", { durationMs: Math.min(4000, ms) }));
+      }, delay);
+      return () => window.clearTimeout(id);
+    },
+    [lines, lang, muted],
+  );
+  useEffect(() => {
+    if (!said) return;
+    const id = window.setTimeout(() => setSaid(null), 2800);
+    return () => window.clearTimeout(id);
+  }, [said]);
+  useEffect(() => () => stopBossVoice(), []);
+  // The Big Move's clock: seconds left, counting once the child can answer.
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const timedOutRef = useRef(false);
 
   // The entrance THUD shakes the characters only (never the HUD or the bubble), a small fast jitter.
   const shake = useCallback((strength: number, delay = 0) => {
@@ -259,20 +292,69 @@ export default function BattleScene(props: BattleSceneProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStep, entrance]);
 
+  // ------------------------------------------------------------ the Big Move clock
+  const clockKey = bigMove && !entrance && !feedback && !launched && !pending && isOnline ? `${question.questionId}:${question.position}` : null;
+  useEffect(() => {
+    if (!clockKey) {
+      setSecondsLeft(null);
+      return;
+    }
+    // A moment to read before the clock shows, then one tick a second.
+    const started = Date.now() + 3000;
+    setSecondsLeft(BIG_MOVE_SECONDS);
+    const tick = window.setInterval(() => {
+      const left = Math.ceil((started + BIG_MOVE_SECONDS * 1000 - Date.now()) / 1000);
+      if (left <= 0) {
+        window.clearInterval(tick);
+        setSecondsLeft(0);
+        if (!timedOutRef.current) {
+          timedOutRef.current = true;
+          props.onTimeout();
+        }
+        return;
+      }
+      setSecondsLeft(Math.min(BIG_MOVE_SECONDS, left));
+    }, 250);
+    return () => window.clearInterval(tick);
+    // Restarts only when the question (or the chance to answer it) changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clockKey]);
+
   // ------------------------------------------------------------ turn flash
   const turnKey = !entrance ? `${question.questionId}:${question.position}` : null;
   useEffect(() => {
     if (!turnKey) return;
     const grumpy = !placement && battle.phase === 2 && previousPhase.current === 1;
+    const rage = !placement && battle.phase === 3 && previousPhase.current < 3;
     previousPhase.current = battle.phase;
+    const cancels: Array<() => void> = [];
     const id = window.setTimeout(() => {
       setLaunched(false);
       setSettled(false);
       setHeld(null);
-      setFlash({ key: Date.now(), text: signature ? signature.name[lang] : turn === "attack" ? t.turnAttack : t.turnBlock, grumpy });
-      if (grumpy) void bossRef.current?.play("powered");
+      timedOutRef.current = false;
+      setFlash({
+        key: Date.now(),
+        text: rage ? t.enragedFlash : bigMove ? t.bigMoveFlash : signature ? signature.name[lang] : turn === "attack" ? t.turnAttack : t.turnBlock,
+        grumpy: grumpy || rage,
+      });
+      if (grumpy || rage) void bossRef.current?.play("powered");
+      if (rage) {
+        shake(6);
+        cancels.push(speak("enraged", 350));
+      } else if (grumpy) {
+        cancels.push(speak("powered", 350));
+      } else if (bigMove) {
+        cancels.push(speak("bigMove", 250));
+      } else if (!placement && question.position > 0 && question.position % 2 === 1 && !signature) {
+        // Every other quiet turn the boss says something in its current mood.
+        cancels.push(speak(enraged ? "enraged" : powered ? "powered" : "calm", 500));
+      }
     }, 0);
-    return () => window.clearTimeout(id);
+    return () => {
+      window.clearTimeout(id);
+      cancels.forEach((cancel) => cancel());
+    };
     // Only when the turn changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnKey]);
@@ -326,6 +408,13 @@ export default function BattleScene(props: BattleSceneProps) {
     return () => engine.dispose();
   }, []);
 
+  useEffect(() => {
+    if (!hint || placement) return;
+    return speak("hint", 200);
+    // Once per hint.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hint]);
+
   // The boss's HP (and hits to go) stay as they were until the hit lands.
   const [held, setHeld] = useState<{ hp: number; correct: number } | null>(null);
   const hpBefore = useRef(battle.bossHpPercent);
@@ -365,7 +454,9 @@ export default function BattleScene(props: BattleSceneProps) {
     if (!fxEvent) return;
     const { feedback: fb, result } = fxEvent;
     const knockout = !fb.neutral && result.finished && result.passed;
-    const big = fb.super || knockout;
+    const countered = bigMove && fb.correct && !fb.neutral;
+    const landed = bigMove && fb.timedOut === true;
+    const big = fb.super || knockout || countered;
     combat.current?.resolve(
       fb.turn,
       fb.neutral
@@ -381,14 +472,28 @@ export default function BattleScene(props: BattleSceneProps) {
             knockout,
             hpFrom: hpBefore.current,
             hpTo: result.bossHpPercent,
-            text: knockout ? t.burstKo : fb.turn === "attack" ? (fb.super ? t.burstSuper : t.burstPow) : t.burstBlocked,
-            missText: fb.turn === "attack" ? t.nearly : t.burstBonk,
+            text: knockout ? t.burstKo : countered ? t.burstCounter : fb.turn === "attack" ? (fb.super ? t.burstSuper : t.burstPow) : t.burstBlocked,
+            missText: landed ? t.burstLanded : fb.turn === "attack" ? t.nearly : t.burstBonk,
           }
     );
     const timers: number[] = [];
+    const cancels: Array<() => void> = [];
     if (!fb.correct) timers.push(window.setTimeout(() => setHeld(null), 0));
     if (knockout) timers.push(window.setTimeout(() => setKnockedOut(true), 650));
-    return () => timers.forEach((id) => window.clearTimeout(id));
+    if (!fb.neutral) {
+      if (knockout) cancels.push(speak("ko", 1400));
+      else if (result.finished && !result.passed) cancels.push(speak("victory", 900));
+      else if (landed) {
+        timers.push(window.setTimeout(() => shake(6), 500));
+        cancels.push(speak("bigMoveLanded", 700));
+      } else if (countered) cancels.push(speak("bigMoveCountered", 900));
+      else if (!fb.correct) cancels.push(speak("stumble", 800));
+      else if (result.combo > 0 && result.combo % 3 === 0) cancels.push(speak("streak", 900));
+    }
+    return () => {
+      timers.forEach((id) => window.clearTimeout(id));
+      cancels.forEach((cancel) => cancel());
+    };
     // Once per answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fxEvent]);
@@ -424,7 +529,7 @@ export default function BattleScene(props: BattleSceneProps) {
   const fullName = BOSS_NAMES[bossKey][lang];
   const subtitle = fullName.startsWith(boss) ? fullName.slice(boss.length).trim() : "";
   // Impact words pop at the contact point (combat.ts); only the powered-up grumble is said here.
-  const bossLine = !feedback && flash?.grumpy ? t.grumpy : null;
+  const bossLine = said?.text ?? null;
   const showPrompt = !feedback && !inEntrance && !moveOwnsPrompt(interaction);
   const talk = (ms: number) => void bossRef.current?.play("talk", { durationMs: ms });
   const speaker = (
@@ -455,7 +560,7 @@ export default function BattleScene(props: BattleSceneProps) {
         className="h-full rounded-full transition-[width] duration-150 ease-out"
         style={{
           width: `${hpShown}%`,
-          background: powered ? "linear-gradient(180deg,#FB7185,#D21034 60%,#F59E0B)" : "linear-gradient(180deg,#F05A73,#D21034 60%,#A01028)",
+          background: enraged ? "linear-gradient(180deg,#FDE68A,#F59E0B 50%,#D21034)" : powered ? "linear-gradient(180deg,#FB7185,#D21034 60%,#F59E0B)" : "linear-gradient(180deg,#F05A73,#D21034 60%,#A01028)",
         }}
       />
     </div>
@@ -472,6 +577,7 @@ export default function BattleScene(props: BattleSceneProps) {
 
   return (
     <div ref={arenaRef} className="absolute inset-0">
+      {final && <Dusk />}
       {/* HUD: the close button, and the boss's name and health (top row on portrait screens, above the boss on landscape ones). */}
       <Link
         href="/lessons"
@@ -493,9 +599,25 @@ export default function BattleScene(props: BattleSceneProps) {
       {/* The boss on its ledge */}
       <div ref={bossBoxRef} className="absolute" style={{ left: bossLeft, top: bossTop, width: bossSize, height: bossSize }}>
         <div data-layout="boss" className="pointer-events-none absolute" style={artBox(geometry.bossArt, geometry.boss)} aria-hidden="true" />
-        <div ref={bossRigRef} className="absolute inset-0">
+        <div ref={bossRigRef} className={`absolute inset-0 ${enraged && !knockedOut ? "motion-safe:animate-[boss-rage_0.9s_ease-in-out_infinite] [filter:drop-shadow(0_0_16px_rgba(210,16,52,0.85))]" : ""}`}>
           {bossMounted && <BossCharacter ref={bossRef} bossKey={bossKey} pose={bossPose} size={bossSize} enter={inEntrance} onCue={bossCues.onCue} title={BOSS_NAMES[bossKey][lang]} />}
+          {final && bossMounted && <Crown size={bossSize} fallen={knockedOut} />}
         </div>
+        {secondsLeft !== null && !feedback && (
+          <div
+            className={`pointer-events-none absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full px-3 py-1 font-bold text-white shadow-[0_3px_0_rgba(0,0,0,0.3)] motion-safe:animate-pop-in ${secondsLeft <= 5 ? "bg-[#D21034]" : "bg-[#7C2D12]"}`}
+            style={{ top: -Math.round(hudFont * 1.4), fontSize: Math.round(hudFont * 0.85) }}
+            role="timer"
+            aria-live={secondsLeft <= 5 ? "assertive" : "off"}
+            aria-label={t.bigMoveHurry}
+          >
+            <span aria-hidden="true">⏱</span>
+            <span className="tabular-nums">{formatNumber(secondsLeft, lang)}</span>
+            <span className="h-1.5 w-16 overflow-hidden rounded-full bg-black/35" aria-hidden="true">
+              <span className="block h-full rounded-full bg-[#FDE68A] transition-[width] duration-200" style={{ width: `${(secondsLeft / BIG_MOVE_SECONDS) * 100}%` }} />
+            </span>
+          </div>
+        )}
         {inEntrance &&
           [0, 1, 2, 3].map((i) => (
             <span key={i} data-dust="" className="absolute bottom-[4%] h-8 w-8 rounded-full bg-[#F5E6C8] opacity-0" style={{ left: `${30 + i * 12}%` }} aria-hidden="true" />
@@ -706,6 +828,7 @@ export default function BattleScene(props: BattleSceneProps) {
           {(step ?? 0) >= 2 && (
             <div ref={bannerRef} className="absolute inset-x-[-6%] z-[9] bg-[#D21034] py-4 shadow-[0_8px_0_rgba(0,0,0,0.25)]" style={{ top: desktop ? Math.max(bubble.rect.bottom, bubble.rect.top + 110) + 28 : geometry.move.top + bandHeight * moveScale * 0.55, transform: "skewY(-6deg)" }}>
               <div className="mx-auto max-w-[720px] px-[12%] text-white">
+                {final && <p className={`${desktop ? "text-[30px]" : "text-[clamp(16px,2.6dvh,22px)]"} font-bold uppercase leading-tight tracking-[0.2em] text-[#FDE68A]`}>{t.grandChallenge}</p>}
                 <p className={`${desktop ? "text-[80px]" : "text-[clamp(40px,7dvh,56px)]"} font-bold uppercase leading-none tracking-wide [text-shadow:0_3px_0_#7F0A20]`}>{boss}</p>
                 {subtitle && <p className={`mt-1 ${desktop ? "text-[34px]" : "text-[clamp(20px,3dvh,26px)]"} font-semibold leading-tight text-[#FDE68A]`}>{subtitle}</p>}
               </div>
@@ -758,6 +881,42 @@ export default function BattleScene(props: BattleSceneProps) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The Grand Challenge's crown: on the boss's head, and knocked off at the KO. */
+export function Crown({ size, fallen }: { size: number; fallen: boolean }) {
+  const w = Math.round(size * 0.42);
+  return (
+    <svg
+      viewBox="0 0 100 60"
+      aria-hidden="true"
+      className={`pointer-events-none absolute left-1/2 ${fallen ? "motion-safe:animate-[crown-fall_1.4s_ease-in_both]" : "motion-safe:animate-[crown-bob_3s_ease-in-out_infinite]"}`}
+      style={{ width: w, height: Math.round(w * 0.6), top: -Math.round(w * 0.22), transform: "translateX(-50%)" }}
+    >
+      <path d="M8 50 L14 16 L34 34 L50 8 L66 34 L86 16 L92 50 Z" fill="#F59E0B" stroke="#B45309" strokeWidth="3" strokeLinejoin="round" />
+      <rect x="8" y="46" width="84" height="10" rx="4" fill="#FBBF24" stroke="#B45309" strokeWidth="3" />
+      <circle cx="50" cy="26" r="5" fill="#D21034" />
+      <circle cx="30" cy="38" r="3.5" fill="#007229" />
+      <circle cx="70" cy="38" r="3.5" fill="#007229" />
+    </svg>
+  );
+}
+
+/** The Grand Challenge arena at dusk: a deep sky wash and slow stars over the usual backdrop. */
+export function Dusk() {
+  const stars = [[8, 6], [22, 14], [37, 5], [55, 11], [71, 4], [86, 13], [93, 24], [15, 26], [64, 22], [44, 19]];
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[1]" aria-hidden="true">
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(30,27,75,0.62)_0%,rgba(76,29,149,0.35)_38%,rgba(245,158,11,0.12)_62%,rgba(0,0,0,0)_100%)] mix-blend-multiply" />
+      {stars.map(([x, y], i) => (
+        <span
+          key={i}
+          className="absolute h-1.5 w-1.5 rounded-full bg-[#FDE68A] motion-safe:animate-[star-twinkle_2.6s_ease-in-out_infinite]"
+          style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${(i * 0.37) % 2.6}s`, opacity: 0.8 }}
+        />
+      ))}
     </div>
   );
 }

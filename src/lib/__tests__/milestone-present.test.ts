@@ -174,7 +174,7 @@ describe("legacy rows and learner payloads", () => {
     const state = battleStateFromRow(battleRow({ status: "won", correct_count: 9, answered_count: 9 }), toBattleQuestion(mcQuestion(), BATTLE_A, 9, "en", null), "cert-1");
     expect(state.question).toBeNull();
     expect(state.bossHpPercent).toBe(0);
-    expect(state.phase).toBe(2);
+    expect(state.phase).toBe(3);
   });
 });
 

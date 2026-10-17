@@ -5,7 +5,7 @@ import {
   resolvePracticeQuestionPresentation,
   type LessonLanguageMode,
 } from "@/lib/practice-language";
-import { battlePhase, battleTurn, bossHpPercent } from "@/lib/milestones/rules";
+import { battlePhase, battleTurn, bossHpPercent, isBigMovePosition } from "@/lib/milestones/rules";
 import type { BattleQuestion, BattleState, BattleStatus, Lang, MilestoneKind, OwlHint } from "@/lib/milestones/types";
 import { cachedNarrationUrl, questionNarration, type NarratableQuestion } from "@/lib/server/question-audio";
 import {
@@ -113,12 +113,18 @@ export function countInstruction(
   return /that many|بعدد/i.test(prompt) ? prompt : `${prompt.trim()} ${tail}`;
 }
 
+/** Whether the question at `position` is this battle's Big Move (a Big Challenge's every 4th question). */
+export function bigMoveFor(battle: Pick<MilestoneBattleRow, "kind" | "question_count">, position: number): boolean {
+  return battle.kind !== "placement" && isBigMovePosition(position, battle.question_count);
+}
+
 export function toBattleQuestion(
   question: MilestonePoolQuestion,
   battleId: string,
   position: number,
   lang: Lang,
   languageMode: LessonLanguageMode,
+  extra: { bigMove?: boolean } = {},
 ): BattleQuestion | null {
   const item = servedItem(question, battleId);
   if (!item) return null;
@@ -156,6 +162,7 @@ export function toBattleQuestion(
     imageUrl: interaction.type === "drag_drop_label" ? interaction.image_url : null,
     audioUrl: cachedNarrationUrl(question, lang, hash),
     turn: battleTurn(position),
+    ...(extra.bigMove ? { bigMove: true } : {}),
   };
 }
 

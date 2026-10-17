@@ -246,6 +246,7 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
       lang={lang}
       bossKey={bossKey}
       level={level}
+      final={intro?.milestone.final === true}
       battle={battle}
       question={question}
       feedback={session.feedback}
@@ -263,6 +264,7 @@ export default function MilestoneBattle({ milestoneId, lang, fetcher, isOnline, 
       fetcher={fetcher}
       onEntranceEnd={() => setEntrance(null)}
       onSubmit={session.submit}
+      onTimeout={session.timeout}
       onAskOwl={() => void session.askOwl()}
       onRetry={session.retry}
       onNext={() => advanceRef.current()}

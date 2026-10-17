@@ -26,6 +26,8 @@ const COPY = {
     loading: "Getting your certificate...",
     notFound: "We couldn't find this certificate.",
     error: "Something went wrong. Please try again.",
+    grandChallenge: "The Grand Challenge",
+    pathComplete: "Path complete!",
   },
   ar: {
     title: "شهادة إنجاز",
@@ -40,6 +42,8 @@ const COPY = {
     loading: "نجهّز شهادتك...",
     notFound: "لم نجد هذه الشهادة.",
     error: "حدث خطأ. حاول مرة أخرى.",
+    grandChallenge: "التحدي الأكبر",
+    pathComplete: "أكملت المسار!",
   },
 } as const;
 
@@ -103,7 +107,7 @@ export default function CertificateCard({ certificateId, lang, fetcher }: { cert
 
       <article
         id="amal-certificate"
-        className="relative overflow-hidden rounded-[28px] border-[6px] border-[#F59E0B] bg-[#FFFBF2] p-6 text-center text-[#1a1a1a] shadow-[0_10px_30px_rgba(0,0,0,0.12)] sm:p-10"
+        className={`relative overflow-hidden rounded-[28px] border-[6px] p-6 text-center text-[#1a1a1a] shadow-[0_10px_30px_rgba(0,0,0,0.12)] sm:p-10 ${view.final ? "border-[#B45309] bg-[linear-gradient(180deg,#FFF7D6_0%,#FFFBF2_40%,#FFF1BF_100%)]" : "border-[#F59E0B] bg-[#FFFBF2]"}`}
       >
         {/* Sudan-flag ribbon and a Nubian zigzag border */}
         <div className="absolute inset-x-0 top-0 flex h-2" aria-hidden="true">
@@ -121,7 +125,8 @@ export default function CertificateCard({ certificateId, lang, fetcher }: { cert
         <div className="flex justify-center">
           <MadrassaLogo size="sm" />
         </div>
-        <h1 className="mt-3 text-[clamp(28px,6vw,40px)] font-bold leading-tight text-[#007229]">{t.title}</h1>
+        {view.final && <p className="mt-3 text-base font-bold uppercase tracking-[0.25em] text-[#B45309]">{t.grandChallenge}</p>}
+        <h1 className={`${view.final ? "mt-1" : "mt-3"} text-[clamp(28px,6vw,40px)] font-bold leading-tight text-[#007229]`}>{view.final ? t.pathComplete : t.title}</h1>
         <p className="mt-3 text-lg font-semibold text-gray-600">{t.awardedTo}</p>
         <div className="mt-2 flex items-center justify-center gap-3">
           {view.learnerAvatar && <LearnerAvatarIcon avatar={view.learnerAvatar} className="h-16 w-16" />}

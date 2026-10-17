@@ -25,7 +25,8 @@ export type Lang = "ar" | "en";
 /** Presentational turn: even question index = "attack" (the child strikes), odd = "block" (the boss throws, the child blocks). */
 export type BattleTurn = "attack" | "block";
 /** 1 while the boss has more than 50% health left, else 2. */
-export type BattlePhase = 1 | 2;
+/** 1 while the boss has more than two thirds of its health, 2 above one third, 3 (enraged) below. */
+export type BattlePhase = 1 | 2 | 3;
 
 /** Interaction types a battle can serve: all auto-gradable ones (no free_response / draw_answer). */
 export const BATTLE_INTERACTION_TYPES = [
@@ -127,6 +128,8 @@ export interface BattleQuestion {
   imageUrl: string | null;
   audioUrl: string | null;          // cached narration for the requested language, if any
   turn: BattleTurn;                 // position % 2 === 0 ? "attack" : "block" (grading unchanged)
+  /** The boss's Big Move (every 4th question of a Big Challenge): a timed question; running out of time counts as a wrong answer. */
+  bigMove?: boolean;
 }
 
 export interface BattleState {
@@ -163,6 +166,8 @@ export interface AnswerRequest {
   answer?: InteractionAnswer;
   choiceIndex?: number;             // index into BattleQuestion.options (display order)
   text?: string;                    // short_answer, <= 200 chars
+  /** The Big Move's clock ran out: recorded as a wrong answer with no response. */
+  timedOut?: boolean;
 }
 
 /** The ONLY grading info the client ever gets. Never contains the correct answer. */
@@ -178,7 +183,9 @@ export interface AnswerResult {
   firstPass: boolean;               // certificate created by this answer -> parent notified
   stars: 1 | 2 | 3 | null;          // when passed
   combo: number;                    // consecutive-correct streak after this answer (0 after a wrong one)
-  phase: BattlePhase;               // 1 while bossHpPercent > 50, else 2
+  phase: BattlePhase;               // 1 above two thirds health, 2 above one third, 3 below
+  /** This answer was the Big Move's clock running out (always incorrect). */
+  timedOut?: boolean;
   /** Placement: true. The UI reacts the same to every answer and never shows right/wrong. */
   neutral?: boolean;
   /** Placement, when finished: what to show the child. Null otherwise. */

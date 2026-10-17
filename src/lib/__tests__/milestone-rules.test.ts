@@ -91,11 +91,13 @@ describe("battle mechanics", () => {
     expect([0, 1, 2, 3].map(battleTurn)).toEqual(["attack", "block", "attack", "block"]);
   });
 
-  it("enters phase 2 at half health", () => {
+  it("has three phases: calm above two thirds, powered above one third, enraged below", () => {
     expect(battlePhase(100)).toBe(1);
-    expect(battlePhase(51)).toBe(1);
-    expect(battlePhase(50)).toBe(2);
-    expect(battlePhase(0)).toBe(2);
+    expect(battlePhase(67)).toBe(1);
+    expect(battlePhase(66)).toBe(2);
+    expect(battlePhase(34)).toBe(2);
+    expect(battlePhase(33)).toBe(3);
+    expect(battlePhase(0)).toBe(3);
   });
 
   it("counts the trailing correct streak", () => {

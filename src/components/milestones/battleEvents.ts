@@ -49,6 +49,8 @@ export interface AnswerFeedback {
   super: boolean;
   final: boolean;
   neutral?: boolean;
+  /** The Big Move's clock ran out (always a miss). */
+  timedOut?: boolean;
 }
 
 /** Placement: the same happy reaction to every answer (shown as "right", never as right or wrong). */
@@ -56,7 +58,7 @@ export function answerFeedback(battle: BattleState, question: BattleQuestion, re
   if (battle.kind === "placement" || result.neutral === true) {
     return { correct: true, turn: turnOf(question), super: false, final: result.finished, neutral: true };
   }
-  return { correct: result.correct, turn: turnOf(question), super: result.correct && superReady(battle.combo), final: result.finished };
+  return { correct: result.correct, turn: turnOf(question), super: result.correct && superReady(battle.combo), final: result.finished, ...(result.timedOut ? { timedOut: true } : {}) };
 }
 
 export function answerEvents(battle: BattleState, result: AnswerResult, position: number, milestoneId: string): BattleEvent[] {

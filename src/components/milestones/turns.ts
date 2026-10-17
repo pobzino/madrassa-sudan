@@ -12,7 +12,7 @@ export function turnOf(question: BattleQuestion): BattleTurn {
 }
 
 export function phaseOf(source: BattleState | AnswerResult, hpPercent: number): BattlePhase {
-  return source.phase === 1 || source.phase === 2 ? source.phase : battlePhase(hpPercent);
+  return source.phase === 1 || source.phase === 2 || source.phase === 3 ? source.phase : battlePhase(hpPercent);
 }
 
 /** Every 3rd right answer in a row charges the Super Star for the next one. */

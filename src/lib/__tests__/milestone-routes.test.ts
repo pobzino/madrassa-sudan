@@ -270,7 +270,7 @@ describe("answer", () => {
     for (let position = 0; position < 6; position += 1) {
       last = await (await answer(post({ position, choiceIndex: correctChoice(tables, battleId, position) }), battleParams(battleId))).json();
     }
-    expect(last).toMatchObject({ finished: true, passed: true, firstPass: true, certificateId: "cert-1", stars: 3, combo: 6, phase: 2, next: null });
+    expect(last).toMatchObject({ finished: true, passed: true, firstPass: true, certificateId: "cert-1", stars: 3, combo: 6, phase: 3, next: null });
     expect(mocks.afterCallbacks).toHaveLength(1);
     await mocks.afterCallbacks[0]();
     expect(mocks.notify).toHaveBeenCalledTimes(1);
