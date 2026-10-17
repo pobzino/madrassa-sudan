@@ -6,13 +6,13 @@ what, why, rough size, what it needs.
 
 ## Now
 
-### Regenerate every boss under the new rules (owner, ~10 minutes)
-Teacher → Learning Path → **Regenerate all**, English first, then Mathematics.
-The pools published before 17 Oct 2026 were written by the fast model under the
-old rules and contain self-matching pairs (`cat → cat`), "match to its Arabic
-name" items with English partners, and counting-letters items. Regenerate all
-unpublishes, rewrites each boss with the background writer (gpt-6.1-sol, medium
-reasoning, `pointless` verifier flag) and leaves drafts to review and publish.
+### Publish the regenerated English bosses (owner, ~5 minutes)
+Both paths were regenerated on 17 Oct 2026 with the background writer
+(gpt-6.1-sol, medium reasoning, `pointless` verifier flag). Mathematics is
+published; the four English bosses are reviewed drafts waiting on
+Teacher → Learning Path → **Publish**. Items with emoji in their text and
+fill-the-word sentences with several blanks were removed by hand from the
+17 Oct pools; the validator now refuses both.
 
 ### Offline Practice (~2 days)
 A downloaded lesson cannot be *completed* offline: finishing a practice-gated
