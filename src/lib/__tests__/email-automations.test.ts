@@ -168,3 +168,23 @@ describe("unsubscribe links", () => {
     expect(verifyUnsubscribeToken("secret", "user-1", "weekly_progress", "short")).toBe(false);
   });
 });
+
+describe("weekly email add-a-child tip", () => {
+  const siteUrl = "https://amalschool.org";
+  const summary = { lessonsStarted: 2, lessonsCompleted: 1, practiceTried: 1, practicePassed: 1, streakDays: 1, activeDays: [true, false, false, false, false, false, false] };
+  const child = { name: "Rawan", summary };
+
+  it("asks parents with no child profile to add one, in both languages and both versions", () => {
+    for (const language of ["en", "ar"] as const) {
+      for (const week of [summary, { ...summary, lessonsStarted: 0, lessonsCompleted: 0, practiceTried: 0, practicePassed: 0, streakDays: 0, activeDays: Array(7).fill(false) }]) {
+        const email = weeklyProgressEmail({ language, name: "Amina", siteUrl, unsubscribeUrl: `${siteUrl}/u`, summary: week, weekLabel: "11–17 October" });
+        expect(email.text).toMatch(language === "ar" ? /أضف ملف طفلك/ : /add your child's profile/);
+      }
+    }
+  });
+
+  it("drops the tip once the family has a child profile", () => {
+    const email = weeklyProgressEmail({ language: "en", name: "Amina", siteUrl, unsubscribeUrl: `${siteUrl}/u`, summary, childSummaries: [child], weekLabel: "11–17 October" });
+    expect(email.text).not.toMatch(/add your child's profile/);
+  });
+});

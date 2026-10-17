@@ -189,6 +189,12 @@ export function weeklyProgressEmail(
   });
   // Learning-measurement lines (flag on only): under the activity lines, for children with data.
   childLines.push(...childSummaries.flatMap((child) => childSkillLines(language, child)));
+  // Parents from before child profiles still learn on their own account: ask them to add a child.
+  const addChildTip = childSummaries.length
+    ? []
+    : [language === "ar"
+        ? "نصيحة: أضف ملف طفلك من لوحة التحكم لتُحفظ دروسه وتحدياته الكبيرة وشهاداته باسمه."
+        : "Tip: add your child's profile on your dashboard so their lessons, Big Challenges and certificates are saved under their own name."];
 
   if (language === "ar") {
     const footer = {
@@ -203,7 +209,7 @@ export function weeklyProgressEmail(
           preheader: "حتى عشر دقائق اليوم تُحدث فرقاً.",
           hero: { art: "missed", alt: "بومة آمال تقرأ كتاباً" },
           heading: first ? `اشتقنا إليكم هذا الأسبوع يا ${first}` : "اشتقنا إليكم هذا الأسبوع",
-          paragraphs: ["درسك التالي جاهز متى شئت. حتى عشر دقائق اليوم تحافظ على استمرار التعلّم."],
+          paragraphs: ["درسك التالي جاهز متى شئت. حتى عشر دقائق اليوم تحافظ على استمرار التعلّم.", ...addChildTip],
           cta: { label: "افتح درسي التالي", url: `${siteUrl}/dashboard` },
           ...footer,
         },
@@ -231,6 +237,7 @@ export function weeklyProgressEmail(
           summary.streakDays > 1
             ? `أنتم على سلسلة من ${n(summary.streakDays)} أيام متتالية. واصلوا غداً!`
             : "القليل كل يوم يصنع فرقاً كبيراً. نراكم غداً!",
+          ...addChildTip,
         ],
         cta: { label: "واصل التعلّم", url: `${siteUrl}/dashboard` },
         secondaryLink: { label: "شاهد التقدّم كاملاً", url: `${siteUrl}/progress` },
@@ -252,7 +259,7 @@ export function weeklyProgressEmail(
         preheader: "Even ten minutes today makes a difference.",
         hero: { art: "missed", alt: "The Amal owl reading a book" },
         heading: first ? `We missed you this week, ${first}` : "We missed you this week",
-        paragraphs: ["Your next lesson is ready whenever you are. Even ten minutes today keeps the learning going."],
+        paragraphs: ["Your next lesson is ready whenever you are. Even ten minutes today keeps the learning going.", ...addChildTip],
         cta: { label: "Open my next lesson", url: `${siteUrl}/dashboard` },
         ...footer,
       },
@@ -281,6 +288,7 @@ export function weeklyProgressEmail(
         summary.streakDays > 1
           ? `You're on a ${n(summary.streakDays)}-day streak. Keep it going tomorrow!`
           : "A little every day adds up. See you tomorrow!",
+        ...addChildTip,
       ],
       cta: { label: "Keep learning", url: `${siteUrl}/dashboard` },
       secondaryLink: { label: "See full progress", url: `${siteUrl}/progress` },
