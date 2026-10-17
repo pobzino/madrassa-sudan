@@ -272,11 +272,13 @@ describe("placement play", () => {
     expect(mocks.afterCallbacks).toHaveLength(1);
   });
 
-  it("is left out of the Boss Book", async () => {
+  it("is the starting-boss sticker in the Boss Book once completed", async () => {
     const tables = seed();
-    tables.milestone_battles.push({ id: "b-1", learner_id: IDS.learner, milestone_id: IDS.placement, is_preview: false, started_at: "2026-10-01T00:00:00Z", kind: "placement" });
-    const { entries } = await (await bossBook(new Request("http://localhost/x"))).json();
-    expect(entries.find((entry: { bossKey: string }) => entry.bossKey === "number_giant")).toMatchObject({ met: false });
+    tables.milestone_battles.push({ id: "b-1", learner_id: IDS.learner, milestone_id: IDS.placement, is_preview: false, started_at: "2026-10-01T00:00:00Z", finished_at: "2026-10-01T00:08:00Z", kind: "placement", status: "completed", correct_count: 12, question_count: 12 });
+    const { albums, earned } = await (await bossBook(new Request("http://localhost/x"))).json();
+    const stickers = albums.flatMap((album: { stickers: Array<{ id: string; kind: string; state: string; score: unknown }> }) => album.stickers);
+    expect(stickers.find((sticker: { id: string }) => sticker.id === IDS.placement)).toMatchObject({ kind: "starting", state: "earned", score: { correct: 12, total: 12 }, certificateId: null });
+    expect(earned).toBe(1);
   });
 
   it("maps the new RPC tokens", () => {

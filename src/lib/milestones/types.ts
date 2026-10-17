@@ -238,25 +238,41 @@ export interface CertificateView {
 }
 export interface CertificateListResponse { certificates: CertificateView[] }
 
-/** GET /api/milestones/boss-book: one entry per BOSS_KEYS boss, for the active learner only. */
-export interface BossBookEntry {
+/**
+ * GET /api/milestones/boss-book: the learner's sticker album. One sticker per
+ * boss on each path (the starting boss, every Big Challenge, the Grand
+ * Challenge), derived from the learner's own certificates and battles, so a
+ * sticker can never be lost or double-counted.
+ */
+export type StickerKind = "starting" | "boss" | "final";
+export type StickerState = "locked" | "met" | "earned";
+export interface BossSticker {
+  /** The milestone this sticker is for (the anchor on the page). */
+  id: string;
   bossKey: BossKey;
-  /** The learner has played at least one (non-preview) battle against this boss, or beaten it. */
-  met: boolean;
-  /** When this boss was first beaten (first certificate), else null. */
-  beatenAt: string | null;
-  /** Best stars kept across this boss's certificates, else null. */
-  starsKept: 1 | 2 | 3 | null;
-  /** The certificate with the best stars (earliest on a tie), else null. */
-  certificateId: string | null;
-  /** Times beaten: one per certificate (different subjects / blocks). */
-  beatenCount: number;
-  /** Subject of that certificate, or of the latest battle when only met. */
-  subject: { id: string | null; nameAr: string | null; nameEn: string | null } | null;
-  /** Weeks covered by that certificate / battle, e.g. { first: 1, last: 4 }. */
+  kind: StickerKind;
+  /** Weeks the boss guards; the starting boss has none. */
   weeks: { first: number; last: number } | null;
+  /** locked: never played; met: played a real battle; earned: beaten (a certificate), or the starting boss completed. */
+  state: StickerState;
+  /** The state comes only from staff preview battles (nothing is saved for a child). */
+  preview: boolean;
+  earnedAt: string | null;
+  /** Best stars kept across this boss's certificates. */
+  stars: 1 | 2 | 3 | null;
+  /** The certificate with the best stars (earliest on a tie). */
+  certificateId: string | null;
+  /** The starting boss: the completed battle's score. */
+  score: { correct: number; total: number } | null;
 }
-export interface BossBookResponse { entries: BossBookEntry[] }
+export interface BossAlbum {
+  pathId: string;
+  titleAr: string;
+  titleEn: string | null;
+  subject: { id: string | null; nameAr: string | null; nameEn: string | null } | null;
+  stickers: BossSticker[];
+}
+export interface BossBookResponse { albums: BossAlbum[]; earned: number; total: number }
 
 export type MilestoneErrorCode =
   | "unauthorized" | "learner_forbidden" | "milestone_not_found" | "milestone_locked"

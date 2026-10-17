@@ -54,7 +54,6 @@ import { GET as bossBook } from "@/app/api/milestones/boss-book/route";
 import { POST as publish } from "@/app/api/teacher/milestones/[id]/publish/route";
 import { POST as unpublish } from "@/app/api/teacher/milestones/[id]/unpublish/route";
 import { mapMilestoneRpcError } from "@/lib/server/milestones/load";
-import { BOSS_KEYS } from "@/lib/milestones/types";
 
 type Row = Record<string, unknown>;
 
@@ -315,26 +314,58 @@ describe("owl hint", () => {
 });
 
 describe("boss book", () => {
-  it("lists every boss from the learner's own certificates and battles only", async () => {
+  function album() {
     const tables = seed();
+    tables.learning_path_milestones.push(
+      { id: "m-start", path_id: IDS.path, kind: "placement", after_week_number: 0, boss_key: "letter_dragon", status: "published" },
+      { id: "m-8", path_id: IDS.path, kind: "milestone", after_week_number: 8, boss_key: "puzzle_owlet", status: "published" },
+      { id: "m-final", path_id: IDS.path, kind: "milestone", is_final: true, after_week_number: 10, boss_key: "number_giant", status: "published" },
+      { id: "m-other", path_id: "other-path", kind: "milestone", after_week_number: 4, boss_key: "word_dragon", status: "published" },
+    );
+    tables.learning_paths.push({ id: "other-path", subject_id: IDS.subject, is_published: true, title_ar: "آخر", title_en: "Other" });
+    return tables;
+  }
+
+  it("gives one sticker per boss on each path, from the learner's own rows only", async () => {
+    const tables = album();
     tables.learner_certificates.push(
-      { id: "cert-a", learner_id: IDS.learner, boss_key: "number_giant", subject_id: IDS.subject, after_week_number: 4, stars: 2, awarded_at: "2026-10-01T00:00:00Z" },
-      { id: "cert-b", learner_id: IDS.learner, boss_key: "number_giant", subject_id: IDS.subject, after_week_number: 8, stars: 3, awarded_at: "2026-10-09T00:00:00Z" },
-      { id: "cert-x", learner_id: IDS.stranger, boss_key: "word_dragon", subject_id: IDS.subject, after_week_number: 4, stars: 3, awarded_at: "2026-10-02T00:00:00Z" },
+      { id: "cert-a", learner_id: IDS.learner, milestone_id: IDS.milestone, stars: 2, awarded_at: "2026-10-01T00:00:00Z" },
+      { id: "cert-b", learner_id: IDS.learner, milestone_id: IDS.milestone, stars: 3, awarded_at: "2026-10-09T00:00:00Z" },
+      { id: "cert-x", learner_id: IDS.stranger, milestone_id: "m-8", stars: 3, awarded_at: "2026-10-02T00:00:00Z" },
     );
     tables.milestone_battles.push(
-      { id: "b-1", learner_id: IDS.learner, milestone_id: IDS.milestone, is_preview: false, started_at: "2026-10-01T00:00:00Z" },
-      { id: "b-x", learner_id: IDS.stranger, milestone_id: "other", is_preview: false, started_at: "2026-10-01T00:00:00Z" },
+      { id: "b-start", learner_id: IDS.learner, milestone_id: "m-start", kind: "placement", is_preview: false, status: "completed", correct_count: 11, question_count: 12, started_at: "2026-09-20T00:00:00Z", finished_at: "2026-09-20T00:10:00Z" },
+      { id: "b-1", learner_id: IDS.learner, milestone_id: IDS.milestone, kind: "milestone", is_preview: false, status: "won", started_at: "2026-10-01T00:00:00Z", finished_at: "2026-10-01T00:10:00Z" },
+      { id: "b-8", learner_id: IDS.learner, milestone_id: "m-8", kind: "milestone", is_preview: false, status: "lost", started_at: "2026-10-12T00:00:00Z", finished_at: "2026-10-12T00:10:00Z" },
+      { id: "b-x", learner_id: IDS.stranger, milestone_id: "m-final", kind: "milestone", is_preview: false, status: "won", started_at: "2026-10-01T00:00:00Z", finished_at: null },
     );
-    const { entries } = await (await bossBook(new Request("http://localhost/x"))).json();
-    expect(entries.map((entry: { bossKey: string }) => entry.bossKey)).toEqual([...BOSS_KEYS]);
-    const numbo = entries.find((entry: { bossKey: string }) => entry.bossKey === "number_giant");
-    expect(numbo).toMatchObject({
-      met: true, beatenAt: "2026-10-01T00:00:00Z", starsKept: 3, certificateId: "cert-b", beatenCount: 2,
-      subject: { id: IDS.subject, nameEn: "Maths" }, weeks: { first: 5, last: 8 },
-    });
-    const wordy = entries.find((entry: { bossKey: string }) => entry.bossKey === "word_dragon");
-    expect(wordy).toMatchObject({ met: false, beatenAt: null, certificateId: null, beatenCount: 0 });
+    const book = await (await bossBook(new Request("http://localhost/x"))).json();
+    expect(book.albums.map((a: { titleEn: string }) => a.titleEn)).toEqual(["Other", "Path"]);
+    const path = book.albums[1];
+    expect(path.subject).toMatchObject({ nameEn: "Maths" });
+    expect(path.stickers.map((s: { id: string; state: string; kind: string }) => [s.id, s.kind, s.state])).toEqual([
+      ["m-start", "starting", "earned"],
+      [IDS.milestone, "boss", "earned"],
+      ["m-8", "boss", "met"],
+      ["m-final", "final", "locked"],
+    ]);
+    expect(path.stickers[0]).toMatchObject({ score: { correct: 11, total: 12 }, certificateId: null, earnedAt: "2026-09-20T00:10:00Z", preview: false });
+    expect(path.stickers[1]).toMatchObject({ stars: 3, certificateId: "cert-b", earnedAt: "2026-10-01T00:00:00Z", weeks: { first: 1, last: 4 } });
+    expect(path.stickers[3]).toMatchObject({ weeks: { first: 1, last: 10 }, stars: null });
+    expect(book.albums[0].stickers[0].state).toBe("locked");
+    expect(book).toMatchObject({ earned: 2, total: 5 });
+  });
+
+  it("ignores preview battles for children and flags them for staff", async () => {
+    const tables = album();
+    tables.milestone_battles.push({ id: "b-p", learner_id: IDS.learner, milestone_id: "m-final", kind: "milestone", is_preview: true, status: "won", started_at: "2026-10-01T00:00:00Z", finished_at: "2026-10-01T00:10:00Z" });
+    const child = await (await bossBook(new Request("http://localhost/x"))).json();
+    expect(child.albums[1].stickers[3]).toMatchObject({ state: "locked", preview: false });
+    mocks.teacherRole = "admin";
+    mocks.context = { accountId: IDS.learner, learnerId: IDS.learner, isSelf: true, learnerProfile: {}, accountProfile: {} };
+    const staff = await (await bossBook(new Request("http://localhost/x"))).json();
+    expect(staff.albums[1].stickers[3]).toMatchObject({ state: "earned", preview: true, certificateId: null });
+    expect(staff.earned).toBe(1);
   });
 });
 
