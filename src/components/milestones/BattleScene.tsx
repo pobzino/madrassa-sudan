@@ -15,7 +15,7 @@ import {
   type Pose,
 } from "@/components/characters";
 import type { InteractionAnswer } from "@/lib/interactions/types";
-import type { AnswerResult, BattleQuestion, BattleState, BossKey, Lang, MilestoneIntroResponse, OwlHint } from "@/lib/milestones/types";
+import type { AnswerResult, BattlePhase, BattleQuestion, BattleState, BossKey, Lang, MilestoneIntroResponse, OwlHint } from "@/lib/milestones/types";
 import { BOSS_NAMES } from "@/lib/milestones/rules";
 import { MathText, OwlShieldIcon, Projectile, ReadAloudButton, WifiOffIcon } from "./BattleParts";
 import { milestoneApi, type Fetcher } from "./api";
@@ -584,7 +584,7 @@ export default function BattleScene(props: BattleSceneProps) {
 
   return (
     <div ref={arenaRef} className="absolute inset-0">
-      {final && <Dusk />}
+      {final && <Dusk stormy={enraged && !knockedOut} />}
       {/* HUD: the close button, and the boss's name and health (top row on portrait screens, above the boss on landscape ones). */}
       <Link
         href="/lessons"
@@ -607,12 +607,21 @@ export default function BattleScene(props: BattleSceneProps) {
       <div ref={bossBoxRef} className="absolute" style={{ left: bossLeft, top: bossTop, width: bossSize, height: bossSize }}>
         <div data-layout="boss" className="pointer-events-none absolute" style={artBox(geometry.bossArt, geometry.boss)} aria-hidden="true" />
         <div ref={bossRigRef} className={`absolute inset-0 ${enraged && !knockedOut ? "motion-safe:animate-[boss-rage_0.9s_ease-in-out_infinite] [filter:drop-shadow(0_0_16px_rgba(210,16,52,0.85))]" : ""}`}>
-          {final && bossMounted && <Cape size={bossSize} fallen={knockedOut} />}
-          {/* Positioned, so the boss paints above the cape behind it. */}
-          <div className="relative h-full w-full">
-            {bossMounted && <BossCharacter ref={bossRef} bossKey={bossKey} pose={bossPose} size={bossSize} enter={inEntrance} onCue={bossCues.onCue} title={BOSS_NAMES[bossKey][lang]} />}
+          {/* The Grand Challenge boss is in its final form: bigger, on a dais, inside an aura, caped and crowned. */}
+          <div
+            className="absolute inset-0"
+            style={final ? { transform: knockedOut ? "scale(1)" : "scale(1.08)", transformOrigin: "50% 94%", transition: "transform 900ms ease-in", filter: enraged ? undefined : "drop-shadow(0 0 14px rgba(253,230,138,0.55))" } : undefined}
+          >
+            {final && bossMounted && <Dais size={bossSize} phase={enraged ? 3 : powered ? 2 : 1} />}
+            {final && bossMounted && <Aura size={bossSize} phase={enraged ? 3 : powered ? 2 : 1} intense={Boolean(bigMove) && !feedback} fallen={knockedOut} />}
+            {final && bossMounted && <Cape size={bossSize} fallen={knockedOut} />}
+            {/* Positioned, so the boss paints above the cape behind it. */}
+            <div className="relative h-full w-full">
+              {bossMounted && <BossCharacter ref={bossRef} bossKey={bossKey} pose={bossPose} size={bossSize} enter={inEntrance} onCue={bossCues.onCue} title={BOSS_NAMES[bossKey][lang]} />}
+            </div>
+            {final && bossMounted && <Crown size={bossSize} fallen={knockedOut} />}
           </div>
-          {final && bossMounted && <Crown size={bossSize} fallen={knockedOut} />}
+          {final && inEntrance && bossMounted && <Strike size={bossSize} reach={bossTop} />}
         </div>
         {secondsLeft !== null && !feedback && (
           <div
@@ -915,12 +924,27 @@ export function Crown({ size, fallen }: { size: number; fallen: boolean }) {
   );
 }
 
-/** The Grand Challenge arena at dusk: a deep sky wash and slow stars over the usual backdrop. */
-export function Dusk() {
-  const stars = [[8, 6], [22, 14], [37, 5], [55, 11], [71, 4], [86, 13], [93, 24], [15, 26], [64, 22], [44, 19]];
+/** `n` points around an ellipse, rounded so the server and the client draw the same path. */
+function ringPoints(n: number, cx: number, cy: number, rx: number, ry: number): Array<readonly [number, number]> {
+  return Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * Math.PI * 2;
+    return [Math.round((cx + rx * Math.cos(a)) * 100) / 100, Math.round((cy + ry * Math.sin(a)) * 100) / 100] as const;
+  });
+}
+
+/** The aura colour of each battle phase: gold while calm, orange when powered, red when enraged. */
+const PHASE_GLOW: Record<BattlePhase, string> = { 1: "#FDE68A", 2: "#FB923C", 3: "#F43F5E" };
+
+/**
+ * The Grand Challenge arena at night: a deep sky wash, a moon, drifting clouds
+ * and slow stars over the usual backdrop. A storm rolls in (lightning, sky
+ * flashes) while the boss is enraged.
+ */
+export function Dusk({ stormy }: { stormy: boolean }) {
+  const stars = [[8, 6], [22, 14], [37, 5], [55, 11], [71, 4], [86, 13], [93, 24], [15, 26], [64, 22], [44, 19], [30, 30], [78, 31]];
   return (
-    <div className="pointer-events-none absolute inset-0 z-[1]" aria-hidden="true">
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(30,27,75,0.62)_0%,rgba(76,29,149,0.35)_38%,rgba(245,158,11,0.12)_62%,rgba(0,0,0,0)_100%)] mix-blend-multiply" />
+    <div className="pointer-events-none absolute inset-0 z-[1] overflow-hidden" aria-hidden="true">
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(23,20,64,0.78)_0%,rgba(76,29,149,0.42)_38%,rgba(245,158,11,0.14)_62%,rgba(0,0,0,0)_100%)] mix-blend-multiply" />
       {stars.map(([x, y], i) => (
         <span
           key={i}
@@ -928,7 +952,100 @@ export function Dusk() {
           style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${(i * 0.37) % 2.6}s`, opacity: 0.8 }}
         />
       ))}
+      {/* The moon, with its glow */}
+      <svg viewBox="0 0 100 100" className="absolute" style={{ left: "70%", top: "4%", width: "min(18vw, 120px)", height: "min(18vw, 120px)" }}>
+        <circle cx="50" cy="50" r="46" fill="#FDE68A" opacity="0.18" />
+        <circle cx="50" cy="50" r="30" fill="#FFF3C4" />
+        <circle cx="40" cy="42" r="6" fill="#F3DFA0" />
+        <circle cx="60" cy="58" r="4" fill="#F3DFA0" />
+        <circle cx="52" cy="36" r="3" fill="#F3DFA0" />
+      </svg>
+      {/* Drifting clouds */}
+      {[0, 1, 2].map((i) => (
+        <svg key={i} viewBox="0 0 200 60" className="final-cloud absolute" style={{ top: `${6 + i * 9}%`, width: `${34 - i * 6}%`, animationDelay: `${-i * 13}s`, animationDuration: `${46 + i * 12}s`, opacity: stormy ? 0.75 : 0.45 }}>
+          <path d="M20 50 Q10 30 34 28 Q40 8 70 14 Q90 0 112 16 Q140 4 150 30 Q182 26 184 50 Z" fill={stormy ? "#2A1C3F" : "#4C3A78"} />
+        </svg>
+      ))}
+      {/* The storm: two bolts and a sky flash, each on its own slow cycle */}
+      {stormy && (
+        <>
+          <div className="final-sky-flash absolute inset-0 bg-white" />
+          <svg viewBox="0 0 40 120" className="final-bolt absolute" style={{ left: "14%", top: "0", width: "7%", maxWidth: 60 }}>
+            <path d="M24 0 L8 50 L20 48 L6 120 L34 44 L20 46 L32 0 Z" fill="#FFF7D6" stroke="#FDE68A" strokeWidth="2" strokeLinejoin="round" />
+          </svg>
+          <svg viewBox="0 0 40 120" className="final-bolt absolute" style={{ left: "58%", top: "0", width: "6%", maxWidth: 50, animationDelay: "2.3s" }}>
+            <path d="M24 0 L8 50 L20 48 L6 120 L34 44 L20 46 L32 0 Z" fill="#FFF7D6" stroke="#FDE68A" strokeWidth="2" strokeLinejoin="round" />
+          </svg>
+        </>
+      )}
     </div>
+  );
+}
+
+/** The Grand Challenge's dais: a stone platform with a gold rim and a glowing seal under the boss's feet. */
+export function Dais({ size, phase }: { size: number; phase: BattlePhase }) {
+  const w = Math.round(size * 1.3);
+  const glow = PHASE_GLOW[phase];
+  const runes = ringPoints(10, 100, 22, 82, 9.5);
+  return (
+    <svg
+      viewBox="0 0 200 50"
+      aria-hidden="true"
+      className="pointer-events-none absolute left-1/2"
+      style={{ width: w, height: Math.round(w * 0.25), bottom: -Math.round(size * 0.075), transform: "translateX(-50%)" }}
+    >
+      <ellipse cx="100" cy="38" rx="98" ry="11" fill="#140F24" opacity="0.55" />
+      <path d="M4 22 L196 22 L192 36 Q100 48 8 36 Z" fill="#3B2A5A" />
+      <path d="M4 22 L196 22 L192 36 Q100 48 8 36 Z" fill="none" stroke="#2A1C3F" strokeWidth="2" />
+      <ellipse cx="100" cy="22" rx="96" ry="12" fill="#5B4A85" />
+      <ellipse cx="100" cy="22" rx="96" ry="12" fill="none" stroke="#F59E0B" strokeWidth="3" />
+      <ellipse className="final-seal" cx="100" cy="22" rx="60" ry="7" fill={glow} style={{ transition: "fill 600ms" }} />
+      <ellipse cx="100" cy="22" rx="60" ry="7" fill="none" stroke="#FDE68A" strokeWidth="1.5" opacity="0.8" />
+      {runes.map(([x, y], i) => (
+        <path key={i} d={`M${x} ${y - 3} l2.4 3 -2.4 3 -2.4 -3 Z`} fill="#FDE68A" opacity="0.95" />
+      ))}
+    </svg>
+  );
+}
+
+/** The Grand Challenge's aura: a pulsing glow and a slow ring of sparks behind the boss, hotter in each phase and racing during a Big Move. */
+export function Aura({ size, phase, intense, fallen }: { size: number; phase: BattlePhase; intense: boolean; fallen: boolean }) {
+  const w = Math.round(size * 1.45);
+  const color = PHASE_GLOW[phase];
+  const sparks = ringPoints(10, 50, 50, 45, 45);
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute left-1/2"
+      style={{ width: w, height: w, top: Math.round(size * 0.56 - w / 2), transform: "translateX(-50%)", opacity: fallen ? 0 : 1, transition: "opacity 800ms" }}
+    >
+      <div
+        className={`final-aura-glow absolute inset-0 rounded-full ${intense ? "is-intense" : ""}`}
+        style={{ background: `radial-gradient(circle, ${color}80 0%, ${color}33 42%, transparent 68%)`, transition: "background 600ms" }}
+      />
+      <svg viewBox="0 0 100 100" className={`final-aura-ring absolute inset-0 ${intense ? "is-intense" : ""}`}>
+        {sparks.map(([x, y], i) => (
+          <path key={i} d={`M${x} ${y - 3.2} l2.3 3.2 -2.3 3.2 -2.3 -3.2 Z`} fill={i % 2 ? "#FDE68A" : color} opacity="0.95" style={{ transition: "fill 600ms" }} />
+        ))}
+        <circle cx="50" cy="50" r="45" fill="none" stroke={color} strokeWidth="0.8" strokeDasharray="3 5" opacity="0.7" style={{ transition: "stroke 600ms" }} />
+      </svg>
+    </div>
+  );
+}
+
+/** The lightning strike that greets the Grand Challenge boss when it lands: one bolt from the top of the arena to its head, then a flash. */
+export function Strike({ size, reach }: { size: number; reach: number }) {
+  const h = Math.round(reach + size * 0.45);
+  return (
+    <svg
+      viewBox="0 0 60 300"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      className="final-strike pointer-events-none absolute left-1/2"
+      style={{ width: Math.round(size * 0.3), height: h, bottom: Math.round(size * 0.55), transform: "translateX(-50%)" }}
+    >
+      <path d="M34 0 L14 110 L30 106 L8 230 L22 226 L10 300 L52 150 L36 154 L56 60 L40 64 L50 0 Z" fill="#FFF7D6" stroke="#FDE68A" strokeWidth="3" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -938,9 +1055,10 @@ export function Cape({ size, fallen }: { size: number; fallen: boolean }) {
   return (
     <svg
       viewBox="0 0 100 100"
+      preserveAspectRatio="none"
       aria-hidden="true"
       className={`pointer-events-none absolute left-1/2 ${fallen ? "opacity-60" : "motion-safe:animate-[cape-sway_3.4s_ease-in-out_infinite]"}`}
-      style={{ width: w, height: Math.round(w * 0.8), top: Math.round(size * 0.3), transform: "translateX(-50%)", transformOrigin: "50% 8%", transition: "opacity 600ms" }}
+      style={{ width: w, height: Math.round(size * 0.66), top: Math.round(size * 0.28), transform: "translateX(-50%)", transformOrigin: "50% 8%", transition: "opacity 600ms" }}
     >
       <path d="M22 8 C12 30 6 60 10 94 Q30 86 50 92 Q70 86 90 94 C94 60 88 30 78 8 Q50 18 22 8 Z" fill="#B3102C" stroke="#7F0A20" strokeWidth="2.5" strokeLinejoin="round" />
       <path d="M22 8 Q50 18 78 8" fill="none" stroke="#F59E0B" strokeWidth="4" strokeLinecap="round" />

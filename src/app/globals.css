@@ -498,3 +498,56 @@ html {
   0%, 100% { transform: translateX(-50%) rotate(-2deg) skewX(0deg); }
   50% { transform: translateX(-50%) rotate(2deg) skewX(-3deg); }
 }
+
+/* The Grand Challenge's final form: aura, dais seal, night sky and storm. */
+@keyframes aura-pulse {
+  0%, 100% { transform: scale(0.92); opacity: 0.75; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+@keyframes aura-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes seal-glow {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.8; }
+}
+@keyframes cloud-drift {
+  from { transform: translateX(-40%); }
+  to { transform: translateX(140vw); }
+}
+@keyframes bolt-flash {
+  0%, 88%, 100% { opacity: 0; }
+  89%, 91% { opacity: 1; }
+  90% { opacity: 0.4; }
+  92% { opacity: 0.9; }
+  94% { opacity: 0; }
+}
+@keyframes sky-flash {
+  0%, 88%, 100% { opacity: 0; }
+  89% { opacity: 0.35; }
+  90% { opacity: 0.08; }
+  92% { opacity: 0.28; }
+  95% { opacity: 0; }
+}
+@keyframes strike {
+  0% { opacity: 0; transform: translateX(-50%) scaleY(0); }
+  18% { opacity: 1; transform: translateX(-50%) scaleY(1); }
+  30% { opacity: 0.3; }
+  38% { opacity: 1; }
+  60%, 100% { opacity: 0; transform: translateX(-50%) scaleY(1); }
+}
+.final-aura-glow { animation: aura-pulse 2.8s ease-in-out infinite; }
+.final-aura-glow.is-intense { animation-duration: 0.7s; }
+.final-aura-ring { animation: aura-spin 16s linear infinite; }
+.final-aura-ring.is-intense { animation-duration: 3s; }
+.final-seal { animation: seal-glow 2.4s ease-in-out infinite; }
+.final-cloud { animation: cloud-drift 50s linear infinite; }
+.final-bolt { animation: bolt-flash 5.2s linear infinite; }
+.final-sky-flash { animation: sky-flash 5.2s linear infinite; }
+.final-strike { transform-origin: 50% 0; animation: strike 1.1s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .final-aura-glow, .final-aura-ring, .final-seal, .final-cloud, .final-bolt, .final-sky-flash { animation: none; }
+  .final-sky-flash { opacity: 0; }
+  .final-bolt { opacity: 0; }
+  .final-strike { animation: strike 1.1s steps(1) both; }
+}
