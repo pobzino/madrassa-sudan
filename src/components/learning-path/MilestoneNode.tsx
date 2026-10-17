@@ -141,6 +141,9 @@ export function MilestoneHero({
   const passed = state === "passed";
   const locked = state === "locked";
   const dim = !isOnline && !passed;
+  // The Grand Challenge: the same hero, dressed as the path's finale (night window, crown, purple-and-gold ribbon).
+  const final = Boolean(milestone.final);
+  const night = final && !locked && !dim;
   const label = milestoneLabel(milestone, lang, isOnline);
   const arena = ARENAS[bossKey];
   const uid = `h${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -308,7 +311,7 @@ export function MilestoneHero({
     <div className="relative" style={{ width: HERO_WINDOW + 14, height: HERO_WINDOW + 14 }}>
       {/* the thick gold rim */}
       <div
-        className={`absolute inset-0 rounded-full shadow-[0_6px_0_#92400E,0_10px_24px_rgba(146,64,14,0.35)] ${isCurrent ? "ring-4 ring-amber-200" : ""}`}
+        className={`absolute inset-0 rounded-full ${night ? "shadow-[0_6px_0_#4C1D95,0_10px_28px_rgba(76,29,149,0.55)]" : "shadow-[0_6px_0_#92400E,0_10px_24px_rgba(146,64,14,0.35)]"} ${isCurrent ? (night ? "ring-4 ring-[#C4B5FD]" : "ring-4 ring-amber-200") : ""}`}
         style={{ background: locked || dim ? "linear-gradient(160deg,#E5E7EB,#9CA3AF)" : "linear-gradient(160deg,#FEF3C7 0%,#F59E0B 40%,#B45309 100%)" }}
       />
       {/* the window into the boss's arena */}
@@ -323,6 +326,16 @@ export function MilestoneHero({
           <arena.Back uid={uid} />
           <arena.Mid uid={uid} />
         </svg>
+        {night && (
+          // the Grand Challenge arena at night: a sky wash, stars and a moon over the window
+          <div className="absolute inset-0" aria-hidden="true">
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(23,20,64,0.8)_0%,rgba(76,29,149,0.45)_40%,rgba(245,158,11,0.12)_64%,rgba(0,0,0,0)_100%)] mix-blend-multiply" />
+            {[[18, 14], [34, 7], [52, 16], [70, 9], [84, 20], [26, 26]].map(([x, y], i) => (
+              <span key={i} className="absolute h-1 w-1 rounded-full bg-[#FDE68A]" style={{ left: `${x}%`, top: `${y}%`, opacity: 0.9 }} />
+            ))}
+            <span className="absolute h-4 w-4 rounded-full bg-[#FFF3C4] shadow-[0_0_10px_4px_rgba(253,230,138,0.45)]" style={{ left: "72%", top: "24%" }} />
+          </div>
+        )}
         {locked && (
           // gate bars over the window
           <div className="absolute inset-0" aria-hidden="true">
@@ -380,8 +393,8 @@ export function MilestoneHero({
       {/* pennant flags at the node */}
       {!locked && (
         <>
-          {!owlHere && <Pennant className="absolute -left-1 top-[38px]" />}
-          <Pennant className="absolute -right-1 top-[38px] -scale-x-100" />
+          {!owlHere && <Pennant className="absolute -left-1 top-[38px]" gold={final} />}
+          <Pennant className="absolute -right-1 top-[38px] -scale-x-100" gold={final} />
         </>
       )}
 
@@ -409,6 +422,21 @@ export function MilestoneHero({
               title={bossName(bossKey, lang)}
               className={locked || dim ? "[filter:grayscale(0.85)]" : undefined}
             />
+          )}
+          {final && visible && !passed && (
+            // the Grand Challenge boss wears its crown on the path too (tilted while it naps)
+            <svg
+              viewBox="0 0 100 60"
+              aria-hidden="true"
+              className={`absolute left-1/2 ${locked || dim ? "[filter:grayscale(0.85)]" : ""}`}
+              style={{ width: BOSS_SIZE * 0.4, height: BOSS_SIZE * 0.24, top: -BOSS_SIZE * 0.04, transform: `translateX(-50%) rotate(${awake ? -4 : -14}deg)` }}
+            >
+              <path d="M8 50 L14 16 L34 34 L50 8 L66 34 L86 16 L92 50 Z" fill="#F59E0B" stroke="#B45309" strokeWidth="4" strokeLinejoin="round" />
+              <rect x="8" y="46" width="84" height="10" rx="4" fill="#FBBF24" stroke="#B45309" strokeWidth="4" />
+              <circle cx="50" cy="26" r="6" fill="#D21034" />
+              <circle cx="30" cy="38" r="4" fill="#007229" />
+              <circle cx="70" cy="38" r="4" fill="#007229" />
+            </svg>
           )}
           {!awake && !passed && (
             <span className="absolute -right-2 top-0 text-sm font-bold text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.6)]" aria-hidden="true">
@@ -477,10 +505,13 @@ export function MilestoneHero({
           </span>
         )}
 
-        {/* the red BOSS BATTLE ribbon across the bottom of the window */}
-        <div className="pointer-events-none absolute left-1/2 top-[74%] w-[176px] -translate-x-1/2" aria-hidden="true">
-          <div className={`px-3 py-1 text-center shadow-[0_4px_0_rgba(0,0,0,0.25)] ${locked || dim ? "bg-[#6B7280]" : "bg-[#D21034]"}`} style={{ transform: "skewY(-5deg)" }}>
-            <p className="text-[10px] font-bold leading-none tracking-[0.18em] text-[#FDE68A]">{t.ribbon}</p>
+        {/* the ribbon across the bottom of the window: red BOSS BATTLE, or purple-and-gold GRAND CHALLENGE for the path's finale */}
+        <div className={`pointer-events-none absolute left-1/2 top-[74%] -translate-x-1/2 ${final ? "w-[196px]" : "w-[176px]"}`} aria-hidden="true">
+          <div
+            className={`px-3 py-1 text-center shadow-[0_4px_0_rgba(0,0,0,0.25)] ${locked || dim ? "bg-[#6B7280]" : final ? "bg-[linear-gradient(180deg,#5B21B6,#3B0764)] ring-2 ring-[#F59E0B]" : "bg-[#D21034]"}`}
+            style={{ transform: "skewY(-5deg)" }}
+          >
+            <p className={`${final ? "text-[11px]" : "text-[10px]"} font-bold leading-none tracking-[0.18em] text-[#FDE68A]`}>{final ? t.ribbonFinal : t.ribbon}</p>
             <p className="text-[20px] font-bold uppercase leading-tight tracking-wide text-white [text-shadow:0_2px_0_rgba(0,0,0,0.3)]">{boss}</p>
           </div>
         </div>
@@ -526,12 +557,12 @@ export function MilestoneHero({
   );
 }
 
-function Pennant({ className = "" }: { className?: string }) {
+function Pennant({ className = "", gold = false }: { className?: string; gold?: boolean }) {
   return (
     <svg viewBox="0 0 28 40" className={`h-10 w-7 ${className}`} aria-hidden="true">
       <path d="M4 2 V38" stroke="#7A4A26" strokeWidth={3} strokeLinecap="round" />
-      <path d="M5 4 L26 10 L5 17 Z" fill="#D21034" />
-      <path d="M5 4 L26 10 L5 10 Z" fill="#F05A73" />
+      <path d="M5 4 L26 10 L5 17 Z" fill={gold ? "#F59E0B" : "#D21034"} />
+      <path d="M5 4 L26 10 L5 10 Z" fill={gold ? "#FDE68A" : "#F05A73"} />
     </svg>
   );
 }
